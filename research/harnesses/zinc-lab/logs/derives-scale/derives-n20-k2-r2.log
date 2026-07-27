@@ -1,0 +1,79 @@
+Profiler start (1) /tmp/dscale/d2_n20/.scala-build/d2_n20_6c26bd6553/classes/main
+parser,run ns = 61655291,idle ns = 0,cpu ns = 60500000,user ns = 58683000,allocated = 8351800,heap at end = 23984768, total allocated = 8351800 
+Profile hook start
+Profiler GC reported 4ms
+Profiler GC reported 4ms
+Profiler GC reported 4ms
+Profiler GC reported 2ms
+Profiler GC reported 0ms
+Profile hook stop
+typer,run ns = 514497334,idle ns = 0,cpu ns = 495248000,user ns = 483797000,allocated = 69847296,heap at end = 37096176, total allocated = 78199096 
+inlinedPositions,run ns = 227750,idle ns = 0,cpu ns = 228000,user ns = 215000,allocated = 47304,heap at end = 37096176, total allocated = 78246400 
+posttyper,run ns = 125184084,idle ns = 0,cpu ns = 123400000,user ns = 120813000,allocated = 10419840,heap at end = 45484784, total allocated = 88666240 
+unrollDefs,run ns = 58958,idle ns = 0,cpu ns = 58000,user ns = 54000,allocated = 4048,heap at end = 45484784, total allocated = 88670288 
+pickler,run ns = 47496250,idle ns = 0,cpu ns = 47172000,user ns = 45992000,allocated = 10007168,heap at end = 58067696, total allocated = 98677456 
+inlining,run ns = 306898750,idle ns = 0,cpu ns = 303537000,user ns = 297355000,allocated = 29372472,heap at end = 87427824, total allocated = 128049928 
+postInlining,run ns = 55625,idle ns = 0,cpu ns = 55000,user ns = 46000,allocated = 4048,heap at end = 87427824, total allocated = 128053976 
+staging,run ns = 35333,idle ns = 0,cpu ns = 36000,user ns = 32000,allocated = 4048,heap at end = 87427824, total allocated = 128058024 
+splicing,run ns = 35166,idle ns = 0,cpu ns = 36000,user ns = 30000,allocated = 4048,heap at end = 87427824, total allocated = 128062072 
+pickleQuotes,run ns = 31208,idle ns = 0,cpu ns = 31000,user ns = 30000,allocated = 4048,heap at end = 87427824, total allocated = 128066120 
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:24:4 ---[0m[0m
+[33m24 |[0m    [33mnew[0m [32mCodec[0m[[32mA[0m]:
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:40:4 ---[0m[0m
+[33m40 |[0m    [33mnew[0m [32mTable[0m[[32mA[0m] { [33mdef[0m [36mcolumns[0m = cols }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:47:4 ---[0m[0m
+[33m47 |[0m    [33mnew[0m [32mForm[0m[[32mA[0m] { [33mdef[0m [36mhtml[0m = cols.map([36mc[0m => [32ms"<input name='[0m$c[32m'>"[0m).mkString }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:54:4 ---[0m[0m
+[33m54 |[0m    [33mnew[0m [32mResource[0m[[32mA[0m] { [33mdef[0m [36mroutes[0m = [33mList[0m([32m"GET /"[0m, [32m"POST /"[0m) ++ cols.map([36mc[0m => [32ms"GET /:id/[0m$c[32m"[0m) }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:61:4 ---[0m[0m
+[33m61 |[0m    [33mnew[0m [32mShow[0m[[32mA[0m] { [33mdef[0m [36mshow[0m([36ma[0m: [32mA[0m) = cols.mkString([32m"<"[0m, [32m","[0m, [32m">"[0m) }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:68:4 ---[0m[0m
+[33m68 |[0m    [33mnew[0m [32mJson[0m[[32mA[0m]:
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:78:4 ---[0m[0m
+[33m78 |[0m    [33mnew[0m [32mCsv[0m[[32mA[0m] { [33mdef[0m [36mheader[0m = cols.mkString([32m","[0m) }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+[33m[33m-- [E197] Potential Issue Warning: /tmp/dscale/d2_n20/Typeclasses.scala:85:4 ---[0m[0m
+[33m85 |[0m    [33mnew[0m [32mDiff[0m[[32mA[0m] { [33mdef[0m [36mfields[0m = cols }
+[33m[33m   |[0m    ^[0m
+[33m   |[0m   New anonymous class definition will be duplicated at each inline site
+[33m   |[0m
+[33m   |[0m longer explanation available when compiling with `-explain`
+MegaPhase{crossVersionChecks  firstTransform  checkReentrant  elimPackagePrefixes  cookComments  checkLoopingImplicits  betaReduce  inlineVals  expandSAMs  elimRepeated  refchecks  dropForMap},run ns = 83769000,idle ns = 0,cpu ns = 82838000,user ns = 80458000,allocated = 12456600,heap at end = 100010736, total allocated = 140522720 
+MegaPhase{protectedAccessors  extmethods  uncacheGivenAliases  checkStatic  elimByName  hoistSuperArgs  forwardDepChecks  specializeApplyMethods  tryCatchPatterns  patternMatcher},run ns = 42309167,idle ns = 0,cpu ns = 42008000,user ns = 40914000,allocated = 4939888,heap at end = 108399344, total allocated = 145462608 
+MegaPhase{elimOpaque  explicitOuter  explicitSelf  interpolators  dropBreaks},run ns = 10150416,idle ns = 0,cpu ns = 10100000,user ns = 9889000,allocated = 963384,heap at end = 108399344, total allocated = 146425992 
+MegaPhase{pruneErasedDefs  uninitialized  inlinePatterns  vcInlineMethods  seqLiterals  intercepted  getters  specializeFunctions  specializeTuples  collectNullableFields  elimOuterSelect  resolveSuper  functionXXLForwarders  paramForwarding  genericTuples  letOverApply  arrayConstructors},run ns = 18632625,idle ns = 0,cpu ns = 18421000,user ns = 17651000,allocated = 1879440,heap at end = 108399344, total allocated = 148305432 
+Profiler GC reported 6ms
+erasure,run ns = 125167083,idle ns = 0,cpu ns = 118535000,user ns = 115704000,allocated = 22050784,heap at end = 38372256, total allocated = 170356216 
+MegaPhase{elimErasedValueType  pureStats  vcElideAllocations  etaReduce  arrayApply  elimPolyFunction  tailrec  completeJavaEnums  mixin  lazyVals  memoize  nonLocalReturns  capturedVars},run ns = 80085917,idle ns = 0,cpu ns = 79261000,user ns = 77731000,allocated = 13367384,heap at end = 46760864, total allocated = 183723600 
+constructors,run ns = 11349708,idle ns = 0,cpu ns = 11283000,user ns = 11191000,allocated = 918648,heap at end = 46760864, total allocated = 184642248 
+MegaPhase{lambdaLift  elimStaticThis  countOuterAccesses},run ns = 38141250,idle ns = 0,cpu ns = 37604000,user ns = 37128000,allocated = 4904160,heap at end = 50955168, total allocated = 189546408 
+MegaPhase{dropOuterAccessors  dropParentRefinements  checkNoSuperThis  flatten  transformWildcards  moveStatic  expandPrivate  restoreScopes  selectStatic  Collect entry points  repeatableAnnotations},run ns = 17102000,idle ns = 0,cpu ns = 16907000,user ns = 16713000,allocated = 1656208,heap at end = 55149472, total allocated = 191202616 
+genBCode,run ns = 247008541,idle ns = 0,cpu ns = 244516000,user ns = 230046000,allocated = 38626528,heap at end = 92898208, total allocated = 229829144 
+8 warnings found

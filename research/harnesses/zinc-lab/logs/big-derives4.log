@@ -1,0 +1,890 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.21/org.scala-sbt/sbt/1.12.1/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.12.1 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/big-derives4/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/big-derives4/)
+[success] Total time: 0 s, completed 27 lug 2026, 09:38:19
+===LAB-BEGIN	clean_build
+[info] compiling 504 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	clean_build	3692393
+edit applied: reset
+===LAB-BEGIN	settle_touch_mtime_r1
+===LAB-TIMED	settle_touch_mtime_r1	33238
+edit applied: touch_mtime
+===LAB-BEGIN	touch_mtime_r1
+===LAB-TIMED	touch_mtime_r1	31396
+edit applied: reset
+===LAB-BEGIN	settle_comment_r1
+===LAB-TIMED	settle_comment_r1	26185
+edit applied: comment
+===LAB-BEGIN	comment_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	comment_r1	301073
+edit applied: reset
+===LAB-BEGIN	settle_method_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_method_body_r1	246753
+edit applied: method_body
+===LAB-BEGIN	method_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	method_body_r1	214500
+edit applied: reset
+===LAB-BEGIN	settle_add_field_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_field_r1	193292
+edit applied: add_field
+===LAB-BEGIN	add_field_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_field_r1	200359
+edit applied: reset
+===LAB-BEGIN	settle_rename_unused_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_unused_r1	183404
+edit applied: rename_unused
+===LAB-BEGIN	rename_unused_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_unused_r1	184658
+edit applied: reset
+===LAB-BEGIN	settle_rename_used_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_used_r1	180069
+edit applied: rename_used
+===LAB-BEGIN	rename_used_r1
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_used_r1	624459
+edit applied: reset
+===LAB-BEGIN	settle_field_type_r1
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_field_type_r1	569583
+edit applied: field_type
+===LAB-BEGIN	field_type_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	field_type_r1	168133
+edit applied: reset
+===LAB-BEGIN	settle_add_derive_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_derive_r1	152449
+edit applied: add_derive
+===LAB-BEGIN	add_derive_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_derive_r1	1070287
+edit applied: reset
+===LAB-BEGIN	settle_drop_derive_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_drop_derive_r1	1135675
+edit applied: drop_derive
+===LAB-BEGIN	drop_derive_r1
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	drop_derive_r1	1264471
+edit applied: reset
+===LAB-BEGIN	settle_order_add_field_r1
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_order_add_field_r1	1199538
+edit applied: order_add_field
+===LAB-BEGIN	order_add_field_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	order_add_field_r1	216590
+edit applied: reset
+===LAB-BEGIN	settle_inline_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_inline_body_r1	200490
+edit applied: inline_body
+===LAB-BEGIN	inline_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	inline_body_r1	275803
+edit applied: reset
+===LAB-BEGIN	settle_noninline_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_noninline_body_r1	239433
+edit applied: noninline_body
+===LAB-BEGIN	noninline_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	noninline_body_r1	130667
+edit applied: reset
+===LAB-BEGIN	settle_unrelated_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_unrelated_body_r1	109756
+edit applied: unrelated_body
+===LAB-BEGIN	unrelated_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	unrelated_body_r1	126116
+edit applied: reset
+===LAB-BEGIN	settle_consumer_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_consumer_body_r1	92817
+edit applied: consumer_body
+===LAB-BEGIN	consumer_body_r1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	consumer_body_r1	131044
+edit applied: reset
+===LAB-BEGIN	settle_touch_mtime_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_touch_mtime_r2	111825
+edit applied: touch_mtime
+===LAB-BEGIN	touch_mtime_r2
+===LAB-TIMED	touch_mtime_r2	30504
+edit applied: reset
+===LAB-BEGIN	settle_comment_r2
+===LAB-TIMED	settle_comment_r2	16543
+edit applied: comment
+===LAB-BEGIN	comment_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	comment_r2	138633
+edit applied: reset
+===LAB-BEGIN	settle_method_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_method_body_r2	118318
+edit applied: method_body
+===LAB-BEGIN	method_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	method_body_r2	134900
+edit applied: reset
+===LAB-BEGIN	settle_add_field_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_field_r2	121258
+edit applied: add_field
+===LAB-BEGIN	add_field_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_field_r2	142323
+edit applied: reset
+===LAB-BEGIN	settle_rename_unused_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_unused_r2	111394
+edit applied: rename_unused
+===LAB-BEGIN	rename_unused_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_unused_r2	132149
+edit applied: reset
+===LAB-BEGIN	settle_rename_used_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_used_r2	114896
+edit applied: rename_used
+===LAB-BEGIN	rename_used_r2
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_used_r2	454209
+edit applied: reset
+===LAB-BEGIN	settle_field_type_r2
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_field_type_r2	438728
+edit applied: field_type
+===LAB-BEGIN	field_type_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	field_type_r2	129746
+edit applied: reset
+===LAB-BEGIN	settle_add_derive_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_derive_r2	115460
+edit applied: add_derive
+===LAB-BEGIN	add_derive_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_derive_r2	830140
+edit applied: reset
+===LAB-BEGIN	settle_drop_derive_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_drop_derive_r2	797425
+edit applied: drop_derive
+===LAB-BEGIN	drop_derive_r2
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	drop_derive_r2	1026390
+edit applied: reset
+===LAB-BEGIN	settle_order_add_field_r2
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_order_add_field_r2	1051959
+edit applied: order_add_field
+===LAB-BEGIN	order_add_field_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	order_add_field_r2	186840
+edit applied: reset
+===LAB-BEGIN	settle_inline_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_inline_body_r2	177583
+edit applied: inline_body
+===LAB-BEGIN	inline_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	inline_body_r2	225509
+edit applied: reset
+===LAB-BEGIN	settle_noninline_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_noninline_body_r2	199301
+edit applied: noninline_body
+===LAB-BEGIN	noninline_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	noninline_body_r2	116420
+edit applied: reset
+===LAB-BEGIN	settle_unrelated_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_unrelated_body_r2	96817
+edit applied: unrelated_body
+===LAB-BEGIN	unrelated_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	unrelated_body_r2	97058
+edit applied: reset
+===LAB-BEGIN	settle_consumer_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_consumer_body_r2	92492
+edit applied: consumer_body
+===LAB-BEGIN	consumer_body_r2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	consumer_body_r2	124638
+edit applied: reset
+===LAB-BEGIN	settle_touch_mtime_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_touch_mtime_r3	107322
+edit applied: touch_mtime
+===LAB-BEGIN	touch_mtime_r3
+===LAB-TIMED	touch_mtime_r3	33977
+edit applied: reset
+===LAB-BEGIN	settle_comment_r3
+===LAB-TIMED	settle_comment_r3	13950
+edit applied: comment
+===LAB-BEGIN	comment_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	comment_r3	157476
+edit applied: reset
+===LAB-BEGIN	settle_method_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_method_body_r3	109257
+edit applied: method_body
+===LAB-BEGIN	method_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	method_body_r3	125767
+edit applied: reset
+===LAB-BEGIN	settle_add_field_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_field_r3	107947
+edit applied: add_field
+===LAB-BEGIN	add_field_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_field_r3	129149
+edit applied: reset
+===LAB-BEGIN	settle_rename_unused_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_unused_r3	107142
+edit applied: rename_unused
+===LAB-BEGIN	rename_unused_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_unused_r3	123480
+edit applied: reset
+===LAB-BEGIN	settle_rename_used_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_rename_used_r3	107515
+edit applied: rename_used
+===LAB-BEGIN	rename_used_r3
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	rename_used_r3	428906
+edit applied: reset
+===LAB-BEGIN	settle_field_type_r3
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_field_type_r3	409842
+edit applied: field_type
+===LAB-BEGIN	field_type_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	field_type_r3	132014
+edit applied: reset
+===LAB-BEGIN	settle_add_derive_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_add_derive_r3	103126
+edit applied: add_derive
+===LAB-BEGIN	add_derive_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	add_derive_r3	765868
+edit applied: reset
+===LAB-BEGIN	settle_drop_derive_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_drop_derive_r3	774646
+edit applied: drop_derive
+===LAB-BEGIN	drop_derive_r3
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	drop_derive_r3	977135
+edit applied: reset
+===LAB-BEGIN	settle_order_add_field_r3
+[info] compiling 201 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 400 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_order_add_field_r3	1012867
+edit applied: order_add_field
+===LAB-BEGIN	order_add_field_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	order_add_field_r3	187404
+edit applied: reset
+===LAB-BEGIN	settle_inline_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_inline_body_r3	159506
+edit applied: inline_body
+===LAB-BEGIN	inline_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	inline_body_r3	219140
+edit applied: reset
+===LAB-BEGIN	settle_noninline_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_noninline_body_r3	191221
+edit applied: noninline_body
+===LAB-BEGIN	noninline_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	noninline_body_r3	119108
+edit applied: reset
+===LAB-BEGIN	settle_unrelated_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:26:4 
+[warn] 26 |    new Codec[A]:
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:40:4 
+[warn] 40 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:47:4 
+[warn] 47 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:54:4 
+[warn] 54 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/big-derives4/src/main/scala/model/Typeclasses.scala:61:4 
+[warn] 61 |    new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] 5 warnings found
+[info] done compiling
+===LAB-TIMED	settle_unrelated_body_r3	93998
+edit applied: unrelated_body
+===LAB-BEGIN	unrelated_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	unrelated_body_r3	96916
+edit applied: reset
+===LAB-BEGIN	settle_consumer_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	settle_consumer_body_r3	82912
+edit applied: consumer_body
+===LAB-BEGIN	consumer_body_r3
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	consumer_body_r3	121312
+edit applied: reset
+===LAB-BEGIN	final_reset
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/big-derives4/target/scala-3.8.4/classes ...
+[info] done compiling
+===LAB-TIMED	final_reset	100496

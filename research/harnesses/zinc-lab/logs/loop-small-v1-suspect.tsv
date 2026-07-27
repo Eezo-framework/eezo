@@ -1,0 +1,34 @@
+== cold sbt ==
+cold_noop	1	1766
+cold_noop	2	1688
+cold_noop	3	1688
+cold_add_field	1	3108
+cold_add_field	2	3100
+cold_add_field	3	3107
+== sbt ~compile ==
+watch_sbt_comment	1	1566
+watch_sbt_comment	2	338
+watch_sbt_comment	3	313
+watch_sbt_add_field	1	247
+watch_sbt_add_field	2	246
+watch_sbt_add_field	3	222
+watch_sbt_rename_used	1	312
+watch_sbt_rename_used	2	72
+watch_sbt_rename_used	3	71
+watch_sbt_add_derive	1	40
+watch_sbt_add_derive	2	33
+watch_sbt_add_derive	3	40
+== scala-cli (Bloop) ==
+scalacli_comment	1	569
+scalacli_comment	2	459
+scalacli_comment	3	428
+scalacli_add_field	1	426
+scalacli_add_field	2	403
+scalacli_add_field	3	403
+scalacli_rename_used	1	400
+scalacli_rename_used	2	425
+scalacli_rename_used	3	397
+scalacli_add_derive	1	582
+scalacli_add_derive	2	492
+scalacli_add_derive	3	506
+LOOP DONE

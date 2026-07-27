@@ -1,0 +1,486 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.21/org.scala-sbt/sbt/1.12.1/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.12.1 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/loop-scale/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/loop-scale/)
+[info] sbt server started at local:///Users/rcardin/.sbt/1.0/server/cd2c68353089c6c3a38e/sock
+[info] started sbt server
+===WATCH-DONE	1785138601116	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:01
+[info] 1. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138605202	OK
+[success] Total time: 1 s, completed 27 lug 2026, 09:50:05
+[info] 2. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138608207	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:08
+[info] 3. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138611116	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:11
+[info] 4. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138614024	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:14
+[info] 5. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138616917	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:16
+[info] 6. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138619788	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:19
+[info] 7. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138622646	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:22
+[info] 8. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138625454	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:25
+[info] 9. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138628257	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:28
+[info] 10. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138631165	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:31
+[info] 11. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138634000	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:34
+[info] 12. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138636814	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:36
+[info] 13. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138639611	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:39
+[info] 14. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138642443	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:42
+[info] 15. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138645256	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:45
+[info] 16. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138648097	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:48
+[info] 17. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138650901	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:50
+[info] 18. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138653713	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:53
+[info] 19. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138656544	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:56
+[info] 20. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138659356	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:50:59
+[info] 21. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138662147	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:02
+[info] 22. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138664927	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:04
+[info] 23. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138667740	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:07
+[info] 24. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138670533	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:10
+[info] 25. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 50 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named44.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named45.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named46.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named47.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named48.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named49.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named5.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named6.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named7.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named8.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named9.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] 11 errors found
+===WATCH-DONE	1785138673941	FAILED
+[success] Total time: 1 s, completed 27 lug 2026, 09:51:13
+[info] 26. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138674266	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:14
+[info] 27. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138677209	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:17
+[info] 28. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+===WATCH-DONE	1785138677238	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:17
+[info] 29. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 50 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named44.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named45.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named46.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named47.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named48.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named49.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named5.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named6.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named7.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named8.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named9.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] 12 errors found
+===WATCH-DONE	1785138680472	FAILED
+[success] Total time: 1 s, completed 27 lug 2026, 09:51:20
+[info] 30. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138680757	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:20
+[info] 31. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138683718	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:23
+[info] 32. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+===WATCH-DONE	1785138683743	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:23
+[info] 33. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 50 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named4.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named40.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named41.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named42.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named44.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named45.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named46.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named47.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named48.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named49.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named5.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named6.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named7.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named8.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] -- [E008] Not Found Error: /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named9.scala:4:32 
+[error] 4 |  def name(u: User): String = u.name
+[error]   |                              ^^^^^^
+[error]   |                              value name is not a member of model.User
+[error] 16 errors found
+===WATCH-DONE	1785138686943	FAILED
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:26
+[info] 34. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138687200	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:27
+[info] 35. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 51 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138690102	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:30
+[info] 36. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/app/Named43.scala. Running 'labWatch'.
+===WATCH-DONE	1785138690130	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:30
+[info] 37. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138693260	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:33
+[info] 38. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138696346	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:36
+[info] 39. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138699418	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:39
+[info] 40. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138702470	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:42
+[info] 41. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138705528	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:45
+[info] 42. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-scale/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 100 Scala sources to /private/tmp/eezo-zinc-lab/loop-scale/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138708553	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:51:48
+[info] 43. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] shutting down sbt server

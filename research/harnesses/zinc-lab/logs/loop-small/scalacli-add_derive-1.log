@@ -1,0 +1,24 @@
+[90mCompiling project (Scala 3.8.4, JVM (26))[0m
+[90mCompiled project (Scala 3.8.4, JVM (26))[0m
+[90mCompiling project (Scala 3.8.4, JVM (26))[0m
+[[33mwarn[0m] /tmp/eezo-zinc-lab/loop-small/src/main/scala/model/Typeclasses.scala:61:5
+[[33mwarn[0m] New anonymous class definition will be duplicated at each inline site
+[[33mwarn[0m]     new Show[A] { def show(a: A) = cols.mkString("<", ",", ">") }
+[[33mwarn[0m]     ^
+[[33mwarn[0m] /tmp/eezo-zinc-lab/loop-small/src/main/scala/model/Typeclasses.scala:54:5
+[[33mwarn[0m] New anonymous class definition will be duplicated at each inline site
+[[33mwarn[0m]     new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[[33mwarn[0m]     ^
+[[33mwarn[0m] /tmp/eezo-zinc-lab/loop-small/src/main/scala/model/Typeclasses.scala:47:5
+[[33mwarn[0m] New anonymous class definition will be duplicated at each inline site
+[[33mwarn[0m]     new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[[33mwarn[0m]     ^
+[[33mwarn[0m] /tmp/eezo-zinc-lab/loop-small/src/main/scala/model/Typeclasses.scala:40:5
+[[33mwarn[0m] New anonymous class definition will be duplicated at each inline site
+[[33mwarn[0m]     new Table[A] { def columns = cols }
+[[33mwarn[0m]     ^
+[[33mwarn[0m] /tmp/eezo-zinc-lab/loop-small/src/main/scala/model/Typeclasses.scala:26:5
+[[33mwarn[0m] New anonymous class definition will be duplicated at each inline site
+[[33mwarn[0m]     new Codec[A]:
+[[33mwarn[0m]     ^
+[90mCompiled project (Scala 3.8.4, JVM (26))[0m
