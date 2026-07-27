@@ -1,0 +1,451 @@
+Note: src/BootNetty.java uses or overrides a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+# toolchain: openjdk version "26" 2026-03-17
+JDK cold-start-ms=3,2 wallclock-from-jvm-ms=163
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,3 threads=17 ok=true
+JDK restart-1-same-port-ms=0,2 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=73,0 wallclock-from-jvm-ms=251
+JETTY handler-thread: t=VirtualThread[#40]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JETTY threads-after-boot=18 (delta=6)
+JETTY restart-0-same-port-ms=1,2 threads=19 ok=true
+JETTY restart-1-same-port-ms=1,2 threads=20 ok=true
+JETTY restart-2-same-port-ms=0,9 threads=20 ok=true
+JETTY restart-3-same-port-ms=0,7 threads=20 ok=true
+JETTY restart-4-same-port-ms=0,8 threads=20 ok=true
+JETTY threads-after-final-stop=18 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, ForkJoinPool-1-worker-4, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=150,8 wallclock-from-jvm-ms=329
+HELIDON handler-thread: t=VirtualThread[#50,[0x42f4b746 0x1c1299bf] WebServer socket]/runnable@ForkJoinPool-1-worker-1 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,7 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,2 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,0 threads=22 ok=true
+HELIDON restart-3-same-port-ms=2,0 threads=23 ok=true
+HELIDON restart-4-same-port-ms=1,8 threads=24 ok=true
+HELIDON threads-after-final-stop=23 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=91,6 wallclock-from-jvm-ms=258
+UNDERTOW handler-thread: t=Thread[#44,XNIO-1 I/O-5,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=29 (delta=17)
+UNDERTOW restart-0-same-port-ms=1,5 threads=30 ok=true
+UNDERTOW restart-1-same-port-ms=1,1 threads=30 ok=true
+UNDERTOW restart-2-same-port-ms=1,3 threads=30 ok=true
+UNDERTOW restart-3-same-port-ms=1,3 threads=30 ok=true
+UNDERTOW restart-4-same-port-ms=1,3 threads=30 ok=true
+UNDERTOW threads-after-final-stop=15 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=134,6 wallclock-from-jvm-ms=316
+VERTX handler-thread: t=Thread[#46,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=19 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-3-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-4-same-port-ms=0,4 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=2,3 threads=20
+VERTX full-recreate-1-ms=2,8 threads=20
+VERTX full-recreate-2-ms=1,6 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=65,9 wallclock-from-jvm-ms=242
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,6 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,6 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-4-same-port-ms=0,6 threads=19 ok=true
+NETTY threads-after-final-stop=17 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,5 wallclock-from-jvm-ms=171
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,2 threads=17 ok=true
+JDK restart-1-same-port-ms=0,2 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=68,7 wallclock-from-jvm-ms=257
+JETTY handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-2 virtual=true
+JETTY threads-after-boot=18 (delta=5)
+JETTY restart-0-same-port-ms=1,0 threads=19 ok=true
+JETTY restart-1-same-port-ms=0,7 threads=19 ok=true
+JETTY restart-2-same-port-ms=0,9 threads=19 ok=true
+JETTY restart-3-same-port-ms=0,8 threads=19 ok=true
+JETTY restart-4-same-port-ms=0,7 threads=19 ok=true
+JETTY threads-after-final-stop=17 (boot-baseline=13)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=162,1 wallclock-from-jvm-ms=350
+HELIDON handler-thread: t=VirtualThread[#50,[0x7e4a409f 0x45401f1d] WebServer socket]/runnable@ForkJoinPool-1-worker-1 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=3,3 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,4 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,2 threads=21 ok=true
+HELIDON restart-3-same-port-ms=2,3 threads=22 ok=true
+HELIDON restart-4-same-port-ms=2,2 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=87,7 wallclock-from-jvm-ms=252
+UNDERTOW handler-thread: t=Thread[#49,XNIO-1 I/O-10,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,5 threads=30 ok=true
+UNDERTOW restart-1-same-port-ms=1,2 threads=30 ok=true
+UNDERTOW restart-2-same-port-ms=1,2 threads=30 ok=true
+UNDERTOW restart-3-same-port-ms=1,2 threads=30 ok=true
+UNDERTOW restart-4-same-port-ms=1,2 threads=30 ok=true
+UNDERTOW threads-after-final-stop=15 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=132,5 wallclock-from-jvm-ms=317
+VERTX handler-thread: t=Thread[#46,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=18 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-3-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-4-same-port-ms=0,4 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=2,5 threads=20
+VERTX full-recreate-1-ms=2,0 threads=20
+VERTX full-recreate-2-ms=1,8 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=67,8 wallclock-from-jvm-ms=247
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=4)
+NETTY restart-0-same-port-ms=0,8 threads=19 ok=true
+NETTY restart-1-same-port-ms=0,9 threads=19 ok=true
+NETTY restart-2-same-port-ms=0,7 threads=19 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=19 ok=true
+NETTY restart-4-same-port-ms=0,8 threads=19 ok=true
+NETTY threads-after-final-stop=17 (boot-baseline=13)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,2 wallclock-from-jvm-ms=172
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,2 threads=17 ok=true
+JDK restart-1-same-port-ms=0,3 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,3 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=68,9 wallclock-from-jvm-ms=231
+JETTY handler-thread: t=VirtualThread[#40]/runnable@ForkJoinPool-1-worker-2 virtual=true
+JETTY threads-after-boot=18 (delta=6)
+JETTY restart-0-same-port-ms=0,9 threads=19 ok=true
+JETTY restart-1-same-port-ms=0,8 threads=20 ok=true
+JETTY restart-2-same-port-ms=0,7 threads=20 ok=true
+JETTY restart-3-same-port-ms=0,7 threads=20 ok=true
+JETTY restart-4-same-port-ms=0,6 threads=20 ok=true
+JETTY threads-after-final-stop=18 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, ForkJoinPool-1-worker-4, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=168,2 wallclock-from-jvm-ms=351
+HELIDON handler-thread: t=VirtualThread[#50,[0x7e4a409f 0x52a2e408] WebServer socket]/runnable@ForkJoinPool-1-worker-2 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,8 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,2 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,3 threads=21 ok=true
+HELIDON restart-3-same-port-ms=2,2 threads=22 ok=true
+HELIDON restart-4-same-port-ms=2,2 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=91,3 wallclock-from-jvm-ms=277
+UNDERTOW handler-thread: t=Thread[#48,XNIO-1 I/O-9,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,5 threads=30 ok=true
+UNDERTOW restart-1-same-port-ms=1,4 threads=30 ok=true
+UNDERTOW restart-2-same-port-ms=1,3 threads=30 ok=true
+UNDERTOW restart-3-same-port-ms=1,5 threads=31 ok=true
+UNDERTOW restart-4-same-port-ms=1,4 threads=31 ok=true
+UNDERTOW threads-after-final-stop=16 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=142,4 wallclock-from-jvm-ms=330
+VERTX handler-thread: t=Thread[#45,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=18 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-3-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-4-same-port-ms=0,4 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=2,1 threads=20
+VERTX full-recreate-1-ms=1,9 threads=20
+VERTX full-recreate-2-ms=1,6 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=67,3 wallclock-from-jvm-ms=249
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-4-same-port-ms=0,6 threads=18 ok=true
+NETTY threads-after-final-stop=16 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,7 wallclock-from-jvm-ms=173
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,2 threads=17 ok=true
+JDK restart-1-same-port-ms=0,2 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=70,5 wallclock-from-jvm-ms=236
+JETTY handler-thread: t=VirtualThread[#40]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JETTY threads-after-boot=18 (delta=6)
+JETTY restart-0-same-port-ms=0,8 threads=19 ok=true
+JETTY restart-1-same-port-ms=0,6 threads=19 ok=true
+JETTY restart-2-same-port-ms=0,6 threads=19 ok=true
+JETTY restart-3-same-port-ms=0,7 threads=19 ok=true
+JETTY restart-4-same-port-ms=0,6 threads=19 ok=true
+JETTY threads-after-final-stop=17 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=156,1 wallclock-from-jvm-ms=328
+HELIDON handler-thread: t=VirtualThread[#50,[0x7e4a409f 0x1400d7ea] WebServer socket]/runnable@ForkJoinPool-1-worker-1 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,7 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,0 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,2 threads=21 ok=true
+HELIDON restart-3-same-port-ms=2,3 threads=22 ok=true
+HELIDON restart-4-same-port-ms=2,2 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=84,4 wallclock-from-jvm-ms=262
+UNDERTOW handler-thread: t=Thread[#50,XNIO-1 I/O-11,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,6 threads=31 ok=true
+UNDERTOW restart-1-same-port-ms=1,5 threads=31 ok=true
+UNDERTOW restart-2-same-port-ms=1,1 threads=31 ok=true
+UNDERTOW restart-3-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW restart-4-same-port-ms=1,3 threads=31 ok=true
+UNDERTOW threads-after-final-stop=16 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=121,3 wallclock-from-jvm-ms=298
+VERTX handler-thread: t=Thread[#43,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=18 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-3-same-port-ms=0,3 threads=18 ok=true
+VERTX restart-4-same-port-ms=0,3 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=2,4 threads=20
+VERTX full-recreate-1-ms=1,9 threads=20
+VERTX full-recreate-2-ms=1,7 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=65,9 wallclock-from-jvm-ms=243
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,6 threads=18 ok=true
+NETTY restart-4-same-port-ms=0,6 threads=18 ok=true
+NETTY threads-after-final-stop=16 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,2 wallclock-from-jvm-ms=161
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,2 threads=17 ok=true
+JDK restart-1-same-port-ms=0,2 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=67,1 wallclock-from-jvm-ms=243
+JETTY handler-thread: t=VirtualThread[#40]/runnable@ForkJoinPool-1-worker-2 virtual=true
+JETTY threads-after-boot=19 (delta=7)
+JETTY restart-0-same-port-ms=1,0 threads=19 ok=true
+JETTY restart-1-same-port-ms=0,9 threads=19 ok=true
+JETTY restart-2-same-port-ms=0,9 threads=19 ok=true
+JETTY restart-3-same-port-ms=0,8 threads=19 ok=true
+JETTY restart-4-same-port-ms=0,7 threads=19 ok=true
+JETTY threads-after-final-stop=17 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=160,3 wallclock-from-jvm-ms=342
+HELIDON handler-thread: t=VirtualThread[#50,[0x7e4a409f 0x52a2e408] WebServer socket]/runnable@ForkJoinPool-1-worker-2 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,5 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,1 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,0 threads=21 ok=true
+HELIDON restart-3-same-port-ms=2,1 threads=22 ok=true
+HELIDON restart-4-same-port-ms=2,3 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=81,5 wallclock-from-jvm-ms=247
+UNDERTOW handler-thread: t=Thread[#43,XNIO-1 I/O-4,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,5 threads=30 ok=true
+UNDERTOW restart-1-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW restart-2-same-port-ms=1,3 threads=31 ok=true
+UNDERTOW restart-3-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW restart-4-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW threads-after-final-stop=16 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=122,9 wallclock-from-jvm-ms=309
+VERTX handler-thread: t=Thread[#43,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=18 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-3-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-4-same-port-ms=0,4 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=3,2 threads=20
+VERTX full-recreate-1-ms=1,8 threads=20
+VERTX full-recreate-2-ms=1,8 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=67,5 wallclock-from-jvm-ms=243
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-4-same-port-ms=0,7 threads=19 ok=true
+NETTY threads-after-final-stop=17 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,6 wallclock-from-jvm-ms=177
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,3 threads=17 ok=true
+JDK restart-1-same-port-ms=0,2 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=66,2 wallclock-from-jvm-ms=234
+JETTY handler-thread: t=VirtualThread[#40]/runnable@ForkJoinPool-1-worker-2 virtual=true
+JETTY threads-after-boot=18 (delta=6)
+JETTY restart-0-same-port-ms=1,3 threads=19 ok=true
+JETTY restart-1-same-port-ms=1,1 threads=19 ok=true
+JETTY restart-2-same-port-ms=0,8 threads=19 ok=true
+JETTY restart-3-same-port-ms=0,7 threads=19 ok=true
+JETTY restart-4-same-port-ms=0,6 threads=19 ok=true
+JETTY threads-after-final-stop=17 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=152,8 wallclock-from-jvm-ms=329
+HELIDON handler-thread: t=VirtualThread[#50,[0x42f4b746 0x411faf80] WebServer socket]/runnable@ForkJoinPool-1-worker-2 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,8 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,3 threads=20 ok=true
+HELIDON restart-2-same-port-ms=1,8 threads=21 ok=true
+HELIDON restart-3-same-port-ms=1,9 threads=22 ok=true
+HELIDON restart-4-same-port-ms=2,1 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=82,5 wallclock-from-jvm-ms=253
+UNDERTOW handler-thread: t=Thread[#50,XNIO-1 I/O-11,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,5 threads=31 ok=true
+UNDERTOW restart-1-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW restart-2-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW restart-3-same-port-ms=1,1 threads=31 ok=true
+UNDERTOW restart-4-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW threads-after-final-stop=16 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=124,8 wallclock-from-jvm-ms=311
+VERTX handler-thread: t=Thread[#41,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=5)
+VERTX restart-0-same-port-ms=0,5 threads=18 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-2-same-port-ms=0,4 threads=18 ok=true
+VERTX restart-3-same-port-ms=0,3 threads=18 ok=true
+VERTX restart-4-same-port-ms=0,4 threads=18 ok=true
+VERTX threads-after-vertx-close=16 (boot-baseline=13)
+VERTX full-recreate-0-ms=3,1 threads=19
+VERTX full-recreate-1-ms=1,7 threads=19
+VERTX full-recreate-2-ms=1,7 threads=19
+VERTX threads-after-final-stop=16 (boot-baseline=13)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=65,5 wallclock-from-jvm-ms=231
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,6 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-4-same-port-ms=0,6 threads=18 ok=true
+NETTY threads-after-final-stop=16 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+JDK cold-start-ms=3,4 wallclock-from-jvm-ms=176
+JDK handler-thread: t=VirtualThread[#42]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JDK threads-after-boot=17 (delta=5)
+JDK restart-0-same-port-ms=0,3 threads=17 ok=true
+JDK restart-1-same-port-ms=0,3 threads=17 ok=true
+JDK restart-2-same-port-ms=0,2 threads=17 ok=true
+JDK restart-3-same-port-ms=0,2 threads=17 ok=true
+JDK restart-4-same-port-ms=0,2 threads=17 ok=true
+JDK threads-after-final-stop=15 (boot-baseline=12)
+JDK live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+JETTY cold-start-ms=64,7 wallclock-from-jvm-ms=237
+JETTY handler-thread: t=VirtualThread[#41]/runnable@ForkJoinPool-1-worker-1 virtual=true
+JETTY threads-after-boot=19 (delta=7)
+JETTY restart-0-same-port-ms=0,9 threads=19 ok=true
+JETTY restart-1-same-port-ms=0,8 threads=19 ok=true
+JETTY restart-2-same-port-ms=0,7 threads=19 ok=true
+JETTY restart-3-same-port-ms=0,7 threads=19 ok=true
+JETTY restart-4-same-port-ms=0,6 threads=19 ok=true
+JETTY threads-after-final-stop=17 (boot-baseline=12)
+JETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, ForkJoinPool-1-worker-3, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+HELIDON cold-start-ms=157,9 wallclock-from-jvm-ms=338
+HELIDON handler-thread: t=VirtualThread[#50,[0x7e4a409f 0x2c10e4bd] WebServer socket]/runnable@ForkJoinPool-1-worker-1 virtual=true
+HELIDON threads-after-boot=18 (delta=6)
+HELIDON restart-0-same-port-ms=2,7 threads=19 ok=true
+HELIDON restart-1-same-port-ms=2,3 threads=20 ok=true
+HELIDON restart-2-same-port-ms=2,1 threads=21 ok=true
+HELIDON restart-3-same-port-ms=2,3 threads=22 ok=true
+HELIDON restart-4-same-port-ms=1,9 threads=23 ok=true
+HELIDON threads-after-final-stop=22 (boot-baseline=12)
+HELIDON live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, helidon-http-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, helidon-idle-connection-timer, main]
+UNDERTOW cold-start-ms=79,4 wallclock-from-jvm-ms=247
+UNDERTOW handler-thread: t=Thread[#53,XNIO-1 I/O-14,5,main] virtual=false inIoThread=true
+UNDERTOW threads-after-boot=30 (delta=18)
+UNDERTOW restart-0-same-port-ms=1,5 threads=30 ok=true
+UNDERTOW restart-1-same-port-ms=1,1 threads=31 ok=true
+UNDERTOW restart-2-same-port-ms=1,3 threads=31 ok=true
+UNDERTOW restart-3-same-port-ms=1,1 threads=31 ok=true
+UNDERTOW restart-4-same-port-ms=1,2 threads=31 ok=true
+UNDERTOW threads-after-final-stop=16 (boot-baseline=12)
+UNDERTOW live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, main]
+VERTX cold-start-ms=124,9 wallclock-from-jvm-ms=299
+VERTX handler-thread: t=Thread[#46,vert.x-eventloop-thread-0,5,main] virtual=false
+VERTX threads-after-boot=18 (delta=6)
+VERTX restart-0-same-port-ms=0,5 threads=19 ok=true
+VERTX restart-1-same-port-ms=0,4 threads=19 ok=true
+VERTX restart-2-same-port-ms=0,3 threads=19 ok=true
+VERTX restart-3-same-port-ms=0,3 threads=19 ok=true
+VERTX restart-4-same-port-ms=0,3 threads=19 ok=true
+VERTX threads-after-vertx-close=17 (boot-baseline=12)
+VERTX full-recreate-0-ms=2,8 threads=20
+VERTX full-recreate-1-ms=2,1 threads=20
+VERTX full-recreate-2-ms=1,8 threads=20
+VERTX threads-after-final-stop=17 (boot-baseline=12)
+VERTX live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
+NETTY cold-start-ms=65,6 wallclock-from-jvm-ms=242
+NETTY handler-thread: t=Thread[#43,nioEventLoopGroup-3-1,10,main] virtual=false
+NETTY threads-after-boot=17 (delta=5)
+NETTY restart-0-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-1-same-port-ms=0,8 threads=18 ok=true
+NETTY restart-2-same-port-ms=0,7 threads=18 ok=true
+NETTY restart-3-same-port-ms=0,7 threads=19 ok=true
+NETTY restart-4-same-port-ms=0,7 threads=19 ok=true
+NETTY threads-after-final-stop=17 (boot-baseline=12)
+NETTY live-threads-at-exit: [Common-Cleaner, Finalizer, ForkJoinPool-1-delayScheduler, ForkJoinPool-1-worker-1, ForkJoinPool-1-worker-2, HttpClient-1-Worker-0, HttpClient-1-Worker-1, HttpClient-1-Worker-2, InnocuousThread-1, Notification Thread, Read-Poller, Reference Handler, Signal Dispatcher, VirtualThread-unblocker, Write-Poller, globalEventExecutor-1-1, main]
