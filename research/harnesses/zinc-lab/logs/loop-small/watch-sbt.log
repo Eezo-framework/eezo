@@ -1,0 +1,330 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.21/org.scala-sbt/sbt/1.12.1/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.12.1 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/loop-small/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/loop-small/)
+[info] sbt server started at local:///Users/rcardin/.sbt/1.0/server/4a52999292494c1321f1/sock
+[info] started sbt server
+===WATCH-DONE	1785138450257	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:30
+[info] 1. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138454265	OK
+[success] Total time: 1 s, completed 27 lug 2026, 09:47:34
+[info] 2. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138457241	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:37
+[info] 3. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138460135	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:40
+[info] 4. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138463014	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:43
+[info] 5. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138465880	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:45
+[info] 6. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138468703	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:48
+[info] 7. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138471555	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:51
+[info] 8. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138474332	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:54
+[info] 9. Monitoring source files for root/labWatch...
+[info]    Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138477119	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:57
+[info] 10. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138479930	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:47:59
+[info] 11. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138482748	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:02
+[info] 12. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138485506	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:05
+[info] 13. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138488300	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:08
+[info] 14. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138491145	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:11
+[info] 15. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138493952	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:13
+[info] 16. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138496737	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:16
+[info] 17. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138499460	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:19
+[info] 18. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138502185	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:22
+[info] 19. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138504951	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:24
+[info] 20. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138507717	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:27
+[info] 21. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138510452	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:30
+[info] 22. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138513204	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:33
+[info] 23. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138515942	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:35
+[info] 24. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138518680	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:38
+[info] 25. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 6 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138521519	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:41
+[info] 26. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138521601	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:41
+[info] 27. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 7 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138524430	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:44
+[info] 28. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+===WATCH-DONE	1785138524455	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:44
+[info] 29. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 6 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138527284	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:47
+[info] 30. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138527356	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:47
+[info] 31. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 7 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138530171	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:50
+[info] 32. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+===WATCH-DONE	1785138530192	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:50
+[info] 33. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 4 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 6 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138532996	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:52
+[info] 34. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138533077	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:53
+[info] 35. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named0.scala. Running 'labWatch'.
+[info] compiling 7 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138535879	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:55
+[info] 36. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/app/Named5.scala. Running 'labWatch'.
+===WATCH-DONE	1785138535902	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:55
+[info] 37. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138538841	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:48:58
+[info] 38. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138541680	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:49:01
+[info] 39. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138544557	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:49:04
+[info] 40. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138547422	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:49:07
+[info] 41. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138550288	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:49:10
+[info] 42. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] Build triggered by /private/tmp/eezo-zinc-lab/loop-small/src/main/scala/model/User.scala. Running 'labWatch'.
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+[info] compiling 12 Scala sources to /private/tmp/eezo-zinc-lab/loop-small/target/scala-3.8.4/classes ...
+[info] done compiling
+===WATCH-DONE	1785138553152	OK
+[success] Total time: 0 s, completed 27 lug 2026, 09:49:13
+[info] 43. Monitoring source files for root/labWatch...
+[info]     Press <enter> to interrupt or '?' for more options.
+[info] shutting down sbt server
