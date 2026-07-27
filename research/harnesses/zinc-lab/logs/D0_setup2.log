@@ -1,0 +1,161 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.20/org.scala-sbt/sbt/1.11.7/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.11.7 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/)
+[info] Executing in batch mode. For better performance use sbt's shell
+[debug] [zinc] IncrementalCompile -----------
+[debug] IncrementalCompile.incrementalCompile
+[debug] previous = Stamps for: 57 products, 22 sources, 2 libraries
+[debug] current source = Set(${BASE}/src/main/scala/app/Named1.scala, ${BASE}/src/main/scala/app/Unrelated4.scala, ${BASE}/src/main/scala/app/Unrelated5.scala, ${BASE}/src/main/scala/app/Consumer3.scala, ${BASE}/src/main/scala/app/Unrelated6.scala, ${BASE}/src/main/scala/model/User.scala, ${BASE}/src/main/scala/model/Typeclasses.scala, ${BASE}/src/main/scala/app/Consumer0.scala, ${BASE}/src/main/scala/app/Consumer1.scala, ${BASE}/src/main/scala/app/Named2.scala, ${BASE}/src/main/scala/app/Consumer2.scala, ${BASE}/src/main/scala/app/Named4.scala, ${BASE}/src/main/scala/app/OrderUse.scala, ${BASE}/src/main/scala/app/Unrelated0.scala, ${BASE}/src/main/scala/app/Consumer5.scala, ${BASE}/src/main/scala/app/Unrelated7.scala, ${BASE}/src/main/scala/app/Consumer4.scala, ${BASE}/src/main/scala/app/Named3.scala, ${BASE}/src/main/scala/app/Unrelated1.scala, ${BASE}/src/main/scala/app/Unrelated3.scala, ${BASE}/src/main/scala/app/Unrelated2.scala, ${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/Named0.scala, ${BASE}/src/main/scala/app/Named5.scala)
+[debug] > initialChanges = InitialChanges(Changes(added = Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala), removed = Set(), changed = Set(${BASE}/src/main/scala/model/User.scala), unmodified = ...),Set(),Set(),API Changes: Set())
+[debug] 
+[debug] Initial source changes:
+[debug] 	removed: Set()
+[debug] 	added: Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala)
+[debug] 	modified: Set(${BASE}/src/main/scala/model/User.scala)
+[debug] Invalidated products: Set()
+[debug] External API changes: API Changes: Set()
+[debug] Modified binary dependencies: Set()
+[debug] Initial directly invalidated classes: Set(model.User)
+[debug] Sources indirectly invalidated by:
+[debug] 	product: Set()
+[debug] 	binary dep: Set()
+[debug] 	external source: Set()
+[debug] All initially invalidated classes: Set(model.User)
+[debug] All initially invalidated sources:Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala, ${BASE}/src/main/scala/model/User.scala)
+[debug] Created transactional ClassFileManager with tempDir = /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[debug] Initial set of included nodes: model.User
+[debug] About to delete class files:
+[debug] 	User$$anon$4.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] We backup class files:
+[debug] 	User$$anon$4.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] compilation cycle 1
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes ...
+[debug] Returning already retrieved and compiled bridge: /Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-sbt-bridge/3.7.3/scala3-sbt-bridge-3.7.3.jar.
+[debug] [zinc] Running cached compiler 3580cc70 for Scala Compiler version 3.7.3
+[debug] [zinc] The Scala compiler is invoked with:
+[debug] 	-classpath
+[debug] 	/private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.7.3/scala3-library_3-3.7.3.jar:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.16/scala-library-2.13.16.jar
+[debug] Scala compilation took 1.363916667 s
+[info] done compiling
+[debug] Registering generated classes:
+[debug] 	OrderUse$.class
+[debug] 	User$$anon$4.class
+[debug] 	Order$.class
+[debug] 	OrderInstances$package$$anon$1.class
+[debug] 	OrderInstances$package$$anon$2.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	Order.class
+[debug] 	OrderUse.class
+[debug] 	OrderInstances$package$.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	OrderInstances$package.class
+[debug] 	OrderUse$.tasty
+[debug] 	User$$anon$4.tasty
+[debug] 	Order$.tasty
+[debug] 	OrderInstances$package$$anon$1.tasty
+[debug] 	OrderInstances$package$$anon$2.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	Order.tasty
+[debug] 	OrderUse.tasty
+[debug] 	OrderInstances$package$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] 	OrderInstances$package.tasty
+[debug] Invalidating (transitively) by inheritance from model.OrderInstances$package...
+[debug] Initial set of included nodes: model.OrderInstances$package
+[debug] Invalidated by transitive inheritance dependency: Set(model.OrderInstances$package)
+[debug] The following member ref dependencies of model.OrderInstances$package are invalidated:
+[debug] 	app.OrderUse
+[debug] Change NamesChange(model.OrderInstances$package,ModifiedNames(changes = UsedName(getClass,[Default]), UsedName(##,[Default]), UsedName(orderCodec,[Implicit]), UsedName(notifyAll,[Default]), UsedName(hashCode,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(orderTable,[Implicit]), UsedName(equals,[Default]), UsedName(synchronized,[Default]), UsedName(asInstanceOf,[Default]), UsedName(==,[Default]), UsedName(isInstanceOf,[Default]), UsedName($asInstanceOf,[Default]), UsedName(ne,[Default]), UsedName(wait,[Default]), UsedName(notify,[Default]), UsedName(!=,[Default]), UsedName(clone,[Default]), UsedName(OrderInstances$package,[Default]), UsedName($isInstanceOf,[Default]), UsedName(model;OrderInstances$package$;init;,[Default]), UsedName(toString,[Default]), UsedName(finalize,[Default]), UsedName(eq,[Default]))) invalidates 2 classes due to The model.OrderInstances$package has the following implicit definitions changed:
+[debug] 	UsedName(orderCodec,[Implicit]), UsedName(orderTable,[Implicit]).
+[debug]   > by transitive inheritance: Set(model.OrderInstances$package)
+[debug]   > 
+[debug]   > by member reference: Set(app.OrderUse)
+[debug]   > 
+[debug]         
+[debug] Invalidating (transitively) by inheritance from app.OrderUse...
+[debug] Initial set of included nodes: app.OrderUse
+[debug] Invalidated by transitive inheritance dependency: Set(app.OrderUse)
+[debug] Change NamesChange(app.OrderUse,ModifiedNames(changes = UsedName(getClass,[Default]), UsedName(app;OrderUse$;init;,[Default]), UsedName(##,[Default]), UsedName(notifyAll,[Default]), UsedName(hashCode,[Default]), UsedName(run,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(equals,[Default]), UsedName(synchronized,[Default]), UsedName(asInstanceOf,[Default]), UsedName(==,[Default]), UsedName(OrderUse,[Default]), UsedName(isInstanceOf,[Default]), UsedName($asInstanceOf,[Default]), UsedName(ne,[Default]), UsedName(wait,[Default]), UsedName(notify,[Default]), UsedName(!=,[Default]), UsedName(clone,[Default]), UsedName($isInstanceOf,[Default]), UsedName(toString,[Default]), UsedName(finalize,[Default]), UsedName(eq,[Default]))) invalidates 1 classes due to The app.OrderUse has the following regular definitions changed:
+[debug] 	UsedName(getClass,[Default]), UsedName(app;OrderUse$;init;,[Default]), UsedName(##,[Default]), UsedName(notifyAll,[Default]), UsedName(hashCode,[Default]), UsedName(run,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(equals,[Default]), UsedName(synchronized,[Default]), UsedName(asInstanceOf,[Default]), UsedName(==,[Default]), UsedName(OrderUse,[Default]), UsedName(isInstanceOf,[Default]), UsedName($asInstanceOf,[Default]), UsedName(ne,[Default]), UsedName(wait,[Default]), UsedName(notify,[Default]), UsedName(!=,[Default]), UsedName(clone,[Default]), UsedName($isInstanceOf,[Default]), UsedName(toString,[Default]), UsedName(finalize,[Default]), UsedName(eq,[Default]).
+[debug]   > by transitive inheritance: Set(app.OrderUse)
+[debug]   > 
+[debug]   > 
+[debug]   > 
+[debug]         
+[debug] Invalidating (transitively) by inheritance from model.Order...
+[debug] Initial set of included nodes: model.Order
+[debug] Invalidated by transitive inheritance dependency: Set(model.Order)
+[debug] The following modified names cause invalidation of model.OrderInstances$package: [UsedName($asInstanceOf,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(model;Order;init;,[Default]), UsedName(Order,[Default])]
+[debug] The following modified names cause invalidation of app.OrderUse: [UsedName(java;lang;Object;init;,[Default]), UsedName(Order,[Default])]
+[debug] Change NamesChange(model.Order,ModifiedNames(changes = UsedName(copy,[Default]), UsedName(_1,[Default]), UsedName(_3,[Default]), UsedName(getClass,[Default]), UsedName(##,[Default]), UsedName(notifyAll,[Default]), UsedName(productArity,[Default]), UsedName(hashCode,[Default]), UsedName(productElementName,[Default]), UsedName(copy$default$2,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(equals,[Default]), UsedName(productPrefix,[Default]), UsedName(MirroredMonoType,[Default]), UsedName(scala;deriving;Mirror;init;,[Default]), UsedName(MirroredElemLabels,[Default]), UsedName(java;io;Serializable;init;,[Default]), UsedName(Order,[Default]), UsedName(synchronized,[Default]), UsedName(asInstanceOf,[Default]), UsedName(sku,[Default]), UsedName(==,[Default]), UsedName(fromProduct,[Default]), UsedName(apply,[Default]), UsedName(_2,[Default]), UsedName(isInstanceOf,[Default]), UsedName($asInstanceOf,[Default]), UsedName(ne,[Default]), UsedName(copy$default$1,[Default]), UsedName(wait,[Default]), UsedName(notify,[Default]), UsedName(!=,[Default]), UsedName(discount,[Default]), UsedName(clone,[Default]), UsedName(model;Order;init;,[Default]), UsedName($isInstanceOf,[Default]), UsedName(_4,[Default]), UsedName(canEqual,[Default]), UsedName(scala;deriving;Mirror$;Product;init;,[Default]), UsedName(toString,[Default]), UsedName(qty,[Default]), UsedName(model;Order$;init;,[Default]), UsedName(copy$default$4,[Default]), UsedName(unapply,[Default]), UsedName(productElement,[Default]), UsedName(MirroredLabel,[Default]), UsedName(finalize,[Default]), UsedName(eq,[Default]), UsedName(id,[Default]), UsedName(copy$default$3,[Default]))) invalidates 3 classes due to The model.Order has the following regular definitions changed:
+[debug] 	UsedName(copy,[Default]), UsedName(_1,[Default]), UsedName(_3,[Default]), UsedName(getClass,[Default]), UsedName(##,[Default]), UsedName(notifyAll,[Default]), UsedName(productArity,[Default]), UsedName(hashCode,[Default]), UsedName(productElementName,[Default]), UsedName(copy$default$2,[Default]), UsedName(java;lang;Object;init;,[Default]), UsedName(equals,[Default]), UsedName(productPrefix,[Default]), UsedName(MirroredMonoType,[Default]), UsedName(scala;deriving;Mirror;init;,[Default]), UsedName(MirroredElemLabels,[Default]), UsedName(java;io;Serializable;init;,[Default]), UsedName(Order,[Default]), UsedName(synchronized,[Default]), UsedName(asInstanceOf,[Default]), UsedName(sku,[Default]), UsedName(==,[Default]), UsedName(fromProduct,[Default]), UsedName(apply,[Default]), UsedName(_2,[Default]), UsedName(isInstanceOf,[Default]), UsedName($asInstanceOf,[Default]), UsedName(ne,[Default]), UsedName(copy$default$1,[Default]), UsedName(wait,[Default]), UsedName(notify,[Default]), UsedName(!=,[Default]), UsedName(discount,[Default]), UsedName(clone,[Default]), UsedName(model;Order;init;,[Default]), UsedName($isInstanceOf,[Default]), UsedName(_4,[Default]), UsedName(canEqual,[Default]), UsedName(scala;deriving;Mirror$;Product;init;,[Default]), UsedName(toString,[Default]), UsedName(qty,[Default]), UsedName(model;Order$;init;,[Default]), UsedName(copy$default$4,[Default]), UsedName(unapply,[Default]), UsedName(productElement,[Default]), UsedName(MirroredLabel,[Default]), UsedName(finalize,[Default]), UsedName(eq,[Default]), UsedName(id,[Default]), UsedName(copy$default$3,[Default]).
+[debug]   > by transitive inheritance: Set(model.Order)
+[debug]   > 
+[debug]   > by member reference: Set(model.OrderInstances$package, app.OrderUse)
+[debug]   > 
+[debug]         
+[debug] New invalidations:
+[debug] Initial set of included nodes: 
+[debug] Previously invalidated, but (transitively) depend on new invalidations:
+[debug] Final step, transitive dependencies:
+[debug] 	Set()
+[debug] Initial set of included nodes: model.User, model.OrderInstances$package, app.OrderUse, model.Order
+[debug] Including app.Named3 by model.User
+[debug] Including app.Consumer4 by model.User
+[debug] Including app.Consumer3 by model.User
+[debug] Including app.Named5 by model.User
+[debug] Including app.Named2 by model.User
+[debug] Including app.Consumer2 by model.User
+[debug] Including app.Consumer5 by model.User
+[debug] Including app.Named1 by model.User
+[debug] Including app.Consumer1 by model.User
+[debug] Including app.Named4 by model.User
+[debug] Including app.Consumer0 by model.User
+[debug] Including app.Named0 by model.User
+[debug] Including app.OrderUse by model.OrderInstances$package
+[debug] Invalidated macros due to upstream dependencies change: Set()
+[debug] No classes were invalidated.
+[debug] Removing the temporary directory used for backing up class files: /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[success] Total time: 2 s, completed 26 lug 2026, 20:29:45

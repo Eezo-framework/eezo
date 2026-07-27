@@ -1,0 +1,183 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.20/org.scala-sbt/sbt/1.11.7/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.11.7 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/)
+[info] Executing in batch mode. For better performance use sbt's shell
+[debug] [zinc] IncrementalCompile -----------
+[debug] IncrementalCompile.incrementalCompile
+[debug] previous = Stamps for: 65 products, 24 sources, 2 libraries
+[debug] current source = Set(${BASE}/src/main/scala/app/Named1.scala, ${BASE}/src/main/scala/app/Unrelated4.scala, ${BASE}/src/main/scala/app/Unrelated5.scala, ${BASE}/src/main/scala/app/Consumer3.scala, ${BASE}/src/main/scala/app/Unrelated6.scala, ${BASE}/src/main/scala/model/User.scala, ${BASE}/src/main/scala/model/Typeclasses.scala, ${BASE}/src/main/scala/app/Consumer0.scala, ${BASE}/src/main/scala/app/Consumer1.scala, ${BASE}/src/main/scala/app/Named2.scala, ${BASE}/src/main/scala/app/Consumer2.scala, ${BASE}/src/main/scala/app/Named4.scala, ${BASE}/src/main/scala/app/OrderUse.scala, ${BASE}/src/main/scala/app/Unrelated0.scala, ${BASE}/src/main/scala/app/Consumer5.scala, ${BASE}/src/main/scala/app/Unrelated7.scala, ${BASE}/src/main/scala/app/Consumer4.scala, ${BASE}/src/main/scala/app/Named3.scala, ${BASE}/src/main/scala/app/Unrelated1.scala, ${BASE}/src/main/scala/app/Unrelated3.scala, ${BASE}/src/main/scala/app/Unrelated2.scala, ${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/Named0.scala, ${BASE}/src/main/scala/app/Named5.scala)
+[debug] > initialChanges = InitialChanges(Changes(added = Set(), removed = Set(), changed = Set(${BASE}/src/main/scala/model/User.scala), unmodified = ...),Set(),Set(),API Changes: Set())
+[debug] 
+[debug] Initial source changes:
+[debug] 	removed: Set()
+[debug] 	added: Set()
+[debug] 	modified: Set(${BASE}/src/main/scala/model/User.scala)
+[debug] Invalidated products: Set()
+[debug] External API changes: API Changes: Set()
+[debug] Modified binary dependencies: Set()
+[debug] Initial directly invalidated classes: Set(model.Order, model.User)
+[debug] Sources indirectly invalidated by:
+[debug] 	product: Set()
+[debug] 	binary dep: Set()
+[debug] 	external source: Set()
+[debug] All initially invalidated classes: Set(model.Order, model.User)
+[debug] All initially invalidated sources:Set(${BASE}/src/main/scala/model/User.scala)
+[debug] Created transactional ClassFileManager with tempDir = /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[debug] Initial set of included nodes: model.Order, model.User
+[debug] About to delete class files:
+[debug] 	User$$anon$4.class
+[debug] 	Order$.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	Order.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	Order$.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	Order.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] We backup class files:
+[debug] 	User$$anon$4.class
+[debug] 	Order$.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	Order.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	Order$.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	Order.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] compilation cycle 1
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes ...
+[debug] Returning already retrieved and compiled bridge: /Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-sbt-bridge/3.7.3/scala3-sbt-bridge-3.7.3.jar.
+[debug] [zinc] Running cached compiler 177709ab for Scala Compiler version 3.7.3
+[debug] [zinc] The Scala compiler is invoked with:
+[debug] 	-classpath
+[debug] 	/private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.7.3/scala3-library_3-3.7.3.jar:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.16/scala-library-2.13.16.jar
+[debug] Scala compilation took 1.320115 s
+[info] done compiling
+[debug] Registering generated classes:
+[debug] 	User$$anon$4.class
+[debug] 	Order$.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	Order.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	Order$.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	Order.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] Invalidating (transitively) by inheritance from model.Order...
+[debug] Initial set of included nodes: model.Order
+[debug] Invalidated by transitive inheritance dependency: Set(model.Order)
+[debug] None of the modified names appears in source file of app.OrderUse. This dependency is not being considered for invalidation.
+[debug] The following modified names cause invalidation of model.OrderInstances$package: [UsedName(model;Order;init;,[Default])]
+[debug] Change NamesChange(model.Order,ModifiedNames(changes = UsedName(model;Order;init;,[Default]), UsedName(apply,[Default]), UsedName(copy,[Default]), UsedName(note,[Default]), UsedName(copy$default$5,[Default]), UsedName(_5,[Default]))) invalidates 2 classes due to The model.Order has the following regular definitions changed:
+[debug] 	UsedName(model;Order;init;,[Default]), UsedName(apply,[Default]), UsedName(copy,[Default]), UsedName(note,[Default]), UsedName(copy$default$5,[Default]), UsedName(_5,[Default]).
+[debug]   > by transitive inheritance: Set(model.Order)
+[debug]   > 
+[debug]   > by member reference: Set(model.OrderInstances$package)
+[debug]   > 
+[debug]         
+[debug] New invalidations:
+[debug] 	model.OrderInstances$package
+[debug] Initial set of included nodes: model.OrderInstances$package
+[debug] Including app.OrderUse by model.OrderInstances$package
+[debug] Previously invalidated, but (transitively) depend on new invalidations:
+[debug] Final step, transitive dependencies:
+[debug] 	Set(model.OrderInstances$package)
+[debug] Initial set of included nodes: model.Order, model.User
+[debug] Including app.OrderUse by model.Order
+[debug] Including model.OrderInstances$package by model.Order
+[debug] Including app.Named3 by model.User
+[debug] Including app.Consumer4 by model.User
+[debug] Including app.Consumer3 by model.User
+[debug] Including app.Named5 by model.User
+[debug] Including app.Named2 by model.User
+[debug] Including app.Consumer2 by model.User
+[debug] Including app.Consumer5 by model.User
+[debug] Including app.Named1 by model.User
+[debug] Including app.Consumer1 by model.User
+[debug] Including app.Named4 by model.User
+[debug] Including app.Consumer0 by model.User
+[debug] Including app.Named0 by model.User
+[debug] Invalidated macros due to upstream dependencies change: Set()
+[debug] Initial set of included nodes: model.OrderInstances$package
+[debug] About to delete class files:
+[debug] 	OrderInstances$package$$anon$1.class
+[debug] 	OrderInstances$package$$anon$2.class
+[debug] 	OrderInstances$package$.class
+[debug] 	OrderInstances$package.class
+[debug] 	OrderInstances$package$$anon$1.tasty
+[debug] 	OrderInstances$package$$anon$2.tasty
+[debug] 	OrderInstances$package$.tasty
+[debug] 	OrderInstances$package.tasty
+[debug] We backup class files:
+[debug] 	OrderInstances$package$$anon$1.class
+[debug] 	OrderInstances$package$$anon$2.class
+[debug] 	OrderInstances$package$.class
+[debug] 	OrderInstances$package.class
+[debug] 	OrderInstances$package$$anon$1.tasty
+[debug] 	OrderInstances$package$$anon$2.tasty
+[debug] 	OrderInstances$package$.tasty
+[debug] 	OrderInstances$package.tasty
+[debug] compilation cycle 2
+[info] compiling 1 Scala source to /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes ...
+[debug] Returning already retrieved and compiled bridge: /Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-sbt-bridge/3.7.3/scala3-sbt-bridge-3.7.3.jar.
+[debug] [zinc] Running cached compiler 5356ed86 for Scala Compiler version 3.7.3
+[debug] [zinc] The Scala compiler is invoked with:
+[debug] 	-classpath
+[debug] 	/private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.7.3/scala3-library_3-3.7.3.jar:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.16/scala-library-2.13.16.jar
+[debug] Scala compilation took 0.223059625 s
+[info] done compiling
+[debug] Registering generated classes:
+[debug] 	OrderInstances$package$$anon$1.class
+[debug] 	OrderInstances$package.class
+[debug] 	OrderInstances$package$.class
+[debug] 	OrderInstances$package$$anon$2.class
+[debug] 	OrderInstances$package$$anon$1.tasty
+[debug] 	OrderInstances$package.tasty
+[debug] 	OrderInstances$package$.tasty
+[debug] 	OrderInstances$package$$anon$2.tasty
+[debug] New invalidations:
+[debug] Initial set of included nodes: 
+[debug] Previously invalidated, but (transitively) depend on new invalidations:
+[debug] Final step, transitive dependencies:
+[debug] 	Set()
+[debug] Initial set of included nodes: model.OrderInstances$package
+[debug] Including app.OrderUse by model.OrderInstances$package
+[debug] Invalidated macros due to upstream dependencies change: Set()
+[debug] No classes were invalidated.
+[debug] Removing the temporary directory used for backing up class files: /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[success] Total time: 2 s, completed 26 lug 2026, 20:29:48

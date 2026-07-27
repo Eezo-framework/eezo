@@ -1,0 +1,186 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.20/org.scala-sbt/sbt/1.11.7/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.11.7 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/)
+[info] Executing in batch mode. For better performance use sbt's shell
+[debug] not up to date. inChanged = true, force = false
+[debug] Updating ...
+[debug] Done updating 
+[debug] Created transactional ClassFileManager with tempDir = /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] [zinc] IncrementalCompile -----------
+[debug] IncrementalCompile.incrementalCompile
+[debug] previous = Stamps for: 0 products, 0 sources, 0 libraries
+[debug] current source = Set(${BASE}/src/main/scala/app/Named1.scala, ${BASE}/src/main/scala/app/Unrelated4.scala, ${BASE}/src/main/scala/app/Unrelated5.scala, ${BASE}/src/main/scala/app/Consumer3.scala, ${BASE}/src/main/scala/app/Unrelated6.scala, ${BASE}/src/main/scala/model/User.scala, ${BASE}/src/main/scala/model/Typeclasses.scala, ${BASE}/src/main/scala/app/Consumer0.scala, ${BASE}/src/main/scala/app/Consumer1.scala, ${BASE}/src/main/scala/app/Named2.scala, ${BASE}/src/main/scala/app/Consumer2.scala, ${BASE}/src/main/scala/app/Named4.scala, ${BASE}/src/main/scala/app/Unrelated0.scala, ${BASE}/src/main/scala/app/Consumer5.scala, ${BASE}/src/main/scala/app/Unrelated7.scala, ${BASE}/src/main/scala/app/Consumer4.scala, ${BASE}/src/main/scala/app/Named3.scala, ${BASE}/src/main/scala/app/Unrelated1.scala, ${BASE}/src/main/scala/app/Unrelated3.scala, ${BASE}/src/main/scala/app/Unrelated2.scala, ${BASE}/src/main/scala/app/Named0.scala, ${BASE}/src/main/scala/app/Named5.scala)
+[debug] > initialChanges = InitialChanges(Changes(added = Set(${BASE}/src/main/scala/app/Consumer5.scala, ${BASE}/src/main/scala/app/Consumer4.scala, ${BASE}/src/main/scala/app/Unrelated3.scala, ${BASE}/src/main/scala/app/Named2.scala, ${BASE}/src/main/scala/app/Unrelated1.scala, ${BASE}/src/main/scala/app/Unrelated7.scala, ${BASE}/src/main/scala/app/Consumer0.scala, ${BASE}/src/main/scala/app/Named3.scala, ${BASE}/src/main/scala/app/Unrelated2.scala, ${BASE}/src/main/scala/app/Consumer2.scala, ${BASE}/src/main/scala/app/Unrelated6.scala, ${BASE}/src/main/scala/app/Consumer1.scala, ${BASE}/src/main/scala/app/Unrelated5.scala, ${BASE}/src/main/scala/app/Named4.scala, ${BASE}/src/main/scala/model/Typeclasses.scala, ${BASE}/src/main/scala/app/Unrelated4.scala, ${BASE}/src/main/scala/app/Named0.scala, ${BASE}/src/main/scala/app/Consumer3.scala, ${BASE}/src/main/scala/model/User.scala, ${BASE}/src/main/scala/app/Unrelated0.scala, ${BASE}/src/main/scala/app/Named5.scala, ${BASE}/src/main/scala/app/Named1.scala), removed = Set(), changed = Set(), unmodified = ...),Set(),Set(),API Changes: Set())
+[debug] Full compilation, no sources in previous analysis.
+[debug] all 22 sources are invalidated
+[debug] Created transactional ClassFileManager with tempDir = /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[debug] Initial set of included nodes: 
+[debug] About to delete class files:
+[debug] We backup class files:
+[debug] compilation cycle 1
+[info] compiling 22 Scala sources to /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes ...
+[debug] Returning already retrieved and compiled bridge: /Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-sbt-bridge/3.7.3/scala3-sbt-bridge-3.7.3.jar.
+[debug] [zinc] Running cached compiler 60f4d38d for Scala Compiler version 3.7.3
+[debug] [zinc] The Scala compiler is invoked with:
+[debug] 	-classpath
+[debug] 	/private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.7.3/scala3-library_3-3.7.3.jar:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.16/scala-library-2.13.16.jar
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/src/main/scala/model/Typeclasses.scala:23:8 
+[warn] 23 |    new Codec[A]:
+[warn]    |        ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/src/main/scala/model/Typeclasses.scala:37:4 
+[warn] 37 |    new Table[A] { def columns = cols }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/src/main/scala/model/Typeclasses.scala:44:4 
+[warn] 44 |    new Form[A] { def html = cols.map(c => s"<input name='$c'>").mkString }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] -- [E197] Potential Issue Warning: /private/tmp/eezo-zinc-lab/src/main/scala/model/Typeclasses.scala:51:4 
+[warn] 51 |    new Resource[A] { def routes = List("GET /", "POST /") ++ cols.map(c => s"GET /:id/$c") }
+[warn]    |    ^
+[warn]    |   New anonymous class definition will be duplicated at each inline site
+[warn]    |
+[warn]    | longer explanation available when compiling with `-explain`
+[warn] four warnings found
+[debug] Scala compilation took 1.719135958 s
+[info] done compiling
+[debug] Registering generated classes:
+[debug] 	Unrelated3.class
+[debug] 	Consumer3.class
+[debug] 	Unrelated4.class
+[debug] 	Named2$.class
+[debug] 	Named3$.class
+[debug] 	Unrelated5$.class
+[debug] 	Codec$given_Codec_Int$.class
+[debug] 	Table$.class
+[debug] 	Codec$.class
+[debug] 	Resource$.class
+[debug] 	Codec$given_Codec_Boolean$.class
+[debug] 	User$$anon$4.class
+[debug] 	Table.class
+[debug] 	Unrelated0$.class
+[debug] 	Named3.class
+[debug] 	Named0.class
+[debug] 	Codec$given_Codec_String$.class
+[debug] 	Codec.class
+[debug] 	Unrelated2.class
+[debug] 	Unrelated1$.class
+[debug] 	Unrelated4$.class
+[debug] 	Form.class
+[debug] 	Unrelated1.class
+[debug] 	Named5$.class
+[debug] 	User$$anon$1.class
+[debug] 	Named1.class
+[debug] 	Unrelated6$.class
+[debug] 	Named1$.class
+[debug] 	Named2.class
+[debug] 	Unrelated5.class
+[debug] 	Consumer0.class
+[debug] 	Consumer2.class
+[debug] 	Unrelated7.class
+[debug] 	Consumer0$.class
+[debug] 	Named5.class
+[debug] 	User$$anon$3.class
+[debug] 	Consumer1.class
+[debug] 	Named0$.class
+[debug] 	Form$.class
+[debug] 	Consumer4.class
+[debug] 	Unrelated0.class
+[debug] 	Unrelated3$.class
+[debug] 	User$.class
+[debug] 	Unrelated6.class
+[debug] 	Named4.class
+[debug] 	Consumer2$.class
+[debug] 	Consumer5$.class
+[debug] 	User$$anon$2.class
+[debug] 	Consumer5.class
+[debug] 	Consumer1$.class
+[debug] 	Resource.class
+[debug] 	Unrelated7$.class
+[debug] 	Named4$.class
+[debug] 	Consumer3$.class
+[debug] 	User.class
+[debug] 	Unrelated2$.class
+[debug] 	Consumer4$.class
+[debug] 	Unrelated3.tasty
+[debug] 	Consumer3.tasty
+[debug] 	Unrelated4.tasty
+[debug] 	Named2$.tasty
+[debug] 	Named3$.tasty
+[debug] 	Unrelated5$.tasty
+[debug] 	Codec$given_Codec_Int$.tasty
+[debug] 	Table$.tasty
+[debug] 	Codec$.tasty
+[debug] 	Resource$.tasty
+[debug] 	Codec$given_Codec_Boolean$.tasty
+[debug] 	User$$anon$4.tasty
+[debug] 	Table.tasty
+[debug] 	Unrelated0$.tasty
+[debug] 	Named3.tasty
+[debug] 	Named0.tasty
+[debug] 	Codec$given_Codec_String$.tasty
+[debug] 	Codec.tasty
+[debug] 	Unrelated2.tasty
+[debug] 	Unrelated1$.tasty
+[debug] 	Unrelated4$.tasty
+[debug] 	Form.tasty
+[debug] 	Unrelated1.tasty
+[debug] 	Named5$.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	Named1.tasty
+[debug] 	Unrelated6$.tasty
+[debug] 	Named1$.tasty
+[debug] 	Named2.tasty
+[debug] 	Unrelated5.tasty
+[debug] 	Consumer0.tasty
+[debug] 	Consumer2.tasty
+[debug] 	Unrelated7.tasty
+[debug] 	Consumer0$.tasty
+[debug] 	Named5.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	Consumer1.tasty
+[debug] 	Named0$.tasty
+[debug] 	Form$.tasty
+[debug] 	Consumer4.tasty
+[debug] 	Unrelated0.tasty
+[debug] 	Unrelated3$.tasty
+[debug] 	User$.tasty
+[debug] 	Unrelated6.tasty
+[debug] 	Named4.tasty
+[debug] 	Consumer2$.tasty
+[debug] 	Consumer5$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	Consumer5.tasty
+[debug] 	Consumer1$.tasty
+[debug] 	Resource.tasty
+[debug] 	Unrelated7$.tasty
+[debug] 	Named4$.tasty
+[debug] 	Consumer3$.tasty
+[debug] 	User.tasty
+[debug] 	Unrelated2$.tasty
+[debug] 	Consumer4$.tasty
+[debug] Removing the temporary directory used for backing up class files: /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[success] Total time: 2 s, completed 26 lug 2026, 20:28:26

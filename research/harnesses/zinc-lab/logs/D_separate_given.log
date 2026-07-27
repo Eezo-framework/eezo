@@ -1,0 +1,94 @@
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A terminally deprecated method in sun.misc.Unsafe has been called
+WARNING: sun.misc.Unsafe::objectFieldOffset has been called by scala.runtime.LazyVals$ (file:/Users/rcardin/.sdkman/candidates/sbt/1.12.1/bin/sbt-launch.jar)
+WARNING: Please consider reporting this to the maintainers of class scala.runtime.LazyVals$
+WARNING: sun.misc.Unsafe::objectFieldOffset will be removed in a future release
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::load has been called by org.scalasbt.ipcsocket.NativeLoader in an unnamed module (file:/Users/rcardin/.sbt/boot/scala-2.12.20/org.scala-sbt/sbt/1.11.7/ipcsocket-1.6.3.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+[info] welcome to sbt 1.11.7 (Eclipse Adoptium Java 26)
+[info] loading project definition from /private/tmp/eezo-zinc-lab/project
+[info] loading settings for project root from build.sbt...
+[info] set current project to root (in build file:/private/tmp/eezo-zinc-lab/)
+[info] Executing in batch mode. For better performance use sbt's shell
+[debug] [zinc] IncrementalCompile -----------
+[debug] IncrementalCompile.incrementalCompile
+[debug] previous = Stamps for: 57 products, 22 sources, 2 libraries
+[debug] current source = Set(${BASE}/src/main/scala/app/Named1.scala, ${BASE}/src/main/scala/app/Unrelated4.scala, ${BASE}/src/main/scala/app/Unrelated5.scala, ${BASE}/src/main/scala/app/Consumer3.scala, ${BASE}/src/main/scala/app/Unrelated6.scala, ${BASE}/src/main/scala/model/User.scala, ${BASE}/src/main/scala/model/Typeclasses.scala, ${BASE}/src/main/scala/app/Consumer0.scala, ${BASE}/src/main/scala/app/Consumer1.scala, ${BASE}/src/main/scala/app/Named2.scala, ${BASE}/src/main/scala/app/Consumer2.scala, ${BASE}/src/main/scala/app/Named4.scala, ${BASE}/src/main/scala/app/OrderUse.scala, ${BASE}/src/main/scala/app/Unrelated0.scala, ${BASE}/src/main/scala/app/Consumer5.scala, ${BASE}/src/main/scala/app/Unrelated7.scala, ${BASE}/src/main/scala/app/Consumer4.scala, ${BASE}/src/main/scala/app/Named3.scala, ${BASE}/src/main/scala/app/Unrelated1.scala, ${BASE}/src/main/scala/app/Unrelated3.scala, ${BASE}/src/main/scala/app/Unrelated2.scala, ${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/Named0.scala, ${BASE}/src/main/scala/app/Named5.scala)
+[debug] > initialChanges = InitialChanges(Changes(added = Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala), removed = Set(), changed = Set(${BASE}/src/main/scala/model/User.scala), unmodified = ...),Set(),Set(),API Changes: Set())
+[debug] 
+[debug] Initial source changes:
+[debug] 	removed: Set()
+[debug] 	added: Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala)
+[debug] 	modified: Set(${BASE}/src/main/scala/model/User.scala)
+[debug] Invalidated products: Set()
+[debug] External API changes: API Changes: Set()
+[debug] Modified binary dependencies: Set()
+[debug] Initial directly invalidated classes: Set(model.User)
+[debug] Sources indirectly invalidated by:
+[debug] 	product: Set()
+[debug] 	binary dep: Set()
+[debug] 	external source: Set()
+[debug] All initially invalidated classes: Set(model.User)
+[debug] All initially invalidated sources:Set(${BASE}/src/main/scala/model/OrderInstances.scala, ${BASE}/src/main/scala/app/OrderUse.scala, ${BASE}/src/main/scala/model/User.scala)
+[debug] Created transactional ClassFileManager with tempDir = /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[debug] Initial set of included nodes: model.User
+[debug] About to delete class files:
+[debug] 	User$$anon$4.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] We backup class files:
+[debug] 	User$$anon$4.class
+[debug] 	User$$anon$1.class
+[debug] 	User$$anon$3.class
+[debug] 	User$.class
+[debug] 	User$$anon$2.class
+[debug] 	User.class
+[debug] 	User$$anon$4.tasty
+[debug] 	User$$anon$1.tasty
+[debug] 	User$$anon$3.tasty
+[debug] 	User$.tasty
+[debug] 	User$$anon$2.tasty
+[debug] 	User.tasty
+[debug] compilation cycle 1
+[info] compiling 3 Scala sources to /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes ...
+[debug] Returning already retrieved and compiled bridge: /Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-sbt-bridge/3.7.3/scala3-sbt-bridge-3.7.3.jar.
+[debug] [zinc] Running cached compiler 1f15f8b0 for Scala Compiler version 3.7.3
+[debug] [zinc] The Scala compiler is invoked with:
+[debug] 	-classpath
+[debug] 	/private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala3-library_3/3.7.3/scala3-library_3-3.7.3.jar:/Users/rcardin/Library/Caches/Coursier/v1/https/repo1.maven.org/maven2/org/scala-lang/scala-library/2.13.16/scala-library-2.13.16.jar
+[error] -- [E172] Type Error: /private/tmp/eezo-zinc-lab/src/main/scala/app/OrderUse.scala:4:50 
+[error] 4 |  def run(o: Order): String = summon[Codec[Order]].encode(o) + summon[Table[Order]].columns.mkString(",")
+[error]   |                                                  ^
+[error]   |No given instance of type model.Codec[model.Order] was found for parameter x of method summon in object Predef
+[error]   |
+[error]   |Note: given instance orderCodec in package model was not considered because it was not imported with `import given`.
+[error] one error found
+[debug] Compilation failed
+[debug] Rolling back changes to class files.
+[debug] Removing generated classes:
+[debug] Restoring class files: 
+[debug] 	User$$anon$2.class
+[debug] 	User$.class
+[debug] 	User$$anon$4.class
+[debug] 	User.tasty
+[debug] 	User$$anon$3.class
+[debug] 	User$$anon$1.class
+[debug] 	User.class
+[debug] Removing the temporary directory used for backing up class files: /private/tmp/eezo-zinc-lab/target/scala-3.7.3/classes.bak
+[error] (Compile / compileIncremental) Compilation failed
+[error] Total time: 1 s, completed 26 lug 2026, 20:29:22

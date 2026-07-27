@@ -2,5 +2,15 @@
 *.tasty
 *.log
 
+# build output
+target/
+.bloop/
+.bsp/
+.scala-build/
+.metals/
+
+# preserved research harnesses: their logs are the evidence, not noise
+!research/harnesses/**/*.log
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*
