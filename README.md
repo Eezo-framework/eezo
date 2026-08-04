@@ -6,7 +6,7 @@ A Scala 3 web framework. Direct-style. The case class is the source of truth. De
 eezo is released under the [MIT License](LICENSE).
 
 ```
-Copyright (c) 2026 Riccardo Cardin
+Copyright (c) 2026 Riccardo Cardin and Daniel Ciocîrlan
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
