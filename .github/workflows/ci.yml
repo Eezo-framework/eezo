@@ -12,22 +12,17 @@ concurrency:
 
 jobs:
   build:
-    name: Compile and test (JDK ${{ matrix.jdk }})
+    name: Compile and test
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        jdk: [25, 26]
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up JDK ${{ matrix.jdk }}
+      - name: Set up JDK 25
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: ${{ matrix.jdk }}
+          java-version: "25"
           cache: sbt
 
       - name: Set up sbt
@@ -41,8 +36,9 @@ jobs:
       # on JDK 21. `Global / onLoad` in the sbt build fails the load on a JVM below the floor, so a
       # bad JDK is caught before any task runs. ToolchainSuite then asserts the Scala version, the
       # floor and that `-release 25` really reached the bytecode, all from inside the compiled
-      # code, so no separate shell check is needed here. The JDK 26 leg is the only configuration
-      # in which that bytecode assertion can actually fail, since the JDK 25 leg would stamp class
-      # file major 69 with or without `-release 25` reaching the compiler.
-      - name: Test (JDK ${{ matrix.jdk }})
+      # code, so no separate shell check is needed here. Note that the bytecode half of that
+      # assertion cannot fail on this runner: JDK 25 stamps class file major 69 with or without
+      # `-release 25` reaching the compiler. It only discriminates when the build JVM sits above
+      # the floor, which is where a contributor on a newer JDK will catch it.
+      - name: Test
         run: sbt -batch test
