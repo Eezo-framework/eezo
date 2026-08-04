@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compile and test
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      # The JDK floor is a design constraint, not a preference: JEP 491 removed virtual-thread
+      # pinning on `synchronized`, and research/http-server.md measured 16x on JDK 21. Assert the
+      # runner actually has it rather than trusting the setup step.
+      - name: Assert the JDK is 25 or newer
+        run: |
+          java -version
+          running=$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
+          echo "java.specification.version = $running"
+          if [ "${running%%.*}" -lt 25 ]; then
+            echo "::error::eezo needs JDK 25 or newer, the runner has $running"
+            exit 1
+          fi
+
+      - name: Assert the build resolves Scala 3.8.x
+        run: |
+          resolved=$(sbt -batch -error "print core/scalaVersion" | tr -d '[:space:]')
+          echo "scalaVersion = $resolved"
+          case "$resolved" in
+            3.8.*) ;;
+            *) echo "::error::expected Scala 3.8.x, the build resolved $resolved"; exit 1 ;;
+          esac
+
+      - name: Compile
+        run: sbt -batch compile Test/compile
+
+      # ToolchainSuite re-asserts both facts from inside the compiled code, including that
+      # `-release 25` really reached the bytecode.
+      - name: Test
+        run: sbt -batch test
