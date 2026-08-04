@@ -1,6 +1,6 @@
 # Migration engine and SQLite/Postgres dialect portability
 
-Research ticket [#5](https://github.com/rcardin/eezo/issues/5). Investigated 2026-07-26.
+Research ticket [#5](https://github.com/rcardin/eezo/issues/5). Investigated 2026-07-26. Licence premises revised 2026-08-04, when eezo moved from GPL-3.0 to MIT ([#37](https://github.com/Eezo-framework/eezo/issues/37)); the Liquibase conclusion survives the move but the argument for it changed shape, and §4 and the confidence note record how.
 
 ## Question
 
@@ -8,7 +8,7 @@ eezo claims that one migration file targets SQLite in development and Postgres i
 
 ## Summary of findings
 
-1. **Liquibase is disqualified on licence.** Liquibase 5.0 and later is FSL-1.1-ALv2, not open source. eezo is GPLv3. The combination is not distributable.
+1. **Liquibase is disqualified on licence.** Liquibase 5.0 and later is FSL-1.1-ALv2, not open source. eezo is MIT, so there is no mechanical incompatibility to point at, but FSL's Permitted Purpose restriction passes through to every application that ships eezo, and a framework offering schema migration as a headline feature is plausibly a Competing Use under it.
 2. **Flyway Community is genuinely Apache 2.0** and covers SQLite and Postgres, but the free tier gives you `migrate`, `info`, `validate`, `baseline`, `repair` and placeholders, and nothing else. `undo` is Teams. Schema diff and migration generation are Enterprise. Those are exactly the two features eezo's headline claims need.
 3. **No tool abstracts the SQLite/Postgres gap well.** Liquibase, the only one that tries, emits SQL that SQLite rejects (verified against Liquibase's own test fixtures) and rebuilds SQLite tables using the precise sequence SQLite's documentation warns causes corruption.
 4. **Placeholder substitution is not the state of the art, but it is the right technique for the hand written path.** The state of the art is a typed schema model rendered per dialect. Skiff already had that on the generated path. The two coexist correctly.
@@ -58,7 +58,7 @@ And `flyway-database-postgresql`, the module eezo would need for production:
 
 **SQLite needs no extra module.** SQLite support lives inside `flyway-core` itself, not in a separate database plugin. A code search of the repository returns `flyway-core/src/main/java/org/flywaydb/core/internal/database/sqlite/SQLiteDatabase.java`, `SQLiteParser.java`, `SQLiteTable.java`, `SQLiteSchema.java`, `SQLiteConnection.java` and `SQLiteDatabaseType.java`. So both target databases are covered by Apache 2.0 artifacts.
 
-**Apache 2.0 is compatible with eezo's GPLv3.** Apache 2.0 is one way compatible with GPLv3, so a GPLv3 work may incorporate Apache 2.0 dependencies. No problem here.
+**Apache 2.0 sits cleanly under eezo's MIT.** MIT imposes no reciprocity, so an MIT work may depend on and redistribute Apache 2.0 artifacts without qualification. The only obligations Apache 2.0 adds are attribution and carrying any upstream `NOTICE`, which is a paragraph in eezo's own `NOTICE` file. No problem here.
 
 #### What the free tier does not include
 
@@ -107,7 +107,9 @@ There is a conversion clause:
 
 Liquibase confirms the cutover and that it is not retroactive: "All versions of Liquibase Community released under Apache 2.0 remain under Apache 2.0. FSL applies only to Liquibase Community 5.0 and later" ([Liquibase, Strengthening Liquibase Community for the Future](https://www.liquibase.com/blog/liquibase-community-for-the-future-fsl)). Verified directly: `LICENSE.txt` at tag `v4.33.0` is still the Apache License 2.0, while `master` is FSL.
 
-**Why this is fatal for eezo specifically.** eezo is GPLv3 (`/Users/rcardin/Documents/Repositories/eezo/LICENSE`). GPLv3 forbids imposing further restrictions on downstream recipients. FSL's Permitted Purpose clause is exactly such a restriction, a field of use limit. A GPLv3 framework cannot redistribute or hard depend on FSL licensed Liquibase 5.x. The Apache Software Foundation opened [LEGAL-721](https://issues.apache.org/jira/browse/LEGAL-721) on the same question for its own projects in December 2025; the issue notes Liquibase's own acknowledgement that "FSL does not technically meet the definition of 'open source' promulgated by the Open Source Initiative."
+**Why this rules Liquibase out for eezo specifically.** eezo is MIT (`LICENSE`). MIT imposes no reciprocity, so unlike a copyleft licence it raises no direct incompatibility, and an MIT project may technically depend on an FSL artifact. The objection is what that does to eezo's users. FSL's Redistribution clause binds "all copies, modifications and derivatives", so the Permitted Purpose field of use limit reaches every application that ships eezo's migration engine, and those users inherit it without eezo's own licence ever signalling it. A permissive framework that quietly hands its users a restriction its licence disclaims is worse than a copyleft one that states its terms up front.
+
+The restriction also bites eezo directly. A framework whose headline claims include reversible migrations and model to schema diffing, distributed as part of a commercial product or service, "offers the same or substantially similar functionality as the Software", which is Competing Use as clause 3 defines it. The Apache Software Foundation opened [LEGAL-721](https://issues.apache.org/jira/browse/LEGAL-721) on this question in December 2025 for its own Apache 2.0 projects, that is, for permissively licensed works rather than copyleft ones, so the analogy to eezo's position is close; the issue notes Liquibase's own acknowledgement that "FSL does not technically meet the definition of 'open source' promulgated by the Open Source Initiative."
 
 Pinning Liquibase 4.33 forever is technically possible but means depending on an abandoned branch of a schema tool. That is not a foundation for a framework.
 
@@ -575,7 +577,7 @@ Against a three second budget, 180 ms is about 6%. Not disqualifying, but not fr
 
 The reasoning, in order of weight:
 
-1. **Liquibase is not available.** FSL-1.1-ALv2 from 5.0 is not open source and its Permitted Purpose restriction is incompatible with eezo's GPLv3. Pinning 4.33 forever is not a foundation. This is not a judgement call.
+1. **Liquibase is not available.** FSL-1.1-ALv2 from 5.0 is not open source, its Permitted Purpose restriction passes through to every application that ships eezo, and eezo's own migration feature set is plausibly a Competing Use under it. Pinning 4.33 forever is not a foundation. Under MIT this is a judgement rather than the legal impossibility it was under GPLv3, but the judgement is not close.
 
 2. **Flyway Community does not supply the features eezo's claims need.** Undo is Teams. Diff and generate are Enterprise. eezo must build reversible migrations and model to schema diffing itself either way. Skiff proved this: it already reimplemented rollback outside Flyway, and its `AutoMigrations` renderer already bypasses placeholders entirely for the generated path.
 
@@ -606,7 +608,7 @@ The reasoning, in order of weight:
 
 ### Confidence
 
-**High** on the licence findings. Both licence texts were read in full from the projects' own repositories, and the edition gating for undo, diff and generate is stated explicitly in Redgate's documentation. The GPLv3 versus FSL incompatibility is a straightforward reading of GPLv3's no-further-restrictions rule, though it is a legal conclusion rather than a technical one and a lawyer should confirm it before it is written into project documentation.
+**High** on the licence facts, **medium** on the FSL conclusion. Both licence texts were read in full from the projects' own repositories, and the edition gating for undo, diff and generate is stated explicitly in Redgate's documentation. That FSL-1.1-ALv2 is not OSI open source, and that its terms pass through on redistribution, is not in doubt. The Competing Use reading is weaker than the argument this document originally carried: when eezo was GPLv3 the incompatibility was mechanical, a direct application of GPLv3's no-further-restrictions rule, whereas under MIT it rests on whether a framework bundling Liquibase "offers the same or substantially similar functionality" within the meaning of FSL clause 3. That is a legal conclusion rather than a technical one, and a lawyer should confirm it before it is written into project documentation. The recommendation does not depend on it: Liquibase's broken SQLite support, documented from Liquibase's own test fixtures in §4, disqualifies it on technical grounds alone.
 
 **High** on the dialect gap analysis. Every construct is cited to SQLite's or PostgreSQL's own documentation, and the foreign key default, transactional DDL behaviour and rendered schema were verified empirically rather than assumed.
 
