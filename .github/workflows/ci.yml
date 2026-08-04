@@ -28,6 +28,11 @@ jobs:
       - name: Set up sbt
         uses: sbt/setup-sbt@v1
 
+      # Formatting is checked before compiling, so a badly formatted tree fails in seconds rather
+      # than after the build.
+      - name: Check formatting
+        run: sbt -batch scalafmtCheckAll scalafmtSbtCheck
+
       - name: Compile
         run: sbt -batch compile Test/compile
 

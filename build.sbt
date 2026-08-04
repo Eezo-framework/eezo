@@ -1,10 +1,32 @@
 import Dependencies._
 
-// eezo ships as one version. No module carries its own, and no module is released alone.
-ThisBuild / version      := "0.1.0-SNAPSHOT"
-ThisBuild / organization := "io.eezo"
-ThisBuild / scalaVersion := Toolchain.ScalaVersion
-ThisBuild / versionScheme := Some("early-semver")
+// eezo ships as one version. No module carries its own, and no module is released alone. The
+// version itself is not set here: sbt-ci-release derives it from the git tag through sbt-dynver,
+// so a release is a tag and nothing else. The fields below are what Maven Central requires in the
+// POM of every artifact.
+inThisBuild(
+  List(
+    organization  := "io.eezo",
+    scalaVersion  := Toolchain.ScalaVersion,
+    versionScheme := Some("early-semver"),
+    homepage      := Some(url("https://github.com/Eezo-framework/eezo")),
+    licenses      := List("MIT" -> url("https://opensource.org/licenses/MIT")),
+    developers    := List(
+      Developer(
+        "rcardin",
+        "Riccardo Cardin",
+        "riccardo DOT cardin AT gmail.com",
+        url("https://github.com/rcardin")
+      ),
+      Developer(
+        "daniel-ciocirlan",
+        "Daniel Ciocîrlan",
+        "",
+        url("https://github.com/daniel-ciocirlan")
+      )
+    )
+  )
+)
 
 // The JDK floor is checked when the build loads, so that a wrong JVM fails with a reason instead
 // of with a `-release` error forty lines into a compile.

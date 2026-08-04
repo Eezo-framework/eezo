@@ -1,0 +1,38 @@
+name: Release
+
+# A release is a tag and nothing else. sbt-ci-release reads the version off the tag through
+# sbt-dynver, signs every module and pushes the bundle to Sonatype Central. Pushing to any other
+# ref publishes nothing, so this workflow only ever fires on `v*`.
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    name: Publish to Sonatype Central
+    runs-on: ubuntu-latest
+
+    steps:
+      # sbt-dynver reads the tag out of the git history, so a shallow clone would leave it with
+      # no version to derive.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Publish
+        run: sbt -batch ci-release
+        env:
+          PGP_PASSPHRASE: ${{ secrets.PGP_PASSPHRASE }}
+          PGP_SECRET: ${{ secrets.PGP_SECRET }}
+          SONATYPE_PASSWORD: ${{ secrets.SONATYPE_PASSWORD }}
+          SONATYPE_USERNAME: ${{ secrets.SONATYPE_USERNAME }}
