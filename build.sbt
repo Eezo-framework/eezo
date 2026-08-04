@@ -2,7 +2,7 @@ import Dependencies._
 
 // eezo ships as one version. No module carries its own, and no module is released alone.
 ThisBuild / version      := "0.1.0-SNAPSHOT"
-ThisBuild / organization := "in.rcard.eezo"
+ThisBuild / organization := "io.eezo"
 ThisBuild / scalaVersion := Toolchain.ScalaVersion
 ThisBuild / versionScheme := Some("early-semver")
 
