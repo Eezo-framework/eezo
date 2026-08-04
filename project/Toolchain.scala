@@ -1,5 +1,3 @@
-import java.io.{DataInputStream, File, FileInputStream}
-
 /** Facts about the toolchain eezo is built with, and the assertions that keep them honest.
   *
   * The version numbers live here, in one place, so that `build.sbt`, the generated `BuildInfo` and
@@ -13,16 +11,11 @@ object Toolchain {
   /** The minimum JDK, and the bytecode target.
     *
     * JEP 491 landed in JDK 24 and removed virtual-thread pinning on `synchronized`; JDK 25 is the
-    * first LTS that carries it. `research/http-server.md` measured a 16x throughput difference
-    * against JDK 21 on exactly that behaviour, and eezo's server design depends on it. The floor
-    * does not move downwards.
+    * first LTS that carries it. `research/http-server.md` measured a latency degradation of roughly
+    * 16.2x to 17.2x at fixed concurrency, comparing JDK 21 against JDK 26 on exactly that
+    * behaviour, and eezo's server design depends on it. The floor does not move downwards.
     */
   val JdkFloor = 25
-
-  /** The class-file major version that `JdkFloor` stamps. Java 1.0 is 45, and it counts up by one
-    * per release.
-    */
-  val ClassFileMajor = JdkFloor + 44
 
   /** The major version of the JVM running this build. */
   def runningJdkMajor: Int = {
@@ -42,27 +35,4 @@ object Toolchain {
           "LTS carrying it, and eezo's server design depends on it. See research/http-server.md."
       )
   }
-
-  /** The major version stamped into the first class file found under `dir`.
-    *
-    * Reads the class file header directly: four magic bytes, then the minor and major version as
-    * unsigned shorts.
-    */
-  def classFileMajorOf(dir: File): Int = {
-    val first = allClassFiles(dir).headOption
-      .getOrElse(sys.error(s"no class file under $dir to read a bytecode version from"))
-    val in = new DataInputStream(new FileInputStream(first))
-    try {
-      if (in.readInt() != 0xcafebabe) sys.error(s"$first does not start with the class file magic")
-      in.readUnsignedShort() // minor
-      in.readUnsignedShort() // major
-    } finally in.close()
-  }
-
-  private def allClassFiles(dir: File): Seq[File] =
-    Option(dir.listFiles()).toSeq.flatten.flatMap { f =>
-      if (f.isDirectory) allClassFiles(f)
-      else if (f.getName.endsWith(".class")) Seq(f)
-      else Nil
-    }
 }

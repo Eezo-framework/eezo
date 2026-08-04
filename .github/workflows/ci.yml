@@ -12,48 +12,37 @@ concurrency:
 
 jobs:
   build:
-    name: Compile and test
+    name: Compile and test (JDK ${{ matrix.jdk }})
     runs-on: ubuntu-latest
+
+    strategy:
+      fail-fast: false
+      matrix:
+        jdk: [25, 26]
 
     steps:
       - uses: actions/checkout@v5
 
-      - name: Set up JDK 25
+      - name: Set up JDK ${{ matrix.jdk }}
         uses: actions/setup-java@v5
         with:
           distribution: temurin
-          java-version: "25"
+          java-version: ${{ matrix.jdk }}
           cache: sbt
 
       - name: Set up sbt
         uses: sbt/setup-sbt@v1
 
-      # The JDK floor is a design constraint, not a preference: JEP 491 removed virtual-thread
-      # pinning on `synchronized`, and research/http-server.md measured 16x on JDK 21. Assert the
-      # runner actually has it rather than trusting the setup step.
-      - name: Assert the JDK is 25 or newer
-        run: |
-          java -version
-          running=$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
-          echo "java.specification.version = $running"
-          if [ "${running%%.*}" -lt 25 ]; then
-            echo "::error::eezo needs JDK 25 or newer, the runner has $running"
-            exit 1
-          fi
-
-      - name: Assert the build resolves Scala 3.8.x
-        run: |
-          resolved=$(sbt -batch -error "print core/scalaVersion" | tr -d '[:space:]')
-          echo "scalaVersion = $resolved"
-          case "$resolved" in
-            3.8.*) ;;
-            *) echo "::error::expected Scala 3.8.x, the build resolved $resolved"; exit 1 ;;
-          esac
-
       - name: Compile
         run: sbt -batch compile Test/compile
 
-      # ToolchainSuite re-asserts both facts from inside the compiled code, including that
-      # `-release 25` really reached the bytecode.
-      - name: Test
+      # The JDK floor is a design constraint, not a preference: JEP 491 removed virtual thread
+      # pinning on `synchronized`, and research/http-server.md measured a 16x latency degradation
+      # on JDK 21. `Global / onLoad` in the sbt build fails the load on a JVM below the floor, so a
+      # bad JDK is caught before any task runs. ToolchainSuite then asserts the Scala version, the
+      # floor and that `-release 25` really reached the bytecode, all from inside the compiled
+      # code, so no separate shell check is needed here. The JDK 26 leg is the only configuration
+      # in which that bytecode assertion can actually fail, since the JDK 25 leg would stamp class
+      # file major 69 with or without `-release 25` reaching the compiler.
+      - name: Test (JDK ${{ matrix.jdk }})
         run: sbt -batch test

@@ -21,12 +21,12 @@ lazy val commonSettings = Seq(
     "-feature",
     "-unchecked",
     "-Wunused:all",
-    "-Wvalue-discard"
+    "-Wvalue-discard",
+    // The two warnings above are only worth setting if they can fail the build.
+    "-Werror"
   ),
   javacOptions ++= Seq("--release", Toolchain.JdkFloor.toString),
-  libraryDependencies += munit,
-  // Tests boot real servers on virtual threads. A forked JVM keeps that out of sbt's own.
-  Test / fork := true
+  libraryDependencies += munit
 )
 
 /** A module of the framework, at `modules/<id>`, published as `eezo-<id>`. */
@@ -78,8 +78,12 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`.
 lazy val cli = module("cli").dependsOn(core, http, db, derives, live, auth)
 
+// The root has no sources today, but it still carries commonSettings. Without it, any file
+// dropped at the repo root would compile against whatever JVM launched sbt instead of the
+// floor, which is the exact failure issue 38 calls Not negotiable downwards.
 lazy val eezo = (project in file("."))
   .aggregate(core, http, db, live, derives, auth, testkit, cli)
+  .settings(commonSettings)
   .settings(
     name           := "eezo",
     publish / skip := true
