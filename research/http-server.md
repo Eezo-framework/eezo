@@ -728,11 +728,14 @@ redistributor may simply elect Apache-2.0 and ignore the EPL branch entirely,
 which sidesteps EPL-2.0's source-availability and secondary-licence provisions.
 
 **Message for [#11 (Licence)](https://github.com/rcardin/eezo/issues/11): the
-server choice constrains you not at all.** eezo may be MIT, Apache-2.0, BSD, MPL,
-or a copyleft licence, and any of the six candidates remains compatible. If eezo
-chooses Jetty, the one obligation is to carry Jetty's `NOTICE` and state that
-Jetty is used under Apache-2.0 (the elected branch of its dual licence). That is
-a paragraph in a `THIRD-PARTY` file, not a design constraint.
+server choice constrains you not at all.** Any of the six candidates is
+compatible with any licence eezo might pick. eezo settled on MIT in
+[#37](https://github.com/Eezo-framework/eezo/issues/37), which is the easiest of
+those cases: MIT imposes no reciprocity, so an Apache-2.0 dependency adds only
+attribution. If eezo chooses Jetty, the one obligation is to carry Jetty's
+`NOTICE` and state that Jetty is used under Apache-2.0 (the elected branch of its
+dual licence). That is a paragraph in eezo's `NOTICE` file, not a design
+constraint.
 
 ---
 
@@ -1064,8 +1067,10 @@ the JVM is warm and only the server is rebuilt. The rigs in
 
 **[#11: Licence.](https://github.com/rcardin/eezo/issues/11)**
 The server choice constrains you not at all (§8). No copyleft anywhere in any
-candidate's tree. If Jetty is chosen, elect the Apache-2.0 branch of its dual
-licence and carry Jetty's `NOTICE`; that is the entire obligation.
+candidate's tree. Settled as MIT in
+[#37](https://github.com/Eezo-framework/eezo/issues/37). If Jetty is chosen,
+elect the Apache-2.0 branch of its dual licence and carry Jetty's `NOTICE`; that
+is the entire obligation.
 
 **[#4: DB / query layer.](https://github.com/rcardin/eezo/issues/4)**
 Two measurements made here belong to you. First, on JDK 21 a blocking call inside
