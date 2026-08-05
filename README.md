@@ -19,7 +19,7 @@ The above copyright notice and this permission notice shall be included in all
 copies or substantial portions of the Software.
 ```
 
-The choice is deliberate. An application that depends on eezo carries no
+An application that depends on eezo carries no
 obligation beyond preserving the copyright notice, and eezo takes on no
 dependency that would add one. Attribution notices for third-party components
 are collected in [NOTICE](NOTICE).
