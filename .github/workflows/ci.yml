@@ -39,11 +39,10 @@ jobs:
       # The JDK floor is a design constraint, not a preference: JEP 491 removed virtual thread
       # pinning on `synchronized`, and research/http-server.md measured a 16x latency degradation
       # on JDK 21. `Global / onLoad` in the sbt build fails the load on a JVM below the floor, so a
-      # bad JDK is caught before any task runs. ToolchainSuite then asserts the Scala version, the
-      # floor and that `-release 25` really reached the bytecode, all from inside the compiled
-      # code, so no separate shell check is needed here. Note that the bytecode half of that
-      # assertion cannot fail on this runner: JDK 25 stamps class file major 69 with or without
-      # `-release 25` reaching the compiler. It only discriminates when the build JVM sits above
-      # the floor, which is where a contributor on a newer JDK will catch it.
+      # bad JDK is caught before any task runs, on this runner and on a contributor's machine
+      # alike. No separate shell check is needed here.
+      #
+      # There are no tests yet: the modules are empty. The step is kept so that the first suite to
+      # land is run without anyone having to remember to wire it up.
       - name: Test
         run: sbt -batch test
