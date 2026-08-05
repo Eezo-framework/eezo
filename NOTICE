@@ -1,0 +1,22 @@
+eezo
+Copyright (c) 2026 Riccardo Cardin and Daniel Ciocîrlan
+
+This product is licensed under the MIT License. See the LICENSE file for the
+full text.
+
+The MIT License does not require a NOTICE file. This file exists to collect
+the attribution notices that eezo's third-party dependencies require, so that
+downstream users have a single place to look.
+
+## Third-party components
+
+eezo does not yet redistribute any third-party code. No runtime dependency has
+been selected and no build is published. As dependencies are adopted, their
+attribution notices are recorded here.
+
+Every dependency eezo adopts must be under an OSI-approved permissive licence
+so that this file stays a list of attributions rather than a list of
+obligations. Copyleft and source-available licences (GPL, LGPL, AGPL, MPL,
+BUSL, FSL) are out of scope for the framework's own dependency tree, because
+they would propagate terms to applications built on eezo that the MIT License
+does not.
