@@ -9,6 +9,10 @@ target/
 .scala-build/
 .metals/
 
+.vscode/**
+project/metals.sbt
+project/project/**
+
 # preserved research harnesses: their logs are the evidence, not noise
 !research/harnesses/**/*.log
 
