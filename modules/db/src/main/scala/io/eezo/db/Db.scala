@@ -1,0 +1,17 @@
+package io.eezo.db
+
+import java.sql.{Connection, DriverManager}
+
+object Db {
+  val url: String  = sys.env.getOrElse("EEZO_DB_URL", "jdbc:postgresql://localhost:5442/eezo")
+  val user: String = sys.env.getOrElse("EEZO_DB_USER", "postgres")
+  val pass: String = sys.env.getOrElse("EEZO_DB_PASS", "postgres")
+
+  def connect(): Connection = DriverManager.getConnection(url, user, pass)
+
+  def withConnection[A](f: Connection => A): A = {
+    val c = connect()
+    try f(c)
+    finally c.close()
+  }
+}

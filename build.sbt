@@ -67,7 +67,9 @@ lazy val core = module("core")
 lazy val http = module("http").dependsOn(core)
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
-lazy val db = module("db").dependsOn(core)
+lazy val db = module("db")
+  .dependsOn(core)
+  .settings(libraryDependencies += "org.postgresql" % "postgresql" % "42.7.1")
 
 // The node tree, the HTML DSL, the diff and patch protocol, the client runtime, PubSub.
 lazy val live = module("live").dependsOn(core, http)
@@ -93,4 +95,12 @@ lazy val eezo = (project in file("."))
   .settings(
     name           := "eezo",
     publish / skip := true
+  )
+
+lazy val example = project
+  .in(file("modules/example"))
+  .dependsOn(eezo)
+  .settings(
+    name := "eezo-example",
+    scalacOptions += "-Xcheck-macros"
   )
