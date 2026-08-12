@@ -5,7 +5,8 @@ final case class ColumnDef(
     pgType: PgType,
     nullable: Boolean,
     primaryKey: Boolean,
-    checks: List[Check]
+    checks: List[Check],
+    references: Option[String] = None
 ) {
   def quoted: String = "\"" + name + "\""
 
@@ -18,20 +19,35 @@ final case class ColumnDef(
 }
 
 object ColumnDef {
-  def of[A](name: String, primaryKey: Boolean = false)(using c: Column[A]): ColumnDef =
-    ColumnDef(name, c.pgType, c.nullable, primaryKey, c.checks)
+  def of[A](
+      name: String,
+      primaryKey: Boolean = false,
+      references: Option[String] = None
+  )(using c: Column[A]): ColumnDef =
+    ColumnDef(name, c.pgType, c.nullable, primaryKey, c.checks, references)
 }
 
 final case class TableDef(name: String, columns: List[ColumnDef]) {
+  def quoted: String = "\"" + name + "\""
+
   def createTable: String = {
     val cols = columns.map(c => "  " + c.renderDdl).mkString(",\n")
-    s"create table if not exists \"$name\" (\n$cols\n)"
+    s"create table if not exists $quoted (\n$cols\n)"
   }
+
+  /** Emitted separately so table creation order doesn't matter. */
+  def foreignKeys: List[String] = columns.flatMap { c =>
+    c.references.map { target =>
+      s"""alter table $quoted add constraint "fk_${name}_${c.name}" """ +
+        s"""foreign key (${c.quoted}) references "$target" ("id")"""
+    }
+  }
+
   def insert: String = {
     val names = columns.map(_.quoted).mkString(", ")
     val holes = columns.map(_ => "?").mkString(", ")
-    s"insert into \"$name\" ($names) values ($holes)"
+    s"insert into $quoted ($names) values ($holes)"
   }
-  def selectAll: String =
-    s"select ${columns.map(_.quoted).mkString(", ")} from \"$name\""
+
+  def selectAll: String = s"select ${columns.map(_.quoted).mkString(", ")} from $quoted"
 }

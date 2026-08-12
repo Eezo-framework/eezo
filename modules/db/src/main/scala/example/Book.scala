@@ -6,6 +6,6 @@ import io.eezo.db.*
 case class Book(
     id: Id[Book],
     title: String,
-    author: String,
+    author: Ref[Author],
     publishedOn: Option[LocalDate]
 ) derives Table

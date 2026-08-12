@@ -4,18 +4,30 @@ import java.sql.{PreparedStatement, ResultSet}
 import scala.quoted.*
 
 import io.eezo.db.*
+import io.eezo.db.util.*
 
 object TableMacro {
-
-  def snake(s: String): String =
-    s.foldLeft(new StringBuilder) { (b, ch) =>
-      if (ch.isUpper && b.nonEmpty) { b += '_'; b += ch.toLower }
-      else b += ch.toLower
-    }.toString
 
   def derive[T: Type](using q: Quotes): Expr[Table[T]] = {
     val s = new Structure[q.type](using q)
     import q.reflect.*
+
+    val refSym: Symbol = TypeRepr.of[io.eezo.db.Ref[Unit]] match {
+      case AppliedType(tc, _) => tc.typeSymbol
+      case other              => other.typeSymbol
+    }
+
+    def unwrapOption(t: TypeRepr): TypeRepr = t.asType match {
+      case '[Option[a]] => TypeRepr.of[a]
+      case _            => t
+    }
+
+    def refTarget(t: TypeRepr): Option[String] =
+      unwrapOption(t) match {
+        case AppliedType(tc, List(arg)) if tc.typeSymbol == refSym =>
+          Some(snake(arg.typeSymbol.name))
+        case _ => None
+      }
 
     val sym    = TypeRepr.of[T].typeSymbol
     val fields = s.of[T]
@@ -42,13 +54,21 @@ object TableMacro {
       }
 
     val colDefs: List[Expr[ColumnDef]] = fields.map { f =>
+      report.info(s"${f.name}: ${f.tpe.show} | ${f.tpe.typeSymbol.fullName}", f.pos)
       f.tpe.asType match {
         case '[t] =>
-          val c = summonOrFail[t](f)
+          val c       = summonOrFail[t](f)
+          val rt      = Expr.summon[RefTarget[t]]
+          val colName = if (rt.isDefined) snake(f.name) + "_id" else snake(f.name)
+          val refExpr: Expr[Option[String]] = rt match {
+            case Some(r) => '{ Some($r.table) }
+            case None    => '{ None }
+          }
           '{
             ColumnDef.of[t](
-              ${ Expr(snake(f.name)) },
-              ${ Expr(f.name == "id") }
+              ${ Expr(colName) },
+              ${ Expr(f.name == "id") },
+              $refExpr
             )(using $c)
           }
       }
