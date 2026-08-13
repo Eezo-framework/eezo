@@ -1,5 +1,7 @@
 package io.eezo.db
 
+import util.*
+
 final case class ColumnSnap(
     name: String,
     pgType: String,
@@ -62,7 +64,7 @@ object Snapshot {
       c.pgType.render,
       c.nullable,
       c.primaryKey,
-      c.checks.map(_.render(c.quoted)).sorted,
+      c.checks.map(ck => canonicalCheck(ck.render(c.name))).sorted, // unquoted name
       c.references
     )
 }

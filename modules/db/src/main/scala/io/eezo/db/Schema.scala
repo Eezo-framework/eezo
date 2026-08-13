@@ -18,7 +18,11 @@ final class TableSpec[T](val table: Table[T]) {
   def indexes: List[IndexSnap] = idx.toList
 
   def snapshot: TableSnap =
-    TableSnap(table.tableName, table.columns.map(Snapshot.column), indexes.sortBy(_.name))
+    TableSnap(
+      table.tableName,
+      table.columns.map(Snapshot.column).sortBy(_.name),
+      indexes.sortBy(_.name)
+    )
 }
 
 abstract class Schema {
