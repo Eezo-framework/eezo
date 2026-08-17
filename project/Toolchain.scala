@@ -8,6 +8,26 @@ object Toolchain {
   /** The pinned language version. eezo tracks Scala 3.8.x. */
   val ScalaVersion = "3.8.4"
 
+  /** The Scala version the sbt 1 axis of `sbt-eezo` is built with. sbt 1 runs on Scala 2.12 and a
+    * plugin has to match it, so this is sbt's version to choose, not eezo's.
+    */
+  val PluginScalaVersion = "2.12.21"
+
+  /** The oldest sbt 1 that `sbt-eezo` promises to work on. Deliberately not eezo's own sbt: a floor
+    * pinned to whatever this build happens to run is an accident, not a promise. 1.5.8 is the floor
+    * `sbt-ci-release` itself ships against.
+    */
+  val Sbt1Floor = "1.5.8"
+
+  /** The sbt 2 the second axis of `sbt-eezo` is built against, and therefore the oldest sbt 2 the
+    * plugin promises to work on. Whatever this axis compiles against becomes the floor: any API the
+    * route table generator reaches for that landed after 2.0.0 turns into a hard requirement. 2.0.6
+    * is the current sbt 2 release, and the version recommended by `research/sbt-plugin.md` on the
+    * unmerged `research/sbt-plugin` branch, so users still on 2.0.0 through 2.0.5 have to upgrade
+    * before they can take the plugin.
+    */
+  val Sbt2Version = "2.0.6"
+
   /** The minimum JDK, and the bytecode target.
     *
     * JEP 491 landed in JDK 24 and removed virtual-thread pinning on `synchronized`; JDK 25 is the
