@@ -6,8 +6,15 @@ lazy val hello = (project in file("."))
   .enablePlugins(EezoPlugin)
   .settings(
     name         := "hello",
-    scalaVersion := "3.8.4",
-    scalacOptions ++= Seq("-release", "25", "-deprecation", "-feature", "-unchecked", "-no-indent"),
+    scalaVersion := EezoVersion.scalaVersion,
+    scalacOptions ++= Seq(
+      "-release",
+      EezoVersion.jdkFloor,
+      "-deprecation",
+      "-feature",
+      "-unchecked",
+      "-no-indent"
+    ),
     libraryDependencies += "io.eezo" %% "eezo-http" % EezoVersion.value,
     // eezo needs JDK 25 to run: JEP 491, which removed virtual-thread pinning on `synchronized`,
     // landed in JDK 24, and the server design depends on it.

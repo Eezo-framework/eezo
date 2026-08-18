@@ -14,47 +14,58 @@ private[http] object Boundary {
   /** What a 500 says to the world when `dev` is false. */
   private val Redacted = "The server encountered an unexpected error."
 
-  /** Resolves any throwable to a `Problem`. Total by construction: whatever arrives, a value comes
-    * back, which is what lets the single completion site in the Jetty handler be unconditional.
+  /** Everything the boundary decides about a failure, in one pass over it: the `Problem` it becomes
+    * and any headers earned along the way. `Allow` on a 405 is the only header eezo decides itself,
+    * and it is decided here rather than on a second match, because `Problem` (RFC 9457's data
+    * model) has no room for a header that is not part of that model.
     */
-  def problemOf(
-      failure: Throwable,
-      path: String,
-      dev: Boolean,
-      problems: PartialFunction[Throwable, Problem]
-  ): Problem = failure match {
+  private[http] final case class Resolution(
+      problem: Problem,
+      headers: Seq[(String, String)] = Seq.empty
+  )
+
+  /** The single exhaustive match. `errorResponse` is read off one call to this, so a failure is
+    * matched once rather than once per question asked about it.
+    *
+    * The `case other` arm is what makes `InternalServerError` reachable: a throwable outside eezo's
+    * set and outside the `problems` hook is wrapped in it and re-matched, so the boundary carries
+    * the one 500 case rather than two.
+    */
+  def resolve(failure: Throwable, path: String, config: Config): Resolution = failure match {
     case e: EezoException =>
       e match {
-        case BadRequest(detail)         => Problem(400, detail, path)
-        case NotFound(_)                => Problem(404, e.getMessage, path)
-        case MethodNotAllowed(_)        => Problem(405, e.getMessage, path)
-        case PayloadTooLarge(_)         => Problem(413, e.getMessage, path)
-        case NotImplemented(_)          => Problem(501, e.getMessage, path)
+        case BadRequest(detail)        => Resolution(Problem(400, detail, path))
+        case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
+        case MethodNotAllowed(allowed) =>
+          Resolution(Problem(405, e.getMessage, path), Seq("Allow" -> allowed.mkString(", ")))
+        case PayloadTooLarge(_)         => Resolution(Problem(413, e.getMessage, path))
+        case NotImplemented(_)          => Resolution(Problem(501, e.getMessage, path))
         case InternalServerError(cause) =>
-          Problem(500, if (dev) messageOf(cause) else Redacted, path)
+          Resolution(Problem(500, if (config.dev) messageOf(cause) else Redacted, path))
       }
 
     case other =>
-      problems.lift(other).getOrElse(Problem(500, if (dev) messageOf(other) else Redacted, path))
+      config.problems.lift(other) match {
+        case Some(problem) => Resolution(problem)
+        case None          => resolve(InternalServerError(other), path, config)
+      }
+  }
+
+  /** Renders a `Resolution` into a `Response`. No matching left to do: the headers are already
+    * decided, so this is the rendering path alone.
+    */
+  def toResponse(resolution: Resolution): Response = {
+    val page = Response.Ok(render(resolution.problem)).copy(status = resolution.problem.status)
+    resolution.headers.foldLeft(page) { case (response, (name, value)) =>
+      response.withHeader(name, value)
+    }
   }
 
   /** The response a failure becomes: one rendering path, and the `Allow` header in the one arm that
     * has the methods to put in it.
     */
-  def errorResponse(
-      failure: Throwable,
-      path: String,
-      dev: Boolean,
-      problems: PartialFunction[Throwable, Problem] = PartialFunction.empty
-  ): Response = {
-    val problem = problemOf(failure, path, dev, problems)
-    val page    = Response.Ok(render(problem)).copy(status = problem.status)
-
-    failure match {
-      case MethodNotAllowed(allowed) => page.withHeader("Allow", allowed.mkString(", "))
-      case _                         => page
-    }
-  }
+  def errorResponse(failure: Throwable, path: String, config: Config): Response =
+    toResponse(resolve(failure, path, config))
 
   /** A stack trace is worth a log at ERROR when the server is at fault. A 4xx is a client mistake,
     * and logging it at ERROR is how log noise starts.

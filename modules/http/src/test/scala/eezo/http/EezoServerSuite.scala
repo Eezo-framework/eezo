@@ -26,7 +26,7 @@ class EezoServerSuite extends munit.FunSuite {
   private def serving(routes: RouteTable, maxBodySize: Long = 1.MiB, dev: Boolean = false)(
       body: (Server, Int) => Unit
   ): Unit = {
-    val server = Eezo.start(port = 0, routes = routes, maxBodySize = maxBodySize, dev = dev)
+    val server = Eezo.start(port = 0, config = Config(routes, maxBodySize, dev))
     try {
       val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
       body(server, port)

@@ -28,6 +28,27 @@ extension (n: Int) {
   def MiB: Long = n.toLong * 1024 * 1024
 }
 
+/** The server-wide set: the route table and the three settings that travel everywhere it is
+  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` pass one
+  * value instead of four.
+  */
+private[http] final case class Config(
+    routes: RouteTable,
+    maxBodySize: Long = Config.DefaultMaxBodySize,
+    dev: Boolean = Config.DefaultDev,
+    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
+)
+
+private[http] object Config {
+
+  /** The one place each of `Eezo.run`'s three optional defaults is stated. `run`'s own parameter
+    * defaults read off these, so changing a default is one edit rather than two.
+    */
+  private[http] val DefaultMaxBodySize: Long                             = 1.MiB
+  private[http] val DefaultDev: Boolean                                  = false
+  private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
+}
+
 /** Booting eezo.
   *
   * The user writes the entry point, and names the route table in it:
@@ -50,11 +71,11 @@ object Eezo {
   def run(
       port: Int,
       routes: RouteTable,
-      maxBodySize: Long = 1.MiB,
-      dev: Boolean = false,
-      problems: PartialFunction[Throwable, Problem] = PartialFunction.empty
+      maxBodySize: Long = Config.DefaultMaxBodySize,
+      dev: Boolean = Config.DefaultDev,
+      problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
   ): Unit = {
-    val server = start(port, routes, maxBodySize, dev, problems)
+    val server = start(port, Config(routes, maxBodySize, dev, problems))
     server.join()
   }
 
@@ -65,13 +86,7 @@ object Eezo {
     * not virtual-thread-native, a 30 second WebSocket idle timeout, a 64 KiB text message cap, and
     * an unbounded outgoing frame queue that grew a single stalled connection to 293.6 MiB of heap.
     */
-  private[http] def start(
-      port: Int,
-      routes: RouteTable,
-      maxBodySize: Long = 1.MiB,
-      dev: Boolean = false,
-      problems: PartialFunction[Throwable, Problem] = PartialFunction.empty
-  ): Server = {
+  private[http] def start(port: Int, config: Config): Server = {
     val pool = new VirtualThreadPool()
     // No semaphore ceiling. The pool's default caps concurrent tasks, which reintroduces the
     // queueing that virtual threads exist to remove.
@@ -91,10 +106,10 @@ object Eezo {
         // Exactly one mapping. eezo matches WebSocket paths with its own `PathPattern`, because
         // Jetty's path spec grammar cannot express a pattern mixing `:name` and a catch-all, and a
         // second matcher would disagree with the first in ways users find before tests do.
-        container.addMapping("/*", creator(routes, dev, problems))
+        container.addMapping("/*", creator(config))
       }
     )
-    upgrade.setHandler(new EezoHandler(routes, maxBodySize, dev, problems))
+    upgrade.setHandler(new EezoHandler(config))
     server.setHandler(upgrade)
 
     server.start()
@@ -107,18 +122,11 @@ object Eezo {
     * and sending a response", so an upgrade request matching no `Route.Ws` is answered here with a
     * 404 rather than falling through to the HTTP handler.
     */
-  private def creator(
-      routes: RouteTable,
-      dev: Boolean,
-      problems: PartialFunction[Throwable, Problem]
-  ): WebSocketCreator =
+  private def creator(config: Config): WebSocketCreator =
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
-      val path    = JettyRequest.getPathInContext(request)
-      val matched = routes.wsRoutes.iterator
-        .flatMap(route => route.pattern.matchPath(path).map(params => (route, params)))
-        .nextOption()
+      val path = JettyRequest.getPathInContext(request)
 
-      matched match {
+      config.routes.dispatchWs(path) match {
         case Some((route, params)) =>
           val upgradeRequest = Request(
             method = Method.GET,
@@ -131,7 +139,7 @@ object Eezo {
           new JettyListener(route.endpoint(upgradeRequest))
 
         case None =>
-          write(response, Boundary.errorResponse(NotFound(path), path, dev, problems), callback)
+          write(response, Boundary.errorResponse(NotFound(path), path, config), callback)
           null
       }
     }
@@ -144,12 +152,7 @@ object Eezo {
     * always returns `true`, because an unmatched route throws `NotFound` here rather than falling
     * through to Jetty's own error page.
     */
-  private final class EezoHandler(
-      routes: RouteTable,
-      maxBodySize: Long,
-      dev: Boolean,
-      problems: PartialFunction[Throwable, Problem]
-  ) extends JettyHandler.Abstract {
+  private final class EezoHandler(config: Config) extends JettyHandler.Abstract {
 
     override def handle(
         request: JettyRequest,
@@ -159,13 +162,15 @@ object Eezo {
       val path = JettyRequest.getPathInContext(request)
 
       val result =
-        try routes.dispatch(readRequest(request, path, maxBodySize))
+        try config.routes.dispatch(readRequest(request, path, config.maxBodySize))
         catch {
           case failure: Throwable =>
-            val problem = Boundary.problemOf(failure, path, dev, problems)
-            if (Boundary.logsStackTrace(problem.status))
-              log.log(System.Logger.Level.ERROR, s"${problem.status} on $path", failure)
-            Boundary.errorResponse(failure, path, dev, problems)
+            // Resolved once: the log decision and the response both read off this single value,
+            // rather than each re-matching the failure to ask its own question of it.
+            val resolution = Boundary.resolve(failure, path, config)
+            if (Boundary.logsStackTrace(resolution.problem.status))
+              log.log(System.Logger.Level.ERROR, s"${resolution.problem.status} on $path", failure)
+            Boundary.toResponse(resolution)
         }
 
       write(response, result, callback)

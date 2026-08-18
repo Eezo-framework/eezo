@@ -29,10 +29,17 @@ inThisBuild(
 )
 
 // The JDK floor is checked when the build loads, so that a wrong JVM fails with a reason instead
-// of with a `-release` error forty lines into a compile.
-Global / onLoad := (Global / onLoad).value.andThen { state =>
-  Toolchain.assertJdk()
-  state
+// of with a `-release` error forty lines into a compile. `sbt.version` is checked for the same
+// reason: it is read by the sbt launcher before any Scala code runs, so examples/hello cannot get
+// it from `Toolchain` the way it gets `ScalaVersion` and `JdkFloor`, and a drift there would
+// otherwise go unnoticed.
+Global / onLoad := {
+  val root = (ThisBuild / baseDirectory).value
+  (Global / onLoad).value.andThen { state =>
+    Toolchain.assertJdk()
+    Toolchain.assertExampleSbtVersionMatches(root)
+    state
+  }
 }
 
 lazy val commonSettings = Seq(
@@ -142,16 +149,26 @@ lazy val eezo = (project in file("."))
     publish / skip := true
   )
 
-// What `examples/hello` needs in order to resolve eezo from the local ivy cache. The version is
-// derived from the git state by sbt-dynver, so it changes with every commit and cannot be written
-// into the example's build by hand. `publishLocalForExample` publishes the modules and the plugin
-// and then records the version where the example's build reads it.
+// What `examples/hello` needs in order to resolve eezo from the local ivy cache, and to stay on
+// the same Scala version and JDK floor as the rest of the build. The eezo version is derived from
+// the git state by sbt-dynver, so it changes with every commit, and the Scala version and JDK
+// floor live in `Toolchain`, which the example's separate build cannot read directly; none of the
+// three can be written into the example's build by hand without drifting. `publishLocalForExample`
+// publishes the modules and the plugin and then records all three where the example's build reads
+// them, through `EezoVersion` in `examples/hello/project/project`.
 lazy val writeLocalVersion =
-  taskKey[File]("Records the locally published version for examples/hello.")
+  taskKey[File]("Records the locally published version and toolchain for examples/hello.")
 
 writeLocalVersion := {
   val destination = (ThisBuild / baseDirectory).value / ".eezo-version"
-  IO.write(destination, version.value)
+  // key=value, not positional lines, so a reader that only recognises the current keys rejects a
+  // file from an earlier format by name instead of misreading it by position.
+  val contents = List(
+    s"version=${version.value}",
+    s"scalaVersion=${Toolchain.ScalaVersion}",
+    s"jdkFloor=${Toolchain.JdkFloor}"
+  )
+  IO.writeLines(destination, contents)
   streams.value.log.info(s"eezo ${version.value} recorded in $destination")
   destination
 }

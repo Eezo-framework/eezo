@@ -22,13 +22,9 @@ class ResponseSuite extends munit.FunSuite {
     assertEquals(response.body, Body.Empty)
   }
 
-  test("NotFound is an empty 404, for a handler that wants the status without the page") {
-    assertEquals(Response.NotFound.status, 404)
-    assertEquals(Response.NotFound.body, Body.Empty)
-  }
-
   test("status reaches any code, including the ones eezo does not model") {
     assertEquals(Response.status(418).status, 418)
+    assertEquals(Response.status(404).body, Body.Empty)
   }
 
   test("a header can be added to any response, and duplicates survive") {

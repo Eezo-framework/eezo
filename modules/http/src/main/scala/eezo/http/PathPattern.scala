@@ -73,10 +73,11 @@ object PathPattern {
     * what its author meant.
     */
   def parse(pattern: String): PathPattern = {
-    val segments = split(pattern).zipWithIndex.map { case (raw, index) =>
+    val raws     = split(pattern)
+    val segments = raws.zipWithIndex.map { case (raw, index) =>
       if (raw.startsWith("*")) {
         require(
-          index == split(pattern).size - 1,
+          index == raws.size - 1,
           s"catch-all segment '$raw' in pattern '$pattern' must be the final segment"
         )
         Segment.CatchAll(raw.drop(1))

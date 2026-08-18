@@ -74,6 +74,18 @@ final class RouteTable(val routes: Seq[Route]) {
     }
   }
 
+  /** Finds the first WebSocket route whose pattern matches, if any.
+    *
+    * The WebSocket half of `dispatch`: no method to disagree on, since an upgrade is always a
+    * `GET`, so one pass with no `Allow` bookkeeping is the whole job. The single caller, `Eezo`'s
+    * WebSocket creator, decides the 404 itself: Jetty requires that decision to complete a
+    * `Callback` rather than throw.
+    */
+  def dispatchWs(path: String): Option[(Route.Ws, Map[String, String])] =
+    wsRoutes.iterator
+      .flatMap(route => route.pattern.matchPath(path).map(params => (route, params)))
+      .nextOption()
+
   /** Concatenation. Order is preserved, so the receiver's routes keep winning. */
   def ++(other: RouteTable): RouteTable = RouteTable(routes ++ other.routes)
 }

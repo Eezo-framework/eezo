@@ -42,9 +42,6 @@ object Response {
   def Redirect(location: String): Response =
     Response(303, Seq("Location" -> location), Body.Empty)
 
-  /** An empty 404, for a handler that wants the status without eezo's error page. */
-  val NotFound: Response = Response(404, Seq.empty, Body.Empty)
-
   /** Any status at all, including the ones eezo does not model. */
   def status(code: Int): Response = Response(code, Seq.empty, Body.Empty)
 }

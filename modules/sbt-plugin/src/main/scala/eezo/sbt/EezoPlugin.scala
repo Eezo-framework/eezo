@@ -41,7 +41,7 @@ object EezoPlugin extends AutoPlugin {
     // caching and ignores the annotation, so one annotation serves both axes. Caching is not lost:
     // `FileFunction.cached` below is the generator's own, and it is the one sbt 1 needs anyway.
     @transient val eezoGenerateRoutes: TaskKey[Seq[File]] =
-      taskKey[Seq[File]]("Generates eezo.generated.Routes from src/main/scala/app/ and the models.")
+      taskKey[Seq[File]]("Generates eezo.generated.Routes from src/main/scala/app/.")
   }
 
   import autoImport._
@@ -60,29 +60,45 @@ object EezoPlugin extends AutoPlugin {
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala")
   )
 
-  /** Reads the application's sources and writes `eezo.generated.Routes`.
+  /** Bumped whenever `RouteGenerator`'s emitted shape changes, and hashed alongside the
+    * application's own sources below. A hardcoded constant rather than the plugin's own artifact
+    * version read off the jar manifest, because a local `publishLocal` republishes the same version
+    * string repeatedly, which would leave the cache none the wiser about a changed generator.
+    */
+  private[sbt] val GeneratorVersion = "1"
+
+  /** Reads the application's sources under `app/` and writes `eezo.generated.Routes`.
     *
     * `sourceGenerators` runs every generator on every evaluation of `compile`, so a generator that
     * does not cache rewrites its output on every keystroke of a watch loop and invalidates the
-    * compile that follows. `FileFunction.cached` is what makes the rewrite conditional, and it
-    * tracks the output as well as the inputs, so deleting the generated file regenerates it.
+    * compile that follows. `FileFunction.cached` is what makes the rewrite conditional. The hashed
+    * input set is the `.scala` files under `app/` plus a stamp file carrying `GeneratorVersion`,
+    * not the whole `Compile` source tree, so editing a file outside `app/`, such as `Main.scala`,
+    * no longer misses the cache. The stamp is what makes upgrading the plugin itself miss the cache
+    * even when the application's own sources are untouched, since bumping `GeneratorVersion`
+    * changes a hashed input; it also guarantees the input set is never empty when a project has no
+    * `app/` directory yet, so the cached body still runs once and writes a table with no rows. The
+    * output is tracked by content hash rather than existence, so a hand-edited or truncated
+    * Routes.scala is repaired on the next run, not only a deleted one.
     */
   private def generate: Def.Initialize[Task[Seq[File]]] = Def.task {
     val log         = streams.value.log
     val sourceRoot  = (Compile / scalaSource).value
     val appRoot     = sourceRoot / "app"
     val destination = (Compile / sourceManaged).value / "eezo" / "generated" / "Routes.scala"
-    val inputs      = (sourceRoot ** "*.scala").get().toSet
+    val appInputs   = (appRoot ** "*.scala").get().toSet
+    val stamp       = streams.value.cacheDirectory / "eezo-routes.version"
+    IO.write(stamp, GeneratorVersion)
+    val inputs = appInputs + stamp
 
     val cached = FileFunction.cached(
       streams.value.cacheDirectory / "eezo-routes",
       FilesInfo.hash,
-      FilesInfo.exists
+      FilesInfo.hash
     ) { (changed: Set[File]) =>
       val _ = changed
 
-      val (appFiles, modelFiles) =
-        inputs.toSeq.sortBy(_.getAbsolutePath).partition(isUnder(appRoot, _))
+      val appFiles = appInputs.toSeq.sortBy(_.getAbsolutePath)
 
       val routes = appFiles.flatMap { source =>
         relative(appRoot, source).flatMap(RouteGenerator.routeFor).map { route =>
@@ -91,17 +107,12 @@ object EezoPlugin extends AutoPlugin {
         }
       }
 
-      val models = modelFiles.flatMap(source => RouteGenerator.modelCandidates(IO.read(source)))
-
-      IO.write(destination, RouteGenerator.render(routes, models))
+      IO.write(destination, RouteGenerator.render(routes))
       Set(destination)
     }
 
     cached(inputs).toSeq
   }
-
-  private def isUnder(directory: File, candidate: File): Boolean =
-    candidate.getAbsolutePath.startsWith(directory.getAbsolutePath + java.io.File.separator)
 
   private def relative(directory: File, candidate: File): Option[String] =
     IO.relativize(directory, candidate).map(_.replace(java.io.File.separatorChar, '/'))

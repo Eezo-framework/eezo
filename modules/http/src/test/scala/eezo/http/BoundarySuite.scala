@@ -10,7 +10,10 @@ class BoundarySuite extends munit.FunSuite {
       failure: Throwable,
       dev: Boolean = false,
       problems: PartialFunction[Throwable, Problem] = PartialFunction.empty
-  ): Problem = Boundary.problemOf(failure, "/widgets/7", dev, problems)
+  ): Problem = {
+    val config = Config(RouteTable.empty, dev = dev, problems = problems)
+    Boundary.resolve(failure, "/widgets/7", config).problem
+  }
 
   test("each member of the sealed set maps to its status") {
     assertEquals(problem(BadRequest("bad")).status, 400)
@@ -57,7 +60,8 @@ class BoundarySuite extends munit.FunSuite {
   }
 
   test("the error response is an HTML page carrying the status and the detail") {
-    val response = Boundary.errorResponse(NotFound("/widgets/7"), "/widgets/7", dev = false)
+    val response =
+      Boundary.errorResponse(NotFound("/widgets/7"), "/widgets/7", Config(RouteTable.empty))
     assertEquals(response.status, 404)
     assertEquals(response.headers, Seq("Content-Type" -> "text/html; charset=utf-8"))
     val page = response.body match {
@@ -73,7 +77,7 @@ class BoundarySuite extends munit.FunSuite {
       Boundary.errorResponse(
         MethodNotAllowed(Seq(Method.GET, Method.PUT)),
         "/widgets/7",
-        dev = false
+        Config(RouteTable.empty)
       )
     assertEquals(response.status, 405)
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))

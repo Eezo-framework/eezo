@@ -26,7 +26,7 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   private def serving(routes: RouteTable)(body: (WebSocketClient, Int) => Unit): Unit = {
-    val server = Eezo.start(port = 0, routes = routes)
+    val server = Eezo.start(port = 0, config = Config(routes))
     val client = new WebSocketClient()
     client.start()
     try {
