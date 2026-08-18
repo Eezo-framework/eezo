@@ -66,7 +66,9 @@ def module(id: String): Project =
 lazy val core = module("core")
 
 // Jetty boot, request parsing, response writing, file-based routing.
-lazy val http = module("http").dependsOn(core)
+lazy val http = module("http")
+  .dependsOn(core)
+  .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, jettyWsClient))
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db").dependsOn(core)
@@ -117,6 +119,8 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         case _      => Seq("--release", "17")
       }
     },
+    // munit, because `commonSettings` is not inherited here.
+    libraryDependencies += munit,
     pluginCrossBuild / sbtVersion := {
       scalaBinaryVersion.value match {
         case "2.12" => Toolchain.Sbt1Floor
@@ -137,3 +141,19 @@ lazy val eezo = (project in file("."))
     name           := "eezo",
     publish / skip := true
   )
+
+// What `examples/hello` needs in order to resolve eezo from the local ivy cache. The version is
+// derived from the git state by sbt-dynver, so it changes with every commit and cannot be written
+// into the example's build by hand. `publishLocalForExample` publishes the modules and the plugin
+// and then records the version where the example's build reads it.
+lazy val writeLocalVersion =
+  taskKey[File]("Records the locally published version for examples/hello.")
+
+writeLocalVersion := {
+  val destination = (ThisBuild / baseDirectory).value / ".eezo-version"
+  IO.write(destination, version.value)
+  streams.value.log.info(s"eezo ${version.value} recorded in $destination")
+  destination
+}
+
+addCommandAlias("publishLocalForExample", ";publishLocal;writeLocalVersion")

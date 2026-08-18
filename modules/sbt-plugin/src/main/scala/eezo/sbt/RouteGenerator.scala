@@ -1,0 +1,210 @@
+package eezo.sbt
+
+import scala.util.matching.Regex
+
+/** One route written by hand under `app/`, as the generator sees it: text, and nothing else.
+  *
+  * @param method
+  *   the HTTP method the filename implies
+  * @param path
+  *   the pattern the directory layout implies
+  * @param target
+  *   the fully qualified `object.def` the row calls
+  * @param source
+  *   the file it came from, which the emitted row carries as a comment
+  */
+final case class HandwrittenRoute(method: String, path: String, target: String, source: String)
+
+/** Turns an application's `app/` tree into eezo's route table.
+  *
+  * Everything here is textual on purpose. The generator is an sbt plugin running before the
+  * compiler: it has the string `derives Table, Resource` and it does not have `Table[Widget]` or
+  * `Actions[Widget]`, so the only warning it can raise is the one a text scan can decide, a file
+  * that does not define the `def` its name promises. Shadowing and orphaned actions need typed
+  * instances and warn at boot instead.
+  *
+  * This file is compiled against sbt 1 on Scala 2.12 and against sbt 2 on Scala 3, so it stays
+  * inside the subset both accept.
+  */
+object RouteGenerator {
+
+  /** Skiff's filename to verb table, with one departure: a custom name calls a `def` of its own
+    * name rather than `index`, which gives it the same object-name-equals-def-name property the
+    * seven REST names have. A custom name is always a GET; a custom POST is written as
+    * `app/health/Create.scala`.
+    */
+  private val Verbs: Map[String, (String, String, String)] = Map(
+    // file name -> (method, def name, path suffix)
+    "Index"   -> (("GET", "index", "")),
+    "New"     -> (("GET", "new", "/new")),
+    "Show"    -> (("GET", "show", "")),
+    "Edit"    -> (("GET", "edit", "/edit")),
+    "Create"  -> (("POST", "create", "")),
+    "Update"  -> (("PUT", "update", "")),
+    "Destroy" -> (("DELETE", "destroy", ""))
+  )
+
+  /** Scala's own keywords that a `def` name has to be backticked to use. `new` is the one the verb
+    * table actually reaches.
+    */
+  private val Keywords = Set("new", "type", "class", "object", "val", "def", "match")
+
+  /** The route a file under `app/` mounts, or nothing when the file is not Scala source.
+    *
+    * `relative` is the path below `app/`, such as `widgets/_id/Show.scala`. Directory names carry
+    * the pattern: `_seg` becomes `:seg` and `__seg` becomes `*seg`, which are the three segment
+    * kinds `PathPattern` keeps.
+    */
+  def routeFor(relative: String): Option[HandwrittenRoute] =
+    if (!relative.endsWith(".scala")) None
+    else {
+      val parts                     = relative.split('/').toVector
+      val fileName                  = parts.last.dropRight(".scala".length)
+      val dirs                      = parts.dropRight(1)
+      val (method, defName, suffix) =
+        Verbs.getOrElse(fileName, ("GET", decapitalise(fileName), "/" + fileName.toLowerCase))
+
+      val dirPath = dirs.map(segment)
+      val path    = ("/" + (dirPath :+ suffix.stripPrefix("/")).filter(_.nonEmpty).mkString("/"))
+      val target  = (Vector("app") ++ dirs ++ Vector(fileName, quoted(defName))).mkString(".")
+
+      Some(
+        HandwrittenRoute(
+          method = method,
+          path = if (path.isEmpty) "/" else path,
+          target = target,
+          source = "src/main/scala/app/" + relative
+        )
+      )
+    }
+
+  /** Emit order, because dispatch is linear first match and the table never sorts.
+    *
+    * Most static segments first, comparing segment by segment with a literal beating `:name`
+    * beating `*rest`, and ties broken by the path and then by the method so that two runs of the
+    * generator produce the same file. Skiff leaves this to filesystem order, under which
+    * `GET /widgets/new` is unreachable whenever `/widgets/:id` happens to be listed first.
+    */
+  def sortRoutes(routes: Seq[HandwrittenRoute]): Seq[HandwrittenRoute] =
+    routes.sortWith { (left, right) =>
+      val comparison = compare(left, right)
+      comparison < 0
+    }
+
+  /** The generated file: one object, handwritten rows first, then one line per candidate model. */
+  def render(routes: Seq[HandwrittenRoute], models: Seq[String]): String = {
+    val handwritten =
+      if (routes.isEmpty) "    // no files under src/main/scala/app/"
+      else
+        sortRoutes(routes)
+          .map { route =>
+            s"""    // from ${route.source}
+               |    eezo.http.Route.Http(
+               |      eezo.http.Method.${route.method},
+               |      eezo.http.PathPattern.parse("${route.path}"),
+               |      req => ${route.target}(req)
+               |    )""".stripMargin
+          }
+          .mkString(",\n")
+
+    val derived =
+      if (models.isEmpty) "    Seq.empty"
+      else models.map(model => s"    eezo.derives.Resource.routesOf[$model]").mkString(" ++\n")
+
+    s"""// AUTO-GENERATED by eezo. Do not edit.
+       |package eezo.generated
+       |
+       |object Routes {
+       |
+       |  /** Routes written by hand under src/main/scala/app/. First in the table, so a handwritten
+       |    * route shadows a derived one of the same shape.
+       |    */
+       |  private val handwritten: Seq[eezo.http.Route] = Seq(
+       |$handwritten
+       |  )
+       |
+       |  /** One line per candidate model. The compiler decides whether each has a Resource. */
+       |  private val derived: Seq[eezo.http.Route] =
+       |$derived
+       |
+       |  val table: eezo.http.RouteTable = eezo.http.RouteTable(handwritten ++ derived)
+       |}
+       |""".stripMargin
+  }
+
+  /** The models the generated file names: every case class carrying any `derives` clause.
+    *
+    * The scan deliberately stops there. Whether a `Resource[A]` exists is a question the compiler
+    * answers, through `Resource.routesOf[A]`, which also catches the shapes no text scan can, such
+    * as a `derives` through a type alias.
+    */
+  def modelCandidates(content: String): Seq[String] = {
+    val packageName = PackageDeclaration.findAllMatchIn(content).map(_.group(1)).mkString(".")
+    val prefix      = if (packageName.isEmpty) "" else packageName + "."
+    val boundaries  = "case class|object |trait |enum |@main"
+
+    CaseClass
+      .findAllMatchIn(content)
+      .flatMap { found =>
+        val rest   = content.substring(found.end)
+        val window = rest.substring(0, math.min(rest.length, 400))
+        val body   = new Regex(boundaries).findFirstMatchIn(window) match {
+          case Some(next) => window.substring(0, next.start)
+          case None       => window
+        }
+        if (DerivesClause.findFirstIn(body).isDefined) Some(prefix + found.group(1)) else None
+      }
+      .toVector
+      .distinct
+  }
+
+  /** The one warning a text scan can decide: a file under `app/` that does not define the `def` its
+    * name promises. Everything the compiler would say better is left to the compiler.
+    */
+  def missingDef(route: HandwrittenRoute, content: String): Option[String] = {
+    val defName = route.target.split('.').last.replace("`", "")
+    val defined = new Regex("def\\s+`?" + Regex.quote(defName) + "`?\\b").findFirstIn(content)
+    if (defined.isDefined) None
+    else
+      Some(
+        s"${route.source} defines no `def $defName`, so the route ${route.method} ${route.path} " +
+          "will not compile"
+      )
+  }
+
+  private val PackageDeclaration = """(?m)^package\s+([\w.]+)\s*$""".r
+  private val CaseClass          = """(?m)^\s*(?:final\s+)?case class\s+(\w+)""".r
+  private val DerivesClause      = """\bderives\b""".r
+
+  private def segment(directory: String): String =
+    if (directory.startsWith("__")) "*" + directory.drop(2)
+    else if (directory.startsWith("_")) ":" + directory.drop(1)
+    else directory
+
+  private def decapitalise(name: String): String =
+    if (name.isEmpty) name else name.substring(0, 1).toLowerCase + name.substring(1)
+
+  private def quoted(defName: String): String =
+    if (Keywords.contains(defName)) "`" + defName + "`" else defName
+
+  private def rank(segment: String): Int =
+    if (segment.startsWith("*")) 2 else if (segment.startsWith(":")) 1 else 0
+
+  private def compare(left: HandwrittenRoute, right: HandwrittenRoute): Int = {
+    val leftSegments  = left.path.split('/').filter(_.nonEmpty).toVector
+    val rightSegments = right.path.split('/').filter(_.nonEmpty).toVector
+
+    val ranked = leftSegments
+      .zip(rightSegments)
+      .map { case (l, r) => rank(l) - rank(r) }
+      .find(_ != 0)
+      .getOrElse(0)
+
+    if (ranked != 0) ranked
+    else if (leftSegments.size != rightSegments.size) rightSegments.size - leftSegments.size
+    else {
+      val byPath = left.path.compareTo(right.path)
+      if (byPath != 0) byPath else left.method.compareTo(right.method)
+    }
+  }
+}
