@@ -55,7 +55,7 @@ private[http] object Config {
   *
   * ```scala
   * import eezo.generated.Routes
-  * @main def main = Eezo.run(8080, Routes.table)
+  * @main def main(): Unit = Eezo.run(port = 8080, routes = Routes.table, dev = true)
   * ```
   *
   * The table is an ordinary parameter rather than something `run` finds by reflection, because a

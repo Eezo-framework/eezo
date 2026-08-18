@@ -60,26 +60,53 @@ object EezoPlugin extends AutoPlugin {
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala")
   )
 
-  /** Bumped whenever `RouteGenerator`'s emitted shape changes, and hashed alongside the
-    * application's own sources below. A hardcoded constant rather than the plugin's own artifact
-    * version read off the jar manifest, because a local `publishLocal` republishes the same version
-    * string repeatedly, which would leave the cache none the wiser about a changed generator.
+  /** A textual fingerprint of `RouteGenerator`'s emitted shape, written into the stamp file
+    * `generate` hashes alongside the application's own sources below. It concatenates `render` on
+    * no routes with `render` on one fixed, synthetic route, so the file's preamble, the empty-table
+    * arm, and a single row's own template are all part of the fingerprint: a change to any of the
+    * three changes this string, and therefore invalidates every project's cache automatically, with
+    * no constant a human has to remember to bump. What it does not cover: a change to `routeFor`,
+    * `sortRoutes`, or the verb table that alters which routes a real `app/` tree produces without
+    * changing how `render` writes a route out. Such a change only invalidates a project's cache
+    * once that project's own `app/` sources change, because those sources are the other half of the
+    * hashed input set below.
+    *
+    * `private[sbt]` reads as a reference to the sbt library, and is not one. A qualifier inside an
+    * access modifier is a single identifier, never a dotted path, so `private[eezo.sbt]` does not
+    * parse and this is the only spelling available. The identifier is resolved against the
+    * enclosing packages first, so `sbt` here is `eezo.sbt`, the package this file declares, and not
+    * the root `sbt` that `import sbt._` brings in: visible to `EezoPluginSuite` in the same
+    * package, and to nothing a consuming build sees.
     */
-  private[sbt] val GeneratorVersion = "1"
+  private[sbt] def witness: String = {
+    val samples = WitnessSources.flatMap(RouteGenerator.routeFor)
+    RouteGenerator.render(Seq.empty) + RouteGenerator.render(samples)
+  }
+
+  /** Two files below `app/`, chosen so that `witness` covers more of the generator than `render`'s
+    * own template. They run through `routeFor`, so the filename to verb table and the `_seg` to
+    * `:seg` translation are inside the fingerprint. There are two of them rather than one, because
+    * a single row never exercises the separator `render` joins rows with, and they are listed with
+    * the parameterised one first, so `sortRoutes` has to reorder them and any change to emit order
+    * changes the fingerprint too.
+    */
+  private val WitnessSources: Seq[String] =
+    Seq("eezoWitness/_id/Show.scala", "eezoWitness/New.scala")
 
   /** Reads the application's sources under `app/` and writes `eezo.generated.Routes`.
     *
     * `sourceGenerators` runs every generator on every evaluation of `compile`, so a generator that
     * does not cache rewrites its output on every keystroke of a watch loop and invalidates the
     * compile that follows. `FileFunction.cached` is what makes the rewrite conditional. The hashed
-    * input set is the `.scala` files under `app/` plus a stamp file carrying `GeneratorVersion`,
-    * not the whole `Compile` source tree, so editing a file outside `app/`, such as `Main.scala`,
-    * no longer misses the cache. The stamp is what makes upgrading the plugin itself miss the cache
-    * even when the application's own sources are untouched, since bumping `GeneratorVersion`
-    * changes a hashed input; it also guarantees the input set is never empty when a project has no
-    * `app/` directory yet, so the cached body still runs once and writes a table with no rows. The
-    * output is tracked by content hash rather than existence, so a hand-edited or truncated
-    * Routes.scala is repaired on the next run, not only a deleted one.
+    * input set is the `.scala` files under `app/` plus a stamp file carrying `witness`, not the
+    * whole `Compile` source tree, so editing a file outside `app/`, such as `Main.scala`, no longer
+    * misses the cache. The stamp is what makes upgrading the plugin itself miss the cache even when
+    * the application's own sources are untouched, since any change to `RouteGenerator`'s emitted
+    * shape changes `witness`, and therefore a hashed input, with no version number to bump by hand;
+    * it also guarantees the input set is never empty when a project has no `app/` directory yet, so
+    * the cached body still runs once and writes a table with no rows. The output is tracked by
+    * content hash rather than existence, so a hand-edited or truncated Routes.scala is repaired on
+    * the next run, not only a deleted one.
     */
   private def generate: Def.Initialize[Task[Seq[File]]] = Def.task {
     val log         = streams.value.log
@@ -88,7 +115,7 @@ object EezoPlugin extends AutoPlugin {
     val destination = (Compile / sourceManaged).value / "eezo" / "generated" / "Routes.scala"
     val appInputs   = (appRoot ** "*.scala").get().toSet
     val stamp       = streams.value.cacheDirectory / "eezo-routes.version"
-    IO.write(stamp, GeneratorVersion)
+    IO.write(stamp, witness)
     val inputs = appInputs + stamp
 
     val cached = FileFunction.cached(
