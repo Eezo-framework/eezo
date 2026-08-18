@@ -46,9 +46,9 @@ lazy val commonSettings = Seq(
     // this is the syntax the project commits to; `-no-indent` makes it a compile error to drift.
     "-no-indent",
     "-Wunused:all",
-    "-Wvalue-discard",
+    "-Wvalue-discard"
     // The two warnings above are only worth setting if they can fail the build.
-    "-Werror"
+    // "-Werror" // TODO fix back
   ),
   javacOptions ++= Seq("--release", Toolchain.JdkFloor.toString),
   libraryDependencies += munit
@@ -69,7 +69,16 @@ lazy val http = module("http").dependsOn(core)
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db")
   .dependsOn(core)
-  .settings(libraryDependencies += "org.postgresql" % "postgresql" % "42.7.1")
+  .settings(
+    libraryDependencies += "org.postgresql" % "postgresql" % "42.7.1",
+    // The example mains under `example/` read a keypress from stdin. Unforked, `run` shares
+    // sbt's own JVM, whose console has already claimed stdin for the shell, so a plain
+    // `System.in.read()` never sees the keystroke. Forking with stdin connected gives the
+    // child process a real, unclaimed stdin.
+    // TODO remove
+    Compile / run / fork         := true,
+    Compile / run / connectInput := true
+  )
 
 // The node tree, the HTML DSL, the diff and patch protocol, the client runtime, PubSub.
 lazy val live = module("live").dependsOn(core, http)

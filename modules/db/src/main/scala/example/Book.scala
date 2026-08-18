@@ -7,5 +7,29 @@ case class Book(
     id: Id[Book],
     author: Ref[Author],
     title: Title,
-    publishedOn: Option[LocalDate]
+    publishedOn: Option[LocalDate],
+    isbn: Option[String],
+    publishedBy: Option[Ref[PublishingHouse]]
 ) derives Table
+
+object Book {
+  val seedBooks = List(
+    Book(
+      Id.gen(),
+      Ref.to(Author.herbert.id),
+      Title("Dune"),
+      Some(LocalDate.of(1965, 8, 1)),
+      None,
+      None
+    ),
+    Book(
+      Id.gen(),
+      Ref.to(Author.herbert.id),
+      Title("Dune Messiah"),
+      Some(LocalDate.of(1969, 1, 1)),
+      None,
+      None
+    ),
+    Book(Id.gen(), Ref.to(Author.student.id), Title("Untitled"), None, None, None)
+  )
+}

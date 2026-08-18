@@ -1,7 +1,6 @@
 package example
 
 import io.eezo.db.*
-import java.time.LocalDate
 
 object Step4 {
   given titleCol: Column[String] = Column[String].withCheck(Check.MaxLen(200))
@@ -32,20 +31,16 @@ object Step4 {
         ai.execute(); ai.close()
 
         val bi = c.prepareStatement(bt.insertSql)
-        bt.encode(
-          bi,
-          1,
-          Book(Id.gen(), Ref.to(herbert.id), Title("Dune"), Some(LocalDate.of(1965, 8, 1)))
-        )
-        bi.addBatch()
-        bt.encode(bi, 1, Book(Id.gen(), Ref.to(herbert.id), Title("Untitled"), None))
-        bi.addBatch()
+        Book.seedBooks.foreach { b =>
+          bt.encode(bi, 1, b)
+          bi.addBatch()
+        }
         bi.executeBatch()
         bi.close()
 
         // try pushing a duplicate
         val dup = c.prepareStatement(Table[Book].insertSql)
-        Table[Book].encode(dup, 1, Book(Id.gen(), Ref.to(herbert.id), Title("Dune"), None))
+        Table[Book].encode(dup, 1, Book.seedBooks.head)
         val rejected =
           try { dup.execute(); false }
           catch { case _: java.sql.SQLException => true }
