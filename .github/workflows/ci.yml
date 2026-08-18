@@ -33,8 +33,22 @@ jobs:
       - name: Check formatting
         run: sbt -batch scalafmtCheckAll scalafmtSbtCheck
 
+      # `+compile` rather than `compile`, and the `+` is there for the sbt plugin alone. `sbt-eezo`
+      # is built from one source set on two axes, Scala 2.12 with sbt 1 and Scala 3.8.4 with sbt 2,
+      # and no compiler flag enforces the shared subset that requires: `-Xsource:3` on the 2.12 axis
+      # accepts Scala 3 syntax but does not reject Scala 2 syntax, and it does not reconcile Scala
+      # 3's leading infix rule, so a file can compile clean on 2.12 and still fail, or quietly mean
+      # something else, on 3.8.4. Compiling both axes is the only guard there is. Doing it here
+      # rather than leaving it to `+publishSigned` inside `ci-release` means a divergence costs a red
+      # build; on a tag it costs the release, which aborts only after the tag exists and so needs a
+      # fresh one.
+      #
+      # The cross is cheap because `crossScalaVersions` is per project: sbt reports "Setting Scala
+      # version to 2.12.21 on 1 projects. Excluded 9 projects", then "Setting Scala version to
+      # 3.8.4 on 10 projects", so only the plugin is built twice and the eight framework modules
+      # are not dragged through a 2.12 pass they would never survive.
       - name: Compile
-        run: sbt -batch compile Test/compile
+        run: sbt -batch +compile Test/compile
 
       # The JDK floor is a design constraint, not a preference: JEP 491 removed virtual thread
       # pinning on `synchronized`, and research/http-server.md measured a 16x latency degradation
