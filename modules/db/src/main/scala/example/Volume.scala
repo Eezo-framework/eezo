@@ -9,7 +9,8 @@ case class Volume(
     title: Title,
     publishedOn: Option[LocalDate],
     isbn: Option[String],
-    publishedBy: Option[Ref[PublishingHouse]]
+    publishedBy: Option[Ref[PublishingHouse]],
+    format: String
 ) derives Table
 
 object Volume {
@@ -20,7 +21,8 @@ object Volume {
       Title("Dune"),
       Some(LocalDate.of(1965, 8, 1)),
       None,
-      None
+      None,
+      "paperback"
     ),
     Volume(
       Id.gen(),
@@ -28,8 +30,9 @@ object Volume {
       Title("Dune Messiah"),
       Some(LocalDate.of(1969, 1, 1)),
       None,
-      None
+      None,
+      "paperback"
     ),
-    Volume(Id.gen(), Ref.to(Author.student.id), Title("Untitled"), None, None, None)
+    Volume(Id.gen(), Ref.to(Author.student.id), Title("Untitled"), None, None, None, "paperback")
   )
 }

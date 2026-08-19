@@ -9,7 +9,8 @@ case class Book(
     title: Title,
     publishedOn: Option[LocalDate],
     isbn: Option[String],
-    publishedBy: Option[Ref[PublishingHouse]]
+    publishedBy: Option[Ref[PublishingHouse]],
+    format: String
 ) derives Table
 
 object Book {
@@ -20,7 +21,8 @@ object Book {
       Title("Dune"),
       Some(LocalDate.of(1965, 8, 1)),
       None,
-      None
+      None,
+      "paperback"
     ),
     Book(
       Id.gen(),
@@ -28,8 +30,9 @@ object Book {
       Title("Dune Messiah"),
       Some(LocalDate.of(1969, 1, 1)),
       None,
-      None
+      None,
+      "paperback"
     ),
-    Book(Id.gen(), Ref.to(Author.student.id), Title("Untitled"), None, None, None)
+    Book(Id.gen(), Ref.to(Author.student.id), Title("Untitled"), None, None, None, "paperback")
   )
 }
