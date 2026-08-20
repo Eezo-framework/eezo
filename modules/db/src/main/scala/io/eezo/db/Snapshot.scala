@@ -30,10 +30,11 @@ final case class IndexSnap(name: String, columns: List[String], unique: Boolean)
       "unique"  -> J.B(unique)
     )
   )
-  def createDdl(table: String): String = {
+  def createDdl(table: String, ifNotExists: Boolean = false): String = {
     val u    = if (unique) "unique " else ""
+    val ine  = if (ifNotExists) "if not exists " else ""
     val cols = columns.map(c => "\"" + c + "\"").mkString(", ")
-    s"""create ${u}index if not exists "$name" on "$table" ($cols)"""
+    s"""create ${u}index $ine"$name" on "$table" ($cols)"""
   }
 }
 
