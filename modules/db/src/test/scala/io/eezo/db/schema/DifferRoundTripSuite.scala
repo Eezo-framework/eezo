@@ -55,8 +55,8 @@ class DifferRoundTripSuite extends PgSuite {
     snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
   )
 
-  // "drop a check" is deliberately absent from the round-trips above: it does not work.
-  // See the two tests at the bottom of this suite and BACKLOG item 25.
+  // "drop a check" is absent from the round-trips above because it does not work at all.
+  // See BacklogSuite, item 25.
 
   roundTrip("add an index")(
     snap(author),
@@ -97,51 +97,4 @@ class DifferRoundTripSuite extends PgSuite {
           col("author_id", "uuid", references = Some("author")))
     )
   )
-
-  /** Constraint names as Postgres actually recorded them. */
-  private def checkConstraints(table: String): List[String] = {
-    val ps = db.prepareStatement(
-      """select con.conname from pg_constraint con
-         join pg_class rel on rel.oid = con.conrelid
-         join pg_namespace ns on ns.oid = rel.relnamespace
-         where con.contype = 'c' and rel.relname = ? and ns.nspname = ?
-         order by con.conname"""
-    )
-    ps.setString(1, table)
-    ps.setString(2, pgSchema)
-    try {
-      val rs = ps.executeQuery()
-      try Iterator.continually(rs).takeWhile(_.next()).map(_.getString(1)).toList
-      finally rs.close()
-    } finally ps.close()
-  }
-
-  test("BACKLOG 25: a check that arrives with its table gets Postgres's name, not ours") {
-    // `Ddl.render(CreateTable)` emits the check inline and unnamed, so Postgres names it
-    // <table>_<column>_check. `Ddl.render(AddCheck)` names it ck_<table>_<column>_<hash>.
-    // Two spellings for one constraint, and only the second is the one DropCheck knows.
-    val withCheck = snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
-    exec(Ddl.render(Differ.diff(empty, withCheck))*)
-    assertEquals(checkConstraints("author"), List("author_name_check"))
-
-    exec(Ddl.render(Differ.diff(empty, snap(tbl("book", id))))*)
-    exec(Ddl.render(List(Change.AddCheck("book", "id", "id is not null")))*)
-    assert(checkConstraints("book").head.startsWith("ck_book_id_"), checkConstraints("book").toString)
-  }
-
-  test("BACKLOG 25: so dropping a check created with its table fails".fail) {
-    val from = snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
-    exec(Ddl.render(Differ.diff(empty, from))*)
-    exec(Ddl.render(Differ.diff(from, snap(author)))*)
-  }
-
-  test("BACKLOG 17: a check on a column whose name needs quoting renders invalid SQL") {
-    // Ddl quotes the column in its definition, but the check expression comes from the
-    // snapshot's canonical form, which had its quotes stripped. So the constraint refers to
-    // a bare reserved word. Invert this test when item 17 is fixed.
-    val t   = tbl("t", id, col("order", checks = List("length(order) <= 10")))
-    val sql = Ddl.render(Differ.diff(empty, snap(t)))
-    assert(sql.head.contains("check (length(order) <= 10)"), sql.head)
-    assert(rejected(exec(sql*)), "Postgres accepted an unquoted reserved word")
-  }
 }

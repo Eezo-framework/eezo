@@ -85,20 +85,4 @@ class CodecSuite extends PgSuite {
     assertEquals(selectAll(Table[Widget]).head.name, w.name)
     assertEquals(selectAll(Table[Widget]).head.count, w.count)
   }
-
-  test("BACKLOG 19: a NULL timestamptz throws instead of decoding as None".fail) {
-    // Column[Instant].get calls .toInstant on the driver's return value before wasNull is
-    // consulted, so a NULL dereferences null. Delete `.fail` when item 19 is fixed.
-    create(Moments)
-    val m = Moment(Id.gen(), None)
-    insert(Table[Moment], m)
-    assertEquals(selectAll(Table[Moment]), List(m))
-  }
-
-  test("BACKLOG 19: a NULL numeric throws instead of decoding as None".fail) {
-    create(Monies)
-    val m = Money(Id.gen(), None)
-    insert(Table[Money], m)
-    assertEquals(selectAll(Table[Money]), List(m))
-  }
 }

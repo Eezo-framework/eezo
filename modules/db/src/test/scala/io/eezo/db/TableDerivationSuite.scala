@@ -95,18 +95,4 @@ class SchemaValidationSuite extends FunSuite {
     val e = intercept[RuntimeException](Twice.snapshot)
     assert(e.getMessage.contains("Duplicate"), e.getMessage)
   }
-
-  // All three throw a bare RuntimeException from `sys.error` rather than SchemaError, so a
-  // CLI catching SchemaError shows a stack trace instead of the message. BACKLOG item 23.
-  //
-  // Marked `.fail`: it passes while the bug is present and starts failing the moment it is
-  // fixed, at which point delete the `.fail` and keep the assertion.
-  test("BACKLOG 23: validation failures are not SchemaError yet".fail) {
-    object StillRuntimeException extends Schema {
-      val authors = table[Author]
-      val books   = table[Book].index("no_such_column")
-      val houses  = table[PublishingHouse]
-    }
-    intercept[SchemaError](StillRuntimeException.snapshot)
-  }
 }

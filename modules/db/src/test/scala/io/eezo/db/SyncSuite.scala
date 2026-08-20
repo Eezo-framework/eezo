@@ -55,19 +55,4 @@ class SyncSuite extends PgSuite {
     assert(d.head.risky)
     assert(!d.head.destructive)
   }
-
-  test("BACKLOG 20: adding a not-null column is neither flagged nor safe") {
-    // It always fails against a non-empty table, so `sync --apply` will attempt it without
-    // warning and die. Invert the flag assertions when item 20 is fixed.
-    create(Library)
-    exec("""alter table "book" drop column "format"""")
-    val d = Differ.diff(live(), Library.snapshot)
-    assertEquals(d.map(_.describe), List("+ book.format text not null"))
-    assert(!d.head.risky, "item 20 has been fixed; update this test")
-
-    insert(Table[Author], Author(Id.gen(), "Herbert", None, None))
-    exec("""insert into "book" ("id", "author_id", "title")
-            select gen_random_uuid(), "id", 'Dune' from "author" """)
-    assert(rejected(exec(Ddl.render(d)*)), "a not-null column with rows present was accepted")
-  }
 }

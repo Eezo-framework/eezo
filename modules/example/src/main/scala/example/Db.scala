@@ -11,7 +11,7 @@ import java.sql.{Connection, DriverManager}
   */
 object Db {
 
-  val url: String  = sys.env.getOrElse("EEZO_DB_URL", "jdbc:postgresql://localhost:5443/eezo")
+  val url: String  = sys.env.getOrElse("EEZO_DB_URL", "jdbc:postgresql://localhost:5442/eezo")
   val user: String = sys.env.getOrElse("EEZO_DB_USER", "postgres")
   val pass: String = sys.env.getOrElse("EEZO_DB_PASS", "postgres")
 

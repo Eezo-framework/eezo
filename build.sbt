@@ -35,6 +35,13 @@ Global / onLoad := (Global / onLoad).value.andThen { state =>
   state
 }
 
+// The db suite is deliberately two things at once. `check` is the regression signal and is
+// expected to be green; `backlog` is the to-do list from design/backlog.md, written as tests
+// that assert what eezo should do, and is expected to be red. A backlog test turns green by
+// the bug being fixed, never by the assertion being weakened.
+addCommandAlias("check", "db/testOnly -- --exclude-tags=backlog")
+addCommandAlias("backlog", "db/testOnly io.eezo.db.BacklogSuite")
+
 lazy val commonSettings = Seq(
   scalacOptions ++= Seq(
     "-release",
@@ -110,7 +117,7 @@ lazy val example = project
   .dependsOn(db)
   .settings(
     name                         := "eezo-example",
-    Compile / run / mainClass    := Some("example.Cli"),
+    Compile / run / mainClass    := Some("example.Tour"),
     Compile / run / fork         := true,
     Compile / run / connectInput := true // required for freeze's prompts
   )

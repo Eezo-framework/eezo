@@ -59,17 +59,4 @@ class ConstraintSuite extends PgSuite {
     insert(Table[Author], master, pupil)
     assertEquals(selectAll(Table[Author]).flatMap(_.mentor).map(_.value), List(master.id.value))
   }
-
-  test("BACKLOG 12: mutually-referencing rows cannot be inserted at all") {
-    // Constraints are immediate, so there is no order that satisfies a cycle and no way to
-    // defer. Two authors mentoring each other is the smallest case. This test documents the
-    // limitation; when FKs become deferrable it will start failing and should be inverted.
-    create(Library)
-    val a = Id.gen[Author]()
-    val b = Id.gen[Author]()
-    val first  = Author(a, "A", None, Some(Ref[Author](b.value)))
-    val second = Author(b, "B", None, Some(Ref[Author](a.value)))
-    assert(rejected(insert(Table[Author], first, second)))
-    assert(rejected(insert(Table[Author], second, first)))
-  }
 }
