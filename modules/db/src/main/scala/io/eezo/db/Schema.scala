@@ -1,5 +1,7 @@
 package io.eezo.db
 
+import io.eezo.db.schema.{Ddl, Differ, IndexSnap, SchemaSnap, Snapshot, TableSnap}
+
 import scala.collection.mutable.ListBuffer
 
 final class TableSpec[T](val table: Table[T]) {
@@ -72,13 +74,13 @@ abstract class Schema {
   lazy val snapshot: SchemaSnap =
     SchemaSnap(validated.map(_.snapshot).sortBy(_.name))
 
-  /** Full DDL, ordered so FKs land after every table exists. */
-  lazy val ddl: List[String] = {
-    val ts = validated.map(_.table.tableDef)
-    ts.map(_.createTable) ++
-      ts.flatMap(_.foreignKeys) ++
-      validated.flatMap(s => s.indexes.map(_.createDdl(s.table.tableName)))
-  }
+  /** Full DDL for an empty database: the diff from nothing to this schema.
+    *
+    * Deliberately the same code path migrations take, so `reset` and `migrate` cannot
+    * produce different databases. Ordering (tables, then FKs, then indexes) comes from
+    * `Differ.diff`; column order is alphabetical, per DESIGN §3.2.
+    */
+  lazy val ddl: List[String] = Ddl.render(Differ.diff(SchemaSnap(Nil), snapshot))
 
   lazy val dropAll: List[String] =
     validated.reverse.map(s => s"""drop table if exists "${s.table.tableName}" cascade""")

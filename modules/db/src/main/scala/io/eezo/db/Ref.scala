@@ -1,7 +1,7 @@
 package io.eezo.db
 
 import java.util.UUID
-import io.eezo.db.util.*
+import io.eezo.db.internal.util.*
 
 trait RefTarget[A] { def table: String }
 

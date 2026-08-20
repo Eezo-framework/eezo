@@ -70,14 +70,11 @@ lazy val http = module("http").dependsOn(core)
 lazy val db = module("db")
   .dependsOn(core)
   .settings(
-    libraryDependencies += "org.postgresql" % "postgresql" % "42.7.1",
-    // The example mains under `example/` read a keypress from stdin. Unforked, `run` shares
-    // sbt's own JVM, whose console has already claimed stdin for the shell, so a plain
-    // `System.in.read()` never sees the keystroke. Forking with stdin connected gives the
-    // child process a real, unclaimed stdin.
-    // TODO remove
-    Compile / run / fork         := true,
-    Compile / run / connectInput := true
+    libraryDependencies ++= Seq(postgresql, testcontainersPg),
+    // The database suite starts one container and shares it across suites (see
+    // `support.Pg`). Forking per suite would start one container per JVM.
+    Test / fork              := true,
+    Test / parallelExecution := false
   )
 
 // The node tree, the HTML DSL, the diff and patch protocol, the client runtime, PubSub.
@@ -106,6 +103,8 @@ lazy val eezo = (project in file("."))
     publish / skip := true
   )
 
+// The demo app: a real model, a real schema, and the `eezo db` CLI driving them. The
+// framework's own correctness lives in `db`'s test suite, not here.
 lazy val example = project
   .in(file("modules/example"))
   .dependsOn(db)

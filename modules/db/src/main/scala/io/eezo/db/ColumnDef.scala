@@ -1,5 +1,12 @@
 package io.eezo.db
 
+/** The runtime description of one column, produced by the `Table` macro.
+  *
+  * This type deliberately renders no DDL. Every `create table`, `alter table`, and
+  * `create index` in the framework comes out of `schema.Ddl`, driven by a `Change` — the
+  * fresh-database path included, via `Differ.diff(SchemaSnap(Nil), _)`. One renderer means
+  * the migration path and the reset path cannot drift apart (BACKLOG §4).
+  */
 final case class ColumnDef(
     name: String,
     pgType: PgType,
@@ -9,13 +16,6 @@ final case class ColumnDef(
     references: Option[String] = None
 ) {
   def quoted: String = "\"" + name + "\""
-
-  def renderDdl: String = {
-    val nn = if (nullable || primaryKey) "" else " not null"
-    val pk = if (primaryKey) " primary key" else ""
-    val ck = checks.map(c => s" check (${c.render(quoted)})").mkString
-    s"$quoted ${pgType.render}$nn$pk$ck"
-  }
 }
 
 object ColumnDef {
@@ -27,21 +27,9 @@ object ColumnDef {
     ColumnDef(name, c.pgType, c.nullable, primaryKey, c.checks, references)
 }
 
+/** A table's columns, for the statements that address rows rather than shape. */
 final case class TableDef(name: String, columns: List[ColumnDef]) {
   def quoted: String = "\"" + name + "\""
-
-  def createTable: String = {
-    val cols = columns.map(c => "  " + c.renderDdl).mkString(",\n")
-    s"create table if not exists $quoted (\n$cols\n)"
-  }
-
-  /** Emitted separately so table creation order doesn't matter. */
-  def foreignKeys: List[String] = columns.flatMap { c =>
-    c.references.map { target =>
-      s"""alter table $quoted add constraint "fk_${name}_${c.name}" """ +
-        s"""foreign key (${c.quoted}) references "$target" ("id")"""
-    }
-  }
 
   def insert: String = {
     val names = columns.map(_.quoted).mkString(", ")

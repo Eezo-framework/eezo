@@ -1,0 +1,154 @@
+{
+  "version": 1,
+  "tables": [
+    {
+      "name": "author",
+      "columns": [
+        {
+          "name": "country",
+          "type": "text",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "mentor_id",
+          "type": "uuid",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": "author"
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "book",
+      "columns": [
+        {
+          "name": "author_id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": "author"
+        },
+        {
+          "name": "format",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "isbn",
+          "type": "text",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "published_by_id",
+          "type": "uuid",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": "publishing_house"
+        },
+        {
+          "name": "published_on",
+          "type": "date",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "title",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [
+            "length(title) <= 100"
+          ],
+          "references": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "idx_book_author_id_published_on_published_by_id",
+          "columns": [
+            "author_id",
+            "published_on",
+            "published_by_id"
+          ],
+          "unique": false
+        },
+        {
+          "name": "uq_book_title",
+          "columns": [
+            "title"
+          ],
+          "unique": true
+        }
+      ]
+    },
+    {
+      "name": "publishing_house",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "location",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        }
+      ],
+      "indexes": []
+    }
+  ]
+}

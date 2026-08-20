@@ -12,7 +12,6 @@ trait Table[T] {
   def decode(rs: ResultSet, offset: Int): T
 
   final def tableDef: TableDef   = TableDef(tableName, columns)
-  final def createTable: String  = tableDef.createTable
   final def insertSql: String    = tableDef.insert
   final def selectAllSql: String = tableDef.selectAll
 }

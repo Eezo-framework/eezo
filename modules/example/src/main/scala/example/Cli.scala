@@ -1,6 +1,8 @@
 package example
 
 import io.eezo.db.*
+import io.eezo.db.schema.*
+import io.eezo.db.migrate.*
 import scala.io.StdIn
 
 object Cli {
