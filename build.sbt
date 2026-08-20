@@ -108,8 +108,10 @@ lazy val eezo = (project in file("."))
 
 lazy val example = project
   .in(file("modules/example"))
-  .dependsOn(eezo)
+  .dependsOn(db)
   .settings(
-    name := "eezo-example",
-    scalacOptions += "-Xcheck-macros"
+    name                         := "eezo-example",
+    Compile / run / mainClass    := Some("example.Cli"),
+    Compile / run / fork         := true,
+    Compile / run / connectInput := true // required for freeze's prompts
   )
