@@ -16,5 +16,8 @@ project/project/**
 # preserved research harnesses: their logs are the evidence, not noise
 !research/harnesses/**/*.log
 
+# written by `sbt publishLocalForExample`, read by examples/hello's build
+.eezo-version
+
 # virtual machine crash logs, see http://www.java.com/en/download/help/error_hotspot.xml
 hs_err_pid*

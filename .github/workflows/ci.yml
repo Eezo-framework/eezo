@@ -56,6 +56,10 @@ jobs:
       # bad JDK is caught before any task runs, on this runner and on a contributor's machine
       # alike. No separate shell check is needed here.
       #
+      # `+test` for the same reason `+compile` is crossed: the sbt plugin's own suite has to run on
+      # both axes, since a semantic divergence between Scala 2.12 and 3.8.4 compiles clean on each.
+      # The framework modules are built once, because `crossScalaVersions` is per project.
+      #
       # The `db` suite starts a real Postgres through testcontainers, which needs a Docker daemon.
       # ubuntu-latest runners have one; a self-hosted runner without it will fail here rather than
       # skip, which is deliberate — half of what `db` claims is a claim about Postgres, and a run
@@ -64,4 +68,13 @@ jobs:
       # BacklogSuite is expected to pass while printing one warning per open item in
       # design/backlog.md. If it *fails*, an item has been fixed: the message says what to do.
       - name: Test
-        run: sbt -batch test
+        run: sbt -batch +test
+
+      # The walking skeleton, built the way a user builds it: eezo published to the local ivy
+      # cache, and a separate sbt build that enables the plugin and compiles what it generates.
+      # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
+      # a build cannot be enabled by that same build.
+      - name: Build the example application
+        run: |
+          sbt -batch publishLocalForExample
+          cd examples/hello && sbt -batch compile

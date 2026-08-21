@@ -29,10 +29,17 @@ inThisBuild(
 )
 
 // The JDK floor is checked when the build loads, so that a wrong JVM fails with a reason instead
-// of with a `-release` error forty lines into a compile.
-Global / onLoad := (Global / onLoad).value.andThen { state =>
-  Toolchain.assertJdk()
-  state
+// of with a `-release` error forty lines into a compile. `sbt.version` is checked for the same
+// reason: it is read by the sbt launcher before any Scala code runs, so examples/hello cannot get
+// it from `Toolchain` the way it gets `ScalaVersion` and `JdkFloor`, and a drift there would
+// otherwise go unnoticed.
+Global / onLoad := {
+  val root = (ThisBuild / baseDirectory).value
+  (Global / onLoad).value.andThen { state =>
+    Toolchain.assertJdk()
+    Toolchain.assertExampleSbtVersionMatches(root)
+    state
+  }
 }
 
 // The db suite is deliberately two things at once. `check` is the regression signal and is
@@ -73,7 +80,9 @@ def module(id: String): Project =
 lazy val core = module("core")
 
 // Jetty boot, request parsing, response writing, file-based routing.
-lazy val http = module("http").dependsOn(core)
+lazy val http = module("http")
+  .dependsOn(core)
+  .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, jettyWsClient))
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db")
@@ -132,6 +141,8 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         case _      => Seq("--release", "17")
       }
     },
+    // munit, because `commonSettings` is not inherited here.
+    libraryDependencies += munit,
     pluginCrossBuild / sbtVersion := {
       scalaBinaryVersion.value match {
         case "2.12" => Toolchain.Sbt1Floor
@@ -152,6 +163,32 @@ lazy val eezo = (project in file("."))
     name           := "eezo",
     publish / skip := true
   )
+
+// What `examples/hello` needs in order to resolve eezo from the local ivy cache, and to stay on
+// the same Scala version and JDK floor as the rest of the build. The eezo version is derived from
+// the git state by sbt-dynver, so it changes with every commit, and the Scala version and JDK
+// floor live in `Toolchain`, which the example's separate build cannot read directly; none of the
+// three can be written into the example's build by hand without drifting. `publishLocalForExample`
+// publishes the modules and the plugin and then records all three where the example's build reads
+// them, through `EezoVersion` in `examples/hello/project/project`.
+lazy val writeLocalVersion =
+  taskKey[File]("Records the locally published version and toolchain for examples/hello.")
+
+writeLocalVersion := {
+  val destination = (ThisBuild / baseDirectory).value / ".eezo-version"
+  // key=value, not positional lines, so a reader that only recognises the current keys rejects a
+  // file from an earlier format by name instead of misreading it by position.
+  val contents = List(
+    s"version=${version.value}",
+    s"scalaVersion=${Toolchain.ScalaVersion}",
+    s"jdkFloor=${Toolchain.JdkFloor}"
+  )
+  IO.writeLines(destination, contents)
+  streams.value.log.info(s"eezo ${version.value} recorded in $destination")
+  destination
+}
+
+addCommandAlias("publishLocalForExample", ";publishLocal;writeLocalVersion")
 
 // The demo app: a real model, a real schema, and the `eezo db` CLI driving them. The
 // framework's own correctness lives in `db`'s test suite, not here.
