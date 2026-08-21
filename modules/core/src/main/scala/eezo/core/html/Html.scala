@@ -18,8 +18,8 @@ enum Html {
   /** The single unescaped path into the tree. */
   case Raw(html: String)
 
-  /** An element. Void ness is a property of the tag *name*, looked up in an internal void tag
-    * table at render time, so `Element("br", …, void = false)` is not a state that exists.
+  /** An element. Void ness is a property of the tag *name*, looked up in an internal void tag table
+    * at render time, so `Element("br", …, void = false)` is not a state that exists.
     *
     * `key` is a field rather than an ordinary attribute because `modules/live` addresses list
     * children by identity, and a requirement one module places on another belongs in a type rather
@@ -34,11 +34,11 @@ enum Html {
 
   /** Several nodes with no element of their own.
     *
-    * A `Fragment` renders its children and nothing of its own, so one tree child can become
-    * several DOM nodes, and every index after it would run ahead of the tree if the fragment were
-    * left in place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` holds four
-    * children, not three, and renders `<div><span>a</span>xy<span>z</span></div>`; left unspliced,
-    * the two text nodes would sit behind one tree child. [[Tag.apply]] is the guard: it splices a
+    * A `Fragment` renders its children and nothing of its own, so one tree child can become several
+    * DOM nodes, and every index after it would run ahead of the tree if the fragment were left in
+    * place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` holds four children,
+    * not three, and renders `<div><span>a</span>xy<span>z</span></div>`; left unspliced, the two
+    * text nodes would sit behind one tree child. [[Tag.apply]] is the guard: it splices a
     * `Fragment` child into its parent's children, so an `Element` built through a tag never
     * contains one and tree child index equals DOM child index. That guard is `Tag.apply`'s alone;
     * building an `Element` by hand with a `Fragment` among its children, or nesting one `Fragment`
