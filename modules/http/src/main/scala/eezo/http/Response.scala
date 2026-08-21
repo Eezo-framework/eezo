@@ -29,6 +29,15 @@ final case class Response(status: Int, headers: Seq[(String, String)], body: Bod
     copy(headers = headers :+ (name -> value))
 }
 
+/** Named constructors stop at `Ok` and `Redirect` because those are the only two responses that
+  * carry structure beyond a bare code: a Content Type for the former, a Location for the latter. A
+  * `NotFound` constructor is deliberately absent even though it would round out the pair: eezo's
+  * own failure statuses are reached by throwing the sealed set in `Errors.scala`, which `Boundary`
+  * catches and renders as a full RFC 9457 problem page. A bare `Response.NotFound` would collide in
+  * name with the `NotFound` exception and would return an empty body, skipping that page entirely.
+  * Every status eezo does not give a name to, including 404 when it is reached outside that thrown
+  * path, goes through `status` instead.
+  */
 object Response {
 
   /** The HTML content type, with the charset the boundary actually encodes in. */
