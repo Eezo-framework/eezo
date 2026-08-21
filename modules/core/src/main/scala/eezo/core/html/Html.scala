@@ -18,8 +18,8 @@ enum Html {
   /** The single unescaped path into the tree. */
   case Raw(html: String)
 
-  /** An element. Void-ness is a property of the tag *name*, looked up in [[Html.VoidTags]] at
-    * render time, so `Element("br", …, void = false)` is not a state that exists.
+  /** An element. Void ness is a property of the tag *name*, looked up in an internal void tag
+    * table at render time, so `Element("br", …, void = false)` is not a state that exists.
     *
     * `key` is a field rather than an ordinary attribute because `modules/live` addresses list
     * children by identity, and a requirement one module places on another belongs in a type rather
@@ -34,9 +34,16 @@ enum Html {
 
   /** Several nodes with no element of their own.
     *
-    * [[Tag.apply]] splices a `Fragment` child into its parent's children, so a constructed
-    * `Element` never contains one and tree child index always equals DOM child index. The case
-    * survives as a root level value, where there is no parent to index into.
+    * A `Fragment` renders its children and nothing of its own, so one tree child can become
+    * several DOM nodes, and every index after it would run ahead of the tree if the fragment were
+    * left in place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` holds four
+    * children, not three, and renders `<div><span>a</span>xy<span>z</span></div>`; left unspliced,
+    * the two text nodes would sit behind one tree child. [[Tag.apply]] is the guard: it splices a
+    * `Fragment` child into its parent's children, so an `Element` built through a tag never
+    * contains one and tree child index equals DOM child index. That guard is `Tag.apply`'s alone;
+    * building an `Element` by hand with a `Fragment` among its children, or nesting one `Fragment`
+    * inside another before it reaches a tag, sits outside it. The case survives as a root level
+    * value, where there is no parent to index into.
     */
   case Fragment(children: Vector[Html])
 
@@ -116,8 +123,14 @@ object Html {
 
   /** The tags a browser parses as self closing. They render `<br>`, not `<br/>`: the XHTML spelling
     * is not what an HTML parser is reading.
+    *
+    * `private[eezo]`, the same reach as [[Html.renderTo]], because void ness is a fact
+    * `modules/live`'s differ will need too: a void `Element` with non empty `children` renders none
+    * of them, so the differ has to know void ness to keep tree child index equal to DOM child
+    * index. Nothing outside `renderTo` reads this table today, so a public `Set[String]` would be
+    * an API commitment with no caller asking for it.
     */
-  val VoidTags: Set[String] =
+  private[eezo] val VoidTags: Set[String] =
     Set(
       "area",
       "base",
