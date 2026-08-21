@@ -2,10 +2,10 @@ package io.eezo.db
 
 /** The runtime description of one column, produced by the `Table` macro.
   *
-  * This type deliberately renders no DDL. Every `create table`, `alter table`, and
-  * `create index` in the framework comes out of `schema.Ddl`, driven by a `Change` — the
-  * fresh-database path included, via `Differ.diff(SchemaSnap(Nil), _)`. One renderer means
-  * the migration path and the reset path cannot drift apart (BACKLOG §4).
+  * This type deliberately renders no DDL. Every `create table`, `alter table`, and `create index`
+  * in the framework comes out of `schema.Ddl`, driven by a `Change` — the fresh-database path
+  * included, via `Differ.diff(SchemaSnap(Nil), _)`. One renderer means the migration path and the
+  * reset path cannot drift apart (BACKLOG §4).
   */
 final case class ColumnDef(
     name: String,

@@ -12,8 +12,7 @@ object Migrator {
 
   def ensureLedger(c: Connection): Unit = {
     val st = c.createStatement()
-    st.execute(
-      s"""create table if not exists "$Ledger" (
+    st.execute(s"""create table if not exists "$Ledger" (
          |  number integer primary key,
          |  name text not null,
          |  fingerprint text not null,
@@ -25,12 +24,21 @@ object Migrator {
   def applied(c: Connection): List[Applied] = {
     ensureLedger(c)
     val ps = c.prepareStatement(
-      s"""select number, name, fingerprint, applied_at from "$Ledger" order by number""")
-    val rs = ps.executeQuery()
-    val out = Iterator.continually(rs).takeWhile(_.next()).map { r =>
-      Applied(r.getInt(1), r.getString(2), r.getString(3),
-        r.getObject(4, classOf[java.time.OffsetDateTime]).toInstant)
-    }.toList
+      s"""select number, name, fingerprint, applied_at from "$Ledger" order by number"""
+    )
+    val rs  = ps.executeQuery()
+    val out = Iterator
+      .continually(rs)
+      .takeWhile(_.next())
+      .map { r =>
+        Applied(
+          r.getInt(1),
+          r.getString(2),
+          r.getString(3),
+          r.getObject(4, classOf[java.time.OffsetDateTime]).toInstant
+        )
+      }
+      .toList
     rs.close(); ps.close()
     out
   }
@@ -38,15 +46,15 @@ object Migrator {
   sealed trait Status
   object Status {
     case class Ok(pending: List[(Int, String, List[String])]) extends Status
-    case class Tampered(problems: List[String]) extends Status
+    case class Tampered(problems: List[String])               extends Status
   }
 
   /** Verifies every on-disk migration, and checks applied ones still match the ledger. */
   def status(c: Connection, dbDir: Path = Freeze.defaultDbDir): Status = {
-    val onDisk = Freeze.existing(dbDir)
-    val ledger = applied(c).map(a => a.number -> a).toMap
+    val onDisk   = Freeze.existing(dbDir)
+    val ledger   = applied(c).map(a => a.number -> a).toMap
     val problems = List.newBuilder[String]
-    val pending = List.newBuilder[(Int, String, List[String])]
+    val pending  = List.newBuilder[(Int, String, List[String])]
 
     onDisk.foreach { case (n, path) =>
       val content = Files.readString(path)
@@ -89,8 +97,9 @@ object Migrator {
         st.close()
 
         val name = file.dropWhile(_.isDigit).stripPrefix("_").stripSuffix(".sql")
-        val ps = c.prepareStatement(
-          s"""insert into "$Ledger" (number, name, fingerprint) values (?, ?, ?)""")
+        val ps   = c.prepareStatement(
+          s"""insert into "$Ledger" (number, name, fingerprint) values (?, ?, ?)"""
+        )
         ps.setInt(1, n)
         ps.setString(2, name)
         ps.setString(3, Migration.fingerprint(stmts))

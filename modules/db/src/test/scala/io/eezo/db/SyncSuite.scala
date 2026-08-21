@@ -3,8 +3,9 @@ package io.eezo.db
 import io.eezo.db.schema.*
 import io.eezo.db.support.*
 
-/** `sync`: reconcile a dev database against the model directly, no migration involved.
-  * Was `Step5`, which printed the diff and the SQL and applied it behind a flag. */
+/** `sync`: reconcile a dev database against the model directly, no migration involved. Was `Step5`,
+  * which printed the diff and the SQL and applied it behind a flag.
+  */
 class SyncSuite extends PgSuite {
 
   test("an empty database diffs to the whole model, and applying lands in sync") {

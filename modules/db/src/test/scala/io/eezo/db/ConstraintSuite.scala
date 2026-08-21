@@ -4,8 +4,9 @@ import io.eezo.db.support.*
 
 import java.util.UUID
 
-/** What the generated DDL actually enforces once Postgres has it. Was the assertions buried
-  * in `Step3` and `Step4`, which printed and exited rather than asserting. */
+/** What the generated DDL actually enforces once Postgres has it. Was the assertions buried in
+  * `Step3` and `Step4`, which printed and exited rather than asserting.
+  */
 class ConstraintSuite extends PgSuite {
 
   private val herbert = Author(Id.gen(), "Frank Herbert", Some("US"), None)

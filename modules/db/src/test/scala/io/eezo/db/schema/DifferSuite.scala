@@ -7,7 +7,8 @@ import munit.FunSuite
 /** The differ is pure, so this is where most of its behaviour can be pinned cheaply. */
 class DifferSuite extends FunSuite {
 
-  private val book = tbl("book", id, col("title"), col("author_id", "uuid", references = Some("author")))
+  private val book =
+    tbl("book", id, col("title"), col("author_id", "uuid", references = Some("author")))
 
   test("a snapshot does not differ from itself") {
     // DESIGN §3.2: equality of two snapshots must mean "no migration needed".
@@ -23,12 +24,17 @@ class DifferSuite extends FunSuite {
 
   test("a new table brings its FK and indexes as separate changes") {
     // FKs are emitted apart from the create so table creation order never matters.
-    val t = tblIx("book", List(id, col("author_id", "uuid", references = Some("author"))),
-                  List(IndexSnap("idx_book_author_id", List("author_id"), unique = false)))
+    val t = tblIx(
+      "book",
+      List(id, col("author_id", "uuid", references = Some("author"))),
+      List(IndexSnap("idx_book_author_id", List("author_id"), unique = false))
+    )
     val d = Differ.diff(empty, snap(t))
     assertEquals(d.collect { case c: Change.CreateTable => c.table.name }, List("book"))
-    assertEquals(d.collect { case Change.AddForeignKey(t, c, tgt) => (t, c, tgt) },
-                 List(("book", "author_id", "author")))
+    assertEquals(
+      d.collect { case Change.AddForeignKey(t, c, tgt) => (t, c, tgt) },
+      List(("book", "author_id", "author"))
+    )
     assertEquals(d.collect { case Change.CreateIndex(_, i) => i.name }, List("idx_book_author_id"))
   }
 
@@ -54,8 +60,10 @@ class DifferSuite extends FunSuite {
   }
 
   test("a type change is risky and carries both types") {
-    val d = Differ.diff(snap(tbl("book", id, col("n", "integer"))),
-                        snap(tbl("book", id, col("n", "bigint"))))
+    val d = Differ.diff(
+      snap(tbl("book", id, col("n", "integer"))),
+      snap(tbl("book", id, col("n", "bigint")))
+    )
     assertEquals(d, List(Change.AlterType("book", "n", "integer", "bigint")))
     assert(d.head.risky)
   }
@@ -75,7 +83,10 @@ class DifferSuite extends FunSuite {
     val without = snap(tbl("book", id, col("t")))
     val with_   = snap(tbl("book", id, col("t", checks = List("length(t) <= 10"))))
     assertEquals(Differ.diff(without, with_), List(Change.AddCheck("book", "t", "length(t) <= 10")))
-    assertEquals(Differ.diff(with_, without), List(Change.DropCheck("book", "t", "length(t) <= 10")))
+    assertEquals(
+      Differ.diff(with_, without),
+      List(Change.DropCheck("book", "t", "length(t) <= 10"))
+    )
     assert(Differ.diff(without, with_).head.risky, "existing rows may violate it")
   }
 
@@ -84,18 +95,23 @@ class DifferSuite extends FunSuite {
     val b = snap(tbl("book", id, col("x", "uuid", references = Some("publishing_house"))))
     assertEquals(
       Differ.diff(a, b),
-      List(Change.DropForeignKey("book", "x"), Change.AddForeignKey("book", "x", "publishing_house"))
+      List(
+        Change.DropForeignKey("book", "x"),
+        Change.AddForeignKey("book", "x", "publishing_house")
+      )
     )
   }
 
   test("an index is keyed by name, so redefining it drops and recreates") {
     // DESIGN §3.2: index names are recorded and significant — they are the only way to tell
     // an index the framework created from one added by hand in production.
-    val one = IndexSnap("idx_book_t", List("t"), unique = false)
-    val two = IndexSnap("idx_book_t", List("t", "u"), unique = false)
+    val one  = IndexSnap("idx_book_t", List("t"), unique = false)
+    val two  = IndexSnap("idx_book_t", List("t", "u"), unique = false)
     val cols = List(id, col("t"), col("u"))
-    val d = Differ.diff(SchemaSnap(List(tblIx("book", cols, List(one)))),
-                        SchemaSnap(List(tblIx("book", cols, List(two)))))
+    val d    = Differ.diff(
+      SchemaSnap(List(tblIx("book", cols, List(one)))),
+      SchemaSnap(List(tblIx("book", cols, List(two))))
+    )
     assertEquals(d, List(Change.DropIndex("book", "idx_book_t"), Change.CreateIndex("book", two)))
   }
 
@@ -103,8 +119,10 @@ class DifferSuite extends FunSuite {
     val plain  = IndexSnap("ix", List("t"), unique = false)
     val unique = IndexSnap("ix", List("t"), unique = true)
     val cols   = List(id, col("t"))
-    val d = Differ.diff(SchemaSnap(List(tblIx("book", cols, List(plain)))),
-                        SchemaSnap(List(tblIx("book", cols, List(unique)))))
+    val d      = Differ.diff(
+      SchemaSnap(List(tblIx("book", cols, List(plain)))),
+      SchemaSnap(List(tblIx("book", cols, List(unique))))
+    )
     assertEquals(d.size, 2)
     assertEquals(d.head, Change.DropIndex("book", "ix"))
   }

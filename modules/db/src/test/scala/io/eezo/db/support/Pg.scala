@@ -12,14 +12,14 @@ import java.sql.DriverManager
 
 /** One Postgres for the whole test run.
   *
-  * Starting a container costs seconds. Isolating suites from each other costs nothing once
-  * the server is up, because they are separated by Postgres *schema* rather than by server
-  * — which works only because `Introspect.snapshot` already takes a schema name (DESIGN §6).
+  * Starting a container costs seconds. Isolating suites from each other costs nothing once the
+  * server is up, because they are separated by Postgres *schema* rather than by server — which
+  * works only because `Introspect.snapshot` already takes a schema name (DESIGN §6).
   *
-  * A real Postgres is not an implementation detail of the suite. Half of what `db` claims is
-  * a claim about Postgres: that the catalog reads back what we wrote, that constraints
-  * reject what they should, that DDL is transactional. A substitute would test the other
-  * half twice and this half not at all.
+  * A real Postgres is not an implementation detail of the suite. Half of what `db` claims is a
+  * claim about Postgres: that the catalog reads back what we wrote, that constraints reject what
+  * they should, that DDL is transactional. A substitute would test the other half twice and this
+  * half not at all.
   */
 object Pg {
   private lazy val container: PostgreSQLContainer[?] = {

@@ -21,11 +21,10 @@ object Dependencies {
 
   /** A real Postgres for the `db` suite.
     *
-    * The database tests assert against Postgres's own catalog and its own constraint
-    * enforcement, so an in-memory substitute would test something other than the thing that
-    * ships. The Java library is used directly rather than a Scala wrapper: the suite needs
-    * one container shared across suites with a schema per suite, and that is a dozen lines
-    * either way.
+    * The database tests assert against Postgres's own catalog and its own constraint enforcement,
+    * so an in-memory substitute would test something other than the thing that ships. The Java
+    * library is used directly rather than a Scala wrapper: the suite needs one container shared
+    * across suites with a schema per suite, and that is a dozen lines either way.
     */
   val testcontainersPg = "org.testcontainers" % "postgresql" % V.testcontainers % Test
 }

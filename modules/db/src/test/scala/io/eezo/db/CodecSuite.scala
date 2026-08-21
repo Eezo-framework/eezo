@@ -6,9 +6,10 @@ import java.time.temporal.ChronoUnit
 import java.time.{Instant, LocalDate}
 import java.util.UUID
 
-/** Row codecs against a real driver. Was `Step1`/`Step2`: the hand-written `TableDef` and
-  * then the derived one, both proving the same round-trip. Only the derived one remains —
-  * the hand-written version was scaffolding for a macro that now exists. */
+/** Row codecs against a real driver. Was `Step1`/`Step2`: the hand-written `TableDef` and then the
+  * derived one, both proving the same round-trip. Only the derived one remains — the hand-written
+  * version was scaffolding for a macro that now exists.
+  */
 class CodecSuite extends PgSuite {
 
   private def widget(

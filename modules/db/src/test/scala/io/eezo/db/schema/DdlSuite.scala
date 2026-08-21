@@ -4,12 +4,18 @@ import io.eezo.db.support.Snaps.*
 
 import munit.FunSuite
 
-/** `Ddl` is the only DDL renderer in the framework (DESIGN §4), so this is the only place
-  * SQL text is asserted. */
+/** `Ddl` is the only DDL renderer in the framework (DESIGN §4), so this is the only place SQL text
+  * is asserted.
+  */
 class DdlSuite extends FunSuite {
 
   test("create table renders pk, not null and checks, and quotes every identifier") {
-    val t = tbl("book", id, col("title", checks = List("length(title) <= 100")), col("x", nullable = true))
+    val t = tbl(
+      "book",
+      id,
+      col("title", checks = List("length(title) <= 100")),
+      col("x", nullable = true)
+    )
     val sql = Ddl.render(Change.CreateTable(t))
     assert(sql.startsWith("""create table "book" ("""), sql)
     assert(sql.contains(""""id" uuid primary key"""), sql)
@@ -22,7 +28,11 @@ class DdlSuite extends FunSuite {
     // Migrations must fail loudly when the table is already there; masking it would hide a
     // real problem. BACKLOG item 4 — this had regressed once through a second renderer.
     assert(!Ddl.render(Change.CreateTable(tbl("book", id))).contains("if not exists"))
-    assert(!Ddl.render(Change.CreateIndex("book", IndexSnap("ix", List("t"), false))).contains("if not exists"))
+    assert(
+      !Ddl
+        .render(Change.CreateIndex("book", IndexSnap("ix", List("t"), false)))
+        .contains("if not exists")
+    )
   }
 
   test("a primary key is never also `not null`") {
@@ -45,10 +55,14 @@ class DdlSuite extends FunSuite {
   }
 
   test("nullability in both directions") {
-    assertEquals(Ddl.render(Change.SetNullable("book", "t", true)),
-                 """alter table "book" alter column "t" drop not null""")
-    assertEquals(Ddl.render(Change.SetNullable("book", "t", false)),
-                 """alter table "book" alter column "t" set not null""")
+    assertEquals(
+      Ddl.render(Change.SetNullable("book", "t", true)),
+      """alter table "book" alter column "t" drop not null"""
+    )
+    assertEquals(
+      Ddl.render(Change.SetNullable("book", "t", false)),
+      """alter table "book" alter column "t" set not null"""
+    )
   }
 
   test("a foreign key always targets the id column") {
@@ -73,7 +87,9 @@ class DdlSuite extends FunSuite {
 
   test("unique and plain indexes") {
     assertEquals(
-      Ddl.render(Change.CreateIndex("book", IndexSnap("uq_book_title", List("title"), unique = true))),
+      Ddl.render(
+        Change.CreateIndex("book", IndexSnap("uq_book_title", List("title"), unique = true))
+      ),
       """create unique index "uq_book_title" on "book" ("title")"""
     )
     assertEquals(

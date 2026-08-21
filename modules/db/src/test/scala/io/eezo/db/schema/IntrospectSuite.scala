@@ -3,9 +3,10 @@ package io.eezo.db.schema
 import io.eezo.db.migrate.Migrator
 import io.eezo.db.support.*
 
-/** Code → DDL → catalog → snapshot must be the identity, and any hand edit to the database
-  * must show up as a difference. Was `Step4` and `DbStatus`, which printed a two-column
-  * diff for a human to read. */
+/** Code → DDL → catalog → snapshot must be the identity, and any hand edit to the database must
+  * show up as a difference. Was `Step4` and `DbStatus`, which printed a two-column diff for a human
+  * to read.
+  */
 class IntrospectSuite extends PgSuite {
 
   test("a schema created from the model introspects back to the model") {
@@ -26,8 +27,10 @@ class IntrospectSuite extends PgSuite {
     // Postgres creates them itself, so recording them would diff forever (DESIGN §3.2).
     create(Library)
     assertEquals(live().tables.flatMap(_.indexes).filter(_.name.endsWith("_pkey")), Nil)
-    assertEquals(live().tables.flatMap(_.indexes).map(_.name).sorted,
-                 List("idx_book_author_id_published_on_published_by_id", "uq_book_title"))
+    assertEquals(
+      live().tables.flatMap(_.indexes).map(_.name).sorted,
+      List("idx_book_author_id_published_on_published_by_id", "uq_book_title")
+    )
   }
 
   test("a column added by hand is detected") {
@@ -39,35 +42,47 @@ class IntrospectSuite extends PgSuite {
   test("a column dropped by hand is detected") {
     create(Library)
     exec("""alter table "book" drop column "isbn"""")
-    assertEquals(Differ.diff(live(), Library.snapshot).map(_.describe), List("+ book.isbn text null"))
+    assertEquals(
+      Differ.diff(live(), Library.snapshot).map(_.describe),
+      List("+ book.isbn text null")
+    )
   }
 
   test("a type changed by hand is detected") {
     create(Library)
     exec("""alter table "book" alter column "format" type varchar(20)""")
-    assertEquals(Differ.diff(live(), Library.snapshot).map(_.describe),
-                 List("~ book.format varchar(20) -> text"))
+    assertEquals(
+      Differ.diff(live(), Library.snapshot).map(_.describe),
+      List("~ book.format varchar(20) -> text")
+    )
   }
 
   test("a dropped not-null is detected") {
     create(Library)
     exec("""alter table "book" alter column "format" drop not null""")
-    assertEquals(Differ.diff(live(), Library.snapshot).map(_.describe),
-                 List("~ book.format set not null"))
+    assertEquals(
+      Differ.diff(live(), Library.snapshot).map(_.describe),
+      List("~ book.format set not null")
+    )
   }
 
   test("an index added by hand is detected, and named") {
     // The name is the only way to tell a framework index from a hand-made one (DESIGN §3.2).
     create(Library)
     exec("""create index "by_hand" on "book" ("format")""")
-    assertEquals(Differ.diff(live(), Library.snapshot).map(_.describe), List("- index by_hand on book"))
+    assertEquals(
+      Differ.diff(live(), Library.snapshot).map(_.describe),
+      List("- index by_hand on book")
+    )
   }
 
   test("a dropped foreign key is detected") {
     create(Library)
     exec("""alter table "book" drop constraint "fk_book_author_id"""")
-    assertEquals(Differ.diff(live(), Library.snapshot).map(_.describe),
-                 List("+ fk book.author_id -> author"))
+    assertEquals(
+      Differ.diff(live(), Library.snapshot).map(_.describe),
+      List("+ fk book.author_id -> author")
+    )
   }
 
   test("a table dropped by hand is detected") {

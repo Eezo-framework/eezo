@@ -5,10 +5,10 @@ import io.eezo.db.support.Snaps.*
 
 /** `apply(diff(a, b))` must land exactly on `b`, executed against a real Postgres.
   *
-  * BACKLOG item 15 asks for this over randomly generated snapshots. This is the
-  * table-driven form: the same property, with the edits chosen rather than generated. It is
-  * the test that covers the differ, the renderer and the introspector at once — a change
-  * that any two of them agree on but the third does not shows up here and nowhere else.
+  * BACKLOG item 15 asks for this over randomly generated snapshots. This is the table-driven form:
+  * the same property, with the edits chosen rather than generated. It is the test that covers the
+  * differ, the renderer and the introspector at once — a change that any two of them agree on but
+  * the third does not shows up here and nowhere else.
   */
 class DifferRoundTripSuite extends PgSuite {
 
@@ -60,10 +60,14 @@ class DifferRoundTripSuite extends PgSuite {
 
   roundTrip("add an index")(
     snap(author),
-    snap(tblIx("author", List(id, col("name")), List(IndexSnap("ix_author_name", List("name"), false))))
+    snap(
+      tblIx("author", List(id, col("name")), List(IndexSnap("ix_author_name", List("name"), false)))
+    )
   )
   roundTrip("drop an index")(
-    snap(tblIx("author", List(id, col("name")), List(IndexSnap("ix_author_name", List("name"), false)))),
+    snap(
+      tblIx("author", List(id, col("name")), List(IndexSnap("ix_author_name", List("name"), false)))
+    ),
     snap(author)
   )
   roundTrip("make an index unique")(
@@ -72,7 +76,9 @@ class DifferRoundTripSuite extends PgSuite {
   )
   roundTrip("add a composite index")(
     snap(tbl("author", id, col("a"), col("b"))),
-    snap(tblIx("author", List(id, col("a"), col("b")), List(IndexSnap("ix_ab", List("a", "b"), false))))
+    snap(
+      tblIx("author", List(id, col("a"), col("b")), List(IndexSnap("ix_ab", List("a", "b"), false)))
+    )
   )
 
   roundTrip("add a foreign key")(
@@ -91,10 +97,17 @@ class DifferRoundTripSuite extends PgSuite {
   roundTrip("several edits at once")(
     snap(author, tbl("book", id, col("title"), col("old"))),
     snap(
-      tblIx("author", List(id, col("name"), col("country", nullable = true)),
-            List(IndexSnap("ix_author_name", List("name"), true))),
-      tbl("book", id, col("title", checks = List("length(title) <= 50")),
-          col("author_id", "uuid", references = Some("author")))
+      tblIx(
+        "author",
+        List(id, col("name"), col("country", nullable = true)),
+        List(IndexSnap("ix_author_name", List("name"), true))
+      ),
+      tbl(
+        "book",
+        id,
+        col("title", checks = List("length(title) <= 50")),
+        col("author_id", "uuid", references = Some("author"))
+      )
     )
   )
 }

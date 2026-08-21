@@ -9,10 +9,9 @@ import scala.io.Source
 
 /** The regression net for every future change to derivation (BACKLOG item 14).
   *
-  * `golden-library.json` is committed and asserted against. It is **not** regenerated when
-  * it fails. A failure means either derivation changed — in which case the diff below is
-  * exactly the review you want — or it broke, in which case regenerating would erase the
-  * only evidence.
+  * `golden-library.json` is committed and asserted against. It is **not** regenerated when it
+  * fails. A failure means either derivation changed — in which case the diff below is exactly the
+  * review you want — or it broke, in which case regenerating would erase the only evidence.
   */
 class GoldenSnapshotSuite extends FunSuite {
 

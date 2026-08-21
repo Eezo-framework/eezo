@@ -21,17 +21,18 @@ enum Change {
 
   /** Needs data validation or a backfill before it can safely apply. */
   def risky: Boolean = this match {
-    case SetNullable(_, _, false) => true   // narrowing: existing NULLs will fail
-    case _: AlterType             => true   // may fail on existing values
-    case _: AddCheck              => true   // may fail on existing rows
+    case SetNullable(_, _, false) => true // narrowing: existing NULLs will fail
+    case _: AlterType             => true // may fail on existing values
+    case _: AddCheck              => true // may fail on existing rows
     case _: CreateIndex           => false
     case _                        => false
   }
 
   def describe: String = this match {
-    case CreateTable(t)              => s"create table ${t.name}"
-    case DropTable(n)                => s"drop table $n"
-    case AddColumn(t, c)             => s"+ ${t}.${c.name} ${c.pgType}${if (c.nullable) " null" else " not null"}"
+    case CreateTable(t)  => s"create table ${t.name}"
+    case DropTable(n)    => s"drop table $n"
+    case AddColumn(t, c) =>
+      s"+ ${t}.${c.name} ${c.pgType}${if (c.nullable) " null" else " not null"}"
     case DropColumn(t, c)            => s"- ${t}.$c"
     case AlterType(t, c, f, to)      => s"~ ${t}.$c $f -> $to"
     case SetNullable(t, c, true)     => s"~ ${t}.$c drop not null"

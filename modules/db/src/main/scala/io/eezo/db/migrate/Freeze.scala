@@ -26,10 +26,10 @@ object Freeze {
 
   /** Where a project keeps its migration history, relative to the working directory.
     *
-    * Every entry point below takes the directory as a parameter defaulting to this, rather
-    * than reading it from a `val`. A hardcoded path is not a configuration problem so much
-    * as a testability one: with the path baked in, nothing that writes a migration can be
-    * exercised anywhere except the real `db/` of whatever process is running.
+    * Every entry point below takes the directory as a parameter defaulting to this, rather than
+    * reading it from a `val`. A hardcoded path is not a configuration problem so much as a
+    * testability one: with the path baked in, nothing that writes a migration can be exercised
+    * anywhere except the real `db/` of whatever process is running.
     */
   val defaultDbDir: Path = Paths.get("db")
 

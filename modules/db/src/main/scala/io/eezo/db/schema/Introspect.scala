@@ -94,7 +94,7 @@ object Introspect {
       schema,
       table
     ) { rs =>
-      val name                            = rs.getString("column_name")
+      val name                             = rs.getString("column_name")
       def optInt(col: String): Option[Int] = {
         val v = rs.getInt(col); if (rs.wasNull()) None else Some(v)
       }

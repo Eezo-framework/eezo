@@ -8,8 +8,9 @@ import munit.FunSuite
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.*
 
-/** The tamper-detection story, which is what makes "migrations are generated artifacts"
-  * (DESIGN §3.5) enforceable rather than a convention. */
+/** The tamper-detection story, which is what makes "migrations are generated artifacts" (DESIGN
+  * §3.5) enforceable rather than a convention.
+  */
 class MigrationSuite extends FunSuite {
 
   private val stmts = List(
@@ -45,7 +46,8 @@ class MigrationSuite extends FunSuite {
   }
 
   test("removing the fingerprint header is detected") {
-    val stripped = migration.render.linesIterator.filterNot(_.contains("fingerprint")).mkString("\n")
+    val stripped =
+      migration.render.linesIterator.filterNot(_.contains("fingerprint")).mkString("\n")
     assertEquals(Migration.verify(stripped), Left("no fingerprint header"))
   }
 
@@ -63,8 +65,8 @@ class FreezeSuite extends FunSuite {
 
   private val tmp = FunFixture[Path](
     setup = _ => Files.createTempDirectory("eezo-freeze"),
-    teardown = dir =>
-      Files.walk(dir).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
+    teardown =
+      dir => Files.walk(dir).iterator().asScala.toList.reverse.foreach(Files.deleteIfExists)
   )
 
   tmp.test("an absent snapshot file reads as the empty schema") { dir =>
@@ -85,8 +87,14 @@ class FreezeSuite extends FunSuite {
   }
 
   tmp.test("numbering continues from the highest file present") { dir =>
-    Freeze.write("initial", Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)), v1, dir)
-    val second = Freeze.write("add title", Differ.diff(v1, v2).map(Resolution(_, Decision.Accept)), v2, dir)
+    Freeze.write(
+      "initial",
+      Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)),
+      v1,
+      dir
+    )
+    val second =
+      Freeze.write("add title", Differ.diff(v1, v2).map(Resolution(_, Decision.Accept)), v2, dir)
     assertEquals(second.getFileName.toString, "0002_add_title.sql")
     assertEquals(Freeze.existing(dir).map(_._1), List(1, 2))
   }
@@ -99,8 +107,9 @@ class FreezeSuite extends FunSuite {
   }
 
   tmp.test("a manual resolution substitutes its own SQL") { dir =>
-    val manual = List(Resolution(Change.DropColumn("book", "title"), Decision.Manual(List("select 1"))))
-    val out    = Freeze.write("manual", manual, v1, dir)
+    val manual =
+      List(Resolution(Change.DropColumn("book", "title"), Decision.Manual(List("select 1"))))
+    val out = Freeze.write("manual", manual, v1, dir)
     assertEquals(Migration.verify(Files.readString(out)), Right(List("select 1")))
   }
 

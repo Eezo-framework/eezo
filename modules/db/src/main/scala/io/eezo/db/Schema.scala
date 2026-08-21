@@ -76,9 +76,9 @@ abstract class Schema {
 
   /** Full DDL for an empty database: the diff from nothing to this schema.
     *
-    * Deliberately the same code path migrations take, so `reset` and `migrate` cannot
-    * produce different databases. Ordering (tables, then FKs, then indexes) comes from
-    * `Differ.diff`; column order is alphabetical, per DESIGN §3.2.
+    * Deliberately the same code path migrations take, so `reset` and `migrate` cannot produce
+    * different databases. Ordering (tables, then FKs, then indexes) comes from `Differ.diff`;
+    * column order is alphabetical, per DESIGN §3.2.
     */
   lazy val ddl: List[String] = Ddl.render(Differ.diff(SchemaSnap(Nil), snapshot))
 

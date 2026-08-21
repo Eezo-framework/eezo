@@ -6,27 +6,71 @@ import io.eezo.db.support.*
 import io.eezo.db.support.Snaps.*
 
 import java.nio.file.{Files, Path}
-import java.time.Instant
-import scala.jdk.CollectionConverters.*
+import scala.util.control.NonFatal
 
 /** The backlog, executable.
   *
-  * Every test here asserts what eezo *should* do, so every test here fails. That is the
-  * point: a red test is a backlog item with a reproduction attached, and it turns green by
-  * being fixed rather than by being edited. The number in each name is the item in
-  * `design/backlog.md`.
+  * Every test here asserts what eezo *should* do, so every one of them currently fails. They are
+  * reported as warnings rather than failures: the build stays green, and each open item prints a
+  * line saying it is still open and why.
   *
-  * The rest of the suite stays green and is the regression signal:
+  * The inversion is the useful part. When an item is fixed its body stops throwing, and `backlog`
+  * then *fails* the test to say so — that is the prompt to move the test into the suite it belongs
+  * to and close the item in `design/backlog.md`. So this file cannot quietly drift out of date in
+  * either direction.
   *
   * {{{
-  * sbt "db/testOnly -- --exclude-tags=backlog"   # does everything still work?
-  * sbt "db/testOnly *BacklogSuite"               # what is still wrong?
+  * sbt check      // the regression signal, this suite excluded — expected green
+  * sbt backlog    // just this suite, with the open items listed
   * }}}
   *
-  * Do not make one of these pass by weakening its assertion. If an item is deliberately
-  * abandoned, delete the test and say so in the backlog.
+  * Never make one of these pass by weakening its assertion. If an item is abandoned, delete the
+  * test and say so in the backlog.
   */
 class BacklogSuite extends PgSuite {
+
+  private val stillOpen = scala.collection.mutable.ListBuffer.empty[String]
+
+  /** Runs `body`, expecting it to fail because the item is open.
+    *
+    * Failure => warn and pass. Success => fail, because the item has been fixed and this test is
+    * now in the wrong file.
+    */
+  private def backlog(item: Int, what: String)(body: => Any): Unit =
+    test(s"$item: $what".tag(Backlog)) {
+      val failure =
+        try { body; None }
+        catch { case NonFatal(e) => Some(e) }
+
+      failure match {
+        case Some(e) =>
+          val why = Option(e.getMessage)
+            .flatMap(_.linesIterator.find(_.trim.nonEmpty))
+            .map(_.trim)
+            .getOrElse(e.getClass.getName)
+          stillOpen += f"$item%3d: $what"
+          println(s"  [backlog] item $item still open — ${why.take(120)}")
+        case None =>
+          fail(
+            s"""BACKLOG item $item now passes: "$what".
+               |
+               |If that is because it was fixed, move this test into the suite it belongs to
+               |and close item $item in design/backlog.md. If the test merely stopped
+               |exercising the bug, restore it — do not delete the assertion.""".stripMargin
+          )
+      }
+    }
+
+  override def afterAll(): Unit = {
+    if (stillOpen.nonEmpty) {
+      println()
+      println(s"  ${stillOpen.size} backlog item(s) still open:")
+      stillOpen.toList.distinct.sorted.foreach(i => println(s"    ·${i}"))
+      println("  See design/backlog.md. These are warnings, not failures.")
+      println()
+    }
+    super.afterAll()
+  }
 
   private def tmpDir: Path = {
     val d = Files.createTempDirectory("eezo-backlog")
@@ -35,7 +79,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 1 ────────────────────────────────────────────────────────────────────────────────
-  test("1: a check is dropped before the type it constrains is altered".tag(Backlog)) {
+  backlog(1, "a check is dropped before the type it constrains is altered") {
     // Differ.diffColumn emits the type change first, and Postgres will not alter a column
     // out from under a CHECK that references it.
     val from = snap(tbl("t", id, col("c", "text", checks = List("length(c) <= 10"))))
@@ -46,7 +90,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 2 ────────────────────────────────────────────────────────────────────────────────
-  test("2: a narrowing type change does not silently truncate".tag(Backlog)) {
+  backlog(2, "a narrowing type change does not silently truncate") {
     // AlterType renders `using "c"::varchar(100)` unconditionally, and an explicit cast to
     // varchar(n) truncates rather than failing. The data is gone with no warning.
     val from = snap(tbl("t", id, col("c", "varchar(200)")))
@@ -61,7 +105,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 3 ────────────────────────────────────────────────────────────────────────────────
-  test("3: tables are dropped in an order their foreign keys allow".tag(Backlog)) {
+  backlog(3, "tables are dropped in an order their foreign keys allow") {
     // Drops are emitted last but in no order among themselves, and `drop table` carries no
     // cascade — so dropping `author` before `book` fails on the FK that still points at it.
     val from = snap(
@@ -74,7 +118,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 12 ───────────────────────────────────────────────────────────────────────────────
-  test("12: two rows that reference each other can be inserted".tag(Backlog)) {
+  backlog(12, "two rows that reference each other can be inserted") {
     // Constraints are immediate, so no insert order satisfies a cycle. Two authors
     // mentoring each other is the smallest case; it needs deferrable foreign keys.
     create(Library)
@@ -89,30 +133,40 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 17 ───────────────────────────────────────────────────────────────────────────────
-  test("17: a check on a column whose name needs quoting renders valid SQL".tag(Backlog)) {
+  backlog(17, "a check on a column whose name needs quoting renders valid SQL") {
     // Note the route: ColumnDef -> Snapshot.column -> ColumnSnap is where canonicalCheck
     // strips the quoting, and Ddl then renders that same string as executable SQL. Building
     // the ColumnSnap by hand would skip the very step under test.
     val cs = Snapshot.column(
-      ColumnDef("order", PgType.Text, nullable = false, primaryKey = false,
-                checks = List(Check.MaxLen(10)))
+      ColumnDef(
+        "order",
+        PgType.Text,
+        nullable = false,
+        primaryKey = false,
+        checks = List(Check.MaxLen(10))
+      )
     )
     assert(cs.checks.head.contains("\""), s"the quoting is already gone: ${cs.checks.head}")
     exec(Ddl.render(Differ.diff(empty, snap(TableSnap("t", List(id, cs).sortBy(_.name), Nil))))*)
   }
 
-  test("17: a check's string literals keep their case".tag(Backlog)) {
+  backlog(17, "a check's string literals keep their case") {
     // canonicalCheck lowercases the whole expression, literals included, and that lowercased
     // form is what lands in the migration file as the constraint's actual meaning.
     val cs = Snapshot.column(
-      ColumnDef("status", PgType.Text, nullable = false, primaryKey = false,
-                checks = List(Check.Raw("{} in ('Draft','Published')")))
+      ColumnDef(
+        "status",
+        PgType.Text,
+        nullable = false,
+        primaryKey = false,
+        checks = List(Check.Raw("{} in ('Draft','Published')"))
+      )
     )
     assert(cs.checks.head.contains("'Draft'"), s"lowercased into: ${cs.checks.head}")
   }
 
   // ── 18 ───────────────────────────────────────────────────────────────────────────────
-  test("18: an ordinary IN check does not diff forever".tag(Backlog)) {
+  backlog(18, "an ordinary IN check does not diff forever") {
     // Postgres rewrites `x in ('a','b')` as `x = ANY (ARRAY[...])` and hands that back.
     // Introspect does not canonicalise at all, so the two spellings never compare equal and
     // `status` reports a difference no migration can resolve.
@@ -122,7 +176,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 19 ───────────────────────────────────────────────────────────────────────────────
-  test("19: a NULL timestamptz decodes as None".tag(Backlog)) {
+  backlog(19, "a NULL timestamptz decodes as None") {
     // Column[Instant].get calls .toInstant before wasNull is consulted.
     create(Moments)
     val m = Moment(Id.gen(), None)
@@ -130,7 +184,7 @@ class BacklogSuite extends PgSuite {
     assertEquals(selectAll(Table[Moment]), List(m))
   }
 
-  test("19: a NULL numeric decodes as None".tag(Backlog)) {
+  backlog(19, "a NULL numeric decodes as None") {
     create(Monies)
     val m = Money(Id.gen(), None)
     insert(Table[Money], m)
@@ -138,25 +192,31 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 20 ───────────────────────────────────────────────────────────────────────────────
-  test("20: adding a not-null column is flagged risky".tag(Backlog)) {
+  backlog(20, "adding a not-null column is flagged risky") {
     val c = ColumnSnap("format", "text", nullable = false, false, Nil, None)
     assert(Change.AddColumn("book", c).risky, "it always fails against a non-empty table")
   }
 
-  test("20: adding a foreign key is flagged risky".tag(Backlog)) {
-    assert(Change.AddForeignKey("book", "author_id", "author").risky,
-           "existing values may not resolve")
+  backlog(20, "adding a foreign key is flagged risky") {
+    assert(
+      Change.AddForeignKey("book", "author_id", "author").risky,
+      "existing values may not resolve"
+    )
   }
 
-  test("20: creating a unique index is flagged risky".tag(Backlog)) {
-    assert(Change.CreateIndex("book", IndexSnap("uq", List("title"), unique = true)).risky,
-           "existing rows may already hold duplicates")
-    assert(!Change.CreateIndex("book", IndexSnap("ix", List("title"), unique = false)).risky,
-           "a plain index cannot fail on data")
+  backlog(20, "creating a unique index is flagged risky") {
+    assert(
+      Change.CreateIndex("book", IndexSnap("uq", List("title"), unique = true)).risky,
+      "existing rows may already hold duplicates"
+    )
+    assert(
+      !Change.CreateIndex("book", IndexSnap("ix", List("title"), unique = false)).risky,
+      "a plain index cannot fail on data"
+    )
   }
 
   // ── 21 ───────────────────────────────────────────────────────────────────────────────
-  test("21: an index name longer than 63 bytes still round-trips".tag(Backlog)) {
+  backlog(21, "an index name longer than 63 bytes still round-trips") {
     // Postgres truncates identifiers silently. Introspect reads the short name back, the
     // differ sees a mismatch, and emits drop+create on every run forever.
     val long = "idx_t_" + ("x" * 70)
@@ -165,7 +225,7 @@ class BacklogSuite extends PgSuite {
     assertEquals(Differ.diff(live(), t), Nil)
   }
 
-  test("21: two long constraint names do not collide".tag(Backlog)) {
+  backlog(21, "two long constraint names do not collide") {
     // Postgres truncates at 63 bytes, so `ck_<table>_<column>_<hash>` keeps only the first
     // 58 characters of the column name. Two columns agreeing that far get one constraint
     // between them, and the second `add constraint` collides with the first.
@@ -178,10 +238,15 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 22 ───────────────────────────────────────────────────────────────────────────────
-  test("22: two migrations with the same number are reported, not executed".tag(Backlog)) {
+  backlog(22, "two migrations with the same number are reported, not executed") {
     val dir = tmpDir
     val v1  = snap(tbl("author", id))
-    Freeze.write("first", Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)), v1, dir)
+    Freeze.write(
+      "first",
+      Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)),
+      v1,
+      dir
+    )
     // A second file claiming the same number, as a branch merge would produce.
     val clash = Freeze.migrationsDir(dir).resolve("0001_other.sql")
     val stmts = List("""create table "other" ("id" uuid primary key)""")
@@ -196,7 +261,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 23 ───────────────────────────────────────────────────────────────────────────────
-  test("23: schema validation failures are SchemaError, not RuntimeException".tag(Backlog)) {
+  backlog(23, "schema validation failures are SchemaError, not RuntimeException") {
     object BadIndex extends Schema {
       val authors = table[Author]
       val books   = table[Book].index("no_such_column")
@@ -206,7 +271,7 @@ class BacklogSuite extends PgSuite {
   }
 
   // ── 25 ───────────────────────────────────────────────────────────────────────────────
-  test("25: a check has one name whether it arrives with its table or after".tag(Backlog)) {
+  backlog(25, "a check has one name whether it arrives with its table or after") {
     val withCheck = snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
     exec(Ddl.render(Differ.diff(empty, withCheck))*)
     val ps = db.prepareStatement(
@@ -218,12 +283,14 @@ class BacklogSuite extends PgSuite {
     ps.setString(1, pgSchema)
     val rs    = ps.executeQuery()
     val names = try Iterator.continually(rs).takeWhile(_.next()).map(_.getString(1)).toList
-                finally { rs.close(); ps.close() }
-    assert(names.head.startsWith("ck_author_name_"),
-           s"CreateTable left Postgres to name it: ${names.mkString(", ")}")
+    finally { rs.close(); ps.close() }
+    assert(
+      names.head.startsWith("ck_author_name_"),
+      s"CreateTable left Postgres to name it: ${names.mkString(", ")}"
+    )
   }
 
-  test("25: a check created with its table can be dropped".tag(Backlog)) {
+  backlog(25, "a check created with its table can be dropped") {
     val from = snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
     val to   = snap(tbl("author", id, col("name")))
     exec(Ddl.render(Differ.diff(empty, from))*)

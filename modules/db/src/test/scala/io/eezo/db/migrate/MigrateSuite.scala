@@ -7,8 +7,9 @@ import io.eezo.db.support.Snaps.*
 import java.nio.file.{Files, Path}
 import scala.jdk.CollectionConverters.*
 
-/** The deploy path: replay committed files, then verify the result against the model.
-  * Was `Step6` (freeze) and `Step7` (migrate), which prompted on stdin and called sys.exit. */
+/** The deploy path: replay committed files, then verify the result against the model. Was `Step6`
+  * (freeze) and `Step7` (migrate), which prompted on stdin and called sys.exit.
+  */
 class MigrateSuite extends PgSuite {
 
   private var dir: Path = null
@@ -92,8 +93,10 @@ class MigrateSuite extends PgSuite {
     Migrator.status(db, dir) match {
       case Migrator.Status.Ok(_)              => fail("a rewritten applied migration was accepted")
       case Migrator.Status.Tampered(problems) =>
-        assert(problems.exists(_.contains("the file changed after being applied")),
-               problems.mkString("\n"))
+        assert(
+          problems.exists(_.contains("the file changed after being applied")),
+          problems.mkString("\n")
+        )
     }
   }
 
