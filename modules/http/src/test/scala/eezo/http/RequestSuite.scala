@@ -2,8 +2,8 @@ package eezo.http
 
 import java.util.UUID
 
-/** What a handler reads. Note what is absent: skiff's `attachment: AnyRef`. Capabilities arrive
-  * through the handler's own `using` list.
+/** What a handler reads. Note what is absent: an untyped `attachment: AnyRef` bag. Capabilities
+  * arrive through the handler's own `using` list.
   */
 class RequestSuite extends munit.FunSuite {
 

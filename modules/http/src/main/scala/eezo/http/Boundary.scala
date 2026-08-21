@@ -14,13 +14,6 @@ private[http] object Boundary {
   /** What a 500 says to the world when `dev` is false. */
   private val Redacted = "The server encountered an unexpected error."
 
-  /** The content type every error page carries. Written here rather than reached through
-    * `Response.Ok`, because `Ok` names a 200 and an error page is never one: borrowing it would
-    * make every error page inherit whatever else `Ok` ever grows, not just the shape it needs
-    * today.
-    */
-  private val HtmlContentType = "Content-Type" -> "text/html; charset=utf-8"
-
   /** Everything the boundary decides about a failure, in one pass over it: the `Problem` it becomes
     * and any headers earned along the way. `Allow` on a 405 is the only header eezo decides itself,
     * and it is decided here rather than on a second match, because `Problem` (RFC 9457's data
@@ -60,12 +53,16 @@ private[http] object Boundary {
 
   /** Renders a `Resolution` into a `Response`. No matching left to do: the headers are already
     * decided, so this is the rendering path alone.
+    *
+    * The `Response` is built directly rather than through `Response.Ok`, because `Ok` names a 200
+    * and an error page is never one: borrowing it and overwriting the status would make every error
+    * page inherit whatever else `Ok` ever grows.
     */
   def toResponse(resolution: Resolution): Response = {
     val page =
       Response(
         resolution.problem.status,
-        Seq(HtmlContentType),
+        Seq(Response.HtmlContentType),
         Body.Html(render(resolution.problem))
       )
     resolution.headers.foldLeft(page) { case (response, (name, value)) =>

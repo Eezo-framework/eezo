@@ -3,9 +3,9 @@ package eezo.core.html
 /** The attribute names, qualified rather than wildcard imported, because they collide with the tags
   * on `title`, `style`, `label`, `form`, `value`, `name`, `data` and `span`.
   *
-  * The three Scala keywords are spelled `cls`, `tpe` and `htmlFor`. Skiff backticks `` `for` ``,
-  * which is a papercut on every label in every form, and forms are the framework's most written
-  * markup.
+  * The three Scala keywords are spelled `cls`, `tpe` and `htmlFor` rather than backticked, because
+  * a backticked `` `for` `` is a papercut on every label in every form, and forms are the
+  * framework's most written markup.
   */
 object Attrs {
 

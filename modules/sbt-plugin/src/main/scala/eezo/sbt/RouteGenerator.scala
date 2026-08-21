@@ -27,10 +27,9 @@ final case class HandwrittenRoute(method: String, path: String, target: String, 
   */
 object RouteGenerator {
 
-  /** The filename to verb table, seven REST names, with one departure: a custom name calls a `def`
-    * of its own name rather than `index`, which gives it the same object-name-equals-def-name
-    * property the seven REST names have. A custom name is always a GET; a custom POST is written as
-    * `app/health/Create.scala`.
+  /** The filename to verb table: the seven REST names, with one departure. A custom name calls a
+    * `def` of its own name rather than `index`, so object name equals def name for it too. A custom
+    * name is always a GET; a custom POST is written as `app/health/Create.scala`.
     */
   private val Verbs: Map[String, (String, String, String)] = Map(
     // file name -> (method, def name, path suffix)
@@ -81,8 +80,9 @@ object RouteGenerator {
     *
     * Most static segments first, comparing segment by segment with a literal beating `:name`
     * beating `*rest`, and ties broken by the path and then by the method so that two runs of the
-    * generator produce the same file. Filesystem order would leave `GET /widgets/new` unreachable
-    * whenever `/widgets/:id` happens to be listed first, which is why the table sorts at all.
+    * generator produce the same file. Sorting here rather than at boot is what makes that safe:
+    * under filesystem order `GET /widgets/new` would be unreachable whenever `/widgets/:id` happens
+    * to be listed first.
     */
   def sortRoutes(routes: Seq[HandwrittenRoute]): Seq[HandwrittenRoute] =
     routes.sortWith { (left, right) =>

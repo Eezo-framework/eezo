@@ -67,10 +67,10 @@ object PathPattern {
 
   /** Parses a pattern, and fails the boot when it cannot.
     *
-    * Two validations skiff lacks, both fatal, because `parse` runs at boot and both are bugs a
-    * developer wants named rather than routed around: a repeated parameter name, whose second
-    * capture would silently win, and a catch-all before the final segment, which can never match
-    * what its author meant.
+    * Two validations, both fatal, because `parse` runs at boot and both are bugs a developer wants
+    * named rather than routed around: a repeated parameter name, whose second capture would
+    * silently win, and a catch-all before the final segment, which can never match what its author
+    * meant.
     */
   def parse(pattern: String): PathPattern = {
     val raws     = split(pattern)

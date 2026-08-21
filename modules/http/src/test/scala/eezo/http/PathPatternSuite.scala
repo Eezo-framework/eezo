@@ -1,6 +1,6 @@
 package eezo.http
 
-/** Path patterns: three segment kinds, two validations skiff lacks, and the way back to a string.
+/** Path patterns: three segment kinds, two fatal validations, and the way back to a string.
   */
 class PathPatternSuite extends munit.FunSuite {
 

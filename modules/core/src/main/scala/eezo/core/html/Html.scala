@@ -169,7 +169,8 @@ object Html {
   }
 }
 
-/** An attribute. `None` renders the bare name, so `value := ""` and `disabled` stay distinct; skiff
-  * renders a bare name for an empty string and loses that difference.
+/** An attribute. The value is optional rather than a plain `String` so that `value := ""` and
+  * `disabled` stay distinct: `None` renders the bare name, `Some("")` renders `value=""`.
+  * Collapsing the two would make an empty text input indistinguishable from a boolean flag.
   */
 final case class Attr(name: String, value: Option[String])

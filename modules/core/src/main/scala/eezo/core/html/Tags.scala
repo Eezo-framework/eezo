@@ -4,8 +4,8 @@ package eezo.core.html
   * attributes; [[Attrs]] stays qualified, because the two collide on `title`, `style`, `label`,
   * `form`, `value`, `name`, `data` and `span`.
   *
-  * Coverage is skiff's list as the floor: document, structure, text, lists, forms, media and
-  * tables, which is everything the seven derived routes render.
+  * Coverage is the floor the seven derived routes need: document, structure, text, lists, forms,
+  * media and tables, which is everything they render.
   */
 object Tags {
 
