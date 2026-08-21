@@ -8,7 +8,9 @@ import sbt._
 object Dependencies {
 
   object V {
-    val munit = "1.3.4"
+    val munit          = "1.3.4"
+    val postgresql     = "42.7.1"
+    val testcontainers = "1.21.3"
 
     /** Jetty. 12.1.11 is what `research/http-server.md` measured and recommends, and it is the
       * first 12.1 clear of both 2026 advisories that section 9 lists: CVE-2026-6790 (patched in
@@ -33,4 +35,16 @@ object Dependencies {
     */
   val jettyWsClient =
     "org.eclipse.jetty.websocket" % "jetty-websocket-jetty-client" % V.jetty % Test
+
+  /** The JDBC driver. `db` is the only module that speaks to a database. */
+  val postgresql = "org.postgresql" % "postgresql" % V.postgresql
+
+  /** A real Postgres for the `db` suite.
+    *
+    * The database tests assert against Postgres's own catalog and its own constraint enforcement,
+    * so an in-memory substitute would test something other than the thing that ships. The Java
+    * library is used directly rather than a Scala wrapper: the suite needs one container shared
+    * across suites with a schema per suite, and that is a dozen lines either way.
+    */
+  val testcontainersPg = "org.testcontainers" % "postgresql" % V.testcontainers % Test
 }

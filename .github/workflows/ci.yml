@@ -59,6 +59,14 @@ jobs:
       # `+test` for the same reason `+compile` is crossed: the sbt plugin's own suite has to run on
       # both axes, since a semantic divergence between Scala 2.12 and 3.8.4 compiles clean on each.
       # The framework modules are built once, because `crossScalaVersions` is per project.
+      #
+      # The `db` suite starts a real Postgres through testcontainers, which needs a Docker daemon.
+      # ubuntu-latest runners have one; a self-hosted runner without it will fail here rather than
+      # skip, which is deliberate — half of what `db` claims is a claim about Postgres, and a run
+      # that silently skipped those suites would be reporting on the other half only.
+      #
+      # BacklogSuite is expected to pass while printing one warning per open item in
+      # design/backlog.md. If it *fails*, an item has been fixed: the message says what to do.
       - name: Test
         run: sbt -batch +test
 
