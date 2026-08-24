@@ -99,9 +99,6 @@ lazy val db = module("db")
 // `core`'s, and `live` adds structural diffing on top of them.
 lazy val live = module("live").dependsOn(core, http)
 
-// The `derives` chain: DbCodec, Table, Form, Resource. It sits on everything it derives into.
-lazy val derives = module("derives").dependsOn(core, db, http, live)
-
 // Sessions, email and password, CSRF, route gating.
 lazy val auth = module("auth").dependsOn(core, http, db)
 
@@ -109,7 +106,7 @@ lazy val auth = module("auth").dependsOn(core, http, db)
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 
 // `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`.
-lazy val cli = module("cli").dependsOn(core, http, db, derives, live, auth)
+lazy val cli = module("cli").dependsOn(core, http, db, live, auth)
 
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross-built for sbt 1 and sbt 2 from one source. See
@@ -157,7 +154,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val eezo = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, derives, auth, testkit, cli, sbtEezo)
+  .aggregate(core, http, db, live, auth, testkit, cli, sbtEezo)
   .settings(commonSettings)
   .settings(
     name           := "eezo",
