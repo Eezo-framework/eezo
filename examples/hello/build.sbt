@@ -1,7 +1,7 @@
 // The first eezo application: one handwritten route, no database, no derivation.
 //
-// `EezoPlugin` is what puts `eezo.generated.Routes` on the source path. It is `noTrigger`, so the
-// `enablePlugins` below is not optional.
+// `EezoPlugin` is what puts `io.eezo.generated.Routes` on the source path. It is `noTrigger`, so
+// the `enablePlugins` below is not optional.
 lazy val hello = (project in file("."))
   .enablePlugins(EezoPlugin)
   .settings(
