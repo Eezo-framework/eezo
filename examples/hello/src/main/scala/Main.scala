@@ -1,5 +1,5 @@
-import eezo.generated.Routes
-import eezo.http.Eezo
+import io.eezo.generated.Routes
+import io.eezo.http.Eezo
 
 /** The application owns its entry point, and names the generated table in it.
   *

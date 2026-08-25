@@ -1,8 +1,8 @@
 package app
 
-import eezo.core.html.*
-import eezo.http.Request
-import eezo.http.Response
+import io.eezo.core.html.*
+import io.eezo.http.Request
+import io.eezo.http.Response
 
 /** `app/Hello.scala` mounts `GET /hello`, calling `def hello`.
   *
