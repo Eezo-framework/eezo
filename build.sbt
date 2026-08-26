@@ -74,9 +74,12 @@ def module(id: String): Project =
     .settings(commonSettings)
     .settings(name := s"eezo-$id")
 
-// The framework's own types: configuration, the HTML node tree and DSL, and what everything else
-// builds on. Not errors: the eezo exception set lives in `http`, so that `db`, which depends on
-// `core` and never on `http`, cannot reach for an HTTP status.
+// The framework's own types: configuration, the HTML node tree and DSL, the model key `Id[T]`, and
+// what everything else builds on. `core` holds what has no dependencies of its own and at least two
+// dependent modules, which is why `Id` is here: `db` stores one and `http` reads one out of a path
+// and a form, and those two are siblings that never see each other. Not errors: the eezo exception
+// set lives in `http`, so that `db`, which depends on `core` and never on `http`, cannot reach for
+// an HTTP status.
 lazy val core = module("core")
 
 // Jetty boot, request parsing, response writing, file-based routing.

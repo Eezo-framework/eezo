@@ -4,10 +4,12 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
+import io.eezo.core.Id
+
 /** Converts a path parameter's text into the type a handler asked for.
   *
-  * `Table[A]` will supply the instance for a model's key type later, so a derived `show` never
-  * converts a `String` by hand.
+  * A model's key type is covered by the `Id[T]` instance in this companion, so a derived `show`
+  * never converts a `String` by hand.
   */
 trait FromPath[A] {
   def apply(value: String): Option[A]
@@ -24,6 +26,12 @@ object FromPath {
   given FromPath[UUID] = value =>
     try Some(UUID.fromString(value))
     catch { case _: IllegalArgumentException => None }
+
+  /** A model's key, which is what a derived `show`, `edit`, `update` and `destroy` all read out of
+    * the path. It is here rather than in `Id`'s companion because `FromPath` is this module's and
+    * `Id` is `core`'s, which cannot see it.
+    */
+  given [T]: FromPath[Id[T]] = value => summon[FromPath[UUID]].apply(value).map(Id.apply)
 }
 
 /** One request, read whole.
