@@ -112,8 +112,38 @@ object Eezo {
     upgrade.setHandler(new EezoHandler(config))
     server.setHandler(upgrade)
 
+    announce(config)
+
     server.start()
     server
+  }
+
+  /** What boot says about the table it is about to serve.
+    *
+    * The warning is unconditional, because a shadowed route in production is worth a line and the
+    * flag that would hide it is the one nobody sets there. The listing is not: it is a development
+    * convenience, and it earns its place because a typo'd `derives Resorce` mounts nothing in
+    * silence, which makes an empty or short table the only symptom a user ever sees.
+    */
+  private def announce(config: Config): Unit = {
+    config.routes.shadowed.foreach { case (earlier, later) =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${earlier.describe} shadows ${later.describe}, which can never match. " +
+          "Routes are tried in table order; move the narrower route first."
+      )
+    }
+
+    if (config.dev) {
+      val routes  = config.routes.routes
+      val listing =
+        if (routes.isEmpty) "no routes mounted"
+        else {
+          val heading = if (routes.size == 1) "1 route:" else s"${routes.size} routes:"
+          routes.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
+        }
+      log.log(System.Logger.Level.INFO, listing)
+    }
   }
 
   /** The single WebSocket creator.

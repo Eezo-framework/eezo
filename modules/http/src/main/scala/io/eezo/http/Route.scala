@@ -14,6 +14,18 @@ enum Route {
     * `WebSocketCreator`, which is what keeps Jetty off `live`'s classpath.
     */
   case Ws(pattern: PathPattern, endpoint: Request => WsListener)
+
+  /** A route named the way a human reads it: `GET /widgets/:id`, `WS /live`.
+    *
+    * The shadow warning and the `dev = true` boot print both name routes and neither can reach for
+    * the source text, so the one rendering lives here rather than being written twice. `WS` stands
+    * in for the method a WebSocket route does not have, matching the key the duplicate check
+    * already builds.
+    */
+  def describe: String = this match {
+    case Http(method, pattern, _) => s"$method ${pattern.render}"
+    case Ws(pattern, _)           => s"WS ${pattern.render}"
+  }
 }
 
 /** The routes an application serves, in the order they are matched.
@@ -85,6 +97,37 @@ final class RouteTable(val routes: Seq[Route]) {
     wsRoutes.iterator
       .flatMap(route => route.pattern.matchPath(path).map(params => (route, params)))
       .nextOption()
+
+  /** Every pair where an earlier route swallows a later one, in table order.
+    *
+    * Pure, and deliberately not a log call: a warning in this constructor would fire in every test
+    * that builds a shadowing table on purpose, and once more for each intermediate `++` produces.
+    * `Eezo.start` is the single site that emits, because the assembled table it serves is the only
+    * one where shadowing is a defect rather than a step.
+    *
+    * Never an error. First-match order is exactly what lets a handwritten route beat a derived one,
+    * so shadowing is legal by construction; only the exact duplicate the constructor rejects is a
+    * bug with no reading under which it was meant. Both kinds are checked against their own kind,
+    * since `dispatch` and `dispatchWs` walk separate partitions and an HTTP route cannot swallow an
+    * upgrade.
+    */
+  def shadowed: Seq[(Route, Route)] = {
+    def pairs(kind: Seq[Route]): Seq[(Route, Route)] =
+      kind.zipWithIndex.flatMap { case (earlier, index) =>
+        kind.drop(index + 1).collect {
+          case later if shadows(earlier, later) => (earlier, later)
+        }
+      }
+
+    pairs(httpRoutes) ++ pairs(wsRoutes)
+  }
+
+  private def shadows(earlier: Route, later: Route): Boolean = (earlier, later) match {
+    case (Route.Http(method, pattern, _), Route.Http(otherMethod, otherPattern, _)) =>
+      method == otherMethod && pattern.subsumes(otherPattern)
+    case (Route.Ws(pattern, _), Route.Ws(otherPattern, _)) => pattern.subsumes(otherPattern)
+    case _                                                 => false
+  }
 
   /** Concatenation. Order is preserved, so the receiver's routes keep winning. */
   def ++(other: RouteTable): RouteTable = RouteTable(routes ++ other.routes)
