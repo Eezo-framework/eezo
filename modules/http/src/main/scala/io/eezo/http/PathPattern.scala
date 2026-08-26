@@ -33,6 +33,34 @@ final class PathPattern private (val segments: Vector[Segment]) {
     loop(segments.toList, parts.toList, Map.empty)
   }
 
+  /** Whether every path this pattern matches, a later pattern would have matched too.
+    *
+    * The subsumption an earlier route needs to shadow a later one, decidable segment by segment
+    * because there are only three segment kinds: a `Static` swallows only an equal `Static`, a
+    * `Param` swallows any single segment, and a `CatchAll` swallows everything remaining. It is a
+    * one-way question, so `/widgets/:id` subsumes `/widgets/new` and never the reverse.
+    *
+    * The two ragged ends are asymmetric for the same reason `matchPath` is: a trailing `CatchAll`
+    * matches zero segments, so a pattern ending in one subsumes the prefix it is appended to, while
+    * a pattern that runs out of segments first subsumes nothing.
+    */
+  def subsumes(later: PathPattern): Boolean = {
+    def loop(mine: List[Segment], theirs: List[Segment]): Boolean = (mine, theirs) match {
+      case (Nil, Nil) => true
+      // `_` rather than `Nil`, because a non-final catch-all is unrepresentable after `parse`
+      // and matching on `Nil` only buys an inexhaustivity warning for the state that cannot exist.
+      case (Segment.CatchAll(_) :: _, _)                              => true
+      case (Nil, _) | (_, Nil)                                        => false
+      case (Segment.Static(value) :: ms, Segment.Static(other) :: ts) =>
+        value == other && loop(ms, ts)
+      case (Segment.Static(_) :: _, _)                       => false
+      case (Segment.Param(_) :: _, Segment.CatchAll(_) :: _) => false
+      case (Segment.Param(_) :: ms, _ :: ts)                 => loop(ms, ts)
+    }
+
+    loop(segments.toList, later.segments.toList)
+  }
+
   /** The way back to the string this was parsed from. The `dev = true` boot print and the boot time
     * warnings both name a path, and neither can reach for the source text.
     */

@@ -83,4 +83,43 @@ class RouteTableSuite extends munit.FunSuite {
     // makes a handwritten route beat a derived one.
     assertEquals(joined.dispatch(request(Method.GET, "/a/new")).body, Body.Html(Html.text("param")))
   }
+
+  test("shadowed names every pair where an earlier route swallows a later one") {
+    val broad  = get("/widgets/:id")
+    val narrow = get("/widgets/new")
+    val table  = RouteTable(Seq(broad, narrow))
+    assertEquals(table.shadowed, Seq((broad, narrow)))
+  }
+
+  test("declaration order decides: the narrow route first shadows nothing") {
+    val table = RouteTable(Seq(get("/widgets/new"), get("/widgets/:id")))
+    assertEquals(table.shadowed, Seq.empty)
+  }
+
+  test("routes on different methods never shadow, however broad the earlier pattern") {
+    val table = RouteTable(
+      Seq(get("/widgets/:id"), Route.Http(Method.POST, PathPattern.parse("/widgets/new"), ok))
+    )
+    assertEquals(table.shadowed, Seq.empty)
+  }
+
+  test("one catch-all shadows every later route on its method, and is reported once per victim") {
+    val all   = get("/*rest")
+    val one   = get("/widgets")
+    val two   = get("/widgets/:id")
+    val table = RouteTable(Seq(all, one, two))
+    assertEquals(table.shadowed, Seq((all, one), (all, two)))
+  }
+
+  test("a WebSocket route shadows a later WebSocket route, and no HTTP route ever shadows one") {
+    val broad  = Route.Ws(PathPattern.parse("/live/:room"), _ => new WsListener {})
+    val narrow = Route.Ws(PathPattern.parse("/live/lobby"), _ => new WsListener {})
+    assertEquals(RouteTable(Seq(broad, narrow)).shadowed, Seq((broad, narrow)))
+    assertEquals(RouteTable(Seq(get("/live/:room"), narrow)).shadowed, Seq.empty)
+  }
+
+  test("describe names a route the way the boot print and the shadow warning both need") {
+    assertEquals(get("/widgets/:id").describe, "GET /widgets/:id")
+    assertEquals(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {}).describe, "WS /live")
+  }
 }
