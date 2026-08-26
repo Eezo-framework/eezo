@@ -8,8 +8,8 @@ import io.eezo.core.Id
 
 /** Converts a path parameter's text into the type a handler asked for.
   *
-  * `Table[A]` will supply the instance for a model's key type later, so a derived `show` never
-  * converts a `String` by hand.
+  * A model's key type is covered by the `Id[T]` instance in this companion, so a derived `show`
+  * never converts a `String` by hand.
   */
 trait FromPath[A] {
   def apply(value: String): Option[A]

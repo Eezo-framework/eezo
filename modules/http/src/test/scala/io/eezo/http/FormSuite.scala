@@ -133,6 +133,13 @@ class FormSuite extends munit.FunSuite {
     assert(e.detail.contains("id"), e.detail)
   }
 
+  test("an undecodable key is a BadRequest for a model keyed by Id too") {
+    val e = intercept[BadRequest] {
+      Form[Gadget].parse(data("name" -> "Sprocket"), Some("not-an-id"))
+    }
+    assertEquals(e.detail, "id is not an id")
+  }
+
   test("an unchecked checkbox reads false rather than missing") {
     val parsed = Form[Widget].parse(
       data("name" -> "Bolt", "price" -> "3"),
