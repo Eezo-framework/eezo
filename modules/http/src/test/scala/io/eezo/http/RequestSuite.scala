@@ -2,10 +2,14 @@ package io.eezo.http
 
 import java.util.UUID
 
+import io.eezo.core.Id
+
 /** What a handler reads. Note what is absent: an untyped `attachment: AnyRef` bag. Capabilities
   * arrive through the handler's own `using` list.
   */
 class RequestSuite extends munit.FunSuite {
+
+  case class Widget()
 
   private def request(
       method: Method = Method.GET,
@@ -64,6 +68,13 @@ class RequestSuite extends munit.FunSuite {
     assertEquals(req.param[Long]("big"), 9999999999L)
     assertEquals(req.param[String]("s"), "x")
     assertEquals(req.param[UUID]("u"), id)
+  }
+
+  test("param reads a model's key, which is what a derived show asks for") {
+    val id  = Id.gen[Widget]()
+    val req = request(pathParams = Map("id" -> id.show, "bad" -> "not-a-uuid"))
+    assertEquals(req.param[Id[Widget]]("id"), id)
+    assertEquals(req.paramOpt[Id[Widget]]("bad"), None)
   }
 
   test("param throws the exception the boundary maps to 400 when the value will not convert") {
