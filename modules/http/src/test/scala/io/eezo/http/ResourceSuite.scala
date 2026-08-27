@@ -335,4 +335,41 @@ class ResourceSuite extends munit.FunSuite {
     )
     assert(errors.contains("typed Id[Model]"), errors)
   }
+
+  test("an edit page without an update is orphaned, which is what boot warns about") {
+    assertEquals(
+      Resource.orphans(Actions.except[Widget](Action.Update)),
+      Seq(Action.Edit -> Action.Update)
+    )
+  }
+
+  test("a new page without a create is orphaned the same way") {
+    assertEquals(
+      Resource.orphans(Actions.except[Widget](Action.Create)),
+      Seq(Action.New -> Action.Create)
+    )
+  }
+
+  test("a create without a new page is silent, because the direction is one way") {
+    assertEquals(Resource.orphans(Actions.except[Widget](Action.New)), Seq.empty)
+  }
+
+  test("subtracting a page along with its target leaves nothing orphaned") {
+    assertEquals(
+      Resource.orphans(Actions.except[Widget](Action.Edit, Action.Update)),
+      Seq.empty
+    )
+  }
+
+  test("all seven, and a read-only subset, are both quiet") {
+    assertEquals(Resource.orphans(Actions.except[Widget]()), Seq.empty)
+    assertEquals(Resource.orphans(Actions.only[Widget](Action.Index, Action.Show)), Seq.empty)
+  }
+
+  test("both pages can be orphaned at once, and each is named") {
+    assertEquals(
+      Resource.orphans(Actions.only[Widget](Action.New, Action.Edit)),
+      Seq(Action.Edit -> Action.Update, Action.New -> Action.Create)
+    )
+  }
 }

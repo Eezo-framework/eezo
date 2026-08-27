@@ -65,9 +65,18 @@ final case class Request(
     * scope: this is `application/x-www-form-urlencoded` only.
     */
   lazy val form: Map[String, Seq[String]] =
-    if (!header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded")))
-      Map.empty
+    if (!isFormEncoded) Map.empty
     else Request.decodeForm(new String(body, StandardCharsets.UTF_8))
+
+  /** Whether the body is one a form submission produces, which is the single place that question is
+    * answered.
+    *
+    * Both [[form]] and the `_method` override ask it, and they have to agree: an override that
+    * fired on a body [[form]] refuses to read would let a request that is not a form submission at
+    * all choose its own verb.
+    */
+  private[http] def isFormEncoded: Boolean =
+    header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded"))
 
   /** A path parameter, converted. Throws [[BadRequest]], which the boundary maps to a 400. */
   def param[A](name: String)(using from: FromPath[A]): A =
@@ -97,14 +106,19 @@ object Request {
     * `RouteTable.dispatch` a pure function of a request whose method is true: a unit test that
     * builds a `PUT` gets a `PUT`, with no transport quirk in between.
     *
-    * Only a form-encoded `POST` is overridden, with the query string as the fallback for the case
-    * that has no body to carry it, and it never downgrades to `GET`: turning a `POST` into a `GET`
-    * loses the body and makes the request repeatable, which is not something a form should be able
-    * to ask for. An unrecognised name is left alone rather than raising, because a request eezo
-    * does not understand is one it has no reason to reject on this field's behalf.
+    * A form-encoded `POST` is the whole of what is overridden, the query string fallback included.
+    * The fallback is there for the form that has no field to carry the verb, not for any `POST` at
+    * all: without the content type in the gate, a `POST` carrying a JSON body would let its own URL
+    * rewrite its verb, and an API client that never asked for this convention would be dispatching
+    * `DELETE` from a link somebody appended a query parameter to.
+    *
+    * It never downgrades to `GET`: turning a `POST` into a `GET` loses the body and makes the
+    * request repeatable, which is not something a form should be able to ask for. An unrecognised
+    * name is left alone rather than raising, because a request eezo does not understand is one it
+    * has no reason to reject on this field's behalf.
     */
   private[http] def withMethodOverride(request: Request): Request =
-    if (request.method != Method.POST) request
+    if (request.method != Method.POST || !request.isFormEncoded) request
     else
       request.form
         .get(MethodField)

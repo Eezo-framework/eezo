@@ -10,6 +10,10 @@ class RouteTableSuite extends munit.FunSuite {
   private def get(pattern: String, handler: Handler = ok): Route =
     Route.Http(Method.GET, PathPattern.parse(pattern), handler)
 
+  /** What `Resource` mounts, spelled out here so the precedence tests do not need a model. */
+  private def derived(pattern: String, handler: Handler = ok): Route =
+    Route.Http(Method.GET, PathPattern.parse(pattern), handler, Provenance.Derived)
+
   private def request(method: Method, path: String): Request =
     Request(method, path, Map.empty, Map.empty, Array.emptyByteArray, Map.empty)
 
@@ -68,10 +72,88 @@ class RouteTableSuite extends munit.FunSuite {
     intercept[NotFound](table.dispatch(request(Method.GET, "/live")))
   }
 
-  test("the same method and pattern twice fails the boot rather than the request") {
+  test("the same method and pattern twice, both written by hand, fails the boot") {
     val failure =
       intercept[IllegalArgumentException](RouteTable(Seq(get("/widgets"), get("/widgets/"))))
     assert(clue(failure.getMessage).contains("/widgets"))
+  }
+
+  test("the same method and pattern twice, both derived, fails the boot too") {
+    val failure =
+      intercept[IllegalArgumentException](RouteTable(Seq(derived("/posts"), derived("/posts/"))))
+    assert(clue(failure.getMessage).contains("/posts"))
+  }
+
+  // ----------------------------------------------- handwritten beats derived (decision 18)
+
+  test(
+    "a handwritten route and a derived one on the same method and path both mount, and the " +
+      "handwritten one answers"
+  ) {
+    val table = RouteTable(
+      Seq(
+        get("/posts", _ => Response.Ok(Html.text("by hand"))),
+        derived("/posts", _ => Response.Ok(Html.text("derived")))
+      )
+    )
+    assertEquals(
+      table.dispatch(request(Method.GET, "/posts")).body,
+      Body.Html(Html.text("by hand"))
+    )
+    // Dropped, not merely outrun: a route the table still holds would show up in the boot listing
+    // and read as a page the application serves.
+    assertEquals(table.routes.size, 1)
+    assertEquals(table.httpRoutes.size, 1)
+  }
+
+  test("the handwritten route wins wherever in the table it sits") {
+    val table = RouteTable(
+      Seq(
+        derived("/posts", _ => Response.Ok(Html.text("derived"))),
+        get("/posts", _ => Response.Ok(Html.text("by hand")))
+      )
+    )
+    assertEquals(table.routes.size, 1)
+    assertEquals(
+      table.dispatch(request(Method.GET, "/posts")).body,
+      Body.Html(Html.text("by hand"))
+    )
+  }
+
+  test("overridden names the derived route that was dropped, which is what boot warns about") {
+    val loser = derived("/posts")
+    val table = RouteTable(Seq(get("/posts"), loser))
+    assertEquals(table.overridden, Seq(loser))
+    assertEquals(RouteTable(Seq(get("/posts"), derived("/posts/:id"))).overridden, Seq.empty)
+  }
+
+  test("only the colliding route of a derived resource is dropped, the rest still mount") {
+    val table = RouteTable(
+      Seq(get("/posts"), derived("/posts"), derived("/posts/new"), derived("/posts/:id"))
+    )
+    assertEquals(
+      table.routes.map(_.describe),
+      Seq("GET /posts", "GET /posts/new", "GET /posts/:id")
+    )
+  }
+
+  test("a derived route only loses to a handwritten route on the very same method") {
+    val table = RouteTable(
+      Seq(Route.Http(Method.POST, PathPattern.parse("/posts"), ok), derived("/posts"))
+    )
+    assertEquals(table.routes.size, 2)
+    assertEquals(table.overridden, Seq.empty)
+  }
+
+  test("++ resolves the precedence across the join, whichever side derived the route") {
+    val handwritten = RouteTable(Seq(get("/posts", _ => Response.Ok(Html.text("by hand")))))
+    val resource    = RouteTable(Seq(derived("/posts", _ => Response.Ok(Html.text("derived")))))
+    assertEquals((handwritten ++ resource).routes.size, 1)
+    assertEquals((resource ++ handwritten).routes.size, 1)
+    assertEquals(
+      (resource ++ handwritten).dispatch(request(Method.GET, "/posts")).body,
+      Body.Html(Html.text("by hand"))
+    )
   }
 
   test("++ concatenates, and the earlier route shadows the later one") {
@@ -141,6 +223,13 @@ class RouteTableSuite extends munit.FunSuite {
       RouteTable(moved).dispatch(request(Method.GET, "/admin/widgets")).body,
       Body.Html(Html.text("list"))
     )
+  }
+
+  test("under keeps the provenance, so a moved derived route still loses to a handwritten one") {
+    val moved = Route.under("/admin")(Seq(derived("/posts")))
+    val table = RouteTable(get("/admin/posts") +: moved)
+    assertEquals(table.routes.size, 1)
+    assertEquals(table.overridden.map(_.describe), Seq("GET /admin/posts"))
   }
 
   test("a prefix written without its slash, or with a trailing one, mounts the same paths") {

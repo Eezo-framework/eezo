@@ -160,8 +160,11 @@ object RouteGenerator {
   /** The generated file: one object, the handwritten rows under `app/` and then one
     * `Resource.routesOf` line per candidate model.
     *
-    * Handwritten first is what makes decision 18's precedence a property of the emitted text rather
-    * than of a merge step somebody can get wrong, since dispatch is first match in table order.
+    * Handwritten first is what makes decision 18's precedence visible in the emitted text rather
+    * than only in a merge step somebody can get wrong, since dispatch is first match in table
+    * order. Order settles the routes that merely overlap, such as a handwritten `/posts/latest`
+    * ahead of a derived `/posts/:id`; the exact same method and path is settled by the route's
+    * provenance instead, so the derived twin is dropped rather than left behind the winner.
     *
     * `table` is a `def` that mints the store, so no user ever writes the word `Store`: the type is
     * a throwaway that a real query runtime replaces within weeks, and a `given Store` line in every

@@ -1,8 +1,6 @@
 package io.eezo.core.internal
 
-import munit.FunSuite
-
-class UtilSuite extends FunSuite {
+class UtilSuite extends munit.FunSuite {
   import util.*
 
   test("snake: a capital starts a word when it follows a lowercase letter") {

@@ -70,4 +70,13 @@ class MethodOverrideSuite extends munit.FunSuite {
     val request = post("""{"_method":"DELETE"}""", contentType = "application/json")
     assertEquals(Request.withMethodOverride(request).method, Method.POST)
   }
+
+  test("the query fallback is scoped to form-encoded POSTs too, so a JSON POST stays a POST") {
+    val request = post(
+      """{"title":"x"}""",
+      query = Map("_method" -> Seq("DELETE")),
+      contentType = "application/json"
+    )
+    assertEquals(Request.withMethodOverride(request).method, Method.POST)
+  }
 }

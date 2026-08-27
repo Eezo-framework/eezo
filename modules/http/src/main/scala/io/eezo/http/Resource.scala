@@ -33,6 +33,8 @@ trait Resource[A] {
 
 object Resource {
 
+  private val log = System.getLogger("io.eezo.http")
+
   def apply[A](using r: Resource[A]): Resource[A] = r
 
   /** The routes of `A` if it has a `Resource`, and nothing if it does not.
@@ -107,6 +109,14 @@ object Resource {
       actions: Actions[A]
   ): Resource[A] = {
 
+    orphans(actions).foreach { case (page, target) =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"$modelName mounts $page without $target: the page renders a form whose submit target is " +
+          s"not mounted, so submitting it answers 405. Mount $target, or subtract $page as well."
+      )
+    }
+
     /** The route name, and the store's bucket key, so the two cannot disagree about which rows
       * belong to which model.
       */
@@ -172,17 +182,33 @@ object Resource {
         )
       )
 
-    def create(store: Store): Handler = request => {
-      val key = Id.gen[A]()
+    /** The half of `create` and `update` that is the same handler twice: parse the submission under
+      * a key that is already decided, come back with the whole page when a field fails, and
+      * redirect where a successful write goes. Only the heading, the form's target and verb, and
+      * the one line that writes the row ever differed, so those are the parameters and nothing
+      * else.
+      *
+      * `persist` answers whether the row was written, which lets `update` report a missing key
+      * without reading it back first: the store already had to look for the row to replace it, and
+      * a read before the write would be that same lookup twice with a race in the gap. `create`
+      * always writes, so it answers `true`.
+      */
+    def submit(request: Request, key: Id[A], heading: String, target: String, verb: Method)(
+        persist: A => Boolean
+    ): Response =
       shape.parse(request.form, Some(key.show)) match {
         case Left(errors) =>
-          rejected(
-            s"New $modelName",
-            shape.render(collection, Method.POST, None, errors, request.form)
-          )
+          rejected(heading, shape.render(target, verb, None, errors, request.form))
         case Right(record) =>
-          store.insert(plural, key, record)
+          if (!persist(record)) throw NotFound(request.path)
           Response.Redirect(afterWrite(key))
+      }
+
+    def create(store: Store): Handler = request => {
+      val key = Id.gen[A]()
+      submit(request, key, s"New $modelName", collection, Method.POST) { record =>
+        store.insert(plural, key, record)
+        true
       }
     }
 
@@ -223,15 +249,8 @@ object Resource {
 
     def update(store: Store): Handler = request => {
       val key = request.param[Id[A]]("id")
-      shape.parse(request.form, Some(key.show)) match {
-        case Left(errors) =>
-          rejected(
-            s"Edit $modelName",
-            shape.render(member(key), Method.PUT, None, errors, request.form)
-          )
-        case Right(record) =>
-          if (!store.update(plural, key, record)) throw NotFound(request.path)
-          Response.Redirect(afterWrite(key))
+      submit(request, key, s"Edit $modelName", member(key), Method.PUT) { record =>
+        store.update(plural, key, record)
       }
     }
 
@@ -265,22 +284,24 @@ object Resource {
 
     new Resource[A] {
 
-      def routes(store: Store): Seq[Route] =
+      /** Every route here is marked [[Provenance.Derived]], and this is the only place in eezo that
+        * marks one. That is what lets a user mount `GET /$plural` by hand and keep the other six
+        * pages: the table drops the derived twin rather than refusing to boot.
+        */
+      def routes(store: Store): Seq[Route] = {
+        def route(method: Method, path: String, handler: Handler): Route =
+          Route.Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+
         Action.values.toSeq.filter(actions.has).map {
-          case Action.Index => Route.Http(Method.GET, PathPattern.parse(collection), index(store))
-          case Action.New   =>
-            Route.Http(Method.GET, PathPattern.parse(s"$collection/new"), blank)
-          case Action.Show =>
-            Route.Http(Method.GET, PathPattern.parse(s"$collection/:id"), show(store))
-          case Action.Edit =>
-            Route.Http(Method.GET, PathPattern.parse(s"$collection/:id/edit"), edit(store))
-          case Action.Create =>
-            Route.Http(Method.POST, PathPattern.parse(collection), create(store))
-          case Action.Update =>
-            Route.Http(Method.PUT, PathPattern.parse(s"$collection/:id"), update(store))
-          case Action.Destroy =>
-            Route.Http(Method.DELETE, PathPattern.parse(s"$collection/:id"), destroy(store))
+          case Action.Index   => route(Method.GET, collection, index(store))
+          case Action.New     => route(Method.GET, s"$collection/new", blank)
+          case Action.Show    => route(Method.GET, s"$collection/:id", show(store))
+          case Action.Edit    => route(Method.GET, s"$collection/:id/edit", edit(store))
+          case Action.Create  => route(Method.POST, collection, create(store))
+          case Action.Update  => route(Method.PUT, s"$collection/:id", update(store))
+          case Action.Destroy => route(Method.DELETE, s"$collection/:id", destroy(store))
         }
+      }
     }
   }
 
@@ -294,6 +315,20 @@ object Resource {
       head(meta(Attrs.charset := "utf-8"), title(heading)),
       body(content*)
     )
+
+  /** Every mounted page whose submit target is not mounted, as the page and the target it posts to.
+    *
+    * #116 settled that this warns at boot through `System.Logger` rather than at generation time,
+    * because deciding it needs `Actions[A]`, a typed instance the sbt plugin does not have. Only
+    * these two pairs qualify: a page is orphaned when targeting a route is its whole purpose, and
+    * omitting a control cannot rescue it, because the control **is** the page. The direction is one
+    * way, so `Create` without `New` is silent: that is a POST target with no derived form, which a
+    * handwritten form is free to post to.
+    */
+  private[http] def orphans[A](actions: Actions[A]): Seq[(Action, Action)] =
+    Seq(Action.Edit -> Action.Update, Action.New -> Action.Create).filter { case (page, target) =>
+      actions.has(page) && !actions.has(target)
+    }
 
   /** #110's deliberately dumb inflector: `+s`, a consonant before `y` becoming `ies`, and a
     * sibilant taking `es`. No dictionary and no irregular list, because a plural that reads badly

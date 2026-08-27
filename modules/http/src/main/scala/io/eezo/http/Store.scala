@@ -10,9 +10,11 @@ import io.eezo.core.Id
   *
   * It is **app-level and invisible**. There is no `Store[A]`: a store per model would be a second
   * per-model description of the model beside `Table[A]`, one to SQL and one to a `HashMap`, and a
-  * connection pool is app-level in every design `research/db-query-layer.md` weighs. And no user
-  * ever names this type: the generated `Routes.table()` mints one, so eezo does not teach a
-  * `given Store = Store.inMemory()` line that it has to un-teach a few weeks later.
+  * connection pool is app-level in every design `research/db-query-layer.md` weighs. The type is
+  * public only because generated code has to name it, in `Routes.table()` and in the
+  * `Resource#routes(store)` it calls; no user writes it by hand, because that generated `table()`
+  * constructs the one instance. So eezo does not teach a `given Store = Store.inMemory()` line that
+  * it has to un-teach a few weeks later.
   *
   * A `final class` rather than a trait, deliberately. The seam between eezo and a real query
   * runtime cannot be designed against one implementation, and that one a `HashMap`; class to trait

@@ -120,12 +120,25 @@ object Eezo {
 
   /** What boot says about the table it is about to serve.
     *
-    * The warning is unconditional, because a shadowed route in production is worth a line and the
-    * flag that would hide it is the one nobody sets there. The listing is not: it is a development
+    * The warnings are unconditional, because a shadowed route and a derived route a handwritten one
+    * replaced are both worth a line in production, and the flag that would hide them is the one
+    * nobody sets there. Two lines about the same table, since one names a route that can never
+    * match and the other names a route that is no longer mounted at all, and a user chasing a page
+    * that is not the page they expected needs to be told which of the two happened. The listing
+    * below is the assembled table after the replacement, so a route named in the override warning
+    * is deliberately absent from it. The listing is not unconditional: it is a development
     * convenience, and it earns its place because a typo'd `derives Resorce` mounts nothing in
     * silence, which makes an empty or short table the only symptom a user ever sees.
     */
   private def announce(config: Config): Unit = {
+    config.routes.overridden.foreach { route =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${route.describe} is written by hand and also derived; the handwritten route is " +
+          "served and the derived one is not mounted."
+      )
+    }
+
     config.routes.shadowed.foreach { case (earlier, later) =>
       log.log(
         System.Logger.Level.WARNING,

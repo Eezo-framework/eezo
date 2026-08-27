@@ -1,5 +1,18 @@
 package io.eezo.http
 
+/** Where a route came from, which is all decision 18's precedence rule needs to know.
+  *
+  * Handwritten is the default, so every site that builds a route directly keeps writing what it
+  * already wrote: users under `app/`, the sbt plugin that emits them, and any transformation over
+  * `Seq[Route]`. [[Resource]] is the single place that mints derived routes, and the single place
+  * that has to say so. Two values rather than a richer record naming the model, because the only
+  * question [[RouteTable]] asks is which of two routes on the same method and path the user wrote
+  * on purpose.
+  */
+enum Provenance {
+  case Handwritten, Derived
+}
+
 /** A route, in the two kinds eezo serves.
   *
   * A sealed enum rather than one record with a kind field, because a WebSocket route has no
@@ -8,12 +21,27 @@ package io.eezo.http
   */
 enum Route {
 
-  case Http(method: Method, pattern: PathPattern, handler: Handler)
+  /** Declared here rather than read out of each case, so that code holding a `Route` can ask
+    * without matching first. Both cases answer it with a constructor parameter that defaults to
+    * [[Provenance.Handwritten]].
+    */
+  def provenance: Provenance
+
+  case Http(
+      method: Method,
+      pattern: PathPattern,
+      handler: Handler,
+      provenance: Provenance = Provenance.Handwritten
+  )
 
   /** The seam to `modules/live`. The payload is an eezo type rather than Jetty's
     * `WebSocketCreator`, which is what keeps Jetty off `live`'s classpath.
     */
-  case Ws(pattern: PathPattern, endpoint: Request => WsListener)
+  case Ws(
+      pattern: PathPattern,
+      endpoint: Request => WsListener,
+      provenance: Provenance = Provenance.Handwritten
+  )
 
   /** A route named the way a human reads it: `GET /widgets/:id`, `WS /live`.
     *
@@ -23,8 +51,8 @@ enum Route {
     * already builds.
     */
   def describe: String = this match {
-    case Http(method, pattern, _) => s"$method ${pattern.render}"
-    case Ws(pattern, _)           => s"WS ${pattern.render}"
+    case Http(method, pattern, _, _) => s"$method ${pattern.render}"
+    case Ws(pattern, _, _)           => s"WS ${pattern.render}"
   }
 }
 
@@ -47,9 +75,12 @@ object Route {
     def moved(pattern: PathPattern): PathPattern =
       if (trimmed.isEmpty) pattern else PathPattern.parse(s"/$trimmed${pattern.render}")
 
+    // The provenance travels with the route: moving a derived resource under `/admin` does not
+    // make it something the user wrote, and a handwritten route at the new path still beats it.
     routes.map {
-      case Http(method, pattern, handler) => Http(method, moved(pattern), handler)
-      case Ws(pattern, endpoint)          => Ws(moved(pattern), endpoint)
+      case Http(method, pattern, handler, provenance) =>
+        Http(method, moved(pattern), handler, provenance)
+      case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
     }
   }
 }
@@ -61,7 +92,35 @@ object Route {
   * to bottom, and that file is what people debug routing with. Rails, Phoenix and Play are all
   * declaration ordered for the same reason. The sbt plugin owns emit order.
   */
-final class RouteTable(val routes: Seq[Route]) {
+final class RouteTable(mounted: Seq[Route]) {
+
+  /** [[Route.describe]] is the key the whole table is deduplicated on: it already renders the
+    * method and the pattern for an HTTP route and `WS` plus the pattern for an upgrade, so the two
+    * kinds share one key space without an HTTP route ever colliding with a WebSocket one.
+    */
+  private val handwrittenKeys: Set[String] = mounted.iterator
+    .filter(_.provenance == Provenance.Handwritten)
+    .map(_.describe)
+    .toSet
+
+  private def losesToHandwritten(route: Route): Boolean =
+    route.provenance == Provenance.Derived && handwrittenKeys(route.describe)
+
+  /** The derived routes a handwritten route on the same method and path replaced.
+    *
+    * Decision 18: a handwritten route wins over a derived one. A `GET /posts` written under `app/`
+    * next to a `case class Post ... derives Resource` is the ordinary way to take over one page of
+    * a resource and keep the other six, so it must boot rather than fail. The loser is dropped from
+    * [[routes]] outright rather than left sitting behind the winner, which is what keeps it out of
+    * the boot listing as well as out of dispatch.
+    *
+    * Pure, and deliberately not a log call, for the reason [[shadowed]] gives: `Eezo.start` is the
+    * one site where the assembled table is the table the application actually serves.
+    */
+  val overridden: Seq[Route] = mounted.filter(losesToHandwritten)
+
+  /** The routes served, in the order they are matched. */
+  val routes: Seq[Route] = mounted.filterNot(losesToHandwritten)
 
   /** The two kinds, split once. `Eezo.run` reads `wsRoutes` to build its single WebSocket mapping
     * and hands `httpRoutes` to the Jetty handler, so neither walks past a route it cannot use.
@@ -71,12 +130,13 @@ final class RouteTable(val routes: Seq[Route]) {
   val wsRoutes: Seq[Route.Ws] = routes.collect { case route: Route.Ws => route }
 
   locally {
-    val httpKeys = httpRoutes.map(route => (route.method, route.pattern.render))
-    val wsKeys   = wsRoutes.map(route => ("WS", route.pattern.render))
-    val keys     = httpKeys ++ wsKeys
-    keys.diff(keys.distinct).headOption.foreach { case (method, pattern) =>
+    // Whatever key survives twice here is two handwritten routes or two derived ones, because the
+    // one pairing with a rule to settle it has already been settled. Neither survivor has a reading
+    // under which the user meant it, and picking one of them silently would hide the mistake.
+    val keys = routes.map(_.describe)
+    keys.diff(keys.distinct).headOption.foreach { key =>
       throw new IllegalArgumentException(
-        s"duplicate route: $method $pattern is mounted twice. Shadowing is legal and ordered; " +
+        s"duplicate route: $key is mounted twice. Shadowing is legal and ordered; " +
           "the same method and pattern twice is a bug."
       )
     }
@@ -131,11 +191,11 @@ final class RouteTable(val routes: Seq[Route]) {
     * `Eezo.start` is the single site that emits, because the assembled table it serves is the only
     * one where shadowing is a defect rather than a step.
     *
-    * Never an error. First-match order is exactly what lets a handwritten route beat a derived one,
-    * so shadowing is legal by construction; only the exact duplicate the constructor rejects is a
-    * bug with no reading under which it was meant. Both kinds are checked against their own kind,
-    * since `dispatch` and `dispatchWs` walk separate partitions and an HTTP route cannot swallow an
-    * upgrade.
+    * Never an error. First-match order is what lets a handwritten `/widgets/new` beat a derived
+    * `/widgets/:id`, so shadowing is legal by construction; only the duplicate the constructor
+    * rejects, two routes of the same provenance on one method and path, is a bug with no reading
+    * under which it was meant. Both kinds are checked against their own kind, since `dispatch` and
+    * `dispatchWs` walk separate partitions and an HTTP route cannot swallow an upgrade.
     */
   def shadowed: Seq[(Route, Route)] = {
     def pairs(kind: Seq[Route]): Seq[(Route, Route)] =
@@ -149,10 +209,10 @@ final class RouteTable(val routes: Seq[Route]) {
   }
 
   private def shadows(earlier: Route, later: Route): Boolean = (earlier, later) match {
-    case (Route.Http(method, pattern, _), Route.Http(otherMethod, otherPattern, _)) =>
+    case (Route.Http(method, pattern, _, _), Route.Http(otherMethod, otherPattern, _, _)) =>
       method == otherMethod && pattern.subsumes(otherPattern)
-    case (Route.Ws(pattern, _), Route.Ws(otherPattern, _)) => pattern.subsumes(otherPattern)
-    case _                                                 => false
+    case (Route.Ws(pattern, _, _), Route.Ws(otherPattern, _, _)) => pattern.subsumes(otherPattern)
+    case _                                                       => false
   }
 
   /** Concatenation. Order is preserved, so the receiver's routes keep winning. */
