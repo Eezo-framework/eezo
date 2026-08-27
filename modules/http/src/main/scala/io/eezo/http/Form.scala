@@ -57,12 +57,27 @@ trait Form[A] {
   /** Declaration order, with the key absent. */
   def fields: Seq[FormField]
 
-  /** The whole `<form>`, including its submit button and, when the verb needs one, `_method`. */
+  /** One record's fields paired with their values, as a `show` page renders them.
+    *
+    * The values come from the same [[Field.show]] the inputs use, so a show page and the edit form
+    * for the same record cannot disagree about one field's text. The alternative, reading
+    * `productElement(i).toString`, prints `Some(3)` for an `Option` field and disagrees on the
+    * spot. The key is absent, exactly as it is from [[fields]].
+    */
+  def show(value: A): Seq[(FormField, String)]
+
+  /** The whole `<form>`, including its submit button and, when the verb needs one, `_method`.
+    *
+    * `raw` is submitted text, winning field by field over `value`. A rejected submission has no `A`
+    * to render from, which is why it was rejected, so without `raw` the user gets an empty form
+    * back with error messages beside it and their typing gone.
+    */
   def render(
       action: String,
       method: Method,
       value: Option[A],
-      errors: FormErrors = FormErrors.empty
+      errors: FormErrors = FormErrors.empty,
+      raw: Map[String, Seq[String]] = Map.empty
   ): Html
 
   /** Reads a submission.
@@ -121,11 +136,18 @@ object Form {
 
       val fields: Seq[FormField] = visible.map(_._1)
 
+      def show(value: A): Seq[(FormField, String)] =
+        visible.map { case (f, i) => f -> text(value, i) }
+
+      private def text(value: A, i: Int): String =
+        instances(i).show(value.asInstanceOf[Product].productElement(i))
+
       def render(
           action: String,
           method: Method,
           value: Option[A],
-          errors: FormErrors
+          errors: FormErrors,
+          raw: Map[String, Seq[String]]
       ): Html = {
         val over = method match {
           case Method.GET | Method.POST => Nil
@@ -140,7 +162,7 @@ object Form {
         }
 
         val rows = visible.map { case (f, i) =>
-          val current = value.map(a => instances(i).show(a.asInstanceOf[Product].productElement(i)))
+          val current  = raw.get(f.name).flatMap(_.headOption).orElse(value.map(text(_, i)))
           val messages = errors.of(f.name)
 
           val control =
