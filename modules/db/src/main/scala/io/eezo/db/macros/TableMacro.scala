@@ -4,7 +4,7 @@ import java.sql.{PreparedStatement, ResultSet}
 import scala.quoted.*
 
 import io.eezo.db.*
-import io.eezo.db.internal.util.*
+import io.eezo.core.internal.util.snake
 
 object TableMacro {
 

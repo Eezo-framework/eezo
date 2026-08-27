@@ -99,6 +99,27 @@ object Form {
 
   def apply[A](using f: Form[A]): Form[A] = f
 
+  /** The hidden input a form needs when its verb is one a browser cannot issue, and nothing at all
+    * when it is not.
+    *
+    * Two places emit it — the `<form>` below, and the delete button a derived `show` page renders,
+    * since a browser cannot issue `DELETE` from a link either — and one place reads it,
+    * [[Request.withMethodOverride]]. Written out twice, the field name would live in three files
+    * and each copy would be pinned by its own test, which is how two of them agree and the third
+    * drifts.
+    */
+  private[http] def methodOverride(method: Method): Seq[Html] = method match {
+    case Method.GET | Method.POST => Nil
+    case other                    =>
+      Seq(
+        input(
+          Attrs.tpe   := "hidden",
+          Attrs.name  := Request.MethodField,
+          Attrs.value := other.toString
+        )
+      )
+  }
+
   /** `inline` only long enough to read the `Mirror`, then straight into [[make]].
     *
     * Returning an anonymous class from an `inline def` duplicates its definition at every call
@@ -149,17 +170,7 @@ object Form {
           errors: FormErrors,
           raw: Map[String, Seq[String]]
       ): Html = {
-        val over = method match {
-          case Method.GET | Method.POST => Nil
-          case other                    =>
-            Seq(
-              input(
-                Attrs.tpe   := "hidden",
-                Attrs.name  := "_method",
-                Attrs.value := other.toString
-              )
-            )
-        }
+        val over = Form.methodOverride(method)
 
         val rows = visible.map { case (f, i) =>
           val current  = raw.get(f.name).flatMap(_.headOption).orElse(value.map(text(_, i)))

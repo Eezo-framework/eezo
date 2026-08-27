@@ -68,20 +68,23 @@ object Toolchain {
     properties.getProperty("sbt.version")
   }
 
-  /** Fails the build, at load time and with the reason, when `examples/hello` pins a different sbt
-    * launcher version than the root build. `sbt.version` is read by the launcher before any Scala
-    * code runs, so, unlike `ScalaVersion` and `JdkFloor`, it cannot be carried across through the
-    * `.eezo-version` file; comparing the two `build.properties` files after the fact is the closest
-    * this repo can get to one source of truth for it.
+  /** Fails the build, at load time and with the reason, when the examples build pins a different
+    * sbt launcher version than the root build. `sbt.version` is read by the launcher before any
+    * Scala code runs, so, unlike `ScalaVersion` and `JdkFloor`, it cannot be carried across through
+    * the `.eezo-version` file; comparing the two `build.properties` files after the fact is the
+    * closest this repo can get to one source of truth for it.
+    *
+    * There is one examples build holding every example, which is also why there is one file to
+    * compare rather than one per example.
     */
   def assertExampleSbtVersionMatches(rootBaseDirectory: File): Unit = {
     val root    = sbtVersion(new File(rootBaseDirectory, "project/build.properties"))
-    val example = sbtVersion(new File(rootBaseDirectory, "examples/hello/project/build.properties"))
+    val example = sbtVersion(new File(rootBaseDirectory, "examples/project/build.properties"))
     if (root != example)
       sys.error(
         s"sbt.version drift: project/build.properties pins $root but " +
-          s"examples/hello/project/build.properties pins $example. Update " +
-          "examples/hello/project/build.properties by hand to match: sbt.version is read by the " +
+          s"examples/project/build.properties pins $example. Update " +
+          "examples/project/build.properties by hand to match: sbt.version is read by the " +
           "launcher before any Scala code runs, so it cannot be generated the way ScalaVersion and " +
           "JdkFloor are."
       )

@@ -30,7 +30,7 @@ inThisBuild(
 
 // The JDK floor is checked when the build loads, so that a wrong JVM fails with a reason instead
 // of with a `-release` error forty lines into a compile. `sbt.version` is checked for the same
-// reason: it is read by the sbt launcher before any Scala code runs, so examples/hello cannot get
+// reason: it is read by the sbt launcher before any Scala code runs, so the examples build cannot get
 // it from `Toolchain` the way it gets `ScalaVersion` and `JdkFloor`, and a drift there would
 // otherwise go unnoticed.
 Global / onLoad := {
@@ -164,15 +164,15 @@ lazy val eezo = (project in file("."))
     publish / skip := true
   )
 
-// What `examples/hello` needs in order to resolve eezo from the local ivy cache, and to stay on
+// What the examples build needs in order to resolve eezo from the local ivy cache, and to stay on
 // the same Scala version and JDK floor as the rest of the build. The eezo version is derived from
 // the git state by sbt-dynver, so it changes with every commit, and the Scala version and JDK
 // floor live in `Toolchain`, which the example's separate build cannot read directly; none of the
 // three can be written into the example's build by hand without drifting. `publishLocalForExample`
 // publishes the modules and the plugin and then records all three where the example's build reads
-// them, through `EezoVersion` in `examples/hello/project/project`.
+// them, through `EezoVersion` in `examples/project/project`.
 lazy val writeLocalVersion =
-  taskKey[File]("Records the locally published version and toolchain for examples/hello.")
+  taskKey[File]("Records the locally published version and toolchain for the examples build.")
 
 writeLocalVersion := {
   val destination = (ThisBuild / baseDirectory).value / ".eezo-version"
