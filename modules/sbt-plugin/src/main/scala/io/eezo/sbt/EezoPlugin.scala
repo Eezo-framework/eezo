@@ -80,7 +80,8 @@ object EezoPlugin extends AutoPlugin {
     */
   private[sbt] def witness: String = {
     val samples = WitnessSources.flatMap(RouteGenerator.routeFor)
-    RouteGenerator.render(Seq.empty) + RouteGenerator.render(samples)
+    val models  = RouteGenerator.modelsIn(WitnessModelSource, WitnessModel)
+    RouteGenerator.render(Seq.empty, Seq.empty) + RouteGenerator.render(samples, models)
   }
 
   /** Two files below `app/`, chosen so that `witness` covers more of the generator than `render`'s
@@ -92,6 +93,15 @@ object EezoPlugin extends AutoPlugin {
     */
   private val WitnessSources: Seq[String] =
     Seq("eezoWitness/_id/Show.scala", "eezoWitness/New.scala")
+
+  /** One model, run through `modelsIn` rather than written as a `ModelCandidate` by hand, so that
+    * the scan's own rules — the package prefix and the `derives` window — are inside the
+    * fingerprint alongside the derived half of `render`'s template.
+    */
+  private val WitnessModelSource: String = "eezoWitness/Model.scala"
+
+  private val WitnessModel: String =
+    "package eezoWitness\n\ncase class Model(id: Long) derives Form\n"
 
   /** Reads the application's sources under `app/` and writes `io.eezo.generated.Routes`.
     *
@@ -114,9 +124,14 @@ object EezoPlugin extends AutoPlugin {
     val appRoot     = sourceRoot / "app"
     val destination = (Compile / sourceManaged).value / "io" / "eezo" / "generated" / "Routes.scala"
     val appInputs   = (appRoot ** "*.scala").get().toSet
+    // Everything outside `app/` is where models live, and a new one has to reach the table, so the
+    // whole source tree is hashed rather than `app/` alone. The cost is a rescan when any source
+    // changes; the write below is conditional, so a rescan that finds nothing new does not touch
+    // the generated file and does not invalidate the compile that follows it.
+    val modelInputs = ((sourceRoot ** "*.scala").get().toSet -- appInputs)
     val stamp       = streams.value.cacheDirectory / "eezo-routes.version"
     IO.write(stamp, witness)
-    val inputs = appInputs + stamp
+    val inputs = appInputs ++ modelInputs + stamp
 
     val cached = FileFunction.cached(
       streams.value.cacheDirectory / "eezo-routes",
@@ -134,12 +149,25 @@ object EezoPlugin extends AutoPlugin {
         }
       }
 
-      IO.write(destination, RouteGenerator.render(routes))
+      val models = modelInputs.toSeq.sortBy(_.getAbsolutePath).flatMap { source =>
+        relative(sourceRoot, source).toSeq.flatMap(RouteGenerator.modelsIn(_, IO.read(source)))
+      }
+
+      write(destination, RouteGenerator.render(routes, models))
       Set(destination)
     }
 
     cached(inputs).toSeq
   }
+
+  /** Writes the generated file only when its content would change.
+    *
+    * `sourceGenerators` runs on every evaluation and the hashed input set now covers the whole
+    * source tree, so an edit to a file with no routes and no models in it reaches this point. A
+    * rewrite there would touch the one file the following compile is guaranteed to read.
+    */
+  private def write(destination: File, contents: String): Unit =
+    if (!destination.exists() || IO.read(destination) != contents) IO.write(destination, contents)
 
   private def relative(directory: File, candidate: File): Option[String] =
     IO.relativize(directory, candidate).map(_.replace(java.io.File.separatorChar, '/'))

@@ -224,13 +224,17 @@ object Eezo {
       finally stream.close()
     if (body.length > maxBodySize) throw PayloadTooLarge(maxBodySize)
 
-    Request(
-      method = method,
-      path = path,
-      query = queryOf(request),
-      headers = headersOf(request),
-      body = body,
-      pathParams = Map.empty
+    // The override is applied here, so that dispatch and every handler downstream see the verb the
+    // form asked for rather than the `POST` a browser was able to issue.
+    Request.withMethodOverride(
+      Request(
+        method = method,
+        path = path,
+        query = queryOf(request),
+        headers = headersOf(request),
+        body = body,
+        pathParams = Map.empty
+      )
     )
   }
 

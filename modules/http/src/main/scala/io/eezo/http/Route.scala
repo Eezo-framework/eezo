@@ -28,6 +28,32 @@ enum Route {
   }
 }
 
+object Route {
+
+  /** Mounts a set of routes under a prefix.
+    *
+    * A plain function over `Seq[Route]` rather than a parameter on `Resource`, because `Route` is
+    * public and that makes relocation free for handwritten routes too. Route transformation is the
+    * general shape here: authorization and the middleware `modules/auth` will want are the same
+    * `Seq[Route] => Seq[Route]`, so neither has to invent a mechanism.
+    *
+    * The prefix is normalised rather than validated, since `/admin`, `admin` and `/admin/` are one
+    * intention written three ways, and rebuilding through `PathPattern.parse` is what keeps the
+    * moved pattern under the same parse-time validation as the original.
+    */
+  def under(prefix: String)(routes: Seq[Route]): Seq[Route] = {
+    val trimmed = prefix.stripPrefix("/").stripSuffix("/")
+
+    def moved(pattern: PathPattern): PathPattern =
+      if (trimmed.isEmpty) pattern else PathPattern.parse(s"/$trimmed${pattern.render}")
+
+    routes.map {
+      case Http(method, pattern, handler) => Http(method, moved(pattern), handler)
+      case Ws(pattern, endpoint)          => Ws(moved(pattern), endpoint)
+    }
+  }
+}
+
 /** The routes an application serves, in the order they are matched.
   *
   * `Seq` order is the entire contract: the table never sorts, and `++` concatenates. Specificity

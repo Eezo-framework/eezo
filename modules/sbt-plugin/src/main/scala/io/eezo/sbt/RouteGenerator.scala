@@ -15,6 +15,20 @@ import scala.util.matching.Regex
   */
 final case class HandwrittenRoute(method: String, path: String, target: String, source: String)
 
+/** A case class the generator will ask the compiler about, by name.
+  *
+  * "Candidate" rather than "model" on purpose: the generator never decides whether this type has a
+  * `Resource`. It emits `Resource.routesOf[fqn]`, which resolves to `Nil` when there is no
+  * instance, so a false positive costs one line that mounts nothing and a comment that mentions
+  * `derives` is not worth stripping out.
+  *
+  * @param fqn
+  *   the fully qualified name, built from the file's `package` clauses
+  * @param source
+  *   the file it came from, which the emitted row carries as a comment
+  */
+final case class ModelCandidate(fqn: String, source: String)
+
 /** Turns an application's `app/` tree into eezo's route table.
   *
   * Everything here is textual on purpose. The generator is an sbt plugin running before the
@@ -46,6 +60,23 @@ object RouteGenerator {
     * table actually reaches.
     */
   private val Keywords = Set("new", "type", "class", "object", "val", "def", "match")
+
+  /** A file's `package` clauses, in order, so that nested ones join into the prefix the compiler
+    * resolves. `package object` is excluded by requiring a plain identifier path.
+    */
+  private val PackageClause: Regex = new Regex("(?m)^package\\s+((?!object\\b)[A-Za-z_][\\w.]*)")
+
+  /** A top level case class, at column zero. */
+  private val CaseClass: Regex =
+    new Regex("(?m)^(?:final\\s+)?case class\\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+  /** Where one declaration's text stops: the next top level declaration of any kind. */
+  private val Declaration: Regex =
+    new Regex(
+      "(?m)^(?:final\\s+|sealed\\s+|abstract\\s+|open\\s+)*(?:case\\s+)?(?:class|object|trait|enum|type|given|val|def)\\b"
+    )
+
+  private val Derives: Regex = new Regex("\\bderives\\b")
 
   /** The route a file under `app/` mounts, or nothing when the file is not Scala source.
     *
@@ -90,8 +121,54 @@ object RouteGenerator {
       comparison < 0
     }
 
-  /** The generated file: one object, one row per handwritten route under `app/`. */
-  def render(routes: Seq[HandwrittenRoute]): String = {
+  /** Every top level `case class` in one file that carries a `derives` clause.
+    *
+    * Textual, and deliberately permissive rather than accurate. A false positive is free: the
+    * emitted `Resource.routesOf[X]` resolves to `Nil` when `X` has no instance, so a `derives`
+    * inside a comment costs a dead line rather than a wrong route, which is why none of skiff's
+    * comment stripping, paren matching or fixed-width lookahead is here. A false negative is the
+    * only real failure, so the window a `derives` may appear in runs to the next top level
+    * declaration rather than to a character count, which is what lets a multi-line constructor
+    * carry its clause on a line of its own.
+    *
+    * Only declarations at column zero are candidates. A nested one is skipped because its name is
+    * `Outer.Inner`, which this scan cannot see and which `package.Inner` would name wrongly: the
+    * generated file would then fail to compile, and a generator that can break a build it was meant
+    * to serve is worse than one that misses a shape nobody writes.
+    */
+  def modelsIn(relative: String, content: String): Seq[ModelCandidate] =
+    if (!relative.endsWith(".scala")) Nil
+    else {
+      val prefix = PackageClause.findAllMatchIn(content).map(_.group(1)).mkString(".")
+      val source = "src/main/scala/" + relative
+
+      val starts = Declaration.findAllMatchIn(content).map(_.start).toVector
+      CaseClass
+        .findAllMatchIn(content)
+        .map { declaration =>
+          val next = starts.find(_ > declaration.start).getOrElse(content.length)
+          val body = content.substring(declaration.start, next)
+          val name = declaration.group(1)
+          (name, Derives.findFirstIn(body).isDefined)
+        }
+        .collect { case (name, true) =>
+          ModelCandidate(if (prefix.isEmpty) name else s"$prefix.$name", source)
+        }
+        .toVector
+    }
+
+  /** The generated file: one object, the handwritten rows under `app/` and then one
+    * `Resource.routesOf` line per candidate model.
+    *
+    * Handwritten first is what makes decision 18's precedence a property of the emitted text rather
+    * than of a merge step somebody can get wrong, since dispatch is first match in table order.
+    *
+    * `table` is a `def` that mints the store, so no user ever writes the word `Store`: the type is
+    * a throwaway that a real query runtime replaces within weeks, and a `given Store` line in every
+    * example is a line eezo would teach and then have to un-teach. Each call gets a store of its
+    * own, which is what makes a test that calls `Routes.table()` start from an empty world.
+    */
+  def render(routes: Seq[HandwrittenRoute], models: Seq[ModelCandidate]): String = {
     val handwritten =
       if (routes.isEmpty) "    // no files under src/main/scala/app/"
       else
@@ -106,6 +183,25 @@ object RouteGenerator {
           }
           .mkString(",\n")
 
+    val body =
+      if (models.isEmpty)
+        "    io.eezo.http.RouteTable(handwritten)"
+      else {
+        val derived = models
+          .sortBy(_.fqn)
+          .map { model =>
+            s"""      // from ${model.source}
+               |      io.eezo.http.Resource.routesOf[${model.fqn}](store)""".stripMargin
+          }
+          .mkString(" ++\n")
+
+        s"""    val store = io.eezo.http.Store.inMemory()
+           |    io.eezo.http.RouteTable(
+           |      handwritten ++
+           |$derived
+           |    )""".stripMargin
+      }
+
     s"""// AUTO-GENERATED by eezo. Do not edit.
        |package io.eezo.generated
        |
@@ -116,7 +212,12 @@ object RouteGenerator {
        |$handwritten
        |  )
        |
-       |  val table: io.eezo.http.RouteTable = io.eezo.http.RouteTable(handwritten)
+       |  /** The table this application serves. One line per candidate model below: the compiler,
+       |    * not the generator, decides which of them has a `Resource` and mounts the seven.
+       |    */
+       |  def table(): io.eezo.http.RouteTable = {
+       |$body
+       |  }
        |}
        |""".stripMargin
   }

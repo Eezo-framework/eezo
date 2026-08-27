@@ -216,4 +216,32 @@ class EezoServerSuite extends munit.FunSuite {
       assert(clue(get(port, "/boom").body()).contains("connection refused"))
     }
   }
+
+  test("a form POST carrying _method=DELETE is dispatched to the DELETE route") {
+    val routes = RouteTable(
+      Seq(
+        Route.Http(
+          Method.POST,
+          PathPattern.parse("/widgets/:id"),
+          _ => Response.Ok(Html.text("posted"))
+        ),
+        Route.Http(
+          Method.DELETE,
+          PathPattern.parse("/widgets/:id"),
+          req => Response.Ok(Html.text(s"destroyed ${req.param[String]("id")}"))
+        )
+      )
+    )
+    serving(routes) { (_, port) =>
+      val response = client.send(
+        HttpRequest
+          .newBuilder(URI.create(s"http://localhost:$port/widgets/7"))
+          .header("Content-Type", "application/x-www-form-urlencoded")
+          .POST(HttpRequest.BodyPublishers.ofString("_method=DELETE"))
+          .build(),
+        HttpResponse.BodyHandlers.ofString()
+      )
+      assertEquals(response.body(), "destroyed 7")
+    }
+  }
 }

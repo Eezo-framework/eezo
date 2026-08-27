@@ -122,4 +122,30 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(get("/widgets/:id").describe, "GET /widgets/:id")
     assertEquals(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {}).describe, "WS /live")
   }
+  // ---------------------------------------------------------------- under
+
+  test("under prefixes every route it is given, derived or handwritten") {
+    val moved = Route.under("/admin")(Seq(get("/widgets"), get("/widgets/:id")))
+    assertEquals(moved.map(_.describe), Seq("GET /admin/widgets", "GET /admin/widgets/:id"))
+  }
+
+  test("under prefixes a WebSocket route too, since it is a transformation over Route") {
+    val moved =
+      Route.under("/admin")(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))
+    assertEquals(moved.map(_.describe), Seq("WS /admin/live"))
+  }
+
+  test("under keeps the handler, so a moved route still runs") {
+    val moved = Route.under("/admin")(Seq(get("/widgets", _ => Response.Ok(Html.text("list")))))
+    assertEquals(
+      RouteTable(moved).dispatch(request(Method.GET, "/admin/widgets")).body,
+      Body.Html(Html.text("list"))
+    )
+  }
+
+  test("a prefix written without its slash, or with a trailing one, mounts the same paths") {
+    val routes = Seq(get("/widgets"))
+    assertEquals(Route.under("admin")(routes).map(_.describe), Seq("GET /admin/widgets"))
+    assertEquals(Route.under("/admin/")(routes).map(_.describe), Seq("GET /admin/widgets"))
+  }
 }

@@ -87,6 +87,35 @@ final case class Request(
 
 object Request {
 
+  /** The field name a browser sends the verb it cannot issue under. */
+  private[http] val MethodField = "_method"
+
+  /** Applies the `_method` override, so that everything downstream sees the real verb.
+    *
+    * A browser can only issue `GET` and `POST` from markup, and the derived seven need `PUT` and
+    * `DELETE`. The override is applied once, before dispatch, which is what keeps
+    * `RouteTable.dispatch` a pure function of a request whose method is true: a unit test that
+    * builds a `PUT` gets a `PUT`, with no transport quirk in between.
+    *
+    * Only a form-encoded `POST` is overridden, with the query string as the fallback for the case
+    * that has no body to carry it, and it never downgrades to `GET`: turning a `POST` into a `GET`
+    * loses the body and makes the request repeatable, which is not something a form should be able
+    * to ask for. An unrecognised name is left alone rather than raising, because a request eezo
+    * does not understand is one it has no reason to reject on this field's behalf.
+    */
+  private[http] def withMethodOverride(request: Request): Request =
+    if (request.method != Method.POST) request
+    else
+      request.form
+        .get(MethodField)
+        .flatMap(_.headOption)
+        .orElse(request.queryParam(MethodField))
+        .flatMap(Method.parse)
+        .filter(_ != Method.GET) match {
+        case Some(method) => request.copy(method = method)
+        case None         => request
+      }
+
   /** Decodes `a=1&b=2`, UTF-8, `+` as a space, percent decoded, keeping repeats in order. */
   private def decodeForm(raw: String): Map[String, Seq[String]] =
     raw

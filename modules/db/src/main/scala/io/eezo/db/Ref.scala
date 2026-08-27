@@ -3,7 +3,7 @@ package io.eezo.db
 import java.util.UUID
 
 import io.eezo.core.Id
-import io.eezo.db.internal.util.*
+import io.eezo.core.internal.util.snake
 
 trait RefTarget[A] { def table: String }
 
