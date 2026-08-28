@@ -61,6 +61,17 @@ final class PathPattern private (val segments: Vector[Segment]) {
     loop(segments.toList, later.segments.toList)
   }
 
+  /** This pattern without its final segment.
+    *
+    * Here rather than in the caller, because from outside the only way to say it is to render the
+    * segments back to text and [[PathPattern.parse]] them again, which is [[render]]'s body copied
+    * out for the sake of reaching a private constructor. Bypassing `parse` is safe in this one
+    * direction: dropping cannot invent what `parse` rejects, since the names left over are a subset
+    * of names already distinct and a catch-all anywhere but last is unrepresentable, so a prefix of
+    * a parsed pattern is a parsed pattern.
+    */
+  private[http] def dropLast: PathPattern = new PathPattern(segments.dropRight(1))
+
   /** The way back to the string this was parsed from. The `dev = true` boot print and the boot time
     * warnings both name a path, and neither can reach for the source text.
     */

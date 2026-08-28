@@ -49,6 +49,29 @@ object Resource {
 
   def apply[A](using r: Resource[A]): Resource[A] = r
 
+  /** A derived page that exists only to submit somewhere else: the literal segment that names it,
+    * and the action and verb of the route its form posts to.
+    *
+    * Stated once because [[orphaned]] reads it backwards. Emission goes from an [[Action]] to a
+    * path, the check goes from a mounted path to the target it needs, and the two only meet at this
+    * pairing, so a renamed segment or a changed verb written on one side alone would leave the
+    * check hunting for a route nobody emits and warning about pages that are fine.
+    *
+    * What is not here is the rest of the path: which handler serves the page, and the captured key
+    * an edit page sits behind. The handler is emission's alone, and the key is a shape [[orphaned]]
+    * reads off the pattern itself, since a value naming one segment cannot say what has to stand in
+    * front of it.
+    */
+  private final case class FormPage(
+      action: Action,
+      segment: String,
+      target: Action,
+      targetMethod: Method
+  )
+
+  private val NewPage  = FormPage(Action.New, "new", Action.Create, Method.POST)
+  private val EditPage = FormPage(Action.Edit, "edit", Action.Update, Method.PUT)
+
   /** The routes of `A` if it has a `Resource`, and nothing if it does not.
     *
     * This is what the sbt plugin emits, one line per candidate case class, so that the **compiler**
@@ -297,12 +320,12 @@ object Resource {
           Route.Http(method, PathPattern.parse(path), handler, Provenance.Derived)
 
         Action.values.toSeq.filter(actions.has).map {
-          case Action.Index   => route(Method.GET, collection, index(store))
-          case Action.New     => route(Method.GET, s"$collection/new", blank)
-          case Action.Show    => route(Method.GET, s"$collection/:id", show(store))
-          case Action.Edit    => route(Method.GET, s"$collection/:id/edit", edit(store))
-          case Action.Create  => route(Method.POST, collection, create(store))
-          case Action.Update  => route(Method.PUT, s"$collection/:id", update(store))
+          case Action.Index => route(Method.GET, collection, index(store))
+          case Action.New   => route(Method.GET, s"$collection/${NewPage.segment}", blank)
+          case Action.Show  => route(Method.GET, s"$collection/:id", show(store))
+          case Action.Edit => route(Method.GET, s"$collection/:id/${EditPage.segment}", edit(store))
+          case Action.Create  => route(NewPage.targetMethod, collection, create(store))
+          case Action.Update  => route(EditPage.targetMethod, s"$collection/:id", update(store))
           case Action.Destroy => route(Method.DELETE, s"$collection/:id", destroy(store))
         }
       }
@@ -340,32 +363,56 @@ object Resource {
     * same convention that emitted the page. The pair is one way, so a `create` with no `new` is
     * silent: that is a POST target with no derived form, which a handwritten form may post to.
     *
-    * The target is named by [[Route.describe]], the key the duplicate and shadow checks already
-    * build, so "is it mounted" is one set lookup and relocation under a prefix moves the page and
-    * its target together.
+    * Whether the target is mounted is decided by [[PathPattern.subsumes]], not by matching the name
+    * [[Route.describe]] renders. The user writing the target picks their own parameter name, and
+    * `PUT /posts/:postId` serves every request `PUT /posts/:id` would have served, so a string key
+    * answers "unmounted" and warns them about the route they just wrote, which is the one failure
+    * this check exists to avoid. It is the predicate [[RouteTable.shadowed]] asks, in that same
+    * direction: the mounted pattern has to swallow the target, so a handwritten `/posts/new` never
+    * answers for `/posts/:id`. Relocation under a prefix stays free either way, since
+    * [[Route.under]] moves a page and its target by the same prefix.
     */
   private[http] def orphaned(table: RouteTable): Seq[Orphan] = {
-    val mounted = table.routes.map(_.describe).toSet
+    import PathPattern.Segment
+
+    def isMounted(method: Method, target: PathPattern): Boolean =
+      table.routes.exists {
+        case Route.Http(other, pattern, _, _) => other == method && pattern.subsumes(target)
+        case _                                => false
+      }
 
     table.httpRoutes
       .filter(route => route.method == Method.GET && route.provenance == Provenance.Derived)
       .flatMap { route =>
-        val path = route.pattern.render
+        val segments = route.pattern.segments
 
-        // Suffix rather than segment matching: a static segment renders as itself, and these two
-        // paths are emitted a dozen lines above rather than parsed from anything a user wrote.
-        val pair =
-          if (path.endsWith("/new"))
-            Some((Action.New, Action.Create, Method.POST, path.stripSuffix("/new")))
-          else if (path.endsWith("/edit"))
-            Some((Action.Edit, Action.Update, Method.PUT, path.stripSuffix("/edit")))
-          else None
+        def keyed: Boolean = segments.dropRight(1).lastOption.exists {
+          case Segment.Param(_) => true
+          case _                => false
+        }
 
-        pair.map { case (page, target, method, targetPath) =>
-          Orphan(page, route.describe, target, s"$method $targetPath")
+        // Segments rather than a suffix on the rendered path, because the shape is the contract:
+        // an edit page is a captured key followed by the literal `edit`, and a static `edit`
+        // sitting anywhere else is a page this object never emitted and cannot read the intent of.
+        val formPage = segments.lastOption match {
+          case Some(Segment.Static(NewPage.segment))           => Some(NewPage)
+          case Some(Segment.Static(EditPage.segment)) if keyed => Some(EditPage)
+          case _                                               => None
+        }
+
+        formPage.flatMap { page =>
+          // The page's own segment dropped, which is where its form submits.
+          val target = route.pattern.dropLast
+          Option.when(!isMounted(page.targetMethod, target))(
+            Orphan(
+              page.action,
+              route.describe,
+              page.target,
+              s"${page.targetMethod} ${target.render}"
+            )
+          )
         }
       }
-      .filterNot(orphan => mounted(orphan.targetRoute))
   }
 
   /** #110's deliberately dumb inflector: `+s`, a consonant before `y` becoming `ies`, and a

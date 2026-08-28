@@ -120,15 +120,17 @@ object Eezo {
 
   /** What boot says about the table it is about to serve.
     *
-    * The warnings are unconditional, because a shadowed route and a derived route a handwritten one
-    * replaced are both worth a line in production, and the flag that would hide them is the one
-    * nobody sets there. Two lines about the same table, since one names a route that can never
-    * match and the other names a route that is no longer mounted at all, and a user chasing a page
-    * that is not the page they expected needs to be told which of the two happened. The listing
-    * below is the assembled table after the replacement, so a route named in the override warning
-    * is deliberately absent from it. The listing is not unconditional: it is a development
-    * convenience, and it earns its place because a typo'd `derives Resorce` mounts nothing in
-    * silence, which makes an empty or short table the only symptom a user ever sees.
+    * The warnings are unconditional, because a shadowed route, a derived route a handwritten one
+    * replaced and a form page with no submit target are all worth a line in production, and the
+    * flag that would hide them is the one nobody sets there. Three lines about the same table,
+    * since one names a route that can never match, one names a route that is no longer mounted at
+    * all, and one names a page that renders and answers 405 the moment it is submitted, and a user
+    * chasing a page that is not the page they expected, or a form that will not send, needs to be
+    * told which of the three happened. The listing below is the assembled table after the
+    * replacement, so a route named in the override warning is deliberately absent from it. The
+    * listing is not unconditional: it is a development convenience, and it earns its place because
+    * a typo'd `derives Resorce` mounts nothing in silence, which makes an empty or short table the
+    * only symptom a user ever sees.
     */
   private def announce(config: Config): Unit = {
     config.routes.overridden.foreach { route =>
