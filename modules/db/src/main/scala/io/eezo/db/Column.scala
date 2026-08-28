@@ -4,6 +4,11 @@ import java.sql.{PreparedStatement, ResultSet, Types}
 import java.time.{Instant, LocalDate, OffsetDateTime, ZoneOffset}
 import java.util.UUID
 
+/** A codec is a pure description: it turns a value into a bound parameter and a result column back
+  * into a value, and it captures nothing. The `->` arrows below say so to the capture checker,
+  * which is what lets an anonymous `Column` be built from them — a `=>` function may capture
+  * anything, and `Column` is a pure base class.
+  */
 trait Column[A] { self =>
   def pgType: PgType
   def nullable: Boolean   = false
@@ -12,7 +17,7 @@ trait Column[A] { self =>
   def put(ps: PreparedStatement, i: Int, a: A): Unit
   def get(rs: ResultSet, i: Int): A
 
-  def imap[B](f: A => B)(g: B => A): Column[B] = new Column[B] {
+  def imap[B](f: A -> B)(g: B -> A): Column[B] = new Column[B] {
     def pgType: PgType                                 = self.pgType
     override def nullable: Boolean                     = self.nullable
     override def checks: List[Check]                   = self.checks
@@ -41,8 +46,8 @@ object Column {
   def apply[A](using c: Column[A]): Column[A] = c
 
   private def base[A](t: PgType)(
-      w: (PreparedStatement, Int, A) => Unit,
-      r: (ResultSet, Int) => A
+      w: (PreparedStatement, Int, A) -> Unit,
+      r: (ResultSet, Int) -> A
   ): Column[A] = new Column[A] {
     def pgType: PgType                                 = t
     def put(ps: PreparedStatement, i: Int, a: A): Unit = w(ps, i, a)

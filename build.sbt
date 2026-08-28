@@ -89,6 +89,11 @@ lazy val db = module("db")
   .dependsOn(core)
   .settings(
     libraryDependencies ++= Seq(postgresql, testcontainersPg),
+    // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
+    // a preference. research/capture-checking.md §6.3 measured that a capture-checked library
+    // requires nothing of downstream and gives downstream nothing: the guarantee is real inside
+    // this module and inside any consumer that opts in, and absent, silently, everywhere else.
+    scalacOptions += "-language:experimental.captureChecking",
     // The database suite starts one container and shares it across suites (see
     // `support.Pg`). Forking per suite would start one container per JVM.
     Test / fork              := true,
