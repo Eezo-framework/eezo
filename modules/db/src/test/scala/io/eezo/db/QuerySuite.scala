@@ -2,6 +2,7 @@ package io.eezo.db
 
 import io.eezo.db.Scopes.*
 import io.eezo.db.support.{Book, DbSuite, Library, PublishingHouse}
+import io.eezo.core.Id
 
 /** The query DSL: what it renders, and what it does against Postgres.
   *

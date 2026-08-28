@@ -4,6 +4,7 @@ import io.eezo.db.*
 import io.eezo.db.Scopes.*
 import io.eezo.db.engine.Installed
 import io.eezo.db.support.{Library, Pg, PublishingHouse}
+import io.eezo.core.Id
 
 /** A runnable walk through phase 2: CRUD by primary key.
   *

@@ -1,7 +1,8 @@
 package io.eezo.db
 
 import io.eezo.db.Scopes.*
-import io.eezo.db.support.{DbSuite, Library, PublishingHouse, Title}
+import io.eezo.db.support.{DbSuite, Library, PublishingHouse}
+import io.eezo.core.Id
 
 /** CRUD by primary key, against a real Postgres.
   *

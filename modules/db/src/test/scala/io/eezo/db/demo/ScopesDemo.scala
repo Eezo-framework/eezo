@@ -1,7 +1,7 @@
 package io.eezo.db.demo
 
 import io.eezo.db.*
-import io.eezo.db.capability.{EscapedScope, OffThread}
+import io.eezo.db.capability.OffThread
 import io.eezo.db.engine.{Installed, ReentrantScope}
 import io.eezo.db.Scopes.*
 import io.eezo.db.support.Pg
