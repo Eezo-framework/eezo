@@ -5,9 +5,11 @@ package io.eezo.http
   * `Index` is "list them all", `New` is "give me a blank form", `Create` is "accept that form". The
   * method and the path fall out of the name. Roles are what make subtraction readable —
   * `Actions.except(Destroy)` says "no deleting", which is what a user means, rather than "no
-  * `DELETE /widgets/:id`" — and they are what makes the orphan check expressible at all, since
-  * `Edit` without `Update` is a form page whose submit target answers 405, and naming that needs
-  * the page and its target to be two things that pair.
+  * `DELETE /widgets/:id`" — and they are what the orphan warning says back, since `Edit` without
+  * `Update` is a form page whose submit target answers 405, and "mount `Update`, or subtract `Edit`
+  * as well" names the line a user edits rather than the route that failed. #118 put the check
+  * itself over the assembled route table rather than over an `Actions`, since the 405 is a property
+  * of the application and not of one model.
   *
   * Declaration order is emission order, and it is a hard constraint rather than a preference:
   * `GET /widgets/new` has to be emitted before `GET /widgets/:id`, or first-match dispatch sends

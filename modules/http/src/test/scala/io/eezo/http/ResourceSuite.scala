@@ -431,4 +431,20 @@ class ResourceSuite extends munit.FunSuite {
 
     assertEquals(Resource.orphaned(RouteTable(Seq(page))), Seq.empty)
   }
+
+  test("a handwritten target spelling its parameter differently still silences it") {
+    val handwritten =
+      Route.Http(Method.PUT, PathPattern.parse("/sketches/:sketchId"), ok)
+
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+
+    assertEquals(Resource.orphaned(mounted), Seq.empty)
+  }
+
+  test("a derived page ending in edit under no captured key is not an edit page") {
+    val page =
+      Route.Http(Method.GET, PathPattern.parse("/sketches/edit"), ok, Provenance.Derived)
+
+    assertEquals(Resource.orphaned(RouteTable(Seq(page))), Seq.empty)
+  }
 }

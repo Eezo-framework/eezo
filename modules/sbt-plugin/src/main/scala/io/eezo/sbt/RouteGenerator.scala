@@ -33,8 +33,8 @@ final case class ModelCandidate(fqn: String, source: String)
   *
   * Everything here is textual on purpose. The generator is an sbt plugin running before the
   * compiler, so the only warning it can raise is the one a text scan can decide, a file that does
-  * not define the `def` its name promises. Shadowing and orphaned actions need typed instances and
-  * warn at boot instead.
+  * not define the `def` its name promises. Shadowing and an orphaned form page are properties of
+  * the assembled table rather than of any one file, and warn at boot instead.
   *
   * This file is compiled against sbt 1 on Scala 2.12 and against sbt 2 on Scala 3, so it stays
   * inside the subset both accept.
