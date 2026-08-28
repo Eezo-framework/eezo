@@ -60,9 +60,9 @@ lazy val commonSettings = Seq(
     // this is the syntax the project commits to; `-no-indent` makes it a compile error to drift.
     "-no-indent",
     "-Wunused:all",
-    "-Wvalue-discard"
+    "-Wvalue-discard",
     // The two warnings above are only worth setting if they can fail the build.
-    // "-Werror" // TODO fix back
+    "-Werror"
   ),
   javacOptions ++= Seq("--release", Toolchain.JdkFloor.toString),
   libraryDependencies += munit
@@ -198,7 +198,7 @@ lazy val example = project
   .in(file("modules/example"))
   .dependsOn(db)
   .settings(
-    name                      := "eezo-example",
+    name := "eezo-example",
     libraryDependencies += testcontainersPg,
     Compile / run / mainClass := Some("example.Cli"),
     Compile / run / fork      := true,
@@ -206,7 +206,7 @@ lazy val example = project
     // that is a test-scoped dependency. It is still a program, not a suite:
     //   sbt "example/Test/runMain example.Tour"            (--no-pause to run straight through)
     // `connectInput` is what lets its pauses and `freeze`'s prompts read stdin.
-    Test / fork               := true,
+    Test / fork                  := true,
     Compile / run / connectInput := true,
     Test / run / connectInput    := true
   )
