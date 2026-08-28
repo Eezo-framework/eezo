@@ -13,9 +13,22 @@ final class TableSpec[T](val table: Table[T]) {
     this
   }
 
-  // TODO: string columns are a placeholder — replaced by `_.author` once Cols lands.
-  def index(cols: String*): this.type  = add(false, cols)
-  def unique(cols: String*): this.type = add(true, cols)
+  /** `index(_.author, _.publishedOn)`. BACKLOG §7.
+    *
+    * Two payoffs over the strings this replaced. Renaming or deleting a field is now a compile
+    * error at the index rather than a `SchemaError` thrown when the schema is first forced. And the
+    * `_id` suffix on a `Ref` column is the framework's job: the selector names the *field*, the
+    * `Col` it returns knows the *column*.
+    *
+    * The arrow is `->`, not `=>`: a column selector captures nothing, and saying so is what lets a
+    * vararg of them be used at all — an impure function in varargs leaks its reach capability out
+    * of the method. Same reason `Column.imap` takes pure arrows.
+    */
+  def index(sel: (ColsOf[T] -> Col[T, ?])*): this.type =
+    add(false, sel.map(_(table.cols).name))
+
+  def unique(sel: (ColsOf[T] -> Col[T, ?])*): this.type =
+    add(true, sel.map(_(table.cols).name))
 
   def indexes: List[IndexSnap] = idx.toList
 

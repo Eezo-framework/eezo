@@ -262,12 +262,10 @@ class BacklogSuite extends PgSuite {
 
   // ── 23 ───────────────────────────────────────────────────────────────────────────────
   backlog(23, "schema validation failures are SchemaError, not RuntimeException") {
-    object BadIndex extends Schema {
-      val authors = table[Author]
-      val books   = table[Book].index("no_such_column")
-      val houses  = table[PublishingHouse]
-    }
-    intercept[SchemaError](BadIndex.snapshot)
+    // was an index on a non-existent column; that is a compile error since BACKLOG §7, so this
+    // now triggers the same `sys.error` path through the unregistered-FK check instead
+    object Partial extends Schema { val books = table[Book] }
+    intercept[SchemaError](Partial.snapshot)
   }
 
   // ── 25 ───────────────────────────────────────────────────────────────────────────────

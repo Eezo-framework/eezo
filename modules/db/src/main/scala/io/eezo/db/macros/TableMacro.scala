@@ -91,6 +91,26 @@ object TableMacro {
 
     def idOfBody(v: Expr[T]): Expr[Id[T]] = Select.unique(v.asTerm, "id").asExprOf[Id[T]]
 
+    /** The `Col` values, in declaration order.
+      *
+      * Assembled as an ordinary tuple and cast, rather than through `NamedTuple.build`: a named
+      * tuple *is* a `Tuple` at run time, and the labels come from `NamedTuple.From[T]`, which reads
+      * the same constructor parameters in the same order as `fields` below. So the cast asserts an
+      * ordering the compiler derives from the same source — not an assumption about the user.
+      */
+    val colsExpr: Expr[ColsOf[T]] = {
+      val values: List[Expr[Any]] = fields.map { f =>
+        f.tpe.asType match {
+          case '[t] =>
+            val c       = summonOrFail[t](f)
+            val rt      = Expr.summon[RefTarget[t]]
+            val colName = if (rt.isDefined) snake(f.name) + "_id" else snake(f.name)
+            '{ new Col[T, t](${ Expr(colName) })(using $c) }
+        }
+      }
+      '{ ${ Expr.ofTupleFromSeq(values) }.asInstanceOf[ColsOf[T]] }
+    }
+
     '{
       new Table[T] {
         def tableName: String                                          = ${ Expr(snake(sym.name)) }
@@ -100,6 +120,7 @@ object TableMacro {
         def decode(rs: ResultSet, offset: Int): T =
           ${ decodeBody('rs, 'offset) }
         def idOf(value: T): Id[T] = ${ idOfBody('value) }
+        val cols: ColsOf[T]       = $colsExpr
       }
     }
   }

@@ -42,7 +42,7 @@ case class Book(
   */
 object Library extends Schema {
   val authors = table[Author]
-  val books   = table[Book].index("author_id", "published_on", "published_by_id").unique("title")
+  val books   = table[Book].index(_.author, _.publishedOn, _.publishedBy).unique(_.title)
   val houses  = table[PublishingHouse]
 }
 

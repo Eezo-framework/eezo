@@ -17,6 +17,13 @@ trait Table[T] {
   def encode(ps: PreparedStatement, offset: Int, value: T): Unit
   def decode(rs: ResultSet, offset: Int): T
 
+  /** Typed references to this table's columns, for indexes and for the query DSL.
+    *
+    * Emitted by the macro in declaration order, which is the order `NamedTuple.From[T]` uses, so a
+    * label always names the column beside it.
+    */
+  def cols: ColsOf[T]
+
   /** The row's primary key, read from the mandatory `id` field. Emitted by the macro, because only
     * it knows the field exists — the trait cannot express "has an `id`".
     */
