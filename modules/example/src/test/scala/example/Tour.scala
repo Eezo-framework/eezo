@@ -5,8 +5,11 @@ import io.eezo.db.Scopes.*
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
 
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+
 import java.nio.file.{Files, Path}
-import java.sql.Connection
+import java.sql.{Connection, DriverManager}
 import scala.io.StdIn
 import scala.util.control.NonFatal
 
@@ -20,11 +23,36 @@ import scala.util.control.NonFatal
   *   sbt "example/run --no-pause"     # run it start to finish
   */
 object Tour extends EezoApp {
-  // One source of truth for connection settings: `Db` already reads these, and `Db.withConnection`
-  // is still how the chapters that demonstrate raw JDBC get a connection.
-  override def databaseUrl: String      = Db.url
-  override def databaseUser: String     = Db.user
-  override def databasePassword: String = Db.pass
+  /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
+    *
+    * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
+    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `--no-pause` to let it run
+    * straight through.
+    */
+  private lazy val container: PostgreSQLContainer[?] = {
+    val c = new PostgreSQLContainer(DockerImageName.parse("postgres:17"))
+    c.start()
+    sys.addShutdownHook(c.stop())
+    c
+  }
+
+  override def databaseUrl: String      = container.getJdbcUrl
+  override def databaseUser: String     = container.getUsername
+  override def databasePassword: String = container.getPassword
+
+  /** The tour works in its own schema, so eezo's connections have to be told about it too —
+    * otherwise the migrator writes to `public` while the drift checks read `eezo_tour`, and a
+    * replay looks like it never happened. DESIGN §8.7.
+    */
+  // `Connection => Unit`, not `->`: this module does not enable capture checking, so eezo's pure
+  // arrow presents here as an ordinary function type (research/capture-checking.md §6.3).
+  override def databaseInit: Connection => Unit = { c =>
+    val st = c.createStatement()
+    try st.execute(s"""create schema if not exists "$Schema0"""") catch { case NonFatal(_) => () }
+    finally st.close()
+    val st2 = c.createStatement()
+    try st2.execute(s"""set search_path to "$Schema0"""") finally st2.close()
+  }
 
 
   private var paused = true
@@ -328,21 +356,17 @@ object Tour extends EezoApp {
   private val Schema0 = "eezo_tour"
 
   private def connect(): Option[Connection] =
-    try Some(Db.connect())
+    try Some(DriverManager.getConnection(databaseUrl, databaseUser, databasePassword))
     catch {
       case NonFatal(e) =>
         println()
-        warn(s"Could not connect to ${Db.url}")
+        warn("Could not start a Postgres container")
         println(s"  ${oneLine(e)}")
         println()
-        note("The tour needs a Postgres. Either start one:")
+        note("The tour starts its own database through testcontainers, which needs a Docker")
+        note("daemon. Check that one is running:")
         blank()
-        sql("docker run -d --name eezo-pg -e POSTGRES_PASSWORD=postgres \\")
-        sql("    -e POSTGRES_DB=eezo -p 5442:5432 postgres:17")
-        blank()
-        note("or point the tour at one you already have:")
-        blank()
-        sql("EEZO_DB_URL=jdbc:postgresql://host:port/db sbt \"example/run\"")
+        sql("docker info")
         println()
         None
     }

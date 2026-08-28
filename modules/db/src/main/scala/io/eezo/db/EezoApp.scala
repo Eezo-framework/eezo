@@ -2,6 +2,8 @@ package io.eezo.db
 
 import io.eezo.db.engine.{Database, Installed}
 
+import java.sql.Connection
+
 /** The entry point an application extends. DESIGN §8.7.
   *
   * {{{
@@ -33,8 +35,17 @@ trait EezoApp {
 
   def databasePassword: String = sys.env.getOrElse("EEZO_DB_PASS", "postgres")
 
+  /** Run on **every** connection the pool creates, not once on a borrowed one — DESIGN §8.7.
+    *
+    * This is where `search_path`, `application_name` and statement timeouts belong. Without it an
+    * application that works in a non-`public` schema silently splits in two: its own connections
+    * see one schema and eezo's see another, which shows up as a migration that appears not to have
+    * run.
+    */
+  def databaseInit: Connection -> Unit = _ => ()
+
   protected def database: Database =
-    Database.connect(databaseUrl, databaseUser, databasePassword)
+    Database.connect(databaseUrl, databaseUser, databasePassword, databaseInit)
 
   /** The application. A `Database` is installed for its whole duration. */
   def boot(args: Array[String]): Unit
