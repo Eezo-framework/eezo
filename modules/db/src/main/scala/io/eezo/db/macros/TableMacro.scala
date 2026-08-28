@@ -3,7 +3,9 @@ package io.eezo.db.macros
 import java.sql.{PreparedStatement, ResultSet}
 import scala.quoted.*
 
-import io.eezo.db.*
+// `Expr` is excluded: `io.eezo.db.Expr` is the query predicate and `scala.quoted.Expr` is the macro
+// one, and every macro in this package needs the latter. The exclusion is local to macro sources.
+import io.eezo.db.{Expr as _, *}
 import io.eezo.db.internal.util.*
 
 object TableMacro {

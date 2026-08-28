@@ -60,6 +60,26 @@ extension [T](t: Table[T]) {
     } finally ps.close()
   }
 
+  /** Starts a query. `Table[Book].where(...)` is shorthand for `Table[Book].query.where(...)`. */
+  def query: Query[T] = Query(t)
+
+  def where(f: ColsOf[T] -> Expr[T]): Query[T]    = query.where(f)
+  def orderBy(f: ColsOf[T] -> Order[T]): Query[T] = query.orderBy(f)
+
+  /** Deleting takes a predicate, always. There is no `delete()` terminal on `Query`, so a dropped
+    * `.where` during a refactor cannot silently become a table wipe — it stops compiling. DESIGN
+    * §9.4, and §3.6: destructive and risky are different, and the destructive one says its own
+    * name.
+    */
+  def deleteWhere(f: ColsOf[T] -> Expr[T])(using tx: Tx): Int = {
+    val (w, binds) = Expr.render(f(t.cols))
+    Query.writing(tx.connection, t.tableDef.deleteWhere(w), binds)
+  }
+
+  /** The table wipe. */
+  def deleteAll()(using tx: Tx): Int =
+    Query.writing(tx.connection, t.tableDef.deleteAll, Nil)
+
   /** Strict, and deliberately so: a lazy result would hold the scope and escape the block that
     * created it. A cursor arrives with the query DSL (DESIGN §9), declaring its capture.
     */

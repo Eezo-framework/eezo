@@ -63,4 +63,15 @@ final case class TableDef(name: String, columns: List[ColumnDef]) {
   }
 
   def deleteById: String = s"delete from $quoted where ${idColumn.quoted} = ?"
+
+  /** Built on `selectAll`, deliberately: the column list is rendered in exactly one place, so the
+    * select list and `decode`'s offsets cannot drift apart (BACKLOG §4, DESIGN §9.4).
+    */
+  def selectWhere(where: String): String = s"$selectAll where $where"
+
+  def countWhere(where: String): String = s"select count(*) from $quoted where $where"
+
+  def deleteWhere(where: String): String = s"delete from $quoted where $where"
+
+  def deleteAll: String = s"delete from $quoted"
 }

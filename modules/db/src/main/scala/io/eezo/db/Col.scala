@@ -1,5 +1,6 @@
 package io.eezo.db
 
+import java.sql.PreparedStatement
 import scala.NamedTuple.{From, Map}
 
 /** A typed reference to one column of `T`. DESIGN §9.1.
@@ -10,6 +11,23 @@ import scala.NamedTuple.{From, Map}
   * parameters through the same codec path as `encode`.
   */
 final class Col[T, A](val name: String)(using val codec: Column[A]) {
+
+  private def cmp(op: String, v: A): Expr[T] =
+    Expr.Cmp(name, op, (ps, i) => codec.put(ps, i, v))
+
+  infix def ===(v: A): Expr[T] = cmp("=", v)
+  infix def <>(v: A): Expr[T]  = cmp("<>", v)
+  infix def <(v: A): Expr[T]   = cmp("<", v)
+  infix def <=(v: A): Expr[T]  = cmp("<=", v)
+  infix def >(v: A): Expr[T]   = cmp(">", v)
+  infix def >=(v: A): Expr[T]  = cmp(">=", v)
+
+  infix def in(vs: Seq[A]): Expr[T] =
+    Expr.In(name, vs.toList.map(v => (ps: PreparedStatement, i: Int) => codec.put(ps, i, v)))
+
+  def asc: Order[T]  = Order(name, "asc")
+  def desc: Order[T] = Order(name, "desc")
+
   override def toString: String = name
 }
 

@@ -29,12 +29,14 @@ trait Table[T] {
     */
   def idOf(value: T): Id[T]
 
-  final def tableDef: TableDef    = TableDef(tableName, columns)
-  final def insertSql: String     = tableDef.insert
-  final def selectAllSql: String  = tableDef.selectAll
-  final def selectByIdSql: String = tableDef.selectById
-  final def updateByIdSql: String = tableDef.updateById
-  final def deleteByIdSql: String = tableDef.deleteById
+  // `lazy val`, not `def`: these are fixed per table, and a query should not rebuild its own
+  // prefix — only the `where`/`order by`/`limit` tail varies (DESIGN §9.3).
+  final lazy val tableDef: TableDef    = TableDef(tableName, columns)
+  final lazy val insertSql: String     = tableDef.insert
+  final lazy val selectAllSql: String  = tableDef.selectAll
+  final lazy val selectByIdSql: String = tableDef.selectById
+  final lazy val updateByIdSql: String = tableDef.updateById
+  final lazy val deleteByIdSql: String = tableDef.deleteById
 }
 
 object Table {
