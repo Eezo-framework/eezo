@@ -2,6 +2,7 @@ package io.eezo.http
 
 import java.util.UUID
 
+import io.eezo.core.Id
 import io.eezo.core.html.Html
 
 /** What `derives Form` produces, and what it refuses to produce.
@@ -21,6 +22,11 @@ class FormSuite extends munit.FunSuite {
   ) derives Form
 
   case class Login(email: String, password: String) derives Form
+
+  /** The shape every real eezo model has: a key of type `Id[A]`, which `TableMacro` requires and
+    * which this module could not see at all while `Id` lived in `db`.
+    */
+  case class Gadget(id: Id[Gadget], name: String) derives Form
 
   private val theKey = UUID.fromString("11111111-2222-3333-4444-555555555555")
 
@@ -89,6 +95,66 @@ class FormSuite extends munit.FunSuite {
     assert(html.contains("is not a number"), html)
   }
 
+  // ---------------------------------------------------------------- show
+
+  test("show pairs every rendered field with its value, and never the key") {
+    val shown = Form[Widget].show(widget)
+    assertEquals(shown.map(_._1.name), Seq("name", "price", "inStock", "note"))
+    assertEquals(shown.map(_._2), Seq("Bolt", "3", "on", "hex"))
+  }
+
+  test("show reads an Option through its Field rather than printing Some") {
+    val shown = Form[Widget].show(widget.copy(note = None)).toMap.map { case (f, v) => f.name -> v }
+    assertEquals(shown("note"), "")
+  }
+
+  test("show and the edit form cannot disagree about one field's text") {
+    val shown = Form[Widget].show(widget).collectFirst { case (f, v) if f.name == "name" => v }.get
+    val html  = Form[Widget].render("/widgets/1", Method.PUT, Some(widget)).render
+    assert(html.contains(s"""value="$shown""""), html)
+  }
+
+  // ---------------------------------------------------------------- raw
+
+  test("a rejected submission comes back with what was typed, beside its errors") {
+    val errs = FormErrors(Seq(FieldError("price", "is not a number")))
+    val html = Form[Widget]
+      .render(
+        "/widgets",
+        Method.POST,
+        None,
+        errs,
+        raw = data("name" -> "Bolt", "price" -> "cheap")
+      )
+      .render
+    assert(html.contains("""value="Bolt""""), html)
+    assert(html.contains("""value="cheap""""), html)
+    assert(html.contains("is not a number"), html)
+  }
+
+  test("raw wins field by field over value, and a field it omits keeps the value's text") {
+    val html = Form[Widget]
+      .render("/widgets/1", Method.PUT, Some(widget), raw = data("name" -> "Nut"))
+      .render
+    assert(html.contains("""value="Nut""""), html)
+    assert(!html.contains("""value="Bolt""""), html)
+    assert(html.contains("""value="3""""), html)
+  }
+
+  test("a box the rejected submission had checked comes back checked") {
+    val html = Form[Widget]
+      .render("/widgets", Method.POST, None, raw = data("inStock" -> "on"))
+      .render
+    assert(html.contains(" checked>"), html)
+  }
+
+  test("a raw multi valued key takes the first value") {
+    val html = Form[Widget]
+      .render("/widgets", Method.POST, None, raw = Map("name" -> Seq("Bolt", "Nut")))
+      .render
+    assert(html.contains("""value="Bolt""""), html)
+  }
+
   // ---------------------------------------------------------------- parse
 
   test("a keyed model parses with the caller's key as raw text") {
@@ -97,6 +163,15 @@ class FormSuite extends munit.FunSuite {
       Some(theKey.toString)
     )
     assertEquals(parsed, Right(widget))
+  }
+
+  test("a model keyed by Id derives, renders without its key, and parses one back") {
+    val key    = Id.gen[Gadget]()
+    val gadget = Gadget(key, "Sprocket")
+    val html   = Form[Gadget].render("/gadgets", Method.POST, Some(gadget)).render
+    assert(!html.contains(key.show), html)
+    assertEquals(Form[Gadget].fields.map(_.name), Seq("name"))
+    assertEquals(Form[Gadget].parse(data("name" -> "Sprocket"), Some(key.show)), Right(gadget))
   }
 
   test("a keyless case class derives and parses") {
@@ -116,6 +191,13 @@ class FormSuite extends munit.FunSuite {
       Form[Widget].parse(data("name" -> "Bolt", "price" -> "3"), Some("not-a-uuid"))
     }
     assert(e.detail.contains("id"), e.detail)
+  }
+
+  test("an undecodable key is a BadRequest for a model keyed by Id too") {
+    val e = intercept[BadRequest] {
+      Form[Gadget].parse(data("name" -> "Sprocket"), Some("not-an-id"))
+    }
+    assertEquals(e.detail, "id is not an id")
   }
 
   test("an unchecked checkbox reads false rather than missing") {

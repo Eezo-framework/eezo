@@ -1,5 +1,7 @@
 package io.eezo.db
 
+import io.eezo.core.Id
+
 import io.eezo.db.support.*
 
 import java.time.temporal.ChronoUnit

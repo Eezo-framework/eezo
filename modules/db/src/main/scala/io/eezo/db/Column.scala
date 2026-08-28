@@ -4,11 +4,8 @@ import java.sql.{PreparedStatement, ResultSet, Types}
 import java.time.{Instant, LocalDate, OffsetDateTime, ZoneOffset}
 import java.util.UUID
 
-/** A codec is a pure description: it turns a value into a bound parameter and a result column back
-  * into a value, and it captures nothing. The `->` arrows below say so to the capture checker,
-  * which is what lets an anonymous `Column` be built from them — a `=>` function may capture
-  * anything, and `Column` is a pure base class.
-  */
+import io.eezo.core.Id
+
 trait Column[A] { self =>
   def pgType: PgType
   def nullable: Boolean   = false
@@ -83,6 +80,15 @@ object Column {
 
   given Column[Array[Byte]] =
     base(PgType.Bytea)((ps, i, a) => ps.setBytes(i, a), (rs, i) => rs.getBytes(i))
+
+  /** A model's key.
+    *
+    * `Id[T]` is `core`'s, because `http` needs it too and cannot see this module, so the one
+    * JDBC-touching line about it lives here instead of in its companion. Written from outside
+    * `Id`'s own scope the opaque type is abstract, which is why this is a real `imap` rather than
+    * the identity pair it used to be.
+    */
+  given [T]: Column[Id[T]] = Column[UUID].imap[Id[T]](Id.apply)(_.value)
 
   given [A](using inner: Column[A]): Column[Option[A]] = new Column[Option[A]] {
     def pgType: PgType                                         = inner.pgType

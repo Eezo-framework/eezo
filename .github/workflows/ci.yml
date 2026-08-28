@@ -70,11 +70,12 @@ jobs:
       - name: Test
         run: sbt -batch +test
 
-      # The walking skeleton, built the way a user builds it: eezo published to the local ivy
+      # The walking skeletons, built the way a user builds one: eezo published to the local ivy
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.
       # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
-      # a build cannot be enabled by that same build.
-      - name: Build the example application
+      # a build cannot be enabled by that same build. `blog` is what covers the derived half: its
+      # seven routes exist only in the file the generator writes.
+      - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample
-          cd examples/hello && sbt -batch compile
+          cd examples && sbt -batch compile

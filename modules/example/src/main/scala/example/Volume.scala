@@ -2,6 +2,7 @@ package example
 
 import java.time.*
 import io.eezo.db.*
+import io.eezo.core.Id
 
 case class Volume(
     id: Id[Volume],

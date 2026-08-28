@@ -112,8 +112,62 @@ object Eezo {
     upgrade.setHandler(new EezoHandler(config))
     server.setHandler(upgrade)
 
+    announce(config)
+
     server.start()
     server
+  }
+
+  /** What boot says about the table it is about to serve.
+    *
+    * The warnings are unconditional, because a shadowed route, a derived route a handwritten one
+    * replaced and a form page with no submit target are all worth a line in production, and the
+    * flag that would hide them is the one nobody sets there. Three lines about the same table,
+    * since one names a route that can never match, one names a route that is no longer mounted at
+    * all, and one names a page that renders and answers 405 the moment it is submitted, and a user
+    * chasing a page that is not the page they expected, or a form that will not send, needs to be
+    * told which of the three happened. The listing below is the assembled table after the
+    * replacement, so a route named in the override warning is deliberately absent from it. The
+    * listing is not unconditional: it is a development convenience, and it earns its place because
+    * a typo'd `derives Resorce` mounts nothing in silence, which makes an empty or short table the
+    * only symptom a user ever sees.
+    */
+  private def announce(config: Config): Unit = {
+    config.routes.overridden.foreach { route =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${route.describe} is written by hand and also derived; the handwritten route is " +
+          "served and the derived one is not mounted."
+      )
+    }
+
+    config.routes.shadowed.foreach { case (earlier, later) =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${earlier.describe} shadows ${later.describe}, which can never match. " +
+          "Routes are tried in table order; move the narrower route first."
+      )
+    }
+
+    Resource.orphaned(config.routes).foreach { orphan =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${orphan.pageRoute} is mounted without ${orphan.targetRoute}: the page renders a form " +
+          "whose submit target is not mounted, so submitting it answers 405. Mount " +
+          s"${orphan.target}, or subtract ${orphan.page} as well."
+      )
+    }
+
+    if (config.dev) {
+      val routes  = config.routes.routes
+      val listing =
+        if (routes.isEmpty) "no routes mounted"
+        else {
+          val heading = if (routes.size == 1) "1 route:" else s"${routes.size} routes:"
+          routes.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
+        }
+      log.log(System.Logger.Level.INFO, listing)
+    }
   }
 
   /** The single WebSocket creator.
@@ -194,13 +248,17 @@ object Eezo {
       finally stream.close()
     if (body.length > maxBodySize) throw PayloadTooLarge(maxBodySize)
 
-    Request(
-      method = method,
-      path = path,
-      query = queryOf(request),
-      headers = headersOf(request),
-      body = body,
-      pathParams = Map.empty
+    // The override is applied here, so that dispatch and every handler downstream see the verb the
+    // form asked for rather than the `POST` a browser was able to issue.
+    Request.withMethodOverride(
+      Request(
+        method = method,
+        path = path,
+        query = queryOf(request),
+        headers = headersOf(request),
+        body = body,
+        pathParams = Map.empty
+      )
     )
   }
 

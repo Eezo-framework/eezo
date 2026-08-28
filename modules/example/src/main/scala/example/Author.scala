@@ -1,6 +1,7 @@
 package example
 
 import io.eezo.db.*
+import io.eezo.core.Id
 
 case class Author(
     id: Id[Author],

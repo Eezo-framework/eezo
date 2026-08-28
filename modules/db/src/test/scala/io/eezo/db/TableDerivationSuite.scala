@@ -1,5 +1,6 @@
 package io.eezo.db
 
+import io.eezo.core.Id
 import io.eezo.db.support.*
 
 import munit.FunSuite
@@ -65,6 +66,15 @@ class TableDerivationSuite extends FunSuite {
 
   test("Option[A] borrows A's Postgres type rather than inventing one") {
     assertEquals(Table[Widget].columns.find(_.name == "tally").get.pgType, PgType.Int4)
+  }
+
+  test("an Id key is a non-null uuid, through a given `db` owns and `core` cannot") {
+    val c = Table[Author].columns.find(_.name == "id").get
+    assertEquals(c.pgType, PgType.Uuid)
+    assertEquals(c.nullable, false)
+    // Written out, because the derivation above would also pass on a `Column[Id[T]]` found in
+    // `Id`'s own companion, which is the arrangement this ticket removes.
+    assertEquals(Column[Id[Author]].pgType, PgType.Uuid)
   }
 }
 

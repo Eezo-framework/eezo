@@ -3,6 +3,7 @@ package io.eezo.db
 import java.sql.{PreparedStatement, ResultSet}
 import scala.annotation.implicitNotFound
 import io.eezo.db.macros.TableMacro
+import io.eezo.core.Id
 
 @implicitNotFound(
   "No Table instance for ${T}.\n" +

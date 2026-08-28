@@ -4,10 +4,12 @@ import java.net.URLDecoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
+import io.eezo.core.Id
+
 /** Converts a path parameter's text into the type a handler asked for.
   *
-  * `Table[A]` will supply the instance for a model's key type later, so a derived `show` never
-  * converts a `String` by hand.
+  * A model's key type is covered by the `Id[T]` instance in this companion, so a derived `show`
+  * never converts a `String` by hand.
   */
 trait FromPath[A] {
   def apply(value: String): Option[A]
@@ -24,6 +26,12 @@ object FromPath {
   given FromPath[UUID] = value =>
     try Some(UUID.fromString(value))
     catch { case _: IllegalArgumentException => None }
+
+  /** A model's key, which is what a derived `show`, `edit`, `update` and `destroy` all read out of
+    * the path. It is here rather than in `Id`'s companion because `FromPath` is this module's and
+    * `Id` is `core`'s, which cannot see it.
+    */
+  given [T]: FromPath[Id[T]] = value => summon[FromPath[UUID]].apply(value).map(Id.apply)
 }
 
 /** One request, read whole.
@@ -57,9 +65,18 @@ final case class Request(
     * scope: this is `application/x-www-form-urlencoded` only.
     */
   lazy val form: Map[String, Seq[String]] =
-    if (!header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded")))
-      Map.empty
+    if (!isFormEncoded) Map.empty
     else Request.decodeForm(new String(body, StandardCharsets.UTF_8))
+
+  /** Whether the body is one a form submission produces, which is the single place that question is
+    * answered.
+    *
+    * Both [[form]] and the `_method` override ask it, and they have to agree: an override that
+    * fired on a body [[form]] refuses to read would let a request that is not a form submission at
+    * all choose its own verb.
+    */
+  private[http] def isFormEncoded: Boolean =
+    header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded"))
 
   /** A path parameter, converted. Throws [[BadRequest]], which the boundary maps to a 400. */
   def param[A](name: String)(using from: FromPath[A]): A =
@@ -78,6 +95,40 @@ final case class Request(
 }
 
 object Request {
+
+  /** The field name a browser sends the verb it cannot issue under. */
+  private[http] val MethodField = "_method"
+
+  /** Applies the `_method` override, so that everything downstream sees the real verb.
+    *
+    * A browser can only issue `GET` and `POST` from markup, and the derived seven need `PUT` and
+    * `DELETE`. The override is applied once, before dispatch, which is what keeps
+    * `RouteTable.dispatch` a pure function of a request whose method is true: a unit test that
+    * builds a `PUT` gets a `PUT`, with no transport quirk in between.
+    *
+    * A form-encoded `POST` is the whole of what is overridden, the query string fallback included.
+    * The fallback is there for the form that has no field to carry the verb, not for any `POST` at
+    * all: without the content type in the gate, a `POST` carrying a JSON body would let its own URL
+    * rewrite its verb, and an API client that never asked for this convention would be dispatching
+    * `DELETE` from a link somebody appended a query parameter to.
+    *
+    * It never downgrades to `GET`: turning a `POST` into a `GET` loses the body and makes the
+    * request repeatable, which is not something a form should be able to ask for. An unrecognised
+    * name is left alone rather than raising, because a request eezo does not understand is one it
+    * has no reason to reject on this field's behalf.
+    */
+  private[http] def withMethodOverride(request: Request): Request =
+    if (request.method != Method.POST || !request.isFormEncoded) request
+    else
+      request.form
+        .get(MethodField)
+        .flatMap(_.headOption)
+        .orElse(request.queryParam(MethodField))
+        .flatMap(Method.parse)
+        .filter(_ != Method.GET) match {
+        case Some(method) => request.copy(method = method)
+        case None         => request
+      }
 
   /** Decodes `a=1&b=2`, UTF-8, `+` as a space, percent decoded, keeping repeats in order. */
   private def decodeForm(raw: String): Map[String, Seq[String]] =

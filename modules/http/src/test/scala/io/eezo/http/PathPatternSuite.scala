@@ -60,4 +60,32 @@ class PathPatternSuite extends munit.FunSuite {
     assertEquals(PathPattern.parse("/widgets/:id"), PathPattern.parse("/widgets/:id/"))
     assertNotEquals(PathPattern.parse("/widgets/:id"), PathPattern.parse("/widgets/:key"))
   }
+
+  test("an earlier pattern subsumes a later one when every segment swallows its counterpart") {
+    def subsumes(earlier: String, later: String): Boolean =
+      PathPattern.parse(earlier).subsumes(PathPattern.parse(later))
+
+    assert(subsumes("/widgets/:id", "/widgets/new"))
+    assert(subsumes("/widgets/:id", "/widgets/:key"))
+    assert(subsumes("/widgets", "/widgets"))
+    assert(subsumes("/*rest", "/widgets/1/edit"))
+    assert(subsumes("/widgets/*rest", "/widgets/1"))
+  }
+
+  test(
+    "a catch-all subsumes the pattern it is the only remainder of, because it matches zero segments"
+  ) {
+    assert(PathPattern.parse("/widgets/*rest").subsumes(PathPattern.parse("/widgets")))
+  }
+
+  test("a literal never subsumes a wildcard, and neither does a shorter pattern") {
+    def subsumes(earlier: String, later: String): Boolean =
+      PathPattern.parse(earlier).subsumes(PathPattern.parse(later))
+
+    assert(!subsumes("/widgets/new", "/widgets/:id"))
+    assert(!subsumes("/widgets/:id", "/widgets/*rest"))
+    assert(!subsumes("/widgets/:id", "/widgets/:id/edit"))
+    assert(!subsumes("/widgets/:id/edit", "/widgets/:id"))
+    assert(!subsumes("/", "/widgets"))
+  }
 }

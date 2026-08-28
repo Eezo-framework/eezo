@@ -5,6 +5,8 @@ import java.util.UUID
 
 import scala.annotation.implicitNotFound
 
+import io.eezo.core.Id
+
 /** One case class field, as HTML sees it.
   *
   * Deliberately not `db`'s `Column`, which is `PreparedStatement` and `ResultSet` and nothing else.
@@ -94,6 +96,16 @@ object Field {
     try Right(Instant.parse(text.trim))
     catch { case _: RuntimeException => Left("is not a date and time") }
   }
+
+  /** A model's key.
+    *
+    * `Id[T]` is `core`'s and its `Column` is `db`'s; this is the same UUID read through the same
+    * text, so it delegates rather than parsing a second time. A key is never rendered into a form
+    * (see `Form`), but it is still read through its own `Field`, which is what keeps one decoder
+    * for it rather than two.
+    */
+  given [T]: Field[Id[T]] =
+    of[Id[T]]("text")(_.show)(text => Field[UUID].read(text).map(Id.apply))
 
   /** An optional field. Empty text and an absent key are the same thing to a browser, so both are
     * `None` here, and neither can ever be `"is required"`.

@@ -1,7 +1,7 @@
 package io.eezo.db
 
 import io.eezo.db.capability.*
-import java.sql.PreparedStatement
+import io.eezo.core.Id
 
 /** An `update` or `delete` that matched no row. */
 final case class NoSuchRow(msg: String) extends RuntimeException(msg)

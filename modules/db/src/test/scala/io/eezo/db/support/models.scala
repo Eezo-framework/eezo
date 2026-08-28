@@ -1,6 +1,7 @@
 package io.eezo.db.support
 
 import io.eezo.db.*
+import io.eezo.core.Id
 
 import java.time.{Instant, LocalDate}
 import java.util.UUID

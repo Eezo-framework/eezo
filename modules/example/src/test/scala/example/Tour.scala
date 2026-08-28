@@ -2,6 +2,7 @@ package example
 
 import io.eezo.db.*
 import io.eezo.db.Scopes.*
+import io.eezo.core.Id
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
 
@@ -15,14 +16,14 @@ import scala.util.control.NonFatal
 
 /** A guided run through everything the `db` module does, against a real Postgres.
   *
-  * Each chapter changes something and then shows what the framework noticed. Nothing here
-  * is simulated: the drift is real ALTERs, the rejections are real constraint violations,
-  * and the migrations are real files on disk that you can open.
+  * Each chapter changes something and then shows what the framework noticed. Nothing here is
+  * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
+  * migrations are real files on disk that you can open.
   *
-  *   sbt "example/run"                # step through it
-  *   sbt "example/run --no-pause"     # run it start to finish
+  * sbt "example/run" # step through it sbt "example/run --no-pause" # run it start to finish
   */
 object Tour extends EezoApp {
+
   /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
     *
     * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
@@ -48,12 +49,13 @@ object Tour extends EezoApp {
   // arrow presents here as an ordinary function type (research/capture-checking.md §6.3).
   override def databaseInit: Connection => Unit = { c =>
     val st = c.createStatement()
-    try st.execute(s"""create schema if not exists "$Schema0"""") catch { case NonFatal(_) => () }
+    try st.execute(s"""create schema if not exists "$Schema0"""")
+    catch { case NonFatal(_) => () }
     finally st.close()
     val st2 = c.createStatement()
-    try st2.execute(s"""set search_path to "$Schema0"""") finally st2.close()
+    try st2.execute(s"""set search_path to "$Schema0"""")
+    finally st2.close()
   }
-
 
   private var paused = true
 
@@ -93,11 +95,15 @@ object Tour extends EezoApp {
     val t = Table[Book]
     println(s"  Table[Book].tableName = ${t.tableName}")
     blank()
-    println(f"  ${"column"}%-18s ${"type"}%-14s ${"null"}%-6s ${"pk"}%-4s ${"references"}%-18s checks")
+    println(
+      f"  ${"column"}%-18s ${"type"}%-14s ${"null"}%-6s ${"pk"}%-4s ${"references"}%-18s checks"
+    )
     println("  " + "─" * 84)
     t.columns.foreach { c =>
-      println(f"  ${c.name}%-18s ${c.pgType.render}%-14s ${c.nullable}%-6s ${c.primaryKey}%-4s " +
-        f"${c.references.getOrElse("")}%-18s ${c.checks.mkString(", ")}")
+      println(
+        f"  ${c.name}%-18s ${c.pgType.render}%-14s ${c.nullable}%-6s ${c.primaryKey}%-4s " +
+          f"${c.references.getOrElse("")}%-18s ${c.checks.mkString(", ")}"
+      )
     }
     blank()
     note("Three things to notice, none of which the model mentions:")
@@ -147,7 +153,9 @@ object Tour extends EezoApp {
     rs.close(); ps.close()
 
     rows.foreach { b =>
-      println(f"  ${b.title.value}%-16s published ${b.publishedOn.map(_.toString).getOrElse("(unknown)")}")
+      println(
+        f"  ${b.title.value}%-16s published ${b.publishedOn.map(_.toString).getOrElse("(unknown)")}"
+      )
     }
     blank()
     note("`(unknown)` is a real SQL NULL that came back as `None`, through the same")
@@ -160,12 +168,19 @@ object Tour extends EezoApp {
     note("Everything the model implied is enforced by Postgres, not by application code.")
     blank()
 
-    val books   = Table[Book]
-    val ghost   = Book(Id.gen(), Ref[Author](java.util.UUID.randomUUID()), Title("Ghost"),
-                       None, None, None, "paperback")
+    val books = Table[Book]
+    val ghost = Book(
+      Id.gen(),
+      Ref[Author](java.util.UUID.randomUUID()),
+      Title("Ghost"),
+      None,
+      None,
+      None,
+      "paperback"
+    )
     val dup     = Book.seedBooks.head.copy(id = Id.gen())
-    val tooLong = Book(Id.gen(), Ref.to(Author.herbert.id), Title("x" * 101),
-                       None, None, None, "paperback")
+    val tooLong =
+      Book(Id.gen(), Ref.to(Author.herbert.id), Title("x" * 101), None, None, None, "paperback")
 
     attempt(c, "an author that does not exist", books, ghost)
     attempt(c, "a title that is already taken", books, dup)
@@ -267,13 +282,22 @@ object Tour extends EezoApp {
       if (t.name == "book") t.copy(columns = t.columns.filterNot(_.name == "isbn")) else t
     })
 
-    Freeze.write("initial", Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)), v1, dir)
+    Freeze.write(
+      "initial",
+      Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)),
+      v1,
+      dir
+    )
     ok("0001_initial.sql — the schema as it was")
 
     val pending = Differ.diff(v1, AppSchema.snapshot)
     pending.foreach(ch => println(s"    ${ch.describe}${flag(ch)}"))
-    val file = Freeze.write("add isbn to book", pending.map(Resolution(_, Decision.Accept)),
-                            AppSchema.snapshot, dir)
+    val file = Freeze.write(
+      "add isbn to book",
+      pending.map(Resolution(_, Decision.Accept)),
+      AppSchema.snapshot,
+      dir
+    )
     blank()
     println(Files.readString(file).linesIterator.map("  " + _).mkString("\n"))
     note(s"Both files are in $dir")
@@ -319,7 +343,7 @@ object Tour extends EezoApp {
     blank()
 
     transact { Migrator.status(dir) } match {
-      case Migrator.Status.Ok(_)     => warn("the edit was not noticed — that is a bug")
+      case Migrator.Status.Ok(_)              => warn("the edit was not noticed — that is a bug")
       case Migrator.Status.Tampered(problems) =>
         problems.foreach(p => rejected(p))
         blank()
@@ -419,7 +443,7 @@ object Tour extends EezoApp {
     if (ch.destructive) "   [destructive]" else if (ch.risky) "   [risky]" else ""
 
   private def oneLine(e: Throwable): String = {
-    val m = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
+    val m     = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
     val first = m.linesIterator.find(_.trim.nonEmpty).getOrElse(m).trim
     if (first.length > 96) first.take(93) + "..." else first
   }
