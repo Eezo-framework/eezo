@@ -23,9 +23,15 @@ lazy val commonSettings = Seq(
     "-no-indent"
   ),
   libraryDependencies += "io.eezo" %% "eezo-http" % EezoVersion.value,
+  // Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as
+  // eezo's own `System.Logger`, and silences SLF4J's no-provider warning at boot.
+  libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime,
   // eezo needs JDK 25 to run: JEP 491, which removed virtual-thread pinning on `synchronized`,
   // landed in JDK 24, and the server design depends on it.
-  run / fork := true
+  run / fork := true,
+  // JUL's ConsoleHandler writes to stderr, which sbt's default strategy labels [error]; passing
+  // the forked output straight through keeps the boot print unprefixed.
+  run / outputStrategy := Some(OutputStrategy.StdoutOutput)
 )
 
 // Skeleton one: one handwritten route, no database, no derivation.
