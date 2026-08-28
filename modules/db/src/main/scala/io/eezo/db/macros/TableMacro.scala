@@ -18,10 +18,20 @@ object TableMacro {
     if (fields.isEmpty)
       report.errorAndAbort(s"${sym.name} has no fields.", Position.ofMacroExpansion)
 
-    if (!fields.exists(_.name == "id"))
+    val idField = fields.find(_.name == "id").getOrElse {
       report.errorAndAbort(
         s"${sym.name} has no `id` field. Every Eezo table needs one, e.g. `id: Id[${sym.name}]`.",
         Position.ofMacroExpansion
+      )
+    }
+
+    // Checked, not merely suggested: `findById`, `update` and `delete` are typed in terms of
+    // `Id[T]`, and `idOf` below reads this field, so a differently-typed `id` would fail later and
+    // further from the cause.
+    if (!(idField.tpe =:= TypeRepr.of[Id[T]]))
+      report.errorAndAbort(
+        s"`id` must be `Id[${sym.name}]`, but is `${idField.tpe.show}`.",
+        idField.pos
       )
 
     def summonOrFail[A: Type](f: s.FieldInfo): Expr[Column[A]] =
@@ -79,6 +89,8 @@ object TableMacro {
       Apply(Select(New(TypeTree.of[T]), sym.primaryConstructor), args).asExprOf[T]
     }
 
+    def idOfBody(v: Expr[T]): Expr[Id[T]] = Select.unique(v.asTerm, "id").asExprOf[Id[T]]
+
     '{
       new Table[T] {
         def tableName: String                                          = ${ Expr(snake(sym.name)) }
@@ -87,6 +99,7 @@ object TableMacro {
           ${ encodeBody('ps, 'offset, 'value) }
         def decode(rs: ResultSet, offset: Int): T =
           ${ decodeBody('rs, 'offset) }
+        def idOf(value: T): Id[T] = ${ idOfBody('value) }
       }
     }
   }

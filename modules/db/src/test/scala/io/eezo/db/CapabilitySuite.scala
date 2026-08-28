@@ -16,6 +16,9 @@ class CapabilitySuite extends FunSuite {
   def needsTx()(using Tx): Unit = ()
   def needsDb()(using DB): Unit = ()
 
+  /** A model with no `derives Table`. */
+  case class Untabled(id: Id[Untabled], name: String)
+
   test("a write with no scope says what to do") {
     val e = compileErrors("needsTx()")
     assert(e.contains("this writes to the database, which requires a transaction"), e)
@@ -53,6 +56,35 @@ class CapabilitySuite extends FunSuite {
     assert(e.contains("Cannot extend sealed trait TxCap"), e)
   }
 
+  test("a CRUD write outside a scope reports the missing transaction") {
+    val e = compileErrors(
+      "Table[io.eezo.db.support.PublishingHouse].delete(Id.gen[io.eezo.db.support.PublishingHouse]())"
+    )
+    assert(e.contains("this writes to the database, which requires a transaction"), e)
+  }
+
+  test("a CRUD write inside a read scope reports the same thing") {
+    val e = compileErrors(
+      "read { Table[io.eezo.db.support.PublishingHouse].delete(Id.gen[io.eezo.db.support.PublishingHouse]()) }"
+    )
+    assert(e.contains("A `DB` is not enough"), e)
+  }
+
+  test("a model with no `derives Table` says how to add one") {
+    val e = compileErrors("Table[Untabled]")
+    assert(e.contains("No Table instance for"), e)
+    assert(e.contains("derives Table"), e)
+  }
+
+  test("an `id` of the wrong type is refused where it is declared") {
+    val e = compileErrors("case class Bad(id: String, name: String) derives Table")
+    assert(e.contains("`id` must be `Id[Bad]`"), e)
+  }
+
+  test("a model with no `id` at all is refused") {
+    val e = compileErrors("case class Keyless(name: String) derives Table")
+    assert(e.contains("has no `id` field"), e)
+  }
 }
 
 /* The capture-level guarantees — a `Tx` or a cursor escaping its block — are NOT here, and cannot
