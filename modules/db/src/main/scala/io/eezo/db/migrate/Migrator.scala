@@ -1,17 +1,25 @@
 package io.eezo.db.migrate
 
+import io.eezo.db.capability.*
+
 import java.nio.file.{Files, Path}
-import java.sql.Connection
 import java.time.Instant
 
 final case class Applied(number: Int, name: String, fingerprint: String, appliedAt: Instant)
 
+/** The migration ledger and the migrations that fill it.
+  *
+  * Every entry point takes a `Tx`, including the reading ones: `applied` ensures the ledger exists
+  * first, and creating a table is a write. Nothing here opens a scope of its own — a caller wraps
+  * the whole run in one `transact`, which is what makes a failed batch roll back including its
+  * ledger rows.
+  */
 object Migrator {
 
   private val Ledger = "eezo_migrations"
 
-  def ensureLedger(c: Connection): Unit = {
-    val st = c.createStatement()
+  def ensureLedger()(using tx: Tx): Unit = {
+    val st = tx.connection.createStatement()
     st.execute(s"""create table if not exists "$Ledger" (
          |  number integer primary key,
          |  name text not null,
@@ -21,9 +29,9 @@ object Migrator {
     st.close()
   }
 
-  def applied(c: Connection): List[Applied] = {
-    ensureLedger(c)
-    val ps = c.prepareStatement(
+  def applied()(using tx: Tx): List[Applied] = {
+    ensureLedger()
+    val ps = tx.connection.prepareStatement(
       s"""select number, name, fingerprint, applied_at from "$Ledger" order by number"""
     )
     val rs  = ps.executeQuery()
@@ -50,9 +58,9 @@ object Migrator {
   }
 
   /** Verifies every on-disk migration, and checks applied ones still match the ledger. */
-  def status(c: Connection, dbDir: Path = Freeze.defaultDbDir): Status = {
+  def status(dbDir: Path = Freeze.defaultDbDir)(using tx: Tx): Status = {
     val onDisk   = Freeze.existing(dbDir)
-    val ledger   = applied(c).map(a => a.number -> a).toMap
+    val ledger   = applied().map(a => a.number -> a).toMap
     val problems = List.newBuilder[String]
     val pending  = List.newBuilder[(Int, String, List[String])]
 
@@ -82,33 +90,30 @@ object Migrator {
     if (p.nonEmpty) Status.Tampered(p) else Status.Ok(pending.result())
   }
 
-  def apply(c: Connection, pending: List[(Int, String, List[String])]): Unit = {
-    ensureLedger(c)
-    val prevAutoCommit = c.getAutoCommit
-    c.setAutoCommit(false)
-    try {
-      pending.foreach { case (n, file, stmts) =>
-        println(s"  applying $file")
-        val st = c.createStatement()
-        stmts.foreach { sql =>
-          println(s"    ${sql.linesIterator.next().take(80)}")
-          st.execute(sql)
-        }
-        st.close()
-
-        val name = file.dropWhile(_.isDigit).stripPrefix("_").stripSuffix(".sql")
-        val ps   = c.prepareStatement(
-          s"""insert into "$Ledger" (number, name, fingerprint) values (?, ?, ?)"""
-        )
-        ps.setInt(1, n)
-        ps.setString(2, name)
-        ps.setString(3, Migration.fingerprint(stmts))
-        ps.execute()
-        ps.close()
+  /** Applies a batch. The transaction is the caller's: DESIGN §8.13 — this used to save and restore
+    * autocommit, commit and roll back for itself, which is exactly the work `transact` does.
+    */
+  def apply(pending: List[(Int, String, List[String])])(using tx: Tx): Unit = {
+    val c = tx.connection
+    ensureLedger()
+    pending.foreach { case (n, file, stmts) =>
+      println(s"  applying $file")
+      val st = c.createStatement()
+      stmts.foreach { sql =>
+        println(s"    ${sql.linesIterator.next().take(80)}")
+        st.execute(sql)
       }
-      c.commit()
-    } catch {
-      case e: Throwable => c.rollback(); throw e
-    } finally c.setAutoCommit(prevAutoCommit)
+      st.close()
+
+      val name = file.dropWhile(_.isDigit).stripPrefix("_").stripSuffix(".sql")
+      val ps   = c.prepareStatement(
+        s"""insert into "$Ledger" (number, name, fingerprint) values (?, ?, ?)"""
+      )
+      ps.setInt(1, n)
+      ps.setString(2, name)
+      ps.setString(3, Migration.fingerprint(stmts))
+      ps.execute()
+      ps.close()
+    }
   }
 }

@@ -2,6 +2,7 @@ package io.eezo.db
 
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
+import io.eezo.db.Scopes.*
 import io.eezo.db.support.*
 import io.eezo.db.support.Snaps.*
 
@@ -27,7 +28,7 @@ import scala.util.control.NonFatal
   * Never make one of these pass by weakening its assertion. If an item is abandoned, delete the
   * test and say so in the backlog.
   */
-class BacklogSuite extends PgSuite {
+class BacklogSuite extends DbSuite {
 
   private val stillOpen = scala.collection.mutable.ListBuffer.empty[String]
 
@@ -252,7 +253,7 @@ class BacklogSuite extends PgSuite {
     val stmts = List("""create table "other" ("id" uuid primary key)""")
     Files.writeString(clash, Migration(1, "other", stmts, Migration.fingerprint(stmts)).render)
 
-    Migrator.status(db, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Tampered(problems) =>
         assert(problems.exists(_.contains("0001")), problems.mkString("\n"))
       case Migrator.Status.Ok(pending) =>

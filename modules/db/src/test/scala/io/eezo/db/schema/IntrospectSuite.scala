@@ -1,13 +1,14 @@
 package io.eezo.db.schema
 
 import io.eezo.db.migrate.Migrator
+import io.eezo.db.Scopes.*
 import io.eezo.db.support.*
 
 /** Code → DDL → catalog → snapshot must be the identity, and any hand edit to the database must
   * show up as a difference. Was `Step4` and `DbStatus`, which printed a two-column diff for a human
   * to read.
   */
-class IntrospectSuite extends PgSuite {
+class IntrospectSuite extends DbSuite {
 
   test("a schema created from the model introspects back to the model") {
     // DESIGN §1, property 2: code vs. live database is a single `==` on rendered snapshots.
@@ -18,7 +19,7 @@ class IntrospectSuite extends PgSuite {
 
   test("the migration ledger is not part of the schema") {
     create(Library)
-    Migrator.ensureLedger(db)
+    transact { Migrator.ensureLedger() }
     assert(!live().tables.map(_.name).contains("eezo_migrations"))
     assertEquals(Differ.diff(live(), Library.snapshot), Nil)
   }

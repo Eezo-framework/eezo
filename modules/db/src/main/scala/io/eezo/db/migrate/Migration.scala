@@ -33,7 +33,8 @@ object Migration {
     val declared = content.linesIterator.collectFirst { case Header(f) => f }
     val body     = content.linesIterator.filterNot(_.trim.startsWith("--")).mkString("\n")
     val stmts    = body.split(";").map(_.trim).filter(_.nonEmpty).toList
-    // FIXME: naive splitting on ;
+    // Naive: a semicolon inside a string literal or a $$-quoted body splits a statement in two,
+    // and the comment filter above eats a `--` inside a literal. BACKLOG §26.
     declared.map(_ -> stmts)
   }
 

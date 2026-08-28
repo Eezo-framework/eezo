@@ -26,4 +26,9 @@ final class Pool private[eezo] (
   }
 
   private[eezo] def release(c: Connection): Unit = c.close()
+
+  /** Nothing is retained yet, so nothing to release. Here because the lifecycle is the interface a
+    * real pool needs, and `EezoApp` should not learn a new call when one arrives.
+    */
+  private[eezo] def close(): Unit = ()
 }

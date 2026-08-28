@@ -1,6 +1,7 @@
 package io.eezo.db.migrate
 
 import io.eezo.db.schema.*
+import io.eezo.db.Scopes.*
 import io.eezo.db.support.*
 import io.eezo.db.support.Snaps.*
 
@@ -10,7 +11,7 @@ import scala.jdk.CollectionConverters.*
 /** The deploy path: replay committed files, then verify the result against the model. Was `Step6`
   * (freeze) and `Step7` (migrate), which prompted on stdin and called sys.exit.
   */
-class MigrateSuite extends PgSuite {
+class MigrateSuite extends DbSuite {
 
   private var dir: Path = null
 
@@ -28,9 +29,13 @@ class MigrateSuite extends PgSuite {
     Freeze.write(name, Differ.diff(from, to).map(Resolution(_, Decision.Accept)), to, dir)
 
   /** Apply everything pending, failing the test if the integrity check objects. */
-  private def migrate(): Int = Migrator.status(db, dir) match {
-    case Migrator.Status.Tampered(problems) => fail(problems.mkString("\n"))
-    case Migrator.Status.Ok(pending)        => Migrator.apply(db, pending); pending.size
+  // One transaction for the whole run — status, the batch, and its ledger rows — which is how an
+  // application does it, and what makes a failed batch roll its ledger rows back with it.
+  private def migrate(): Int = transact {
+    Migrator.status(dir) match {
+      case Migrator.Status.Tampered(problems) => fail(problems.mkString("\n"))
+      case Migrator.Status.Ok(pending)        => Migrator.apply(pending); pending.size
+    }
   }
 
   test("freeze then migrate replays from empty and lands exactly on the model") {
@@ -52,20 +57,20 @@ class MigrateSuite extends PgSuite {
     freeze("add country", v1, v2)
     assertEquals(migrate(), 1)
     assertEquals(Differ.diff(live(), v2), Nil)
-    assertEquals(Migrator.applied(db).map(_.number), List(1, 2))
+    assertEquals(transact { Migrator.applied() }.map(_.number), List(1, 2))
   }
 
   test("nothing is pending after a successful migrate") {
     freeze("initial", SchemaSnap(Nil), Library.snapshot)
     migrate(): Unit
-    assertEquals(Migrator.status(db, dir), Migrator.Status.Ok(Nil))
+    assertEquals(transact { Migrator.status(dir) }, Migrator.Status.Ok(Nil))
   }
 
   test("the ledger records the number, name and fingerprint of what ran") {
     val file = freeze("initial", SchemaSnap(Nil), Library.snapshot)
     migrate(): Unit
     val Right(stmts) = Migration.verify(Files.readString(file)): @unchecked
-    val applied      = Migrator.applied(db)
+    val applied      = transact { Migrator.applied() }
     assertEquals(applied.map(a => (a.number, a.name)), List((1, "initial")))
     assertEquals(applied.head.fingerprint, Migration.fingerprint(stmts))
   }
@@ -75,7 +80,7 @@ class MigrateSuite extends PgSuite {
     val file = freeze("initial", SchemaSnap(Nil), Library.snapshot)
     Files.writeString(file, Files.readString(file).replace(""""author"""", """"writer""""))
 
-    Migrator.status(db, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Ok(_)              => fail("an edited migration was accepted")
       case Migrator.Status.Tampered(problems) =>
         assert(problems.exists(_.contains("fingerprint")), problems.mkString("\n"))
@@ -90,7 +95,7 @@ class MigrateSuite extends PgSuite {
     val extra = stmts :+ """create table "sneaky" ("id" uuid)"""
     Files.writeString(file, Migration(1, "initial", extra, Migration.fingerprint(extra)).render)
 
-    Migrator.status(db, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Ok(_)              => fail("a rewritten applied migration was accepted")
       case Migrator.Status.Tampered(problems) =>
         assert(
@@ -104,7 +109,7 @@ class MigrateSuite extends PgSuite {
     val file = freeze("initial", SchemaSnap(Nil), Library.snapshot)
     migrate(): Unit
     Files.delete(file)
-    Migrator.status(db, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Ok(_)              => fail("a missing migration was not reported")
       case Migrator.Status.Tampered(problems) =>
         assert(problems.exists(_.contains("no file exists on disk")), problems.mkString("\n"))
@@ -114,14 +119,18 @@ class MigrateSuite extends PgSuite {
   test("a failing migration rolls back every statement in its batch") {
     // DESIGN §3.7: Postgres has transactional DDL and Migrator leans on it deliberately.
     val stmts = List("""create table "t1" ("id" uuid primary key)""", "this is not valid sql")
-    intercept[java.sql.SQLException](Migrator.apply(db, List((1, "0001_bad.sql", stmts))))
+    intercept[java.sql.SQLException](transact { Migrator.apply(List((1, "0001_bad.sql", stmts))) })
     assertEquals(live().tables.map(_.name), Nil, "the first statement was not rolled back")
-    assertEquals(Migrator.applied(db), Nil, "a failed migration must not enter the ledger")
+    assertEquals(
+      transact { Migrator.applied() },
+      Nil,
+      "a failed migration must not enter the ledger"
+    )
   }
 
   test("a migration that fails leaves the database migratable afterwards") {
     val bad = List("""create table "t1" ("id" uuid primary key)""", "nonsense")
-    intercept[java.sql.SQLException](Migrator.apply(db, List((1, "0001_bad.sql", bad))))
+    intercept[java.sql.SQLException](transact { Migrator.apply(List((1, "0001_bad.sql", bad))) })
     freeze("initial", SchemaSnap(Nil), Library.snapshot)
     assertEquals(migrate(), 1)
     assertEquals(Differ.diff(live(), Library.snapshot), Nil)

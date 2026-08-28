@@ -7,7 +7,11 @@ import java.sql.Connection
   * Users never name this type. It is built once at the edge — `EezoApp` in production, the testkit
   * in tests — installed, and reached only through `transact` and `read`.
   */
-final class Database private[eezo] (private[eezo] val pool: Pool)
+final class Database private[eezo] (private[eezo] val pool: Pool) {
+
+  /** Releases what the pool holds. Called by `EezoApp` after `boot` returns. */
+  def close(): Unit = pool.close()
+}
 
 object Database {
 

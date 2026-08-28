@@ -1,6 +1,7 @@
 package example
 
 import io.eezo.db.*
+import io.eezo.db.Scopes.*
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
 
@@ -18,11 +19,17 @@ import scala.util.control.NonFatal
   *   sbt "example/run"                # step through it
   *   sbt "example/run --no-pause"     # run it start to finish
   */
-object Tour {
+object Tour extends EezoApp {
+  // One source of truth for connection settings: `Db` already reads these, and `Db.withConnection`
+  // is still how the chapters that demonstrate raw JDBC get a connection.
+  override def databaseUrl: String      = Db.url
+  override def databaseUser: String     = Db.user
+  override def databasePassword: String = Db.pass
+
 
   private var paused = true
 
-  def main(args: Array[String]): Unit = {
+  def boot(args: Array[String]): Unit = {
     paused = !args.contains("--no-pause")
     val migrations = Files.createTempDirectory("eezo-tour")
 
@@ -256,13 +263,13 @@ object Tour {
     dropAll(c)
     ok("database emptied")
 
-    Migrator.status(c, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Tampered(p) => p.foreach(warn)
       case Migrator.Status.Ok(pending) =>
         println(s"  ${pending.size} pending migration(s):")
         pending.foreach { case (n, f, s) => println(f"    $n%04d  $f  (${s.size} statements)") }
         pause("Press Enter to apply them")
-        Migrator.apply(c, pending)
+        transact { Migrator.apply(pending) }
         blank()
         DeployCheck.verify(c, AppSchema.snapshot, Schema0) match {
           case Right(_) => ok("replayed from empty and landed exactly on the model")
@@ -283,7 +290,7 @@ object Tour {
     sql("""- create table "author" ...  ->  create table "writer" ...""")
     blank()
 
-    Migrator.status(c, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Ok(_)     => warn("the edit was not noticed — that is a bug")
       case Migrator.Status.Tampered(problems) =>
         problems.foreach(p => rejected(p))
@@ -296,20 +303,21 @@ object Tour {
 
   private def ch11_rollback(c: Connection): Unit = {
     chapter(11, "A failed migration leaves nothing behind")
-    note("Postgres has transactional DDL, and the migrator wraps the whole batch — statements")
-    note("and ledger rows together. Here is a migration whose second statement is nonsense:")
+    note("Postgres has transactional DDL, and the whole batch runs in one `transact` — statements")
+    note("and ledger rows together. The migrator does no transaction bookkeeping of its own; it")
+    note("takes a `Tx` and writes. Here is a migration whose second statement is nonsense:")
     blank()
     val stmts = List("""create table "halfway" ("id" uuid primary key)""", "this is not sql")
     stmts.foreach(sql)
     pause("Press Enter to apply it")
-    try Migrator.apply(c, List((99, "0099_broken.sql", stmts)))
+    try transact { Migrator.apply(List((99, "0099_broken.sql", stmts))) }
     catch { case NonFatal(e) => rejected(oneLine(e)) }
     blank()
 
     val tables = snapshotOf(c).tables.map(_.name)
     if (tables.contains("halfway")) warn("`halfway` exists — the rollback did not happen")
     else ok("`halfway` does not exist: the first statement was rolled back with the second")
-    if (Migrator.applied(c).exists(_.number == 99)) warn("it entered the ledger anyway")
+    if (transact { Migrator.applied() }.exists(_.number == 99)) warn("it entered the ledger anyway")
     else ok("nothing entered the migration ledger")
     pause()
   }
