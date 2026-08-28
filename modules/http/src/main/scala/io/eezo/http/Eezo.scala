@@ -147,6 +147,15 @@ object Eezo {
       )
     }
 
+    Resource.orphaned(config.routes).foreach { orphan =>
+      log.log(
+        System.Logger.Level.WARNING,
+        s"${orphan.pageRoute} is mounted without ${orphan.targetRoute}: the page renders a form " +
+          "whose submit target is not mounted, so submitting it answers 405. Mount " +
+          s"${orphan.target}, or subtract ${orphan.page} as well."
+      )
+    }
+
     if (config.dev) {
       val routes  = config.routes.routes
       val listing =

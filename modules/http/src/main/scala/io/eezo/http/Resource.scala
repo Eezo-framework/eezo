@@ -9,6 +9,20 @@ import io.eezo.core.html.{Attrs, Html, Mod}
 import io.eezo.core.html.Tags.*
 import io.eezo.core.internal.util.snake
 
+/** A mounted form page whose submit target is not mounted, named both ways.
+  *
+  * The role words are what the user edits, in their model's `Actions`; the route strings are what
+  * they see in a browser. Both are in the warning because the defect is read one way and fixed the
+  * other. The model's own name is deliberately absent: a route does not carry it, and putting it
+  * there is #106's three field `Route` again.
+  */
+private[http] final case class Orphan(
+    page: Action,
+    pageRoute: String,
+    target: Action,
+    targetRoute: String
+)
+
 /** The seven HTML CRUD routes a model mounts.
   *
   * `derives Resource` needs a `Mirror`, a [[Form]] and an [[Actions]], and nothing else. `Table[A]`
@@ -32,8 +46,6 @@ trait Resource[A] {
 }
 
 object Resource {
-
-  private val log = System.getLogger("io.eezo.http")
 
   def apply[A](using r: Resource[A]): Resource[A] = r
 
@@ -108,14 +120,6 @@ object Resource {
       shape: Form[A],
       actions: Actions[A]
   ): Resource[A] = {
-
-    orphans(actions).foreach { case (page, target) =>
-      log.log(
-        System.Logger.Level.WARNING,
-        s"$modelName mounts $page without $target: the page renders a form whose submit target is " +
-          s"not mounted, so submitting it answers 405. Mount $target, or subtract $page as well."
-      )
-    }
 
     /** The route name, and the store's bucket key, so the two cannot disagree about which rows
       * belong to which model.
@@ -316,19 +320,53 @@ object Resource {
       body(content*)
     )
 
-  /** Every mounted page whose submit target is not mounted, as the page and the target it posts to.
+  /** Every mounted page whose submit target is not mounted.
     *
-    * #116 settled that this warns at boot through `System.Logger` rather than at generation time,
-    * because deciding it needs `Actions[A]`, a typed instance the sbt plugin does not have. Only
-    * these two pairs qualify: a page is orphaned when targeting a route is its whole purpose, and
-    * omitting a control cannot rescue it, because the control **is** the page. The direction is one
-    * way, so `Create` without `New` is silent: that is a POST target with no derived form, which a
-    * handwritten form is free to post to.
+    * #116 settled the defect and #118 settled the shape: a pure method over the value that holds
+    * the whole picture, logged in one place, `Eezo.start`'s `announce`. The value is the assembled
+    * [[RouteTable]] rather than an [[Actions]], because `Actions[A]` describes one model in
+    * isolation and the 405 is a property of the application. A user who subtracts `Update` and
+    * writes `PUT /posts/:id` by hand under `app/` has mounted the target; decision 18 makes that
+    * the ordinary way to take over one page and keep the rest, and a check reading `Actions[A]`
+    * would warn them to mount what they mounted.
+    *
+    * It lives here rather than beside `overridden` and `shadowed` because `/new` and `/:id/edit`
+    * are conventions this object invented, and [[RouteTable]] knows only methods, patterns and
+    * order.
+    *
+    * Only a **derived** `GET` can be an orphaned page, and any route at all can be its target. A
+    * handwritten `/posts/new` is free to submit anywhere, so reading its intent off its path would
+    * be a guess; a handwritten target is not a guess, because the page's submit URL is fixed by the
+    * same convention that emitted the page. The pair is one way, so a `create` with no `new` is
+    * silent: that is a POST target with no derived form, which a handwritten form may post to.
+    *
+    * The target is named by [[Route.describe]], the key the duplicate and shadow checks already
+    * build, so "is it mounted" is one set lookup and relocation under a prefix moves the page and
+    * its target together.
     */
-  private[http] def orphans[A](actions: Actions[A]): Seq[(Action, Action)] =
-    Seq(Action.Edit -> Action.Update, Action.New -> Action.Create).filter { case (page, target) =>
-      actions.has(page) && !actions.has(target)
-    }
+  private[http] def orphaned(table: RouteTable): Seq[Orphan] = {
+    val mounted = table.routes.map(_.describe).toSet
+
+    table.httpRoutes
+      .filter(route => route.method == Method.GET && route.provenance == Provenance.Derived)
+      .flatMap { route =>
+        val path = route.pattern.render
+
+        // Suffix rather than segment matching: a static segment renders as itself, and these two
+        // paths are emitted a dozen lines above rather than parsed from anything a user wrote.
+        val pair =
+          if (path.endsWith("/new"))
+            Some((Action.New, Action.Create, Method.POST, path.stripSuffix("/new")))
+          else if (path.endsWith("/edit"))
+            Some((Action.Edit, Action.Update, Method.PUT, path.stripSuffix("/edit")))
+          else None
+
+        pair.map { case (page, target, method, targetPath) =>
+          Orphan(page, route.describe, target, s"$method $targetPath")
+        }
+      }
+      .filterNot(orphan => mounted(orphan.targetRoute))
+  }
 
   /** #110's deliberately dumb inflector: `+s`, a consonant before `y` becoming `ies`, and a
     * sibilant taking `es`. No dictionary and no irregular list, because a plural that reads badly

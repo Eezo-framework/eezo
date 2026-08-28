@@ -35,8 +35,38 @@ class ResourceSuite extends munit.FunSuite {
     given Actions[Draft] = Actions.except(Action.Show)
   }
 
+  /** No `Update`, so the edit page it still mounts submits to a route nobody serves. */
+  case class Sketch(id: Id[Sketch], body: String) derives Form, Resource
+
+  object Sketch {
+    given Actions[Sketch] = Actions.except(Action.Update)
+  }
+
+  /** The same defect on the other pair: a blank form with no `create` behind it. */
+  case class Memo(id: Id[Memo], body: String) derives Form, Resource
+
+  object Memo {
+    given Actions[Memo] = Actions.except(Action.Create)
+  }
+
+  /** A `create` with no form page in front of it, which is a legitimate shape. */
+  case class Bulletin(id: Id[Bulletin], body: String) derives Form, Resource
+
+  object Bulletin {
+    given Actions[Bulletin] = Actions.except(Action.New)
+  }
+
+  /** Both form pages, neither target. */
+  case class Stub(id: Id[Stub], body: String) derives Form, Resource
+
+  object Stub {
+    given Actions[Stub] = Actions.only(Action.New, Action.Edit)
+  }
+
   /** Forms, and deliberately does not mount: it has no key. */
   case class Login(email: String, password: String) derives Form
+
+  private val ok: Handler = _ => Response.Ok(io.eezo.core.html.Html.text("ok"))
 
   private def table[A](store: Store)(using r: Resource[A]): RouteTable =
     RouteTable(r.routes(store))
@@ -336,40 +366,69 @@ class ResourceSuite extends munit.FunSuite {
     assert(errors.contains("typed Id[Model]"), errors)
   }
 
-  test("an edit page without an update is orphaned, which is what boot warns about") {
+  // ---------------------------------------------------------------- orphaned pages
+
+  test("an edit page whose update is not mounted is orphaned, which is what boot warns about") {
     assertEquals(
-      Resource.orphans(Actions.except[Widget](Action.Update)),
-      Seq(Action.Edit -> Action.Update)
+      Resource.orphaned(table[Sketch](Store.inMemory())),
+      Seq(Orphan(Action.Edit, "GET /sketches/:id/edit", Action.Update, "PUT /sketches/:id"))
     )
   }
 
-  test("a new page without a create is orphaned the same way") {
+  test("a new page whose create is not mounted is orphaned the same way") {
     assertEquals(
-      Resource.orphans(Actions.except[Widget](Action.Create)),
-      Seq(Action.New -> Action.Create)
+      Resource.orphaned(table[Memo](Store.inMemory())),
+      Seq(Orphan(Action.New, "GET /memos/new", Action.Create, "POST /memos"))
     )
   }
 
-  test("a create without a new page is silent, because the direction is one way") {
-    assertEquals(Resource.orphans(Actions.except[Widget](Action.New)), Seq.empty)
-  }
-
-  test("subtracting a page along with its target leaves nothing orphaned") {
-    assertEquals(
-      Resource.orphans(Actions.except[Widget](Action.Edit, Action.Update)),
-      Seq.empty
-    )
+  test("a create with no new page is silent, because the direction is one way") {
+    assertEquals(Resource.orphaned(table[Bulletin](Store.inMemory())), Seq.empty)
   }
 
   test("all seven, and a read-only subset, are both quiet") {
-    assertEquals(Resource.orphans(Actions.except[Widget]()), Seq.empty)
-    assertEquals(Resource.orphans(Actions.only[Widget](Action.Index, Action.Show)), Seq.empty)
+    assertEquals(Resource.orphaned(table[Widget](Store.inMemory())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Note](Store.inMemory())), Seq.empty)
   }
 
-  test("both pages can be orphaned at once, and each is named") {
+  test("both pages can be orphaned at once, and each names its own target") {
     assertEquals(
-      Resource.orphans(Actions.only[Widget](Action.New, Action.Edit)),
-      Seq(Action.Edit -> Action.Update, Action.New -> Action.Create)
+      Resource.orphaned(table[Stub](Store.inMemory())),
+      Seq(
+        Orphan(Action.New, "GET /stubs/new", Action.Create, "POST /stubs"),
+        Orphan(Action.Edit, "GET /stubs/:id/edit", Action.Update, "PUT /stubs/:id")
+      )
     )
+  }
+
+  test("a handwritten target silences it, because the page has somewhere to submit after all") {
+    val handwritten =
+      Route.Http(Method.PUT, PathPattern.parse("/sketches/:id"), ok)
+
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+
+    assertEquals(Resource.orphaned(mounted), Seq.empty)
+  }
+
+  test("relocating the set under a prefix moves the page and its target together") {
+    val moved = RouteTable(Route.under("/admin")(summon[Resource[Sketch]].routes(Store.inMemory())))
+
+    assertEquals(
+      Resource.orphaned(moved),
+      Seq(
+        Orphan(
+          Action.Edit,
+          "GET /admin/sketches/:id/edit",
+          Action.Update,
+          "PUT /admin/sketches/:id"
+        )
+      )
+    )
+  }
+
+  test("a handwritten form page is never orphaned, since eezo cannot know where it submits") {
+    val page = Route.Http(Method.GET, PathPattern.parse("/drafts/new"), ok)
+
+    assertEquals(Resource.orphaned(RouteTable(Seq(page))), Seq.empty)
   }
 }
