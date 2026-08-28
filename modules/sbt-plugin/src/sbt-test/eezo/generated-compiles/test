@@ -1,0 +1,5 @@
+# One handwritten route and one model that derives `Form` and `Resource`, compiled against a
+# published eezo. `RouteGeneratorSuite` pins what the generator writes and `eezo/generator-cache`
+# pins that it stays put; only this test says the text is a Scala program that eezo can serve.
+> compile
+> assertTableMounts

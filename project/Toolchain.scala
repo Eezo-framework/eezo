@@ -68,6 +68,17 @@ object Toolchain {
     properties.getProperty("sbt.version")
   }
 
+  /** The sbt this repository's own build runs on, read from `project/build.properties`.
+    *
+    * It is the version the scripted tests launch their throwaway builds with. That is deliberately
+    * not `Sbt1Floor`: the floor is what `sbt-eezo` is *compiled* against, and a scripted test
+    * launched at 1.5.8 could not compile a Scala 3.8.4 application, which is what the generated
+    * table has to be compiled as. Reading it here rather than writing `1.12.14` twice keeps it from
+    * drifting away from the launcher's own pin.
+    */
+  def rootSbtVersion(rootBaseDirectory: File): String =
+    sbtVersion(new File(rootBaseDirectory, "project/build.properties"))
+
   /** Fails the build, at load time and with the reason, when the examples build pins a different
     * sbt launcher version than the root build. `sbt.version` is read by the launcher before any
     * Scala code runs, so, unlike `ScalaVersion` and `JdkFloor`, it cannot be carried across through
