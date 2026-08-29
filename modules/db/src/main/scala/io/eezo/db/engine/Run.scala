@@ -9,12 +9,17 @@ import io.eezo.db.capability.*
   * inline method drops that contract and every capture guarantee with it, while still compiling —
   * so the signatures below are load-bearing, and the split is not tidiness.
   *
-  * Visibility is not part of that. `transact` is `inline`, so its body is beta-reduced into the
-  * caller, which may be any user's file; Scala 3 synthesizes inline accessors for members that are
-  * not visible there, so `private[eezo]` is fine. Verified on a clean cross-module build: the
-  * `example` project, which is outside `io.eezo`, compiles against these hops unchanged.
+  * **These must stay public.** `private[eezo]` compiles — Scala 3 synthesizes inline accessors —
+  * and then fails at run time with `NoClassDefFoundError: io/eezo/db/engine`, because the expansion
+  * baked into the caller reaches for the package as a class. Measured both ways on a clean build.
+  *
+  * It is worth knowing how this hid twice. The expansion lives in the *caller's* bytecode, so
+  * changing visibility here only shows up once every caller recompiles; an incremental build keeps
+  * the old expansion and reports whatever the previous setting did. That is also why renaming this
+  * package once appeared to fix it — the rename forced the full recompile, and the name was never
+  * involved.
   */
-private[eezo] object Run {
+object Run {
 
   def tx[A](body: Tx ?-> A): A =
     Scope.enter(ScopeKind.Write) {

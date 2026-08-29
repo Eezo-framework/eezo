@@ -25,7 +25,10 @@ class CapabilitySuite extends FunSuite {
   }
 
   test("a write inside a read says a DB is not enough") {
-    val e = compileErrors("read { needsTx() }")
+    val e = compileErrors("import io.eezo.db.Scopes.*; read { needsTx() }")
+    // Without the guard this passes when `read` does not resolve at all: the `Tx` message carries
+    // "A `DB` is not enough" on its third line, so an unresolved snippet looks like a pass.
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
     assert(e.contains("A `DB` is not enough"), e)
   }
 
@@ -35,23 +38,23 @@ class CapabilitySuite extends FunSuite {
   }
 
   test("a nested transact says to remove it") {
-    val e = compileErrors("transact { transact { needsTx() } }")
+    val e = compileErrors("import io.eezo.db.Scopes.*; transact { transact { needsTx() } }")
     assert(e.contains("already inside a transaction: remove this `transact`"), e)
     assert(e.contains("use `attempt`"), e)
   }
 
   test("a transact inside a read says to move it outward") {
-    val e = compileErrors("read { transact { needsTx() } }")
+    val e = compileErrors("import io.eezo.db.Scopes.*; read { transact { needsTx() } }")
     assert(e.contains("cannot open a transaction inside a `read` scope"), e)
   }
 
   test("a nested read says to remove it") {
-    val e = compileErrors("read { read { needsDb() } }")
+    val e = compileErrors("import io.eezo.db.Scopes.*; read { read { needsDb() } }")
     assert(e.contains("already inside a database scope"), e)
   }
 
   test("a transaction cannot be built by hand") {
-    val e = compileErrors("new TxCap { def connection = ??? }")
+    val e = compileErrors("new io.eezo.db.capability.TxCap { def connection = ??? }")
     assert(e.contains("Cannot extend sealed trait TxCap"), e)
   }
 
@@ -64,8 +67,9 @@ class CapabilitySuite extends FunSuite {
 
   test("a CRUD write inside a read scope reports the same thing") {
     val e = compileErrors(
-      "read { Table[io.eezo.db.support.PublishingHouse].delete(Id.gen[io.eezo.db.support.PublishingHouse]()) }"
+      "import io.eezo.db.Scopes.*; read { Table[io.eezo.db.support.PublishingHouse].delete(Id.gen[io.eezo.db.support.PublishingHouse]()) }"
     )
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
     assert(e.contains("A `DB` is not enough"), e)
   }
 
