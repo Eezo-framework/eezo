@@ -14,7 +14,7 @@ trait Column[A] { self =>
   def put(ps: PreparedStatement, i: Int, a: A): Unit
   def get(rs: ResultSet, i: Int): A
 
-  def imap[B](f: A => B)(g: B => A): Column[B] = new Column[B] {
+  def imap[B](f: A -> B)(g: B -> A): Column[B] = new Column[B] {
     def pgType: PgType                                 = self.pgType
     override def nullable: Boolean                     = self.nullable
     override def checks: List[Check]                   = self.checks
@@ -43,8 +43,8 @@ object Column {
   def apply[A](using c: Column[A]): Column[A] = c
 
   private def base[A](t: PgType)(
-      w: (PreparedStatement, Int, A) => Unit,
-      r: (ResultSet, Int) => A
+      w: (PreparedStatement, Int, A) -> Unit,
+      r: (ResultSet, Int) -> A
   ): Column[A] = new Column[A] {
     def pgType: PgType                                 = t
     def put(ps: PreparedStatement, i: Int, a: A): Unit = w(ps, i, a)

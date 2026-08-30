@@ -1,11 +1,10 @@
 package io.eezo.db.schema
 
-/** FIXME There's a problem here you should notice: checkName derives a constraint name from a hash
-  * of the expression, but Introspect doesn't read constraint names back — it only reads the
-  * expression. So after a DropCheck/AddCheck cycle the names stay consistent only because both
-  * sides compute the same hash. Works, but it's load-bearing coincidence. Alternative is to store
-  * the constraint name in ColumnSnap and let it be significant, like index names. Worth thinking
-  * about; don't change it yet.
+/** Renders every `Change` the differ can emit, and is the only place that renders DDL.
+  *
+  * Constraint names come from a hash of the expression, which holds together only because both
+  * sides of a drop/add cycle compute the same hash — see BACKLOG §27, and §25, which needs the same
+  * decision.
   */
 object Ddl {
 

@@ -1,6 +1,7 @@
 package io.eezo.db.support
 
 import io.eezo.db.{Schema, Table}
+import io.eezo.db.engine.{Database, Installed}
 import io.eezo.db.schema.{Introspect, SchemaSnap}
 
 import munit.FunSuite
@@ -31,6 +32,43 @@ object Pg {
 
   def connect(): Connection =
     DriverManager.getConnection(container.getJdbcUrl, container.getUsername, container.getPassword)
+
+  /** A `Database` for one suite, isolated by Postgres schema.
+    *
+    * The `search_path` is set by the pool's connection-init hook rather than once on a borrowed
+    * connection, because `search_path` is per-connection: set once on one connection, every other
+    * connection the pool hands out would still be on `public` and the suite would silently read the
+    * wrong schema. This is the reason `Pool` takes the hook at all (DESIGN §8.7).
+    */
+  def database(schema: String): Database =
+    Database.connect(
+      container.getJdbcUrl,
+      container.getUsername,
+      container.getPassword,
+      init = c => {
+        val st = c.createStatement()
+        try st.execute(s"""set search_path to "$schema" """): Unit
+        finally st.close()
+      }
+    )
+}
+
+/** A suite that installs a `Database` on eezo's holder for its duration, isolated by schema.
+  *
+  * One install point is enough because `Test / parallelExecution := false` is set on the `db`
+  * project; see the comment on that setting in `build.sbt`.
+  */
+abstract class DbSuite extends PgSuite {
+  override def beforeAll(): Unit = {
+    super.beforeAll()
+    exec(s"""drop schema if exists "$pgSchema" cascade""", s"""create schema "$pgSchema"""")
+    Installed.install(Pg.database(pgSchema))
+  }
+
+  override def afterAll(): Unit = {
+    Installed.uninstall()
+    super.afterAll()
+  }
 }
 
 /** A suite with a private, empty Postgres schema restored before every test. */

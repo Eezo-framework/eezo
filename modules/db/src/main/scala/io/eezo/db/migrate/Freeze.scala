@@ -8,13 +8,10 @@ import scala.jdk.CollectionConverters.*
 
 final case class Resolution(change: Change, decision: Decision)
 
-/** FIXME Note the invariant: the snapshot is only written when the migration is. If a change is
-  * Skipped, the snapshot still records the new code state — which means the next freeze won't
-  * re-offer it. That's probably wrong, and it's a decision you should make consciously. The
-  * alternative is that skipping means the snapshot keeps the old value for that column, so the
-  * drift persists and gets re-offered forever. I lean toward the second (skip = "not yet", not
-  * "never"), but it makes the snapshot no longer a pure function of the code, which breaks the
-  * verify story. Worth thinking about — for now Skip is rare enough to punt.
+/** What the author chose to do with one drifted change.
+  *
+  * `Skip` currently still records the new state in the snapshot, so a skipped change is not
+  * re-offered — see BACKLOG §28, which is the decision that has not been made.
   */
 enum Decision {
   case Accept

@@ -4,6 +4,7 @@ import io.eezo.core.Id
 
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
+import io.eezo.db.Scopes.*
 import io.eezo.db.support.*
 import io.eezo.db.support.Snaps.*
 
@@ -29,7 +30,7 @@ import scala.util.control.NonFatal
   * Never make one of these pass by weakening its assertion. If an item is abandoned, delete the
   * test and say so in the backlog.
   */
-class BacklogSuite extends PgSuite {
+class BacklogSuite extends DbSuite {
 
   private val stillOpen = scala.collection.mutable.ListBuffer.empty[String]
 
@@ -254,7 +255,7 @@ class BacklogSuite extends PgSuite {
     val stmts = List("""create table "other" ("id" uuid primary key)""")
     Files.writeString(clash, Migration(1, "other", stmts, Migration.fingerprint(stmts)).render)
 
-    Migrator.status(db, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Tampered(problems) =>
         assert(problems.exists(_.contains("0001")), problems.mkString("\n"))
       case Migrator.Status.Ok(pending) =>
@@ -264,12 +265,10 @@ class BacklogSuite extends PgSuite {
 
   // ── 23 ───────────────────────────────────────────────────────────────────────────────
   backlog(23, "schema validation failures are SchemaError, not RuntimeException") {
-    object BadIndex extends Schema {
-      val authors = table[Author]
-      val books   = table[Book].index("no_such_column")
-      val houses  = table[PublishingHouse]
-    }
-    intercept[SchemaError](BadIndex.snapshot)
+    // was an index on a non-existent column; that is a compile error since BACKLOG §7, so this
+    // now triggers the same `sys.error` path through the unregistered-FK check instead
+    object Partial extends Schema { val books = table[Book] }
+    intercept[SchemaError](Partial.snapshot)
   }
 
   // ── 25 ───────────────────────────────────────────────────────────────────────────────

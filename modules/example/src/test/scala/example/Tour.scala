@@ -1,29 +1,65 @@
 package example
 
 import io.eezo.db.*
+import io.eezo.db.Scopes.*
 import io.eezo.core.Id
 import io.eezo.db.migrate.*
 import io.eezo.db.schema.*
 
+import org.testcontainers.containers.PostgreSQLContainer
+import org.testcontainers.utility.DockerImageName
+
 import java.nio.file.{Files, Path}
-import java.sql.Connection
+import java.sql.{Connection, DriverManager}
 import scala.io.StdIn
 import scala.util.control.NonFatal
 
 /** A guided run through everything the `db` module does, against a real Postgres.
   *
-  * Each chapter changes something and then shows what the framework noticed. Nothing here
-  * is simulated: the drift is real ALTERs, the rejections are real constraint violations,
-  * and the migrations are real files on disk that you can open.
+  * Each chapter changes something and then shows what the framework noticed. Nothing here is
+  * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
+  * migrations are real files on disk that you can open.
   *
-  *   sbt "example/run"                # step through it
-  *   sbt "example/run --no-pause"     # run it start to finish
+  * sbt "example/run" # step through it sbt "example/run --no-pause" # run it start to finish
   */
-object Tour {
+object Tour extends EezoApp {
+
+  /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
+    *
+    * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
+    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `--no-pause` to let it run
+    * straight through.
+    */
+  private lazy val container: PostgreSQLContainer[?] = {
+    val c = new PostgreSQLContainer(DockerImageName.parse("postgres:17"))
+    c.start()
+    sys.addShutdownHook(c.stop())
+    c
+  }
+
+  override def databaseUrl: String      = container.getJdbcUrl
+  override def databaseUser: String     = container.getUsername
+  override def databasePassword: String = container.getPassword
+
+  /** The tour works in its own schema, so eezo's connections have to be told about it too —
+    * otherwise the migrator writes to `public` while the drift checks read `eezo_tour`, and a
+    * replay looks like it never happened. DESIGN §8.7.
+    */
+  // `Connection => Unit`, not `->`: this module does not enable capture checking, so eezo's pure
+  // arrow presents here as an ordinary function type (research/capture-checking.md §6.3).
+  override def databaseInit: Connection => Unit = { c =>
+    val st = c.createStatement()
+    try st.execute(s"""create schema if not exists "$Schema0"""")
+    catch { case NonFatal(_) => () }
+    finally st.close()
+    val st2 = c.createStatement()
+    try st2.execute(s"""set search_path to "$Schema0"""")
+    finally st2.close()
+  }
 
   private var paused = true
 
-  def main(args: Array[String]): Unit = {
+  def boot(args: Array[String]): Unit = {
     paused = !args.contains("--no-pause")
     val migrations = Files.createTempDirectory("eezo-tour")
 
@@ -59,11 +95,15 @@ object Tour {
     val t = Table[Book]
     println(s"  Table[Book].tableName = ${t.tableName}")
     blank()
-    println(f"  ${"column"}%-18s ${"type"}%-14s ${"null"}%-6s ${"pk"}%-4s ${"references"}%-18s checks")
+    println(
+      f"  ${"column"}%-18s ${"type"}%-14s ${"null"}%-6s ${"pk"}%-4s ${"references"}%-18s checks"
+    )
     println("  " + "─" * 84)
     t.columns.foreach { c =>
-      println(f"  ${c.name}%-18s ${c.pgType.render}%-14s ${c.nullable}%-6s ${c.primaryKey}%-4s " +
-        f"${c.references.getOrElse("")}%-18s ${c.checks.mkString(", ")}")
+      println(
+        f"  ${c.name}%-18s ${c.pgType.render}%-14s ${c.nullable}%-6s ${c.primaryKey}%-4s " +
+          f"${c.references.getOrElse("")}%-18s ${c.checks.mkString(", ")}"
+      )
     }
     blank()
     note("Three things to notice, none of which the model mentions:")
@@ -113,7 +153,9 @@ object Tour {
     rs.close(); ps.close()
 
     rows.foreach { b =>
-      println(f"  ${b.title.value}%-16s published ${b.publishedOn.map(_.toString).getOrElse("(unknown)")}")
+      println(
+        f"  ${b.title.value}%-16s published ${b.publishedOn.map(_.toString).getOrElse("(unknown)")}"
+      )
     }
     blank()
     note("`(unknown)` is a real SQL NULL that came back as `None`, through the same")
@@ -126,12 +168,19 @@ object Tour {
     note("Everything the model implied is enforced by Postgres, not by application code.")
     blank()
 
-    val books   = Table[Book]
-    val ghost   = Book(Id.gen(), Ref[Author](java.util.UUID.randomUUID()), Title("Ghost"),
-                       None, None, None, "paperback")
+    val books = Table[Book]
+    val ghost = Book(
+      Id.gen(),
+      Ref[Author](java.util.UUID.randomUUID()),
+      Title("Ghost"),
+      None,
+      None,
+      None,
+      "paperback"
+    )
     val dup     = Book.seedBooks.head.copy(id = Id.gen())
-    val tooLong = Book(Id.gen(), Ref.to(Author.herbert.id), Title("x" * 101),
-                       None, None, None, "paperback")
+    val tooLong =
+      Book(Id.gen(), Ref.to(Author.herbert.id), Title("x" * 101), None, None, None, "paperback")
 
     attempt(c, "an author that does not exist", books, ghost)
     attempt(c, "a title that is already taken", books, dup)
@@ -233,13 +282,22 @@ object Tour {
       if (t.name == "book") t.copy(columns = t.columns.filterNot(_.name == "isbn")) else t
     })
 
-    Freeze.write("initial", Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)), v1, dir)
+    Freeze.write(
+      "initial",
+      Differ.diff(SchemaSnap(Nil), v1).map(Resolution(_, Decision.Accept)),
+      v1,
+      dir
+    )
     ok("0001_initial.sql — the schema as it was")
 
     val pending = Differ.diff(v1, AppSchema.snapshot)
     pending.foreach(ch => println(s"    ${ch.describe}${flag(ch)}"))
-    val file = Freeze.write("add isbn to book", pending.map(Resolution(_, Decision.Accept)),
-                            AppSchema.snapshot, dir)
+    val file = Freeze.write(
+      "add isbn to book",
+      pending.map(Resolution(_, Decision.Accept)),
+      AppSchema.snapshot,
+      dir
+    )
     blank()
     println(Files.readString(file).linesIterator.map("  " + _).mkString("\n"))
     note(s"Both files are in $dir")
@@ -257,13 +315,13 @@ object Tour {
     dropAll(c)
     ok("database emptied")
 
-    Migrator.status(c, dir) match {
+    transact { Migrator.status(dir) } match {
       case Migrator.Status.Tampered(p) => p.foreach(warn)
       case Migrator.Status.Ok(pending) =>
         println(s"  ${pending.size} pending migration(s):")
         pending.foreach { case (n, f, s) => println(f"    $n%04d  $f  (${s.size} statements)") }
         pause("Press Enter to apply them")
-        Migrator.apply(c, pending)
+        transact { Migrator.apply(pending) }
         blank()
         DeployCheck.verify(c, AppSchema.snapshot, Schema0) match {
           case Right(_) => ok("replayed from empty and landed exactly on the model")
@@ -284,8 +342,8 @@ object Tour {
     sql("""- create table "author" ...  ->  create table "writer" ...""")
     blank()
 
-    Migrator.status(c, dir) match {
-      case Migrator.Status.Ok(_)     => warn("the edit was not noticed — that is a bug")
+    transact { Migrator.status(dir) } match {
+      case Migrator.Status.Ok(_)              => warn("the edit was not noticed — that is a bug")
       case Migrator.Status.Tampered(problems) =>
         problems.foreach(p => rejected(p))
         blank()
@@ -297,20 +355,21 @@ object Tour {
 
   private def ch11_rollback(c: Connection): Unit = {
     chapter(11, "A failed migration leaves nothing behind")
-    note("Postgres has transactional DDL, and the migrator wraps the whole batch — statements")
-    note("and ledger rows together. Here is a migration whose second statement is nonsense:")
+    note("Postgres has transactional DDL, and the whole batch runs in one `transact` — statements")
+    note("and ledger rows together. The migrator does no transaction bookkeeping of its own; it")
+    note("takes a `Tx` and writes. Here is a migration whose second statement is nonsense:")
     blank()
     val stmts = List("""create table "halfway" ("id" uuid primary key)""", "this is not sql")
     stmts.foreach(sql)
     pause("Press Enter to apply it")
-    try Migrator.apply(c, List((99, "0099_broken.sql", stmts)))
+    try transact { Migrator.apply(List((99, "0099_broken.sql", stmts))) }
     catch { case NonFatal(e) => rejected(oneLine(e)) }
     blank()
 
     val tables = snapshotOf(c).tables.map(_.name)
     if (tables.contains("halfway")) warn("`halfway` exists — the rollback did not happen")
     else ok("`halfway` does not exist: the first statement was rolled back with the second")
-    if (Migrator.applied(c).exists(_.number == 99)) warn("it entered the ledger anyway")
+    if (transact { Migrator.applied() }.exists(_.number == 99)) warn("it entered the ledger anyway")
     else ok("nothing entered the migration ledger")
     pause()
   }
@@ -321,21 +380,17 @@ object Tour {
   private val Schema0 = "eezo_tour"
 
   private def connect(): Option[Connection] =
-    try Some(Db.connect())
+    try Some(DriverManager.getConnection(databaseUrl, databaseUser, databasePassword))
     catch {
       case NonFatal(e) =>
         println()
-        warn(s"Could not connect to ${Db.url}")
+        warn("Could not start a Postgres container")
         println(s"  ${oneLine(e)}")
         println()
-        note("The tour needs a Postgres. Either start one:")
+        note("The tour starts its own database through testcontainers, which needs a Docker")
+        note("daemon. Check that one is running:")
         blank()
-        sql("docker run -d --name eezo-pg -e POSTGRES_PASSWORD=postgres \\")
-        sql("    -e POSTGRES_DB=eezo -p 5442:5432 postgres:17")
-        blank()
-        note("or point the tour at one you already have:")
-        blank()
-        sql("EEZO_DB_URL=jdbc:postgresql://host:port/db sbt \"example/run\"")
+        sql("docker info")
         println()
         None
     }
@@ -388,7 +443,7 @@ object Tour {
     if (ch.destructive) "   [destructive]" else if (ch.risky) "   [risky]" else ""
 
   private def oneLine(e: Throwable): String = {
-    val m = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
+    val m     = Option(e.getMessage).getOrElse(e.getClass.getSimpleName)
     val first = m.linesIterator.find(_.trim.nonEmpty).getOrElse(m).trim
     if (first.length > 96) first.take(93) + "..." else first
   }

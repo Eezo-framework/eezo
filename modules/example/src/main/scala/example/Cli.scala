@@ -1,13 +1,20 @@
 package example
 
 import io.eezo.db.*
+import io.eezo.db.Scopes.*
 import io.eezo.db.schema.*
 import io.eezo.db.migrate.*
 import scala.io.StdIn
 
-object Cli {
+object Cli extends EezoApp {
 
-  def main(args: Array[String]): Unit = {
+  // One source of truth for connection settings: `Db` already reads these, and `Db.withConnection`
+  // is still how the chapters that demonstrate raw JDBC get a connection.
+  override def databaseUrl: String      = Db.url
+  override def databaseUser: String     = Db.user
+  override def databasePassword: String = Db.pass
+
+  def boot(args: Array[String]): Unit = {
     val cmd  = args.headOption.getOrElse("help")
     val rest = args.drop(1)
     try {
@@ -118,7 +125,7 @@ object Cli {
   }
 
   private def migrate(apply: Boolean): Unit = Db.withConnection { c =>
-    Migrator.status(c) match {
+    transact { Migrator.status() } match {
       case Migrator.Status.Tampered(problems) =>
         problems.foreach(p => println(s"  ✗ $p"))
         throw SchemaError(
@@ -130,7 +137,12 @@ object Cli {
       case Migrator.Status.Ok(pending) =>
         pending.foreach { case (n, f, s) => println(f"  $n%04d  $f  (${s.size} statements)") }
         if (!apply) println("\n--apply to execute")
-        else { println(); Migrator.apply(c, pending); println("\napplied ✓\n"); verifySync(c) }
+        else {
+          println()
+          transact { Migrator.apply(pending) }
+          println("\napplied ✓\n")
+          verifySync(c)
+        }
     }
   }
 

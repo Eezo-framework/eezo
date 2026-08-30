@@ -8,7 +8,7 @@ case class Book(
     id: Id[Book],
     author: Ref[Author],
     title: Title,
-    publishedOn: Option[LocalDate], // TODO maybe add the index here in the type
+    publishedOn: Option[LocalDate],
     isbn: Option[String],
     publishedBy: Option[Ref[PublishingHouse]],
     format: String

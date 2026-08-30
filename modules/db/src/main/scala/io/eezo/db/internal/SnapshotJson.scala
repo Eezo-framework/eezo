@@ -3,7 +3,7 @@ package io.eezo.db.internal
 import io.eezo.db.SchemaError
 import io.eezo.db.schema.{ColumnSnap, IndexSnap, SchemaSnap, TableSnap}
 
-// TODO replace this with a json parsing lib
+// Hand-rolled, and one more thing to be correct about for no gain over a library. BACKLOG §30.
 object SnapshotJson {
   def parse(s: String): SchemaSnap = {
     val p = new P(s)

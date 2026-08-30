@@ -60,9 +60,9 @@ lazy val commonSettings = Seq(
     // this is the syntax the project commits to; `-no-indent` makes it a compile error to drift.
     "-no-indent",
     "-Wunused:all",
-    "-Wvalue-discard"
+    "-Wvalue-discard",
     // The two warnings above are only worth setting if they can fail the build.
-    // "-Werror" // TODO fix back
+    "-Werror"
   ),
   javacOptions ++= Seq("--release", Toolchain.JdkFloor.toString),
   libraryDependencies += munit
@@ -92,6 +92,11 @@ lazy val db = module("db")
   .dependsOn(core)
   .settings(
     libraryDependencies ++= Seq(postgresql, testcontainersPg),
+    // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
+    // a preference. research/capture-checking.md §6.3 measured that a capture-checked library
+    // requires nothing of downstream and gives downstream nothing: the guarantee is real inside
+    // this module and inside any consumer that opts in, and absent, silently, everywhere else.
+    scalacOptions += "-language:experimental.captureChecking",
     // The database suite starts one container and shares it across suites (see
     // `support.Pg`). Forking per suite would start one container per JVM.
     Test / fork              := true,
@@ -196,8 +201,15 @@ lazy val example = project
   .in(file("modules/example"))
   .dependsOn(db)
   .settings(
-    name                         := "eezo-example",
-    Compile / run / mainClass    := Some("example.Tour"),
-    Compile / run / fork         := true,
-    Compile / run / connectInput := true // required for freeze's prompts
+    name := "eezo-example",
+    libraryDependencies += testcontainersPg,
+    Compile / run / mainClass := Some("example.Cli"),
+    Compile / run / fork      := true,
+    // The Tour lives in `src/test` because it starts its own Postgres through testcontainers, and
+    // that is a test-scoped dependency. It is still a program, not a suite:
+    //   sbt "example/Test/runMain example.Tour"            (--no-pause to run straight through)
+    // `connectInput` is what lets its pauses and `freeze`'s prompts read stdin.
+    Test / fork                  := true,
+    Compile / run / connectInput := true,
+    Test / run / connectInput    := true
   )

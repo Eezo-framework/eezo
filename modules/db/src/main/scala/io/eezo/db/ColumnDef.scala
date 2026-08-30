@@ -38,4 +38,40 @@ final case class TableDef(name: String, columns: List[ColumnDef]) {
   }
 
   def selectAll: String = s"select ${columns.map(_.quoted).mkString(", ")} from $quoted"
+
+  /** The primary key column. The `Table` macro refuses a model without an `id`, so this is total in
+    * practice; the throw is for a `TableDef` assembled by hand.
+    */
+  def idColumn: ColumnDef =
+    columns
+      .find(_.primaryKey)
+      .getOrElse(throw new IllegalStateException(s"table $name has no primary key column"))
+
+  def selectById: String = s"$selectAll where ${idColumn.quoted} = ?"
+
+  /** Sets **every** column, including the key, and binds them in declaration order.
+    *
+    * Setting the key to the value it already has is a no-op, and it buys the one thing that
+    * matters: `encode` can be reused exactly as it is. A `set` clause that skipped the key would
+    * need its own column ordering, and that is a second ordering decision to keep in step with
+    * `decode` — the same trap DESIGN §9.4 avoids for the select list. The key is bound once more at
+    * the end, for the `where`.
+    */
+  def updateById: String = {
+    val sets = columns.map(c => s"${c.quoted} = ?").mkString(", ")
+    s"update $quoted set $sets where ${idColumn.quoted} = ?"
+  }
+
+  def deleteById: String = s"delete from $quoted where ${idColumn.quoted} = ?"
+
+  /** Built on `selectAll`, deliberately: the column list is rendered in exactly one place, so the
+    * select list and `decode`'s offsets cannot drift apart (BACKLOG §4, DESIGN §9.4).
+    */
+  def selectWhere(where: String): String = s"$selectAll where $where"
+
+  def countWhere(where: String): String = s"select count(*) from $quoted where $where"
+
+  def deleteWhere(where: String): String = s"delete from $quoted where $where"
+
+  def deleteAll: String = s"delete from $quoted"
 }

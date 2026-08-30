@@ -1,8 +1,15 @@
 package io.eezo.db
 
 import java.sql.{PreparedStatement, ResultSet}
+import scala.annotation.implicitNotFound
 import io.eezo.db.macros.TableMacro
+import io.eezo.core.Id
 
+@implicitNotFound(
+  "No Table instance for ${T}.\n" +
+    "Add `derives Table` to its declaration:\n" +
+    "  case class ${T}(id: Id[${T}], ...) derives Table"
+)
 trait Table[T] {
   def tableName: String
   def columns: List[ColumnDef]
@@ -11,9 +18,26 @@ trait Table[T] {
   def encode(ps: PreparedStatement, offset: Int, value: T): Unit
   def decode(rs: ResultSet, offset: Int): T
 
-  final def tableDef: TableDef   = TableDef(tableName, columns)
-  final def insertSql: String    = tableDef.insert
-  final def selectAllSql: String = tableDef.selectAll
+  /** Typed references to this table's columns, for indexes and for the query DSL.
+    *
+    * Emitted by the macro in declaration order, which is the order `NamedTuple.From[T]` uses, so a
+    * label always names the column beside it.
+    */
+  def cols: ColsOf[T]
+
+  /** The row's primary key, read from the mandatory `id` field. Emitted by the macro, because only
+    * it knows the field exists — the trait cannot express "has an `id`".
+    */
+  def idOf(value: T): Id[T]
+
+  // `lazy val`, not `def`: these are fixed per table, and a query should not rebuild its own
+  // prefix — only the `where`/`order by`/`limit` tail varies (DESIGN §9.3).
+  final lazy val tableDef: TableDef    = TableDef(tableName, columns)
+  final lazy val insertSql: String     = tableDef.insert
+  final lazy val selectAllSql: String  = tableDef.selectAll
+  final lazy val selectByIdSql: String = tableDef.selectById
+  final lazy val updateByIdSql: String = tableDef.updateById
+  final lazy val deleteByIdSql: String = tableDef.deleteById
 }
 
 object Table {

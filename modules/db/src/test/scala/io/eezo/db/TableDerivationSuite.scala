@@ -81,14 +81,11 @@ class TableDerivationSuite extends FunSuite {
 /** Cross-table validation, which happens when a `Schema`'s snapshot is first forced. */
 class SchemaValidationSuite extends FunSuite {
 
-  test("an index on a column that doesn't exist is rejected") {
-    object BadIndex extends Schema {
-      val authors = table[Author]
-      val books   = table[Book].index("no_such_column")
-      val houses  = table[PublishingHouse]
-    }
-    val e = intercept[RuntimeException](BadIndex.snapshot)
-    assert(e.getMessage.contains("no_such_column"), e.getMessage)
+  test("an index on a column that doesn't exist no longer compiles") {
+    // BACKLOG §7's first payoff. This used to be a `SchemaError` thrown when the schema was first
+    // forced — a runtime failure for a typo the compiler can see.
+    val e = compileErrors("Library.books.index(_.no_such_column)")
+    assert(e.contains("no_such_column is not a member"), e)
   }
 
   test("an FK to an unregistered table is rejected") {
