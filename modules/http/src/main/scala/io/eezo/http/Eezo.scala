@@ -269,7 +269,9 @@ object Eezo {
       callback: Callback
   ): Unit = {
     response.setStatus(value.status)
-    value.headers.foreach { case (name, headerValue) => response.getHeaders.add(name, headerValue) }
+    value.headers.foreach { case (name, headerValue) =>
+      response.getHeaders.add(name, Response.text(headerValue))
+    }
 
     val bytes = value.body match {
       case Body.Bytes(raw) => raw

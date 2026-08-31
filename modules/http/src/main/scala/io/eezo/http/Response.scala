@@ -1,5 +1,7 @@
 package io.eezo.http
 
+import io.eezo.core.html.Url
+
 /** A response body.
   *
   * `Stream` is deliberately absent and reserved: `Html.renderTo` already writes into a builder, so
@@ -22,11 +24,38 @@ enum Body {
   * permits duplicates, deliberately asymmetric with the request's `Map`: writing wants order and
   * repetition, `Set-Cookie` being both, while reading wants keyed lookup.
   */
-final case class Response(status: Int, headers: Seq[(String, String)], body: Body) {
+final case class Response(status: Int, headers: Seq[(String, Url | String)], body: Body) {
 
   /** Appends a header, keeping any header of the same name that is already there. */
   def withHeader(name: String, value: String): Response =
     copy(headers = headers :+ (name -> value))
+
+  /** The first value carried under this name, as it goes on the wire.
+    *
+    * A header value is a [[Url]] or a `String`, and every reader wants the one spelling, so the
+    * flattening lives here rather than at each site that has to ask what a `Location` says.
+    */
+  def header(name: String): Option[String] =
+    headers.collectFirst { case (key, value) if key.equalsIgnoreCase(name) => Response.text(value) }
+
+  /** This response as served from under `prefix`: the mounted URLs in its page and in its headers
+    * take the prefix, and everything else is left as its author wrote it.
+    *
+    * `Route.under` is the only caller. It walks the response rather than telling the handler where
+    * it is mounted, because a handler that had to be told would be a handler every user has to
+    * remember to ask.
+    */
+  private[http] def under(prefix: String): Response =
+    copy(
+      headers = headers.map {
+        case (name, url: Url) => name -> url.under(prefix)
+        case header           => header
+      },
+      body = body match {
+        case Body.Html(page) => Body.Html(page.under(prefix))
+        case other           => other
+      }
+    )
 }
 
 /** Named constructors stop at `Ok` and `Redirect` because those are the only two responses that
@@ -56,8 +85,24 @@ object Response {
   def Redirect(location: String): Response =
     Response(303, Seq("Location" -> location), Body.Empty)
 
+  /** The same 303 for an address that still travels with its mount, which is what a derived write
+    * redirects to. Overloaded rather than widened, so that a `String` location keeps meaning a
+    * finished address and reads as one at the call site.
+    */
+  def Redirect(location: Url): Response =
+    Response(303, Seq("Location" -> location), Body.Empty)
+
   /** Any status at all, including the ones eezo does not model. */
   def status(code: Int): Response = Response(code, Seq.empty, Body.Empty)
+
+  /** A header value as it goes on the wire. An unresolved [[Url.Mounted]] flattens to its bare
+    * payload, matching what the HTML renderer does with one: a response served outside any mount is
+    * a response at no prefix.
+    */
+  private[http] def text(value: Url | String): String = value match {
+    case url: Url      => url.path
+    case plain: String => plain
+  }
 }
 
 /** What a route runs.

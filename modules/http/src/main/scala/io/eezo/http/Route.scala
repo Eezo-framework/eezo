@@ -58,7 +58,13 @@ enum Route {
 
 object Route {
 
-  /** Mounts a set of routes under a prefix.
+  /** Mounts a set of routes under a prefix: the paths they answer on, and the URLs they emit.
+    *
+    * Moving the pattern alone is half a mount. A page whose links were built before the prefix
+    * existed keeps pointing at the unmounted path, so an anchor 404s, a form posts nowhere and a
+    * redirect lands outside the mount. Which URLs move is decided where they are written: a
+    * `Url.Mounted` is the application's own and travels, a `String` and a `Url.Absolute` are
+    * finished addresses and are left exactly as written.
     *
     * A plain function over `Seq[Route]` rather than a parameter on `Resource`, because `Route` is
     * public and that makes relocation free for handwritten routes too. Route transformation is the
@@ -73,15 +79,27 @@ object Route {
     val trimmed = prefix.stripPrefix("/").stripSuffix("/")
 
     def moved(pattern: PathPattern): PathPattern =
-      if (trimmed.isEmpty) pattern else PathPattern.parse(s"/$trimmed${pattern.render}")
+      PathPattern.parse(s"/$trimmed${pattern.render}")
+
+    /** The other half of a mount: a page whose links stayed where the route no longer is is a page
+      * of 404s. The handler is wrapped rather than told its prefix, so that nothing a user writes
+      * has to know it is mounted, and the response comes back still mounted, which is what lets a
+      * second `under` move it again.
+      *
+      * A WebSocket endpoint is not wrapped. It answers with frames rather than a `Response`, and
+      * eezo has no rule for a URL inside one.
+      */
+    def mounting(handler: Handler): Handler = request => handler(request).under(s"/$trimmed")
 
     // The provenance travels with the route: moving a derived resource under `/admin` does not
     // make it something the user wrote, and a handwritten route at the new path still beats it.
-    routes.map {
-      case Http(method, pattern, handler, provenance) =>
-        Http(method, moved(pattern), handler, provenance)
-      case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
-    }
+    if (trimmed.isEmpty) routes
+    else
+      routes.map {
+        case Http(method, pattern, handler, provenance) =>
+          Http(method, moved(pattern), mounting(handler), provenance)
+        case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
+      }
   }
 }
 

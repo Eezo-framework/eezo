@@ -94,8 +94,7 @@ class ResourceSuite extends munit.FunSuite {
     case other           => fail(s"expected an HTML body, got $other")
   }
 
-  private def location(response: Response): String =
-    response.headers.collectFirst { case ("Location", value) => value }.getOrElse("")
+  private def location(response: Response): String = response.header("Location").getOrElse("")
 
   private def widgets(rows: (String, Int)*): (Store, RouteTable, Seq[Widget]) = {
     val store = Store.inMemory()
