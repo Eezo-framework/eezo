@@ -98,3 +98,12 @@ abstract class Schema {
   lazy val dropAll: List[String] =
     validated.reverse.map(s => s"""drop table if exists "${s.table.tableName}" cascade""")
 }
+
+object Schema {
+
+  /** No tables. What an application that has no models yet leaves in place: the CLI dispatch
+    * defaults its `schema` member to this, so `hello`-shaped apps override nothing and the drift
+    * commands answer "in sync" against an empty database instead of failing to compile.
+    */
+  val empty: Schema = new Schema {}
+}

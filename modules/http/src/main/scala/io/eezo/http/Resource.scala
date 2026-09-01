@@ -16,7 +16,7 @@ import io.eezo.core.internal.util.snake
   * other. The model's own name is deliberately absent: a route does not carry it, and putting it
   * there is #106's three field `Route` again.
   */
-private[http] final case class Orphan(
+private[eezo] final case class Orphan(
     page: Action,
     pageRoute: String,
     target: Action,
@@ -372,7 +372,7 @@ object Resource {
     * answers for `/posts/:id`. Relocation under a prefix stays free either way, since
     * [[Route.under]] moves a page and its target by the same prefix.
     */
-  private[http] def orphaned(table: RouteTable): Seq[Orphan] = {
+  private[eezo] def orphaned(table: RouteTable): Seq[Orphan] = {
     import PathPattern.Segment
 
     def isMounted(method: Method, target: PathPattern): Boolean =

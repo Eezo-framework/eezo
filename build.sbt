@@ -113,8 +113,18 @@ lazy val auth = module("auth").dependsOn(core, http, db)
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 
-// `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`.
-lazy val cli = module("cli").dependsOn(core, http, db, live, auth)
+// `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`. Commands are library functions returning
+// values (design/cli.md §4, layer 1); the front-ends live above, in `modules/eezo` and the
+// launcher. `test->test` on `db` is what lets the cli suites extend `DbSuite` and inherit its
+// one-Postgres-per-run testcontainers setup; the fork and parallelism settings below are `db`'s
+// own, for the same reason `db` states on them — one installed `Database` at a time.
+lazy val cli = module("cli")
+  .dependsOn(core, http, db % "compile->compile;test->test", live, auth)
+  .settings(
+    libraryDependencies += testcontainersPg,
+    Test / fork              := true,
+    Test / parallelExecution := false
+  )
 
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross-built for sbt 1 and sbt 2 from one source. See
