@@ -1,5 +1,6 @@
 package example
 
+import io.eezo.EezoApp
 import io.eezo.db.*
 import io.eezo.db.Scopes.*
 import io.eezo.core.Id

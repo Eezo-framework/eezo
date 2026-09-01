@@ -22,7 +22,9 @@ lazy val commonSettings = Seq(
     "-unchecked",
     "-no-indent"
   ),
-  libraryDependencies += "io.eezo" %% "eezo-http" % EezoVersion.value,
+  // The umbrella: `io.eezo.EezoApp` plus everything it dispatches to. One dependency and one
+  // import is the point — see the comment on the `eezo` module in the main build.
+  libraryDependencies += "io.eezo" %% "eezo" % EezoVersion.value,
   // Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as
   // eezo's own `System.Logger`, and silences SLF4J's no-provider warning at boot.
   libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime,

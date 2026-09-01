@@ -126,6 +126,18 @@ lazy val cli = module("cli")
     Test / parallelExecution := false
   )
 
+// The umbrella, and the artifact an application depends on: `"io.eezo" %% "eezo"`. It exists so
+// that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which is what
+// design/objective.md's 30-minute benchmark asks of the first file a user writes. The entry point
+// lives here rather than in a lower module because it is the opposite shape from `core`'s
+// contents: it depends on everything and nothing depends on it, so it goes in the lowest module
+// that sees everything its body names — `Schema` from `db`, `RouteTable` from `http`, the
+// commands from `cli`.
+lazy val eezo = (project in file("modules/eezo"))
+  .dependsOn(cli)
+  .settings(commonSettings)
+  .settings(name := "eezo")
+
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross-built for sbt 1 and sbt 2 from one source. See
 // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md` for why.
@@ -169,13 +181,15 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 // The root has no sources today, but it still carries commonSettings. Without it, any file
 // dropped at the repo root would compile against whatever JVM launched sbt instead of the
 // floor, which is the exact failure issue 38 calls Not negotiable downwards.
-lazy val eezo = (project in file("."))
+lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, cli, sbtEezo)
+  .aggregate(core, http, db, live, auth, testkit, cli, eezo, sbtEezo)
   .settings(commonSettings)
   .settings(
-    name           := "eezo",
+    // The name `eezo` belongs to the published umbrella module above; the root is the unpublished
+    // aggregate.
+    name           := "eezo-root",
     publish / skip := true
   )
 
@@ -209,7 +223,7 @@ addCommandAlias("publishLocalForExample", ";publishLocal;writeLocalVersion")
 // framework's own correctness lives in `db`'s test suite, not here.
 lazy val example = project
   .in(file("modules/example"))
-  .dependsOn(db)
+  .dependsOn(eezo)
   .settings(
     name := "eezo-example",
     libraryDependencies += testcontainersPg,
