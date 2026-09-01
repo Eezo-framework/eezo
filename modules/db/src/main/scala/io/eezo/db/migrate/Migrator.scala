@@ -97,12 +97,11 @@ object Migrator {
     val c = tx.connection
     ensureLedger()
     pending.foreach { case (n, file, stmts) =>
-      println(s"  applying $file")
       val st = c.createStatement()
-      stmts.foreach { sql =>
-        println(s"    ${sql.linesIterator.next().take(80)}")
-        st.execute(sql)
-      }
+      // Silent by design: a library that prints cannot be embedded, and everything a front-end
+      // might narrate — the file, the statements — is already in `pending`, in its hands before
+      // this call. (This replaced two printlns; backlog "Smaller / noted" records the defect.)
+      stmts.foreach(sql => st.execute(sql))
       st.close()
 
       val name = file.dropWhile(_.isDigit).stripPrefix("_").stripSuffix(".sql")
