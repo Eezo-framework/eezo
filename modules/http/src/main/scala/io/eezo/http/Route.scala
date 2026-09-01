@@ -1,5 +1,7 @@
 package io.eezo.http
 
+import io.eezo.core.html.Url
+
 /** Where a route came from, which is all decision 18's precedence rule needs to know.
   *
   * Handwritten is the default, so every site that builds a route directly keeps writing what it
@@ -58,7 +60,13 @@ enum Route {
 
 object Route {
 
-  /** Mounts a set of routes under a prefix.
+  /** Mounts a set of routes under a prefix: the paths they answer on, and the URLs they emit.
+    *
+    * Moving the pattern alone is half a mount. A page whose links were built before the prefix
+    * existed keeps pointing at the unmounted path, so an anchor 404s, a form posts nowhere and a
+    * redirect lands outside the mount. Which URLs move is decided where they are written: a
+    * `Url.Mounted` is the application's own and travels, a `String` and a `Url.Absolute` are
+    * finished addresses and are left exactly as written.
     *
     * A plain function over `Seq[Route]` rather than a parameter on `Resource`, because `Route` is
     * public and that makes relocation free for handwritten routes too. Route transformation is the
@@ -67,21 +75,37 @@ object Route {
     *
     * The prefix is normalised rather than validated, since `/admin`, `admin` and `/admin/` are one
     * intention written three ways, and rebuilding through `PathPattern.parse` is what keeps the
-    * moved pattern under the same parse-time validation as the original.
+    * moved pattern under the same parse-time validation as the original. `Url.normalise` does that
+    * normalising rather than a trim written here, because the prefix reaches the emitted URLs
+    * through `Url` anyway: two spellings of one rule are two rules waiting to disagree, and a path
+    * a route answers on that disagrees with the path its links point at is the bug this whole
+    * function exists to prevent. `/` is the identity prefix, and an empty string spells it too.
     */
   def under(prefix: String)(routes: Seq[Route]): Seq[Route] = {
-    val trimmed = prefix.stripPrefix("/").stripSuffix("/")
+    val mount = Url.normalise(prefix)
 
     def moved(pattern: PathPattern): PathPattern =
-      if (trimmed.isEmpty) pattern else PathPattern.parse(s"/$trimmed${pattern.render}")
+      PathPattern.parse(s"$mount${pattern.render}")
+
+    /** The other half of a mount: a page whose links stayed where the route no longer is is a page
+      * of 404s. The handler is wrapped rather than told its prefix, so that nothing a user writes
+      * has to know it is mounted, and the response comes back still mounted, which is what lets a
+      * second `under` move it again.
+      *
+      * A WebSocket endpoint is not wrapped. It answers with frames rather than a `Response`, and
+      * eezo has no rule for a URL inside one.
+      */
+    def mounting(handler: Handler): Handler = request => handler(request).under(mount)
 
     // The provenance travels with the route: moving a derived resource under `/admin` does not
     // make it something the user wrote, and a handwritten route at the new path still beats it.
-    routes.map {
-      case Http(method, pattern, handler, provenance) =>
-        Http(method, moved(pattern), handler, provenance)
-      case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
-    }
+    if (mount == "/") routes
+    else
+      routes.map {
+        case Http(method, pattern, handler, provenance) =>
+          Http(method, moved(pattern), mounting(handler), provenance)
+        case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
+      }
   }
 }
 

@@ -72,18 +72,38 @@ object Tag {
       }
 }
 
-/** An attribute name, waiting for its value. */
-final class AttrName(val name: String) {
+/** An attribute name, waiting for its value.
+  *
+  * `sealed` rather than `final` so that [[UrlAttrName]] can add the one arm the url bearing names
+  * need, and no view file can invent a fourth kind of attribute name from outside this file.
+  */
+sealed class AttrName(val name: String) {
 
-  def :=(value: String): Attr = Attr(name, Some(value))
+  def :=(value: String): Attr = Attr(name, Some(AttrValue.Literal(value)))
 
-  def :=(value: Int): Attr = Attr(name, Some(value.toString))
+  def :=(value: Int): Attr = Attr(name, Some(AttrValue.Literal(value.toString)))
 
   /** A present attribute *is* the truth, so `true` renders the bare name and `false` renders
     * nothing at all. The `Iterable` arm of [[Mod]] absorbs both, which is why a conditional
     * attribute needs no helper of its own.
     */
   def :=(value: Boolean): Iterable[Attr] = if (value) Seq(Attr(name, None)) else Nil
+}
+
+/** An attribute name whose value is an address: `href`, `action`, `src`.
+  *
+  * Separate from [[AttrName]] because a [[Url]] means something only where a browser will follow
+  * it. Restricting the arm to these three is what makes `Attrs.cls := Url.Mounted("/posts")` a
+  * compile error rather than a class attribute that quietly moves under a mount. The constructor
+  * stays `private[html]` so [[Attrs]] is the one list that decides which names carry a `Url`, and
+  * the constructors of [[Attr]] and [[AttrValue.Link]] are package private for the same reason:
+  * either of them left public would let a call site outside `io.eezo.core.html` pair a name of its
+  * own with an [[AttrValue.Link]], minting one outright or lifting one out of an `href` attribute
+  * it had just built, and so mint a fourth url bearing name that a mount would then rewrite.
+  */
+final class UrlAttrName private[html] (name: String) extends AttrName(name) {
+
+  def :=(value: Url): Attr = Attr(name, Some(AttrValue.Link(value)))
 }
 
 /** Builds a list child's [[Key]]. */

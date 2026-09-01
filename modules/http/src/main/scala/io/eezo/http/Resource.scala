@@ -5,7 +5,7 @@ import scala.compiletime.{constValue, erasedValue, error, summonFrom}
 import scala.deriving.Mirror
 
 import io.eezo.core.Id
-import io.eezo.core.html.{Attrs, Html, Mod}
+import io.eezo.core.html.{Attrs, Html, Mod, Url}
 import io.eezo.core.html.Tags.*
 import io.eezo.core.internal.util.snake
 
@@ -147,10 +147,15 @@ object Resource {
     /** The route name, and the store's bucket key, so the two cannot disagree about which rows
       * belong to which model.
       */
-    val plural     = pluralise(snake(modelName))
-    val collection = s"/$plural"
+    val plural = pluralise(snake(modelName))
 
-    def member(key: Id[A]): String = s"$collection/${key.show}"
+    /** A [[Url.Mounted]] rather than a `String`, so that every link a page renders and every
+      * `Location` a write sets travels with `Route.under`. Derivation has no prefix to bake in;
+      * mounting is what puts one on.
+      */
+    val collection: Url = Url.Mounted(s"/$plural")
+
+    def member(key: Id[A]): Url = collection / key.show
 
     def keyOf(row: A): Id[A] =
       row.asInstanceOf[Product].productElement(keyIndex).asInstanceOf[Id[A]]
@@ -158,7 +163,7 @@ object Resource {
     /** Where a successful write goes. `show` when it is mounted, and the index when it is not,
       * because redirecting to a route nobody mounted is a 404 at the end of a successful save.
       */
-    def afterWrite(key: Id[A]): String =
+    def afterWrite(key: Id[A]): Url =
       if (actions.has(Action.Show)) member(key) else collection
 
     def row(store: Store, request: Request): (Id[A], A) = {
@@ -194,7 +199,7 @@ object Resource {
           plural,
           h1(s"All $plural"),
           listing,
-          when(Action.New)(p(a(Attrs.href := s"$collection/new", s"New $modelName")))
+          when(Action.New)(p(a(Attrs.href := collection / NewPage.segment, s"New $modelName")))
         )
       )
     }
@@ -220,7 +225,7 @@ object Resource {
       * a read before the write would be that same lookup twice with a race in the gap. `create`
       * always writes, so it answers `true`.
       */
-    def submit(request: Request, key: Id[A], heading: String, target: String, verb: Method)(
+    def submit(request: Request, key: Id[A], heading: String, target: Url, verb: Method)(
         persist: A => Boolean
     ): Response =
       shape.parse(request.form, Some(key.show)) match {
@@ -247,7 +252,7 @@ object Resource {
           modelName,
           h1(modelName),
           dl(shape.show(record).flatMap { case (field, value) => Seq(dt(field.label), dd(value)) }),
-          when(Action.Edit)(p(a(Attrs.href := s"${member(key)}/edit", "Edit"))),
+          when(Action.Edit)(p(a(Attrs.href := member(key) / EditPage.segment, "Edit"))),
           when(Action.Destroy)(
             form(
               Attrs.action := member(key),
@@ -320,13 +325,16 @@ object Resource {
           Route.Http(method, PathPattern.parse(path), handler, Provenance.Derived)
 
         Action.values.toSeq.filter(actions.has).map {
-          case Action.Index => route(Method.GET, collection, index(store))
-          case Action.New   => route(Method.GET, s"$collection/${NewPage.segment}", blank)
-          case Action.Show  => route(Method.GET, s"$collection/:id", show(store))
-          case Action.Edit => route(Method.GET, s"$collection/:id/${EditPage.segment}", edit(store))
-          case Action.Create  => route(NewPage.targetMethod, collection, create(store))
-          case Action.Update  => route(EditPage.targetMethod, s"$collection/:id", update(store))
-          case Action.Destroy => route(Method.DELETE, s"$collection/:id", destroy(store))
+          case Action.Index => route(Method.GET, collection.path, index(store))
+          case Action.New   =>
+            route(Method.GET, s"${collection.path}/${NewPage.segment}", blank)
+          case Action.Show => route(Method.GET, s"${collection.path}/:id", show(store))
+          case Action.Edit =>
+            route(Method.GET, s"${collection.path}/:id/${EditPage.segment}", edit(store))
+          case Action.Create => route(NewPage.targetMethod, collection.path, create(store))
+          case Action.Update =>
+            route(EditPage.targetMethod, s"${collection.path}/:id", update(store))
+          case Action.Destroy => route(Method.DELETE, s"${collection.path}/:id", destroy(store))
         }
       }
     }

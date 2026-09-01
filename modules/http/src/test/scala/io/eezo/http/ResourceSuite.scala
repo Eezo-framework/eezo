@@ -1,8 +1,5 @@
 package io.eezo.http
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-
 import io.eezo.core.Id
 
 /** What `derives Resource` mounts, and what each of the seven does when it runs.
@@ -11,9 +8,7 @@ import io.eezo.core.Id
   * the path parameters the handlers read are dispatch's own work, and a test that hand-builds
   * `pathParams` proves the handler and not the route.
   */
-class ResourceSuite extends munit.FunSuite {
-
-  case class Widget(id: Id[Widget], name: String, price: Int) derives Form, Resource
+class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   case class BlogPost(id: Id[BlogPost], title: String) derives Form, Resource
 
@@ -70,32 +65,6 @@ class ResourceSuite extends munit.FunSuite {
 
   private def table[A](store: Store)(using r: Resource[A]): RouteTable =
     RouteTable(r.routes(store))
-
-  private def request(method: Method, path: String, form: (String, String)*): Request = {
-    val body = form
-      .map { case (k, v) =>
-        s"${URLEncoder.encode(k, StandardCharsets.UTF_8)}=${URLEncoder.encode(v, StandardCharsets.UTF_8)}"
-      }
-      .mkString("&")
-    Request(
-      method = method,
-      path = path,
-      query = Map.empty,
-      headers =
-        if (form.isEmpty) Map.empty
-        else Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
-      body = body.getBytes(StandardCharsets.UTF_8),
-      pathParams = Map.empty
-    )
-  }
-
-  private def markup(response: Response): String = response.body match {
-    case Body.Html(node) => node.render
-    case other           => fail(s"expected an HTML body, got $other")
-  }
-
-  private def location(response: Response): String =
-    response.headers.collectFirst { case ("Location", value) => value }.getOrElse("")
 
   private def widgets(rows: (String, Int)*): (Store, RouteTable, Seq[Widget]) = {
     val store = Store.inMemory()
