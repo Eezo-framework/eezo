@@ -61,7 +61,10 @@ object Attrs {
     *
     * A plain [[AttrName]], even when the name spelled here is `href`. A [[Url]] moves under a
     * mount, and which names a mount is allowed to rewrite is a decision this list makes once rather
-    * than one a string handed in at a call site can reopen.
+    * than one a string handed in at a call site can reopen. The package private constructors of
+    * [[Attr]] and [[AttrValue.Link]] are what hold that shut: outside `io.eezo.core.html`, `:=` on
+    * one of the [[UrlAttrName]] values above is the only expression that produces an attribute a
+    * mount rewrites.
     */
   def attr(name: String): AttrName = AttrName(name)
 

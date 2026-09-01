@@ -29,6 +29,13 @@ class UrlSuite extends munit.FunSuite {
     assertEquals(Url.Absolute("/posts").under("/admin"), Url.Absolute("/posts"))
   }
 
+  test("mounting normalises the result, so a root url under a prefix leaves no trailing slash") {
+    assertEquals(Url.Mounted("/").under("/admin"), Url.Mounted("/admin"))
+    assertEquals(Url.Mounted("/").under("/admin").path, "/admin")
+    assertEquals(Url.Mounted("/").under("/"), Url.Mounted("/"))
+    assertEquals(Url.Mounted("/posts").under("//admin//"), Url.Mounted("/admin/posts"))
+  }
+
   test(
     "normalising a mounted url collapses doubled slashes only in the path, not in the query or fragment"
   ) {

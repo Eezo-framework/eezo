@@ -270,7 +270,7 @@ object Eezo {
   ): Unit = {
     response.setStatus(value.status)
     value.headers.foreach { case (name, headerValue) =>
-      response.getHeaders.add(name, Response.text(headerValue))
+      response.getHeaders.add(name, Response.renderUrl(headerValue))
     }
 
     val bytes = value.body match {

@@ -203,13 +203,10 @@ object Form {
           )
         }
 
-        val target = action match {
-          case url: Url      => Attrs.action := url
-          case plain: String => Attrs.action := plain
-        }
-
         form(
-          target,
+          // `Response.asUrl` rather than a match on the union here: a `String` action is a finished
+          // address, which is what `Url.Absolute` means, and one place in the package decides that.
+          Attrs.action := Response.asUrl(action),
           Attrs.method := (if (method == Method.GET) "get" else "post"),
           over,
           rows,

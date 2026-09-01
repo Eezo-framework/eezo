@@ -95,9 +95,11 @@ sealed class AttrName(val name: String) {
   * Separate from [[AttrName]] because a [[Url]] means something only where a browser will follow
   * it. Restricting the arm to these three is what makes `Attrs.cls := Url.Mounted("/posts")` a
   * compile error rather than a class attribute that quietly moves under a mount. The constructor
-  * stays `private[html]` so [[Attrs]] is the one list that decides which names carry a `Url`; a
-  * public constructor would let a call site outside this file mint a fourth url bearing name and
-  * reopen the restriction the scaladoc claims.
+  * stays `private[html]` so [[Attrs]] is the one list that decides which names carry a `Url`, and
+  * the constructors of [[Attr]] and [[AttrValue.Link]] are package private for the same reason:
+  * either of them left public would let a call site outside `io.eezo.core.html` pair a name of its
+  * own with an [[AttrValue.Link]], minting one outright or lifting one out of an `href` attribute
+  * it had just built, and so mint a fourth url bearing name that a mount would then rewrite.
   */
 final class UrlAttrName private[html] (name: String) extends AttrName(name) {
 
