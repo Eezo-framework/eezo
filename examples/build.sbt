@@ -48,3 +48,16 @@ lazy val blog = (project in file("blog"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
   .settings(name := "blog")
+
+// The tour app: a model deriving `Table, Form, Resource`, an `AppSchema`, two handwritten routes,
+// and its own Postgres schema. `todo/README.md` is a guided walk through the whole CLI on it.
+lazy val todo = (project in file("todo"))
+  .enablePlugins(EezoPlugin)
+  .settings(commonSettings)
+  .settings(
+    name := "todo",
+    // `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
+    // forked run to the project dir so the terminal commands and the dev loop write one place.
+    Compile / run / forkOptions := (Compile / run / forkOptions).value
+      .withWorkingDirectory(baseDirectory.value)
+  )
