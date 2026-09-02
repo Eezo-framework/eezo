@@ -241,3 +241,13 @@ drop + sync when you don't care about migrations.)
 | `todo/run help` | no | the list above |
 
 \* serves without Postgres; the dev drift check just logs "skipped, database unreachable".
+
+**The launcher:** `bin/eezo` (at the repo root) wraps all of this for a standalone project:
+`eezo new myapp` scaffolds one against the locally published eezo, and inside it `eezo routes`,
+`eezo status --json`, `eezo dev` forward to the same dispatch these `todo/run ...` commands hit.
+
+**For agents and scripts:** every command takes `--json` — same exit codes, machine-readable
+body, each change carrying its `sql` alongside the `destructive`/`risky` classification. Try
+`todo/run status --json`. `freeze` swaps its prompt for a policy flag: `--accept-all` or
+`--skip-destructive` (bare `--json` implies the latter, so a machine caller never hangs on a
+prompt).

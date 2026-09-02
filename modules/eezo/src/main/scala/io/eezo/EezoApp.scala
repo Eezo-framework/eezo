@@ -1,6 +1,6 @@
 package io.eezo
 
-import io.eezo.cli.{Commands, MigrateResult, Render}
+import io.eezo.cli.{Commands, MigrateResult, Render, RenderJson}
 import io.eezo.db.{DbInit, Schema, SchemaError}
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.engine.Installed
@@ -68,7 +68,8 @@ trait EezoApp extends DbInit {
       try dispatch(args)
       catch {
         case e: SchemaError =>
-          System.err.println(s"\n[eezo] ${e.getMessage}\n")
+          if (args.contains("--json")) System.err.println(RenderJson.error(e.getMessage))
+          else System.err.println(s"\n[eezo] ${e.getMessage}\n")
           1
       }
     // Only a failure exits explicitly: `sys.exit(0)` on the happy path would tear down anything
@@ -76,75 +77,99 @@ trait EezoApp extends DbInit {
     if (code != 0) sys.exit(code)
   }
 
-  private def dispatch(args: Array[String]): Int = args.toList match {
-    case "status" :: _ =>
-      val result = withDatabase(read { Commands.status(schema, databaseSchema) })
-      println(Render.status(result))
-      if (result.inSync) 0 else 1
+  private def dispatch(args: Array[String]): Int = {
+    // `--json` renders the same result values through `RenderJson` instead of `Render` — the
+    // machine-readable half of design/objective.md's dev loop. Exit codes are identical in both
+    // modes, so a caller gates on the code and parses the body.
+    val json = args.contains("--json")
 
-    case "sync" :: rest =>
-      val apply  = rest.contains("--apply")
-      val force  = rest.contains("--force")
-      val result = withDatabase(transact { Commands.sync(schema, apply, force, databaseSchema) })
-      println(Render.sync(result, applyRequested = apply))
-      if (apply && !result.applied && result.changes.nonEmpty) 1 else 0
+    args.toList match {
+      case "status" :: _ =>
+        val result = withDatabase(read { Commands.status(schema, databaseSchema) })
+        println(if (json) RenderJson.status(result) else Render.status(result))
+        if (result.inSync) 0 else 1
 
-    case "freeze" :: rest =>
-      // Everything that is not a flag is the name, joined: `run freeze add isbn to book` names
-      // the migration "add isbn to book" without the caller having to fight sbt's space-splitting
-      // argument parser with quotes.
-      val name = rest.filterNot(_.startsWith("--")).mkString(" ")
-      if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
-      println(Render.freeze(Commands.freeze(schema, name, decide)))
-      0
+      case "sync" :: rest =>
+        val apply  = rest.contains("--apply")
+        val force  = rest.contains("--force")
+        val result = withDatabase(transact { Commands.sync(schema, apply, force, databaseSchema) })
+        println(
+          if (json) RenderJson.sync(result, applyRequested = apply)
+          else Render.sync(result, applyRequested = apply)
+        )
+        if (apply && !result.applied && result.changes.nonEmpty) 1 else 0
 
-    case "migrate" :: rest =>
-      val apply  = rest.contains("--apply")
-      val result = withDatabase(transact {
-        Commands.migrate(schema, apply, dbSchema = databaseSchema)
-      })
-      println(Render.migrate(result))
-      result match {
-        case MigrateResult.Tampered(_)                       => 1
-        case MigrateResult.UpToDate(drift) if drift.nonEmpty => 1
-        case MigrateResult.Applied(_, drift)                 => if (drift.isEmpty) 0 else 1
-        case _                                               => 0
-      }
+      case "freeze" :: rest =>
+        // Everything that is not a flag is the name, joined: `run freeze add isbn to book` names
+        // the migration "add isbn to book" without the caller having to fight sbt's
+        // space-splitting argument parser with quotes.
+        val name = rest.filterNot(_.startsWith("--")).mkString(" ")
+        if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
+        val result = Commands.freeze(schema, name, freezePolicy(rest, json))
+        println(if (json) RenderJson.freeze(result) else Render.freeze(result))
+        0
 
-    case "reset" :: _ =>
-      withDatabase(transact { Commands.reset(schema, databaseSchema) }): Unit
-      println("reset ✓")
-      0
+      case "migrate" :: rest =>
+        val apply  = rest.contains("--apply")
+        val result = withDatabase(transact {
+          Commands.migrate(schema, apply, dbSchema = databaseSchema)
+        })
+        println(if (json) RenderJson.migrate(result) else Render.migrate(result))
+        result match {
+          case MigrateResult.Tampered(_)                       => 1
+          case MigrateResult.UpToDate(drift) if drift.nonEmpty => 1
+          case MigrateResult.Applied(_, drift)                 => if (drift.isEmpty) 0 else 1
+          case _                                               => 0
+        }
 
-    case "drop" :: _ =>
-      withDatabase(transact { Commands.drop(databaseSchema) }): Unit
-      println("dropped ✓")
-      0
+      case "reset" :: _ =>
+        val result = withDatabase(transact { Commands.reset(schema, databaseSchema) })
+        println(if (json) RenderJson.reset(result) else "reset ✓")
+        0
 
-    case "dev" :: _ =>
-      withDatabase(DevServer.serve(schema, databaseSchema, port, routes))
-      0
+      case "drop" :: _ =>
+        val result = withDatabase(transact { Commands.drop(databaseSchema) })
+        println(if (json) RenderJson.drop(result) else "dropped ✓")
+        0
 
-    case "routes" :: _ =>
-      println(Render.routes(Commands.routes(routes)))
-      0
+      case "dev" :: _ =>
+        withDatabase(DevServer.serve(schema, databaseSchema, port, routes))
+        0
 
-    case "dump" :: _ =>
-      println(Commands.dump(schema))
-      0
+      case "routes" :: _ =>
+        val result = Commands.routes(routes)
+        println(if (json) RenderJson.routes(result) else Render.routes(result))
+        0
 
-    case "ddl" :: _ =>
-      Commands.ddl(schema).foreach(s => println(s + ";"))
-      0
+      case "dump" :: _ =>
+        println(if (json) RenderJson.dump(schema.snapshot) else Commands.dump(schema))
+        0
 
-    case "help" :: _ =>
-      println(help)
-      0
+      case "ddl" :: _ =>
+        if (json) println(RenderJson.ddl(Commands.ddl(schema)))
+        else Commands.ddl(schema).foreach(s => println(s + ";"))
+        0
 
-    case _ =>
-      withDatabase(boot(args))
-      0
+      case "help" :: _ =>
+        println(help)
+        0
+
+      case _ =>
+        withDatabase(boot(args))
+        0
+    }
   }
+
+  /** How `freeze` decides without a terminal. `--accept-all` and `--skip-destructive` are the two
+    * canned policies an agent or a script names explicitly; bare `--json` implies
+    * `--skip-destructive`, because a machine caller must never hang on a prompt and skip is the
+    * choice that loses nothing.
+    */
+  private def freezePolicy(flags: List[String], json: Boolean): Change => Decision =
+    if (flags.contains("--accept-all")) _ => Decision.Accept
+    else if (flags.contains("--skip-destructive") || json)
+      change => if (change.destructive) Decision.Skip else Decision.Accept
+    else decide
 
   /** The interactive freeze policy: safe changes pass, destructive ones prompt. An agent or a
     * script gets its own policy through flags in a later stage; the mechanism — `Commands.freeze`'s
@@ -182,6 +207,10 @@ trait EezoApp extends DbInit {
       |  routes            the mounted table, with boot's warnings
       |  dump              print the derived snapshot
       |  ddl               print full DDL
+      |
+      |every command takes --json for machine-readable output (same exit codes);
+      |freeze takes --accept-all / --skip-destructive in place of the prompt
+      |(bare --json implies --skip-destructive)
       |
       |anything else runs the application""".stripMargin
 }
