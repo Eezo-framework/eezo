@@ -24,7 +24,7 @@ object Cli extends EezoApp {
 
   override def schema: Schema = AppSchema
 
-  def boot(args: Array[String]): Unit = {
+  override def boot(args: Array[String]): Unit = {
     val _ = args
     println("eezo example — run a command: status, sync, freeze, migrate, reset, drop, dump, ddl, help")
   }

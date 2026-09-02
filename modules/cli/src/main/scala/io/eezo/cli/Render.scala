@@ -14,8 +14,13 @@ object Render {
   private def flag(c: Change): String =
     if (c.destructive) "  [destructive]" else if (c.risky) "  [risky]" else ""
 
+  /** One change with its classification: the line every listing prints, exposed for front-ends that
+    * lay their own page around it — the dev server's drift page is one.
+    */
+  def change(c: Change): String = s"${c.describe}${flag(c)}"
+
   private def changes(cs: List[Change]): String =
-    cs.map(c => s"  ${c.describe}${flag(c)}").mkString("\n")
+    cs.map(c => s"  ${change(c)}").mkString("\n")
 
   def status(r: StatusResult): String =
     if (r.inSync) "in sync ✓"

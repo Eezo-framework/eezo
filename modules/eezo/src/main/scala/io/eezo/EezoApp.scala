@@ -6,7 +6,7 @@ import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.engine.Installed
 import io.eezo.db.migrate.Decision
 import io.eezo.db.schema.Change
-import io.eezo.http.RouteTable
+import io.eezo.http.{Eezo, RouteTable}
 
 import scala.io.StdIn
 
@@ -16,7 +16,6 @@ import scala.io.StdIn
   * object Main extends EezoApp {
   *   override def schema: Schema     = AppSchema
   *   override def routes: RouteTable = Routes.table()
-  *   def boot(args: Array[String]): Unit = Eezo.run(port = 8080, routes = routes)
   * }
   * }}}
   *
@@ -50,8 +49,19 @@ trait EezoApp extends DbInit {
     */
   def databaseSchema: String = "public"
 
-  /** The application. A `Database` is installed for its whole duration. */
-  def boot(args: Array[String]): Unit
+  /** Where [[boot]]'s default and the `dev` command serve. */
+  def port: Int = 8080
+
+  /** The application. A `Database` is installed for its whole duration.
+    *
+    * The default serves [[routes]] on [[port]], which is what makes the minimal application one
+    * override — `routes` — and nothing else. Override it for anything more: a different server
+    * setup, background work, no server at all.
+    */
+  def boot(args: Array[String]): Unit = {
+    val _ = args
+    Eezo.run(port = port, routes = routes)
+  }
 
   final def main(args: Array[String]): Unit = {
     val code =
@@ -80,10 +90,11 @@ trait EezoApp extends DbInit {
       if (apply && !result.applied && result.changes.nonEmpty) 1 else 0
 
     case "freeze" :: rest =>
-      val name = rest
-        .filterNot(_.startsWith("--"))
-        .headOption
-        .getOrElse(throw SchemaError("freeze needs a name: eezo freeze \"add isbn to book\""))
+      // Everything that is not a flag is the name, joined: `run freeze add isbn to book` names
+      // the migration "add isbn to book" without the caller having to fight sbt's space-splitting
+      // argument parser with quotes.
+      val name = rest.filterNot(_.startsWith("--")).mkString(" ")
+      if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
       println(Render.freeze(Commands.freeze(schema, name, decide)))
       0
 
@@ -108,6 +119,10 @@ trait EezoApp extends DbInit {
     case "drop" :: _ =>
       withDatabase(transact { Commands.drop(databaseSchema) }): Unit
       println("dropped ✓")
+      0
+
+    case "dev" :: _ =>
+      withDatabase(DevServer.serve(schema, databaseSchema, port, routes))
       0
 
     case "routes" :: _ =>
@@ -156,6 +171,7 @@ trait EezoApp extends DbInit {
 
   private def help: String =
     """eezo
+      |  dev               serve with the drift check and the route listing on
       |  status            code vs live database
       |  sync [--apply] [--force]
       |                    apply the code/db diff directly (dev only)

@@ -42,6 +42,35 @@ object EezoPlugin extends AutoPlugin {
     // `FileFunction.cached` below is the generator's own, and it is the one sbt 1 needs anyway.
     @transient val eezoGenerateRoutes: TaskKey[Seq[File]] =
       taskKey[Seq[File]]("Generates io.eezo.generated.Routes from src/main/scala/app/.")
+
+    // The command tasks. Each is one forward to `run <command>`, so `sbt eezoStatus` and
+    // `sbt "run status"` are the same code path — the dispatch in `io.eezo.EezoApp` — and the
+    // plugin stays sugar rather than mechanism (design/cli.md §4). `@transient` for the same
+    // reason as above: these are effectful forwards, and sbt 2 must never satisfy one from a
+    // task cache.
+    @transient val eezoStatus: TaskKey[Unit] =
+      taskKey[Unit]("Forwards to `run status`: code vs live database.")
+
+    @transient val eezoRoutes: TaskKey[Unit] =
+      taskKey[Unit]("Forwards to `run routes`: the mounted table, with boot's warnings.")
+
+    @transient val eezoSync: InputKey[Unit] =
+      inputKey[Unit]("Forwards to `run sync`; pass --apply and --force through.")
+
+    @transient val eezoMigrate: InputKey[Unit] =
+      inputKey[Unit]("Forwards to `run migrate`; pass --apply through.")
+
+    @transient val eezoFreeze: InputKey[Unit] =
+      inputKey[Unit]("Forwards to `run freeze <name>`: writes a migration from the model diff.")
+
+    // The dev loop's two halves. `eezoRestart` is the kernel: kill the app's JVM, fork it again
+    // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev` — the
+    // command a user actually types — is a command alias over it, defined in `globalSettings`.
+    @transient val eezoRestart: TaskKey[Unit] =
+      taskKey[Unit]("(Re)starts the application in dev mode in a background JVM.")
+
+    @transient val eezoStop: TaskKey[Unit] =
+      taskKey[Unit]("Stops the application `eezoRestart` started, if it is running.")
   }
 
   import autoImport._
@@ -57,8 +86,70 @@ object EezoPlugin extends AutoPlugin {
     // so the caching below is this generator's own job; the trigger is what makes `~compile` react
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
-      Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala")
+      Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
+    // The command tasks, project-level rather than `Compile`-scoped so that `sbt eezoStatus`
+    // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
+    // inherits everything the build already decided about running — fork, working directory,
+    // javaOptions — instead of restating it.
+    eezoStatus  := unit((Compile / run).toTask(" status")).value,
+    eezoRoutes  := unit((Compile / run).toTask(" routes")).value,
+    eezoSync    := forward("sync").evaluated,
+    eezoMigrate := forward("migrate").evaluated,
+    eezoFreeze  := forward("freeze").evaluated,
+    // `freeze` prompts on destructive changes, and a forked `run` reads nothing unless the build
+    // forwards stdin. Set here rather than left to every application's build, because a prompt
+    // that hangs on unforwarded input looks like a hang, not like a setting.
+    Compile / run / connectInput := true,
+    // The restart kernel. `fullClasspath` is what makes it compile first: asking for the
+    // classpath compiles the project, so a broken edit fails here and the previous process keeps
+    // serving — the dev loop never kills a working server for a compile error.
+    eezoRestart := {
+      val log  = streams.value.log
+      val main = (Compile / run / mainClass).value
+        .getOrElse(
+          sys.error("eezoRestart: no main class. Define an `object Main extends EezoApp`.")
+        )
+      DevProcess.restart(
+        javaHome = (Compile / run / javaHome).value,
+        jvmOptions = (Compile / run / javaOptions).value,
+        classpath = EezoClasspath.files.value,
+        mainClass = main,
+        args = Seq("dev"),
+        workingDirectory = baseDirectory.value,
+        log = message => log.info(message)
+      )
+    },
+    eezoStop := {
+      val log = streams.value.log
+      DevProcess.stop(quiet = false, log = message => log.info(message))
+    }
   )
+
+  /** `eezoDev`: restart on every edit. The watch is sbt's own — `watchTriggers` above already
+    * covers the source tree, and `eezoRestart`'s classpath dependency pulls the compile — so the
+    * loop is one alias rather than machinery: research/build-reload.md measured resident `~` at
+    * 148–300 ms from save to rebuilt, which is the budget this rides on.
+    */
+  override lazy val globalSettings: Seq[Setting[_]] =
+    addCommandAlias("eezoDev", "~eezoRestart")
+
+  /** `eezoSync --apply` → `run sync --apply`: the task's own arguments, appended after the command.
+    * One helper so the three input tasks cannot drift apart.
+    */
+  private def forward(command: String): Def.Initialize[InputTask[Unit]] =
+    Def.inputTaskDyn {
+      val args = sbt.complete.DefaultParsers.spaceDelimited("<args>").parsed
+      unit((Compile / run).toTask((command +: args).mkString(" ", " ", "")))
+    }
+
+  /** The forward's result, discarded through `dependsOn`.
+    *
+    * On sbt 1 `run` yields `Unit` and this is redundant; on sbt 2 it yields a union type that a
+    * `TaskKey[Unit]` cannot hold. `dependsOn` takes the dependency existentially on both axes, so
+    * sequencing through it instead of `.value` is the one spelling the shared source can use.
+    */
+  private def unit[A](fwd: Def.Initialize[Task[A]]): Def.Initialize[Task[Unit]] =
+    Def.task(()).dependsOn(fwd)
 
   /** A textual fingerprint of `RouteGenerator`'s emitted shape, written into the stamp file
     * `generate` hashes alongside the application's own sources below. It concatenates `render` on
