@@ -46,6 +46,17 @@ class JdbcStoreSuite extends DbSuite {
     assertEquals(store.update(h.id, h), false)
   }
 
+  /** The key locates the row, not the key inside the row. The in-memory half answers a stale key
+    * with `false` and no write, and a seam whose two halves disagree here is not a seam.
+    */
+  test("update reports false for a stale key even when the row's own key is live") {
+    val h = house("Faber")
+    store.insert(h.id, h)
+    val moved = h.copy(name = "Faber & Faber")
+    assertEquals(store.update(Id.gen[PublishingHouse](), moved), false)
+    assertEquals(store.find(h.id), Some(h))
+  }
+
   test("delete removes the row and reports it was there") {
     val h = house("Faber")
     store.insert(h.id, h)

@@ -37,6 +37,16 @@ class CrudSuite extends DbSuite {
     assertEquals(read { Table[PublishingHouse].findById(h.id) }, Some(moved))
   }
 
+  test("updateById matches on the id it is given, not the one inside the row") {
+    val h = house("Faber")
+    transact { Table[PublishingHouse].insert(h) }
+    val moved = h.copy(name = "Faber & Faber")
+    intercept[NoSuchRow] {
+      transact { Table[PublishingHouse].updateById(Id.gen[PublishingHouse](), moved) }
+    }
+    assertEquals(read { Table[PublishingHouse].findById(h.id) }, Some(h))
+  }
+
   test("delete removes the row") {
     val h = house("Faber")
     transact { Table[PublishingHouse].insert(h) }

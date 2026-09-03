@@ -43,7 +43,7 @@ object JdbcStore {
       */
     def all(): Seq[A] =
       read {
-        Query.reading(summon[DB].connection, t.tableDef.selectAllOrderedById, Nil) { rs =>
+        Query.reading(summon[DB].connection, t.selectAllOrderedByIdSql, Nil) { rs =>
           Iterator.continually(rs).takeWhile(_.next()).map(t.decode(_, 1)).toVector
         }
       }
@@ -63,7 +63,7 @@ object JdbcStore {
       */
     def update(key: Id[A], row: A): Boolean =
       transact {
-        try { t.update(row); true }
+        try { t.updateById(key, row); true }
         catch { case _: NoSuchRow => false }
       }
 
