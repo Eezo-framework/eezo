@@ -68,7 +68,7 @@ class EezoPluginSuite extends munit.FunSuite {
       "      handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
       "      io.eezo.http.Resource.routesOf[eezoWitness.Model](\n" +
-      "        io.eezo.http.Store.inMemory[eezoWitness.Model]()\n" +
+      "        io.eezo.http.InMemoryStore[eezoWitness.Model]()\n" +
       "      )\n" +
       "    )\n" +
       "  }\n" +

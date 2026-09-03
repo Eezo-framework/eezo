@@ -1,6 +1,6 @@
 package io.eezo.http
 
-import io.eezo.core.Id
+import io.eezo.core.{Id, Store}
 
 /** The in-memory half of `core`'s `Store[A]` seam.
   *
@@ -9,7 +9,7 @@ import io.eezo.core.Id
   * agree with; one store per model, so no call site names a bucket; and the two writes that report
   * a missing row, which is where the derived 404 comes from.
   */
-class StoreSuite extends munit.FunSuite {
+class InMemoryStoreSuite extends munit.FunSuite {
 
   case class Widget(id: Id[Widget], name: String)
 
@@ -27,12 +27,12 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("a store is a core Store, which is the seam db implements the other half of") {
-    val store: io.eezo.core.Store[Widget] = Store.inMemory[Widget]()
+    val store: Store[Widget] = InMemoryStore[Widget]()
     assertEquals(store.all(), Seq.empty[Widget])
   }
 
   test("all comes back ordered by primary key, not in the order rows were inserted") {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     store.insert(keyAt(3), Widget(keyAt(3), "third"))
     store.insert(keyAt(1), Widget(keyAt(1), "first"))
     store.insert(keyAt(2), Widget(keyAt(2), "second"))
@@ -40,11 +40,11 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("an empty store lists nothing rather than failing") {
-    assertEquals(Store.inMemory[Widget]().all(), Seq.empty[Widget])
+    assertEquals(InMemoryStore[Widget]().all(), Seq.empty[Widget])
   }
 
   test("find locates a row by its key, and says nothing about a key never inserted") {
-    val store      = Store.inMemory[Widget]()
+    val store      = InMemoryStore[Widget]()
     val (key, row) = widget("Bolt")
     store.insert(key, row)
     assertEquals(store.find(key), Some(row))
@@ -52,8 +52,8 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("two models are two stores, so the same key in each holds its own row") {
-    val widgets = Store.inMemory[Widget]()
-    val gadgets = Store.inMemory[Gadget]()
+    val widgets = InMemoryStore[Widget]()
+    val gadgets = InMemoryStore[Gadget]()
     val shared  = Id.gen[Widget]()
     widgets.insert(shared, Widget(shared, "Bolt"))
     gadgets.insert(Id.apply[Gadget](shared.value), Gadget(Id.apply(shared.value), "Cog"))
@@ -62,7 +62,7 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("update replaces the row and keeps its place in the promised order") {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     store.insert(keyAt(1), Widget(keyAt(1), "first"))
     store.insert(keyAt(2), Widget(keyAt(2), "second"))
     assert(store.update(keyAt(1), Widget(keyAt(1), "renamed")))
@@ -70,14 +70,14 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("update reports false for a row that is not there, which is the derived 404") {
-    val store      = Store.inMemory[Widget]()
+    val store      = InMemoryStore[Widget]()
     val (key, row) = widget("Bolt")
     assertEquals(store.update(key, row), false)
     assertEquals(store.all(), Seq.empty[Widget])
   }
 
   test("delete removes the row and reports what it did") {
-    val store      = Store.inMemory[Widget]()
+    val store      = InMemoryStore[Widget]()
     val (key, row) = widget("Bolt")
     store.insert(key, row)
     assert(store.delete(key))
@@ -86,15 +86,15 @@ class StoreSuite extends munit.FunSuite {
   }
 
   test("two stores share nothing, which is what makes a test's table its own") {
-    val one        = Store.inMemory[Widget]()
-    val other      = Store.inMemory[Widget]()
+    val one        = InMemoryStore[Widget]()
+    val other      = InMemoryStore[Widget]()
     val (key, row) = widget("Bolt")
     one.insert(key, row)
     assertEquals(other.all(), Seq.empty[Widget])
   }
 
   test("concurrent inserts all land, and the store is not corrupted by them") {
-    val store   = Store.inMemory[Widget]()
+    val store   = InMemoryStore[Widget]()
     val rows    = (1 to 200).map(n => widget(s"row-$n"))
     val threads = rows.map { case (key, row) =>
       Thread.ofVirtual().start(() => store.insert(key, row))

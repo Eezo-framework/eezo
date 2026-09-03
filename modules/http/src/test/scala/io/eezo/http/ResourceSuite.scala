@@ -67,7 +67,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     RouteTable(r.routes(store))
 
   private def widgets(rows: (String, Int)*): (Store[Widget], RouteTable, Seq[Widget]) = {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     val saved = rows.map { case (name, price) =>
       val row = Widget(Id.gen[Widget](), name, price)
       store.insert(row.id, row)
@@ -80,7 +80,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   test("the seven are mounted, with new emitted before show so that /widgets/new is reachable") {
     assertEquals(
-      summon[Resource[Widget]].routes(Store.inMemory()).map(_.describe),
+      summon[Resource[Widget]].routes(InMemoryStore()).map(_.describe),
       Seq(
         "GET /widgets",
         "GET /widgets/new",
@@ -95,7 +95,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   test("the route name is the class name, snake cased and pluralised") {
     def pathOf[A](using r: Resource[A]): String =
-      r.routes(Store.inMemory()).head.describe.stripPrefix("GET ")
+      r.routes(InMemoryStore()).head.describe.stripPrefix("GET ")
 
     assertEquals(pathOf[BlogPost], "/blog_posts")
     assertEquals(pathOf[Category], "/categories")
@@ -104,20 +104,20 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   test("a subtracted action is not mounted at all") {
     assertEquals(
-      summon[Resource[Note]].routes(Store.inMemory()).map(_.describe),
+      summon[Resource[Note]].routes(InMemoryStore()).map(_.describe),
       Seq("GET /notes", "GET /notes/:id")
     )
   }
 
   test("a subtracted write is a 405 with an accurate Allow, not a 404") {
-    val store   = Store.inMemory[Note]()
+    val store   = InMemoryStore[Note]()
     val failure =
       intercept[MethodNotAllowed](table[Note](store).dispatch(request(Method.DELETE, "/notes/x")))
     assertEquals(failure.allowed, Seq(Method.GET))
   }
 
   test("routesOf mounts nothing for a model with no Resource, and never fails to compile") {
-    assertEquals(Resource.routesOf[Login](Store.inMemory()), Seq.empty[Route])
+    assertEquals(Resource.routesOf[Login](InMemoryStore()), Seq.empty[Route])
   }
 
   // ---------------------------------------------------------------- index
@@ -133,7 +133,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("index lists rows in the store's order, which is by key rather than by insertion") {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     val first = Id.apply[Widget](java.util.UUID.fromString("00000000-0000-4000-8000-000000000000"))
     val last  = Id.apply[Widget](java.util.UUID.fromString("ffffffff-0000-4000-8000-000000000000"))
     store.insert(last, Widget(last, "second", 2))
@@ -152,7 +152,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val (_, routes, _) = widgets()
     assert(markup(routes.dispatch(request(Method.GET, "/widgets"))).contains("""/widgets/new"""))
 
-    val notes = table[Note](Store.inMemory())
+    val notes = table[Note](InMemoryStore())
     assert(!markup(notes.dispatch(request(Method.GET, "/notes"))).contains("/notes/new"))
   }
 
@@ -192,7 +192,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("create falls back to the index when Show is not mounted") {
-    val store    = Store.inMemory[Draft]()
+    val store    = InMemoryStore[Draft]()
     val response = table[Draft](store).dispatch(request(Method.POST, "/drafts", "body" -> "hi"))
     assertEquals(response.status, 303)
     assertEquals(location(response), "/drafts")
@@ -227,7 +227,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     assert(page.contains(s"""href="/widgets/${saved.head.id.show}/edit""""), page)
     assert(page.contains("""<input type="hidden" name="_method" value="DELETE">"""), page)
 
-    val store = Store.inMemory[Note]()
+    val store = InMemoryStore[Note]()
     val note  = Note(Id.gen[Note](), "read me")
     store.insert(note.id, note)
     val readOnly =
@@ -306,8 +306,8 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
   // ---------------------------------------------------------------- the store
 
   test("two models in one table each write to their own store") {
-    val widgets = Store.inMemory[Widget]()
-    val posts   = Store.inMemory[BlogPost]()
+    val widgets = InMemoryStore[Widget]()
+    val posts   = InMemoryStore[BlogPost]()
     val both    = RouteTable(
       Resource.routesOf[Widget](widgets) ++ Resource.routesOf[BlogPost](posts)
     )
@@ -344,30 +344,30 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   test("an edit page whose update is not mounted is orphaned, which is what boot warns about") {
     assertEquals(
-      Resource.orphaned(table[Sketch](Store.inMemory())),
+      Resource.orphaned(table[Sketch](InMemoryStore())),
       Seq(Orphan(Action.Edit, "GET /sketches/:id/edit", Action.Update, "PUT /sketches/:id"))
     )
   }
 
   test("a new page whose create is not mounted is orphaned the same way") {
     assertEquals(
-      Resource.orphaned(table[Memo](Store.inMemory())),
+      Resource.orphaned(table[Memo](InMemoryStore())),
       Seq(Orphan(Action.New, "GET /memos/new", Action.Create, "POST /memos"))
     )
   }
 
   test("a create with no new page is silent, because the direction is one way") {
-    assertEquals(Resource.orphaned(table[Bulletin](Store.inMemory())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Bulletin](InMemoryStore())), Seq.empty)
   }
 
   test("all seven, and a read-only subset, are both quiet") {
-    assertEquals(Resource.orphaned(table[Widget](Store.inMemory())), Seq.empty)
-    assertEquals(Resource.orphaned(table[Note](Store.inMemory())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Widget](InMemoryStore())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Note](InMemoryStore())), Seq.empty)
   }
 
   test("both pages can be orphaned at once, and each names its own target") {
     assertEquals(
-      Resource.orphaned(table[Stub](Store.inMemory())),
+      Resource.orphaned(table[Stub](InMemoryStore())),
       Seq(
         Orphan(Action.New, "GET /stubs/new", Action.Create, "POST /stubs"),
         Orphan(Action.Edit, "GET /stubs/:id/edit", Action.Update, "PUT /stubs/:id")
@@ -379,13 +379,13 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val handwritten =
       Route.Http(Method.PUT, PathPattern.parse("/sketches/:id"), ok)
 
-    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(InMemoryStore()) :+ handwritten)
 
     assertEquals(Resource.orphaned(mounted), Seq.empty)
   }
 
   test("relocating the set under a prefix moves the page and its target together") {
-    val moved = RouteTable(Route.under("/admin")(summon[Resource[Sketch]].routes(Store.inMemory())))
+    val moved = RouteTable(Route.under("/admin")(summon[Resource[Sketch]].routes(InMemoryStore())))
 
     assertEquals(
       Resource.orphaned(moved),
@@ -410,7 +410,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val handwritten =
       Route.Http(Method.PUT, PathPattern.parse("/sketches/:sketchId"), ok)
 
-    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(InMemoryStore()) :+ handwritten)
 
     assertEquals(Resource.orphaned(mounted), Seq.empty)
   }

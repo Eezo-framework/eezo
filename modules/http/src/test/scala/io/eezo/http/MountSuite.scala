@@ -13,7 +13,7 @@ import io.eezo.core.html.Tags.*
 class MountSuite extends munit.FunSuite with ResourceFixtures {
 
   private def mounted(prefixes: String*): (RouteTable, Widget) = {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     val row   = Widget(Id.gen[Widget](), "Bolt", 3)
     store.insert(row.id, row)
     val routes = prefixes.foldRight(summon[Resource[Widget]].routes(store)) { (prefix, inner) =>
@@ -122,7 +122,7 @@ class MountSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("a resource mounted under no prefix renders what it renders today") {
-    val store = Store.inMemory[Widget]()
+    val store = InMemoryStore[Widget]()
     val row   = Widget(Id.gen[Widget](), "Bolt", 3)
     store.insert(row.id, row)
     val plain = RouteTable(summon[Resource[Widget]].routes(store))

@@ -236,7 +236,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
       )
     assert(clue(emitted).contains("// from src/main/scala/models/Widget.scala"))
     assert(clue(emitted).contains("io.eezo.http.Resource.routesOf[models.Widget]("))
-    assert(clue(emitted).contains("io.eezo.http.Store.inMemory[models.Widget]()"))
+    assert(clue(emitted).contains("io.eezo.http.InMemoryStore[models.Widget]()"))
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
   }
 
@@ -248,15 +248,15 @@ class RouteGeneratorSuite extends munit.FunSuite {
         ModelCandidate("models.Gadget", "src/main/scala/models/Gadget.scala")
       )
     )
-    assert(clue(emitted).contains("io.eezo.http.Store.inMemory[models.Widget]()"))
-    assert(clue(emitted).contains("io.eezo.http.Store.inMemory[models.Gadget]()"))
+    assert(clue(emitted).contains("io.eezo.http.InMemoryStore[models.Widget]()"))
+    assert(clue(emitted).contains("io.eezo.http.InMemoryStore[models.Gadget]()"))
     // No shared instance survives: an untyped one is what the bucket parameter existed to index.
     assert(!clue(emitted).contains("val store ="))
   }
 
   test("with no candidates the table mints no store, so nothing unused is emitted") {
     val emitted = RouteGenerator.render(Seq.empty, Seq.empty)
-    assert(!clue(emitted).contains("Store.inMemory"))
+    assert(!clue(emitted).contains("InMemoryStore"))
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
   }
 

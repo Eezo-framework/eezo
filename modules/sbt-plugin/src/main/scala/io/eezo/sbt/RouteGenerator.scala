@@ -166,7 +166,7 @@ object RouteGenerator {
     * ahead of a derived `/posts/:id`; the exact same method and path is settled by the route's
     * provenance instead, so the derived twin is dropped rather than left behind the winner.
     *
-    * `table` is a `def` that mints the stores, so no user ever writes the word `Store`, and each
+    * `table` is a `def` that mints the stores, so no user ever writes `InMemoryStore`, and each
     * call gets stores of its own, which is what makes a test that calls `Routes.table()` start from
     * an empty world. One per model rather than one for the application: `core`'s `Store[A]` is
     * typed by the model it holds, so the name that used to pick a bucket is now the type argument
@@ -199,7 +199,7 @@ object RouteGenerator {
           .map { model =>
             s"""      // from ${model.source}
                |      io.eezo.http.Resource.routesOf[${model.fqn}](
-               |        io.eezo.http.Store.inMemory[${model.fqn}]()
+               |        io.eezo.http.InMemoryStore[${model.fqn}]()
                |      )""".stripMargin
           }
           .mkString(" ++\n")
