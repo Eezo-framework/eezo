@@ -166,10 +166,14 @@ object RouteGenerator {
     * ahead of a derived `/posts/:id`; the exact same method and path is settled by the route's
     * provenance instead, so the derived twin is dropped rather than left behind the winner.
     *
-    * `table` is a `def` that mints the store, so no user ever writes the word `Store`: the type is
-    * a throwaway that a real query runtime replaces within weeks, and a `given Store` line in every
-    * example is a line eezo would teach and then have to un-teach. Each call gets a store of its
-    * own, which is what makes a test that calls `Routes.table()` start from an empty world.
+    * `table` is a `def` that mints the stores, so no user ever writes the word `Store`, and each
+    * call gets stores of its own, which is what makes a test that calls `Routes.table()` start from
+    * an empty world. One per model rather than one for the application: `core`'s `Store[A]` is
+    * typed by the model it holds, so the name that used to pick a bucket is now the type argument
+    * the compiler checks.
+    *
+    * Every model gets the in-memory implementation here. Which models instead get a JDBC store off
+    * their `Table` is the compiler's decision, not the generator's, and it is not emitted yet.
     */
   def render(routes: Seq[HandwrittenRoute], models: Seq[ModelCandidate]): String = {
     val handwritten =
@@ -194,12 +198,13 @@ object RouteGenerator {
           .sortBy(_.fqn)
           .map { model =>
             s"""      // from ${model.source}
-               |      io.eezo.http.Resource.routesOf[${model.fqn}](store)""".stripMargin
+               |      io.eezo.http.Resource.routesOf[${model.fqn}](
+               |        io.eezo.http.Store.inMemory[${model.fqn}]()
+               |      )""".stripMargin
           }
           .mkString(" ++\n")
 
-        s"""    val store = io.eezo.http.Store.inMemory()
-           |    io.eezo.http.RouteTable(
+        s"""    io.eezo.http.RouteTable(
            |      handwritten ++
            |$derived
            |    )""".stripMargin

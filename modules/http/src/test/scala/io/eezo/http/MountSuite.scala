@@ -13,9 +13,9 @@ import io.eezo.core.html.Tags.*
 class MountSuite extends munit.FunSuite with ResourceFixtures {
 
   private def mounted(prefixes: String*): (RouteTable, Widget) = {
-    val store = Store.inMemory()
+    val store = Store.inMemory[Widget]()
     val row   = Widget(Id.gen[Widget](), "Bolt", 3)
-    store.insert("widgets", row.id, row)
+    store.insert(row.id, row)
     val routes = prefixes.foldRight(summon[Resource[Widget]].routes(store)) { (prefix, inner) =>
       Route.under(prefix)(inner)
     }
@@ -122,9 +122,9 @@ class MountSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("a resource mounted under no prefix renders what it renders today") {
-    val store = Store.inMemory()
+    val store = Store.inMemory[Widget]()
     val row   = Widget(Id.gen[Widget](), "Bolt", 3)
-    store.insert("widgets", row.id, row)
+    store.insert(row.id, row)
     val plain = RouteTable(summon[Resource[Widget]].routes(store))
     val page  = markup(plain.dispatch(request(Method.GET, "/widgets")))
     assert(page.contains(s"""href="/widgets/${row.id.show}""""), page)
