@@ -64,11 +64,12 @@ class EezoPluginSuite extends munit.FunSuite {
       "    * not the generator, decides which of them has a `Resource` and mounts the seven.\n" +
       "    */\n" +
       "  def table(): io.eezo.http.RouteTable = {\n" +
-      "    val store = io.eezo.http.Store.inMemory()\n" +
       "    io.eezo.http.RouteTable(\n" +
       "      handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](store)\n" +
+      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](\n" +
+      "        io.eezo.http.Store.inMemory[eezoWitness.Model]()\n" +
+      "      )\n" +
       "    )\n" +
       "  }\n" +
       "}\n"
