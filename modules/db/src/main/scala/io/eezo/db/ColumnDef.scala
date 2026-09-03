@@ -49,6 +49,12 @@ final case class TableDef(name: String, columns: List[ColumnDef]) {
 
   def selectById: String = s"$selectAll where ${idColumn.quoted} = ?"
 
+  /** Every row in primary-key order, which is what `core`'s `Store[A]` promises `all()` returns.
+    * Not `selectAll`'s job: a query with no `order by` is what db's own API hands the query DSL,
+    * and the DSL's caller says its own order.
+    */
+  def selectAllOrderedById: String = s"$selectAll order by ${idColumn.quoted}"
+
   /** Sets **every** column, including the key, and binds them in declaration order.
     *
     * Setting the key to the value it already has is a no-op, and it buys the one thing that
