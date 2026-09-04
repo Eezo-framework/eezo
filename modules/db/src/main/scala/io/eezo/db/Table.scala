@@ -36,8 +36,14 @@ trait Table[T] {
   final lazy val insertSql: String     = tableDef.insert
   final lazy val selectAllSql: String  = tableDef.selectAll
   final lazy val selectByIdSql: String = tableDef.selectById
-  final lazy val updateByIdSql: String = tableDef.updateById
-  final lazy val deleteByIdSql: String = tableDef.deleteById
+
+  /** Every row in primary-key order, which is what `core`'s `Store[A]` promises `all()` returns.
+    * Separate from `selectAllSql`, because db's own `all` is deliberately unordered and the query
+    * DSL's caller states its own order.
+    */
+  final lazy val selectAllOrderedByIdSql: String = tableDef.selectAllOrderedById
+  final lazy val updateByIdSql: String           = tableDef.updateById
+  final lazy val deleteByIdSql: String           = tableDef.deleteById
 }
 
 object Table {

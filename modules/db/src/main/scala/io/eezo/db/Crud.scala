@@ -32,8 +32,16 @@ extension [T](t: Table[T]) {
     * zero-rows check below is the one conflict it can still detect, and it is the branch an
     * optimistic-concurrency check would later reuse without changing this signature.
     */
-  def update(row: T)(using tx: Tx): Unit = {
-    val id = t.idOf(row)
+  def update(row: T)(using tx: Tx): Unit = updateById(t.idOf(row), row)
+
+  /** The row to write found by `id` rather than by the key inside `row`.
+    *
+    * The two coincide for every caller inside db, which is why `update` exists at all. They come
+    * apart at `core`'s `Store[A]`, whose `update(key, row)` promises to replace "the row under
+    * `key`": binding `id` here is what makes a stale key report `false` rather than write to
+    * `row`'s own key and report `true`, which is the answer the in-memory half gives.
+    */
+  def updateById(id: Id[T], row: T)(using tx: Tx): Unit = {
     val ps = tx.connection.prepareStatement(t.updateByIdSql)
     try {
       t.encode(ps, 1, row)
