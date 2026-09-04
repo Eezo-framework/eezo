@@ -60,6 +60,12 @@ class EezoPluginSuite extends munit.FunSuite {
       "    )\n" +
       "  )\n" +
       "\n" +
+      "  /** The store each derived model gets. Nothing on this application's classpath persists a\n" +
+      "    * model, so every one of them lives in memory for as long as the process does.\n" +
+      "    */\n" +
+      "  private inline def storeFor[A]: io.eezo.core.Store[A] =\n" +
+      "    io.eezo.http.InMemoryStore[A]()\n" +
+      "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
       "    * not the generator, decides which of them has a `Resource` and mounts the seven.\n" +
       "    */\n" +
@@ -67,18 +73,28 @@ class EezoPluginSuite extends munit.FunSuite {
       "    io.eezo.http.RouteTable(\n" +
       "      handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](\n" +
-      "        io.eezo.http.InMemoryStore[eezoWitness.Model]()\n" +
-      "      )\n" +
+      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model])\n" +
       "    )\n" +
       "  }\n" +
       "}\n"
 
   test("the witness pins RouteGenerator's current emitted shape") {
-    assertEquals(EezoPlugin.witness, expectedWitness)
+    assertEquals(EezoPlugin.witness(false), expectedWitness)
   }
 
   test("the witness covers the empty-table arm, so render(Seq.empty) alone is not it") {
-    assertNotEquals(EezoPlugin.witness, RouteGenerator.render(Seq.empty, Seq.empty))
+    assertNotEquals(
+      EezoPlugin.witness(false),
+      RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath = false)
+    )
+  }
+
+  test("adding eezo-db to a project changes the witness, so the stale table is regenerated") {
+    // The stamp file `generate` writes is `witness`, and it is one of the hashed inputs of the
+    // cached generator. Adding `eezo-db` to an existing application touches none of that
+    // application's own sources, so if the flag were left out of the fingerprint the cache would
+    // hit, `Routes.scala` would keep its in-memory-only `storeFor`, and every model deriving
+    // `Table` would silently keep losing its rows at shutdown.
+    assertNotEquals(EezoPlugin.witness(true), EezoPlugin.witness(false))
   }
 }

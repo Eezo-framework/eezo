@@ -71,6 +71,14 @@ object EezoPlugin extends AutoPlugin {
     * once that project's own `app/` sources change, because those sources are the other half of the
     * hashed input set below.
     *
+    * `dbOnClasspath` is folded in rather than left to the emitted text alone, and it is the one
+    * input that no source file carries. Adding `eezo-db` to an existing application changes its
+    * `libraryDependencies` and nothing under `src/main/scala`, so without the flag here every
+    * hashed input would be byte-identical, the cache would hit, and the application would keep a
+    * `Routes.scala` whose `storeFor` only ever mints an in-memory store. Every model deriving
+    * `Table` would then go on losing its rows at shutdown, with no error anywhere to say why. The
+    * flag being part of the fingerprint is what turns adding the dependency into a cache miss.
+    *
     * `private[sbt]` reads as a reference to the sbt library, and is not one. A qualifier inside an
     * access modifier is a single identifier, never a dotted path, so `private[io.eezo.sbt]` does
     * not parse and this is the only spelling available. The identifier is resolved against the
@@ -78,10 +86,11 @@ object EezoPlugin extends AutoPlugin {
     * not the root `sbt` that `import sbt._` brings in: visible to `EezoPluginSuite` in the same
     * package, and to nothing a consuming build sees.
     */
-  private[sbt] def witness: String = {
+  private[sbt] def witness(dbOnClasspath: Boolean): String = {
     val samples = WitnessSources.flatMap(RouteGenerator.routeFor)
     val models  = RouteGenerator.modelsIn(WitnessModelSource, WitnessModel)
-    RouteGenerator.render(Seq.empty, Seq.empty) + RouteGenerator.render(samples, models)
+    RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath) +
+      RouteGenerator.render(samples, models, dbOnClasspath)
   }
 
   /** Two files below `app/`, chosen so that `witness` covers more of the generator than `render`'s
@@ -129,8 +138,66 @@ object EezoPlugin extends AutoPlugin {
     // changes, which `writeIfChanged` below absorbs: a rescan that finds nothing new leaves the
     // generated file alone and does not invalidate the compile that follows it.
     val modelInputs = ((sourceRoot ** "*.scala").get().toSet -- appInputs)
-    val stamp       = streams.value.cacheDirectory / "eezo-routes.version"
-    IO.write(stamp, witness)
+
+    // Whether `eezo-db` reaches this project's *compile* classpath, which is what decides whether
+    // the emitted `storeFor` may name `io.eezo.db.Table`. Read off the resolution report rather
+    // than off `libraryDependencies`, because the declared list misses an `eezo-db` that arrives
+    // transitively, through a shared internal module that depends on it. That miss is silent data
+    // loss rather than an error: the generator would emit the in-memory-only arm, every model
+    // deriving `Table` would compile and serve, and its rows would die at shutdown.
+    //
+    // The report has to be narrowed to one configuration, and the configuration is
+    // `compile-internal` rather than `compile`. `UpdateReport.allModules` is not an answer here at
+    // all: it merges every configuration report there is, compile, runtime, test, provided and
+    // optional alike, so it is not what the compiler sees. An application that declares only
+    // `"io.eezo" %% "eezo-testkit" % V % Test` gets `eezo-db_3` in its *test* configuration,
+    // because testkit depends on db at compile scope; `allModules` reports it, this flag reads
+    // true, and the generator writes `io.eezo.db.Table` into `src_managed/main`, which is a
+    // Compile source. The application then fails `Compile / compile` with `value db is not a
+    // member of io.eezo`, in a file its author cannot edit.
+    //
+    // `compile` is not the answer either, and the reason was measured jar for jar against
+    // `Compile / dependencyClasspath` on sbt 1.12.14 and sbt 2.0.6. `ConfigRef("compile")` is NOT
+    // equal to it: it omits `% Provided` dependencies (slf4j-api, in the measurement) and
+    // `% Optional` ones (six upickle modules), every one of which is genuinely on the compile
+    // classpath. Reading it would produce the mirror image of the bug above, and the worse half of
+    // it: `eezo-db` present to the compiler, this flag false, and every model deriving `Table`
+    // silently handed an in-memory store that loses its rows at shutdown. `ConfigRef(
+    // "compile-internal")` is equal to it, with zero modules missing and zero extra, on both sbt
+    // versions, and including the inter-project case where a library reaches the compile classpath
+    // through `web.dependsOn(models)` while being absent from `web`'s own `libraryDependencies`.
+    //
+    // One source file serves both axes because `UpdateReport.configuration` has an identical
+    // signature on each: the same `sbt.librarymanagement.ConfigRef` argument, the same
+    // `Option[ConfigurationReport]` result, and the same `allModules` on that report.
+    //
+    // `Compile / dependencyClasspath` is accurate by construction and is still not used. It forces
+    // every upstream project to compile before this generator may run, and on sbt 1 an in-build
+    // sibling arrives on it as a directory named `classes`, which no filename match can identify as
+    // `eezo-db`.
+    //
+    // Reading a resolution task from a source generator does not risk a cycle here: `update`
+    // depends on `libraryDependencies` and `projectDependencies`, never on `Compile / sources`, so
+    // the generator this flag feeds is downstream of it and not the other way round. Sharper, and
+    // also measured: `dependencyClasspath`, `externalDependencyClasspath`,
+    // `internalDependencyClasspath`, `managedClasspath` and `update` are all safe to read from a
+    // source generator, while `fullClasspath`, `exportedProducts`, `products` and the same
+    // project's own `compile` are not. Their failure mode is not a reported cycle that names the
+    // keys involved; it is a silent hang.
+    //
+    // The name is matched with its cross-version suffix as well as bare, because the resolved
+    // report carries the artifact name, which for a Scala library is `eezo-db_3`.
+    val dbOnClasspath = update.value
+      .configuration(ConfigRef("compile-internal"))
+      .exists(
+        _.allModules.exists(module =>
+          module.organization == "io.eezo" &&
+            (module.name == "eezo-db" || module.name.startsWith("eezo-db_"))
+        )
+      )
+
+    val stamp = streams.value.cacheDirectory / "eezo-routes.version"
+    IO.write(stamp, witness(dbOnClasspath))
     val inputs = appInputs ++ modelInputs + stamp
 
     val cached = FileFunction.cached(
@@ -153,7 +220,7 @@ object EezoPlugin extends AutoPlugin {
         relative(sourceRoot, source).toSeq.flatMap(RouteGenerator.modelsIn(_, IO.read(source)))
       }
 
-      writeIfChanged(destination, RouteGenerator.render(routes, models))
+      writeIfChanged(destination, RouteGenerator.render(routes, models, dbOnClasspath))
       Set(destination)
     }
 
