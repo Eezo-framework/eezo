@@ -4,8 +4,8 @@ import scala.annotation.implicitNotFound
 import scala.compiletime.{constValue, erasedValue, error, summonFrom}
 import scala.deriving.Mirror
 
-import io.eezo.core.Id
-import io.eezo.core.html.{Attrs, Html, Mod}
+import io.eezo.core.{Id, Store}
+import io.eezo.core.html.{Attrs, Html, Mod, Url}
 import io.eezo.core.html.Tags.*
 import io.eezo.core.internal.util.snake
 
@@ -31,8 +31,10 @@ private[eezo] final case class Orphan(
   * different reasons and take different overrides, and a model deriving `Form, Resource` and no
   * `Table` mounts seven working routes.
   *
-  * The `Store` arrives as a parameter of [[routes]] rather than being captured, so one store serves
-  * every model in an application and a test that builds its own table gets its own empty world.
+  * The [[io.eezo.core.Store]] arrives as a parameter of [[routes]] rather than being summoned, so a
+  * test can hand over one it made itself and an unresolved store reports at the call site. It is
+  * `core`'s trait and one per model: which implementation a model gets is decided where both `db`
+  * and `http` are visible, which is the generated route table and nowhere in here.
   */
 @implicitNotFound(
   "No Resource instance for ${A}.\n" +
@@ -42,7 +44,7 @@ private[eezo] final case class Orphan(
 trait Resource[A] {
 
   /** The routes, in dispatch order. */
-  def routes(store: Store): Seq[Route]
+  def routes(store: Store[A]): Seq[Route]
 }
 
 object Resource {
@@ -79,7 +81,7 @@ object Resource {
     * through a type alias and finds a hand-written `given Resource[A]`, neither of which a regex
     * can, and a model with no instance yields `Nil` instead of failing to compile.
     */
-  inline def routesOf[A](store: Store): Seq[Route] = summonFrom {
+  inline def routesOf[A](store: Store[A]): Seq[Route] = summonFrom {
     case r: Resource[A] => r.routes(store)
     case _              => Seq.empty
   }
@@ -144,13 +146,20 @@ object Resource {
       actions: Actions[A]
   ): Resource[A] = {
 
-    /** The route name, and the store's bucket key, so the two cannot disagree about which rows
-      * belong to which model.
+    /** The route name, inflected off the class name.
+      *
+      * It names paths and nothing else. A store no longer takes a bucket, so this string cannot
+      * reach storage even by accident, and a legacy table name renames no URL.
       */
-    val plural     = pluralise(snake(modelName))
-    val collection = s"/$plural"
+    val plural = pluralise(snake(modelName))
 
-    def member(key: Id[A]): String = s"$collection/${key.show}"
+    /** A [[Url.Mounted]] rather than a `String`, so that every link a page renders and every
+      * `Location` a write sets travels with `Route.under`. Derivation has no prefix to bake in;
+      * mounting is what puts one on.
+      */
+    val collection: Url = Url.Mounted(s"/$plural")
+
+    def member(key: Id[A]): Url = collection / key.show
 
     def keyOf(row: A): Id[A] =
       row.asInstanceOf[Product].productElement(keyIndex).asInstanceOf[Id[A]]
@@ -158,16 +167,16 @@ object Resource {
     /** Where a successful write goes. `show` when it is mounted, and the index when it is not,
       * because redirecting to a route nobody mounted is a 404 at the end of a successful save.
       */
-    def afterWrite(key: Id[A]): String =
+    def afterWrite(key: Id[A]): Url =
       if (actions.has(Action.Show)) member(key) else collection
 
-    def row(store: Store, request: Request): (Id[A], A) = {
+    def row(store: Store[A], request: Request): (Id[A], A) = {
       val key = request.param[Id[A]]("id")
-      (key, store.get[A](plural, key).getOrElse(throw NotFound(request.path)))
+      (key, store.find(key).getOrElse(throw NotFound(request.path)))
     }
 
-    def index(store: Store): Handler = _ => {
-      val rows = store.list[A](plural)
+    def index(store: Store[A]): Handler = _ => {
+      val rows = store.all()
 
       val listing =
         if (rows.isEmpty) p(s"No $plural yet")
@@ -194,7 +203,7 @@ object Resource {
           plural,
           h1(s"All $plural"),
           listing,
-          when(Action.New)(p(a(Attrs.href := s"$collection/new", s"New $modelName")))
+          when(Action.New)(p(a(Attrs.href := collection / NewPage.segment, s"New $modelName")))
         )
       )
     }
@@ -220,7 +229,7 @@ object Resource {
       * a read before the write would be that same lookup twice with a race in the gap. `create`
       * always writes, so it answers `true`.
       */
-    def submit(request: Request, key: Id[A], heading: String, target: String, verb: Method)(
+    def submit(request: Request, key: Id[A], heading: String, target: Url, verb: Method)(
         persist: A => Boolean
     ): Response =
       shape.parse(request.form, Some(key.show)) match {
@@ -231,15 +240,15 @@ object Resource {
           Response.Redirect(afterWrite(key))
       }
 
-    def create(store: Store): Handler = request => {
+    def create(store: Store[A]): Handler = request => {
       val key = Id.gen[A]()
       submit(request, key, s"New $modelName", collection, Method.POST) { record =>
-        store.insert(plural, key, record)
+        store.insert(key, record)
         true
       }
     }
 
-    def show(store: Store): Handler = request => {
+    def show(store: Store[A]): Handler = request => {
       val (key, record) = row(store, request)
 
       Response.Ok(
@@ -247,7 +256,7 @@ object Resource {
           modelName,
           h1(modelName),
           dl(shape.show(record).flatMap { case (field, value) => Seq(dt(field.label), dd(value)) }),
-          when(Action.Edit)(p(a(Attrs.href := s"${member(key)}/edit", "Edit"))),
+          when(Action.Edit)(p(a(Attrs.href := member(key) / EditPage.segment, "Edit"))),
           when(Action.Destroy)(
             form(
               Attrs.action := member(key),
@@ -261,7 +270,7 @@ object Resource {
       )
     }
 
-    def edit(store: Store): Handler = request => {
+    def edit(store: Store[A]): Handler = request => {
       val (key, record) = row(store, request)
 
       Response.Ok(
@@ -274,16 +283,16 @@ object Resource {
       )
     }
 
-    def update(store: Store): Handler = request => {
+    def update(store: Store[A]): Handler = request => {
       val key = request.param[Id[A]]("id")
       submit(request, key, s"Edit $modelName", member(key), Method.PUT) { record =>
-        store.update(plural, key, record)
+        store.update(key, record)
       }
     }
 
-    def destroy(store: Store): Handler = request => {
+    def destroy(store: Store[A]): Handler = request => {
       val key = request.param[Id[A]]("id")
-      if (!store.delete[A](plural, key)) throw NotFound(request.path)
+      if (!store.delete(key)) throw NotFound(request.path)
       Response.Redirect(collection)
     }
 
@@ -315,18 +324,21 @@ object Resource {
         * marks one. That is what lets a user mount `GET /$plural` by hand and keep the other six
         * pages: the table drops the derived twin rather than refusing to boot.
         */
-      def routes(store: Store): Seq[Route] = {
+      def routes(store: Store[A]): Seq[Route] = {
         def route(method: Method, path: String, handler: Handler): Route =
           Route.Http(method, PathPattern.parse(path), handler, Provenance.Derived)
 
         Action.values.toSeq.filter(actions.has).map {
-          case Action.Index => route(Method.GET, collection, index(store))
-          case Action.New   => route(Method.GET, s"$collection/${NewPage.segment}", blank)
-          case Action.Show  => route(Method.GET, s"$collection/:id", show(store))
-          case Action.Edit => route(Method.GET, s"$collection/:id/${EditPage.segment}", edit(store))
-          case Action.Create  => route(NewPage.targetMethod, collection, create(store))
-          case Action.Update  => route(EditPage.targetMethod, s"$collection/:id", update(store))
-          case Action.Destroy => route(Method.DELETE, s"$collection/:id", destroy(store))
+          case Action.Index => route(Method.GET, collection.path, index(store))
+          case Action.New   =>
+            route(Method.GET, s"${collection.path}/${NewPage.segment}", blank)
+          case Action.Show => route(Method.GET, s"${collection.path}/:id", show(store))
+          case Action.Edit =>
+            route(Method.GET, s"${collection.path}/:id/${EditPage.segment}", edit(store))
+          case Action.Create => route(NewPage.targetMethod, collection.path, create(store))
+          case Action.Update =>
+            route(EditPage.targetMethod, s"${collection.path}/:id", update(store))
+          case Action.Destroy => route(Method.DELETE, s"${collection.path}/:id", destroy(store))
         }
       }
     }

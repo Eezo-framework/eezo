@@ -4,7 +4,7 @@ import scala.annotation.implicitNotFound
 import scala.compiletime.{constValue, constValueTuple, summonAll}
 import scala.deriving.Mirror
 
-import io.eezo.core.html.{Attrs, Html}
+import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
 
 /** One field, as the view side names it.
@@ -71,9 +71,13 @@ trait Form[A] {
     * `raw` is submitted text, winning field by field over `value`. A rejected submission has no `A`
     * to render from, which is why it was rejected, so without `raw` the user gets an empty form
     * back with error messages beside it and their typing gone.
+    *
+    * `action` is a union rather than two overloads because only one alternative of an overloaded
+    * method may carry default arguments, and `errors` and `raw` have them. A `String` is a finished
+    * address; a [[Url.Mounted]] is one that still travels with `Route.under`.
     */
   def render(
-      action: String,
+      action: Url | String,
       method: Method,
       value: Option[A],
       errors: FormErrors = FormErrors.empty,
@@ -164,7 +168,7 @@ object Form {
         instances(i).show(value.asInstanceOf[Product].productElement(i))
 
       def render(
-          action: String,
+          action: Url | String,
           method: Method,
           value: Option[A],
           errors: FormErrors,
@@ -200,7 +204,9 @@ object Form {
         }
 
         form(
-          Attrs.action := action,
+          // `Response.asUrl` rather than a match on the union here: a `String` action is a finished
+          // address, which is what `Url.Absolute` means, and one place in the package decides that.
+          Attrs.action := Response.asUrl(action),
           Attrs.method := (if (method == Method.GET) "get" else "post"),
           over,
           rows,

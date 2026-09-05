@@ -1,9 +1,6 @@
 package io.eezo.http
 
-import java.net.URLEncoder
-import java.nio.charset.StandardCharsets
-
-import io.eezo.core.Id
+import io.eezo.core.{Id, Store}
 
 /** What `derives Resource` mounts, and what each of the seven does when it runs.
   *
@@ -11,9 +8,7 @@ import io.eezo.core.Id
   * the path parameters the handlers read are dispatch's own work, and a test that hand-builds
   * `pathParams` proves the handler and not the route.
   */
-class ResourceSuite extends munit.FunSuite {
-
-  case class Widget(id: Id[Widget], name: String, price: Int) derives Form, Resource
+class ResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   case class BlogPost(id: Id[BlogPost], title: String) derives Form, Resource
 
@@ -68,40 +63,14 @@ class ResourceSuite extends munit.FunSuite {
 
   private val ok: Handler = _ => Response.Ok(io.eezo.core.html.Html.text("ok"))
 
-  private def table[A](store: Store)(using r: Resource[A]): RouteTable =
+  private def table[A](store: Store[A])(using r: Resource[A]): RouteTable =
     RouteTable(r.routes(store))
 
-  private def request(method: Method, path: String, form: (String, String)*): Request = {
-    val body = form
-      .map { case (k, v) =>
-        s"${URLEncoder.encode(k, StandardCharsets.UTF_8)}=${URLEncoder.encode(v, StandardCharsets.UTF_8)}"
-      }
-      .mkString("&")
-    Request(
-      method = method,
-      path = path,
-      query = Map.empty,
-      headers =
-        if (form.isEmpty) Map.empty
-        else Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
-      body = body.getBytes(StandardCharsets.UTF_8),
-      pathParams = Map.empty
-    )
-  }
-
-  private def markup(response: Response): String = response.body match {
-    case Body.Html(node) => node.render
-    case other           => fail(s"expected an HTML body, got $other")
-  }
-
-  private def location(response: Response): String =
-    response.headers.collectFirst { case ("Location", value) => value }.getOrElse("")
-
-  private def widgets(rows: (String, Int)*): (Store, RouteTable, Seq[Widget]) = {
-    val store = Store.inMemory()
+  private def widgets(rows: (String, Int)*): (Store[Widget], RouteTable, Seq[Widget]) = {
+    val store = InMemoryStore[Widget]()
     val saved = rows.map { case (name, price) =>
       val row = Widget(Id.gen[Widget](), name, price)
-      store.insert("widgets", row.id, row)
+      store.insert(row.id, row)
       row
     }
     (store, table[Widget](store), saved)
@@ -111,7 +80,7 @@ class ResourceSuite extends munit.FunSuite {
 
   test("the seven are mounted, with new emitted before show so that /widgets/new is reachable") {
     assertEquals(
-      summon[Resource[Widget]].routes(Store.inMemory()).map(_.describe),
+      summon[Resource[Widget]].routes(InMemoryStore()).map(_.describe),
       Seq(
         "GET /widgets",
         "GET /widgets/new",
@@ -126,7 +95,7 @@ class ResourceSuite extends munit.FunSuite {
 
   test("the route name is the class name, snake cased and pluralised") {
     def pathOf[A](using r: Resource[A]): String =
-      r.routes(Store.inMemory()).head.describe.stripPrefix("GET ")
+      r.routes(InMemoryStore()).head.describe.stripPrefix("GET ")
 
     assertEquals(pathOf[BlogPost], "/blog_posts")
     assertEquals(pathOf[Category], "/categories")
@@ -135,20 +104,20 @@ class ResourceSuite extends munit.FunSuite {
 
   test("a subtracted action is not mounted at all") {
     assertEquals(
-      summon[Resource[Note]].routes(Store.inMemory()).map(_.describe),
+      summon[Resource[Note]].routes(InMemoryStore()).map(_.describe),
       Seq("GET /notes", "GET /notes/:id")
     )
   }
 
   test("a subtracted write is a 405 with an accurate Allow, not a 404") {
-    val store   = Store.inMemory()
+    val store   = InMemoryStore[Note]()
     val failure =
       intercept[MethodNotAllowed](table[Note](store).dispatch(request(Method.DELETE, "/notes/x")))
     assertEquals(failure.allowed, Seq(Method.GET))
   }
 
   test("routesOf mounts nothing for a model with no Resource, and never fails to compile") {
-    assertEquals(Resource.routesOf[Login](Store.inMemory()), Seq.empty[Route])
+    assertEquals(Resource.routesOf[Login](InMemoryStore()), Seq.empty[Route])
   }
 
   // ---------------------------------------------------------------- index
@@ -163,9 +132,13 @@ class ResourceSuite extends munit.FunSuite {
     assert(page.contains(s"""href="/widgets/${saved.head.id.show}""""), page)
   }
 
-  test("index lists rows in insertion order") {
-    val (_, routes, _) = widgets("first" -> 1, "second" -> 2)
-    val page           = markup(routes.dispatch(request(Method.GET, "/widgets")))
+  test("index lists rows in the store's order, which is by key rather than by insertion") {
+    val store = InMemoryStore[Widget]()
+    val first = Id.apply[Widget](java.util.UUID.fromString("00000000-0000-4000-8000-000000000000"))
+    val last  = Id.apply[Widget](java.util.UUID.fromString("ffffffff-0000-4000-8000-000000000000"))
+    store.insert(last, Widget(last, "second", 2))
+    store.insert(first, Widget(first, "first", 1))
+    val page = markup(table[Widget](store).dispatch(request(Method.GET, "/widgets")))
     assert(page.indexOf("first") < page.indexOf("second"), page)
   }
 
@@ -179,7 +152,7 @@ class ResourceSuite extends munit.FunSuite {
     val (_, routes, _) = widgets()
     assert(markup(routes.dispatch(request(Method.GET, "/widgets"))).contains("""/widgets/new"""))
 
-    val notes = table[Note](Store.inMemory())
+    val notes = table[Note](InMemoryStore())
     assert(!markup(notes.dispatch(request(Method.GET, "/notes"))).contains("/notes/new"))
   }
 
@@ -198,7 +171,7 @@ class ResourceSuite extends munit.FunSuite {
     val response           =
       routes.dispatch(request(Method.POST, "/widgets", "name" -> "Bolt", "price" -> "3"))
     assertEquals(response.status, 303)
-    val stored = store.list[Widget]("widgets")
+    val stored = store.all()
     assertEquals(stored.map(w => (w.name, w.price)), Seq(("Bolt", 3)))
     assertEquals(location(response), s"/widgets/${stored.head.id.show}")
   }
@@ -208,7 +181,7 @@ class ResourceSuite extends munit.FunSuite {
     val response           =
       routes.dispatch(request(Method.POST, "/widgets", "name" -> "Bolt", "price" -> "cheap"))
     assertEquals(response.status, 422)
-    assertEquals(store.list[Widget]("widgets"), Seq.empty[Widget])
+    assertEquals(store.all(), Seq.empty[Widget])
     val page = markup(response)
     // The same page the form was on, not a bare form: a submission that comes back without its
     // heading reads as a different screen.
@@ -219,7 +192,7 @@ class ResourceSuite extends munit.FunSuite {
   }
 
   test("create falls back to the index when Show is not mounted") {
-    val store    = Store.inMemory()
+    val store    = InMemoryStore[Draft]()
     val response = table[Draft](store).dispatch(request(Method.POST, "/drafts", "body" -> "hi"))
     assertEquals(response.status, 303)
     assertEquals(location(response), "/drafts")
@@ -254,9 +227,9 @@ class ResourceSuite extends munit.FunSuite {
     assert(page.contains(s"""href="/widgets/${saved.head.id.show}/edit""""), page)
     assert(page.contains("""<input type="hidden" name="_method" value="DELETE">"""), page)
 
-    val store = Store.inMemory()
+    val store = InMemoryStore[Note]()
     val note  = Note(Id.gen[Note](), "read me")
-    store.insert("notes", note.id, note)
+    store.insert(note.id, note)
     val readOnly =
       markup(table[Note](store).dispatch(request(Method.GET, s"/notes/${note.id.show}")))
     assert(!readOnly.contains("/edit"), readOnly)
@@ -288,7 +261,7 @@ class ResourceSuite extends munit.FunSuite {
       routes.dispatch(request(Method.PUT, s"/widgets/${key.show}", "name" -> "Nut", "price" -> "4"))
     assertEquals(response.status, 303)
     assertEquals(location(response), s"/widgets/${key.show}")
-    assertEquals(store.get[Widget]("widgets", key), Some(Widget(key, "Nut", 4)))
+    assertEquals(store.find(key), Some(Widget(key, "Nut", 4)))
   }
 
   test("update on a missing row is a 404, decided by the store rather than by a read first") {
@@ -308,7 +281,7 @@ class ResourceSuite extends munit.FunSuite {
         request(Method.PUT, s"/widgets/${key.show}", "name" -> "Nut", "price" -> "cheap")
       )
     assertEquals(response.status, 422)
-    assertEquals(store.get[Widget]("widgets", key).map(_.name), Some("Bolt"))
+    assertEquals(store.find(key).map(_.name), Some("Bolt"))
     assert(markup(response).contains("<h1>Edit Widget</h1>"), markup(response))
     assert(markup(response).contains("""value="cheap""""), markup(response))
   }
@@ -320,7 +293,7 @@ class ResourceSuite extends munit.FunSuite {
     val response = routes.dispatch(request(Method.DELETE, s"/widgets/${saved.head.id.show}"))
     assertEquals(response.status, 303)
     assertEquals(location(response), "/widgets")
-    assertEquals(store.list[Widget]("widgets"), Seq.empty[Widget])
+    assertEquals(store.all(), Seq.empty[Widget])
   }
 
   test("destroy on a missing row is a 404") {
@@ -332,15 +305,16 @@ class ResourceSuite extends munit.FunSuite {
 
   // ---------------------------------------------------------------- the store
 
-  test("two models mounted over one store keep their rows apart") {
-    val store = Store.inMemory()
-    val both  = RouteTable(
-      Resource.routesOf[Widget](store) ++ Resource.routesOf[BlogPost](store)
+  test("two models in one table each write to their own store") {
+    val widgets = InMemoryStore[Widget]()
+    val posts   = InMemoryStore[BlogPost]()
+    val both    = RouteTable(
+      Resource.routesOf[Widget](widgets) ++ Resource.routesOf[BlogPost](posts)
     )
     val _ = both.dispatch(request(Method.POST, "/widgets", "name" -> "Bolt", "price" -> "3"))
     val _ = both.dispatch(request(Method.POST, "/blog_posts", "title" -> "Hello"))
-    assertEquals(store.list[Widget]("widgets").map(_.name), Seq("Bolt"))
-    assertEquals(store.list[BlogPost]("blog_posts").map(_.title), Seq("Hello"))
+    assertEquals(widgets.all().map(_.name), Seq("Bolt"))
+    assertEquals(posts.all().map(_.title), Seq("Hello"))
   }
 
   // ---------------------------------------------------------------- what does not derive
@@ -370,30 +344,30 @@ class ResourceSuite extends munit.FunSuite {
 
   test("an edit page whose update is not mounted is orphaned, which is what boot warns about") {
     assertEquals(
-      Resource.orphaned(table[Sketch](Store.inMemory())),
+      Resource.orphaned(table[Sketch](InMemoryStore())),
       Seq(Orphan(Action.Edit, "GET /sketches/:id/edit", Action.Update, "PUT /sketches/:id"))
     )
   }
 
   test("a new page whose create is not mounted is orphaned the same way") {
     assertEquals(
-      Resource.orphaned(table[Memo](Store.inMemory())),
+      Resource.orphaned(table[Memo](InMemoryStore())),
       Seq(Orphan(Action.New, "GET /memos/new", Action.Create, "POST /memos"))
     )
   }
 
   test("a create with no new page is silent, because the direction is one way") {
-    assertEquals(Resource.orphaned(table[Bulletin](Store.inMemory())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Bulletin](InMemoryStore())), Seq.empty)
   }
 
   test("all seven, and a read-only subset, are both quiet") {
-    assertEquals(Resource.orphaned(table[Widget](Store.inMemory())), Seq.empty)
-    assertEquals(Resource.orphaned(table[Note](Store.inMemory())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Widget](InMemoryStore())), Seq.empty)
+    assertEquals(Resource.orphaned(table[Note](InMemoryStore())), Seq.empty)
   }
 
   test("both pages can be orphaned at once, and each names its own target") {
     assertEquals(
-      Resource.orphaned(table[Stub](Store.inMemory())),
+      Resource.orphaned(table[Stub](InMemoryStore())),
       Seq(
         Orphan(Action.New, "GET /stubs/new", Action.Create, "POST /stubs"),
         Orphan(Action.Edit, "GET /stubs/:id/edit", Action.Update, "PUT /stubs/:id")
@@ -405,13 +379,13 @@ class ResourceSuite extends munit.FunSuite {
     val handwritten =
       Route.Http(Method.PUT, PathPattern.parse("/sketches/:id"), ok)
 
-    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(InMemoryStore()) :+ handwritten)
 
     assertEquals(Resource.orphaned(mounted), Seq.empty)
   }
 
   test("relocating the set under a prefix moves the page and its target together") {
-    val moved = RouteTable(Route.under("/admin")(summon[Resource[Sketch]].routes(Store.inMemory())))
+    val moved = RouteTable(Route.under("/admin")(summon[Resource[Sketch]].routes(InMemoryStore())))
 
     assertEquals(
       Resource.orphaned(moved),
@@ -436,7 +410,7 @@ class ResourceSuite extends munit.FunSuite {
     val handwritten =
       Route.Http(Method.PUT, PathPattern.parse("/sketches/:sketchId"), ok)
 
-    val mounted = RouteTable(summon[Resource[Sketch]].routes(Store.inMemory()) :+ handwritten)
+    val mounted = RouteTable(summon[Resource[Sketch]].routes(InMemoryStore()) :+ handwritten)
 
     assertEquals(Resource.orphaned(mounted), Seq.empty)
   }

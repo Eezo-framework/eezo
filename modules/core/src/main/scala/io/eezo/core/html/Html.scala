@@ -15,7 +15,12 @@ enum Html {
     */
   case Text private[html] (escaped: String)
 
-  /** The single unescaped path into the tree. */
+  /** The single unescaped path into the tree.
+    *
+    * Mounting stops at its edge. `Route.under` moves a [[Url.Mounted]] wherever one sits in an
+    * attribute, and raw content is a string eezo never parses, so a link written inside it keeps
+    * whatever it says and stays where the author put it.
+    */
   case Raw(html: String)
 
   /** An element. Void ness is a property of the tag *name*, looked up in an internal void tag table
@@ -55,6 +60,21 @@ enum Html {
     case (a, b)                     => Fragment(Vector(a, b))
   }
 
+  /** This tree as seen from under `prefix`: every [[Url.Mounted]] sitting in an attribute takes the
+    * prefix, and stays mounted so that a second layer can move it again.
+    *
+    * `private[eezo]` because `Response.under` is the one caller, walking the page of a response a
+    * mounted route is about to return, and a mount is a property of where routes are served rather
+    * than something a view decides for itself.
+    */
+  private[eezo] def under(prefix: String): Html = this match {
+    case Element(name, attrs, key, children) =>
+      Element(name, attrs.map(_.under(prefix)), key, children.map(_.under(prefix)))
+    case Fragment(children) => Fragment(children.map(_.under(prefix)))
+    // Text carries no address, and raw markup is a string eezo never parses.
+    case leaf => leaf
+  }
+
   /** The rendered markup, as a `String`. The HTTP boundary encodes it as UTF-8. */
   def render: String = {
     val sb = new StringBuilder
@@ -80,7 +100,7 @@ enum Html {
           put(attr.name)
           attr.value.foreach { v =>
             put("=\"")
-            put(Html.escape(v))
+            put(Html.escape(v.text))
             put("\"")
           }
         }
@@ -169,8 +189,50 @@ object Html {
   }
 }
 
-/** An attribute. The value is optional rather than a plain `String` so that `value := ""` and
-  * `disabled` stay distinct: `None` renders the bare name, `Some("")` renders `value=""`.
+/** An attribute. The value is optional rather than a plain [[AttrValue]] so that `value := ""` and
+  * `disabled` stay distinct: `None` renders the bare name, `Some(Literal(""))` renders `value=""`.
   * Collapsing the two would make an empty text input indistinguishable from a boolean flag.
+  *
+  * The constructor is package private, the same shape as [[Html.Text]], so `:=` on an [[AttrName]]
+  * is the only way to build one from outside `io.eezo.core.html`, while the pattern match that the
+  * differ in `modules/live` needs still compiles from anywhere. Pairing a name of a call site's own
+  * choosing with an [[AttrValue.Link]] is what would otherwise reopen the set of url bearing names
+  * that [[Attrs]] closes.
   */
-final case class Attr(name: String, value: Option[String])
+final case class Attr private[html] (name: String, value: Option[AttrValue]) {
+
+  /** Unchanged unless this attribute carries a [[Url]], which is what keeps a handwritten `String`
+    * link exactly where its author wrote it.
+    */
+  private[eezo] def under(prefix: String): Attr = value match {
+    case Some(AttrValue.Link(url)) => copy(value = Some(AttrValue.Link(url.under(prefix))))
+    case _                         => this
+  }
+}
+
+/** What an attribute carries.
+  *
+  * Two cases because a mount has to tell them apart: text is finished, and a [[Url]] is a value
+  * `Route.under` can still move. Only the url bearing names build a [[Link]], so the arm exists
+  * exactly where prefixing an address is meaningful.
+  */
+enum AttrValue {
+
+  case Literal(value: String)
+
+  /** An address a mount may still move. The constructor is package private, so `:=` on a
+    * [[UrlAttrName]] is the only way to build one from outside `io.eezo.core.html`, while the
+    * pattern match [[Attr.under]] and the differ in `modules/live` need still compiles from
+    * anywhere.
+    */
+  case Link private[html] (url: Url)
+
+  /** The one spelling of an attribute value, so that a [[Link]] cannot reach the output down a path
+    * that skips [[Html.escape]]. An unresolved [[Url.Mounted]] flattens to its bare payload: a page
+    * rendered outside any mount is a page at no prefix.
+    */
+  private[eezo] def text: String = this match {
+    case Literal(value) => value
+    case Link(url)      => url.path
+  }
+}

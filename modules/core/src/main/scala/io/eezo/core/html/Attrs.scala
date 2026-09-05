@@ -19,8 +19,8 @@ object Attrs {
   val hidden: AttrName = AttrName("hidden")
 
   // Links and media
-  val href: AttrName    = AttrName("href")
-  val src: AttrName     = AttrName("src")
+  val href: UrlAttrName = UrlAttrName("href")
+  val src: UrlAttrName  = UrlAttrName("src")
   val alt: AttrName     = AttrName("alt")
   val rel: AttrName     = AttrName("rel")
   val target: AttrName  = AttrName("target")
@@ -30,7 +30,7 @@ object Attrs {
   val content: AttrName = AttrName("content")
 
   // Forms
-  val action: AttrName      = AttrName("action")
+  val action: UrlAttrName   = UrlAttrName("action")
   val method: AttrName      = AttrName("method")
   val name: AttrName        = AttrName("name")
   val value: AttrName       = AttrName("value")
@@ -57,7 +57,15 @@ object Attrs {
   val rowspan: AttrName = AttrName("rowspan")
   val scope: AttrName   = AttrName("scope")
 
-  /** An arbitrary attribute, for the ones this list does not carry. */
+  /** An arbitrary attribute, for the ones this list does not carry.
+    *
+    * A plain [[AttrName]], even when the name spelled here is `href`. A [[Url]] moves under a
+    * mount, and which names a mount is allowed to rewrite is a decision this list makes once rather
+    * than one a string handed in at a call site can reopen. The package private constructors of
+    * [[Attr]] and [[AttrValue.Link]] are what hold that shut: outside `io.eezo.core.html`, `:=` on
+    * one of the [[UrlAttrName]] values above is the only expression that produces an attribute a
+    * mount rewrites.
+    */
   def attr(name: String): AttrName = AttrName(name)
 
   /** A `data-*` attribute. */

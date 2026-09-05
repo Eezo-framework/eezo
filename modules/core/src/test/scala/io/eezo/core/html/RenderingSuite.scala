@@ -10,7 +10,10 @@ class RenderingSuite extends munit.FunSuite {
   test("an element renders its attributes in insertion order") {
     val node = Element(
       "a",
-      Vector(Attr("href", Some("/posts")), Attr("class", Some("link"))),
+      Vector(
+        Attr("href", Some(AttrValue.Literal("/posts"))),
+        Attr("class", Some(AttrValue.Literal("link")))
+      ),
       key = None,
       children = Vector(Html.text("posts"))
     )
@@ -19,21 +22,53 @@ class RenderingSuite extends munit.FunSuite {
 
   test("an attribute with no value renders bare, and an empty value renders empty") {
     val bare  = Element("input", Vector(Attr("disabled", None)), None, Vector.empty)
-    val empty = Element("input", Vector(Attr("value", Some(""))), None, Vector.empty)
+    val empty =
+      Element("input", Vector(Attr("value", Some(AttrValue.Literal("")))), None, Vector.empty)
     assertEquals(bare.render, "<input disabled>")
     assertEquals(empty.render, """<input value="">""")
   }
 
+  test("a link attribute value goes through the same escaping a literal one does") {
+    val node = Element(
+      "a",
+      Vector(Attr("href", Some(AttrValue.Link(Url.Mounted("/posts?q=a&b=\"c\""))))),
+      None,
+      Vector.empty
+    )
+    assertEquals(node.render, """<a href="/posts?q=a&amp;b=&quot;c&quot;"></a>""")
+  }
+
+  test("an unresolved mounted url renders as its bare payload") {
+    val node =
+      Element(
+        "a",
+        Vector(Attr("href", Some(AttrValue.Link(Url.Mounted("posts"))))),
+        None,
+        Vector.empty
+      )
+    assertEquals(node.render, """<a href="/posts"></a>""")
+  }
+
   test("an attribute value is escaped") {
     val node =
-      Element("a", Vector(Attr("title", Some("""a "quote" & <tag>"""))), None, Vector.empty)
+      Element(
+        "a",
+        Vector(Attr("title", Some(AttrValue.Literal("""a "quote" & <tag>""")))),
+        None,
+        Vector.empty
+      )
     assertEquals(node.render, """<a title="a &quot;quote&quot; &amp; &lt;tag&gt;"></a>""")
   }
 
   test("a void tag renders without a closing tag and without the XHTML slash") {
     assertEquals(Element("br", Vector.empty, None, Vector.empty).render, "<br>")
     assertEquals(
-      Element("img", Vector(Attr("src", Some("/a.png"))), None, Vector.empty).render,
+      Element(
+        "img",
+        Vector(Attr("src", Some(AttrValue.Literal("/a.png")))),
+        None,
+        Vector.empty
+      ).render,
       """<img src="/a.png">"""
     )
   }
@@ -43,7 +78,12 @@ class RenderingSuite extends munit.FunSuite {
   }
 
   test("key renders as data-eezo-key, after the attributes") {
-    val node = Element("li", Vector(Attr("class", Some("row"))), Some("7"), Vector(Html.text("a")))
+    val node = Element(
+      "li",
+      Vector(Attr("class", Some(AttrValue.Literal("row")))),
+      Some("7"),
+      Vector(Html.text("a"))
+    )
     assertEquals(node.render, """<li class="row" data-eezo-key="7">a</li>""")
   }
 

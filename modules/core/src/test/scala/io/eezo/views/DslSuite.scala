@@ -79,7 +79,39 @@ class DslSuite extends munit.FunSuite {
     )
   }
 
+  test("a Url is a value href, action and src accept, and no other attribute name does") {
+    assertEquals(
+      a(Attrs.href := Url.Mounted("posts"), "next").render,
+      """<a href="/posts">next</a>"""
+    )
+    assertEquals(
+      form(Attrs.action := Url.Mounted("/posts"), "x").render,
+      """<form action="/posts">x</form>"""
+    )
+    assertEquals(
+      img(Attrs.src := Url.Absolute("https://eezo.io/logo.png")).render,
+      """<img src="https://eezo.io/logo.png">"""
+    )
+    assert(compileErrors("""Attrs.cls := Url.Mounted("/posts")""").nonEmpty)
+    assert(compileErrors("""Attrs.title := Url.Mounted("/posts")""").nonEmpty)
+  }
+
+  test("a url bearing attribute name still takes a String, an Int and a Boolean") {
+    assertEquals(
+      a(Attrs.href := "/next", Attrs.src := 4, Attrs.action := true).render,
+      """<a href="/next" src="4" action></a>"""
+    )
+    assertEquals(
+      form(Attrs.action := "/posts", img(Attrs.src := "/a.png")).render,
+      """<form action="/posts"><img src="/a.png"></form>"""
+    )
+  }
+
   test("escaped text cannot be forged from outside the html package") {
     assert(compileErrors("""Html.Text("<script>")""").nonEmpty)
+  }
+
+  test("UrlAttrName cannot be constructed from outside the html package") {
+    assert(compileErrors("""UrlAttrName("class")""").nonEmpty)
   }
 }
