@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+#
+# The eezo launcher — layer 3 of design/cli.md §4. It adds no capability, only ergonomics:
+# everything except `new` is a forward to the application's own dispatch (`sbt "run <cmd>"`) or to
+# an sbt-eezo task, so this script can stay a page long and never needs the user's classpath.
+#
+# `new` is the one command that cannot forward, because nothing exists yet to forward to. While
+# eezo is unreleased, the scaffold takes its versions from the `.eezo-version` file that
+# `sbt publishLocalForExample` writes at the repository root — the same source the examples build
+# reads — so a scaffolded app resolves the locally published eezo.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(dirname "$SCRIPT_DIR")"
+
+usage() {
+  cat <<'EOF'
+eezo — the framework launcher
+
+  eezo new <name>       scaffold a new application in ./<name>
+  eezo dev              serve, restarting on every save (runs `sbt eezoDev`)
+
+forwarded to the application (run from the project directory):
+  eezo routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help
+  every command takes --json; see `eezo help` inside a project for details
+EOF
+}
+
+need_sbt() {
+  command -v sbt > /dev/null || {
+    echo "eezo: sbt not found on PATH. Install sbt (https://www.scala-sbt.org) first." >&2
+    exit 1
+  }
+}
+
+# sbt is an implementation detail of the forwarded commands, so its own voice is silenced; the
+# application's output passes through untouched (the scaffold sets `run / outputStrategy :=
+# StdoutOutput`, so the forked app writes straight to this terminal, not through sbt's logger).
+# Three noise sources, each silenced at the narrowest point that gets it:
+#
+#   - sbt's [info]/[success] chatter: `-error` raises sbt's own log level. Compile errors are
+#     [error] and still come through, which is exactly right.
+#   - the JDK's Unsafe / native-access WARNING blocks from *sbt's* JVM: turned off with the two
+#     flags below rather than filtered, because eezo's own boot warnings reach stderr through
+#     java.util.logging with the same "WARNING:" prefix and must not be swallowed. The flags are
+#     JDK 23+; eezo's runtime floor is far above that, and sbt runs on the same JVM.
+#     SBT_OPTS reaches only sbt's JVM — the forked application gets `run / javaOptions`.
+#   - the three "[error] Nonzero exit code" lines sbt prints when the app exits 1: that exit code
+#     is the command's *answer* (drift, refusal — design/cli.md), not a failure of the build, so
+#     those specific lines are dropped. The app's code is still this script's exit code.
+#
+# Only SLF4J's own "no providers" stderr grumble is filtered by pattern, because it has a prefix
+# nothing else uses.
+forward() {
+  set +e
+  SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow" \
+    sbt -error -batch "$@" \
+    2> >(grep -vE '^SLF4J\(' >&2) \
+    | grep -vE '^\[error\] ([Nn]onzero exit code returned from runner|\([^)]*[Rr]un\) [Nn]onzero exit code|Total time:)'
+  local code="${PIPESTATUS[0]}"
+  set -e
+  exit "$code"
+}
+
+read_version_file() {
+  VERSION_FILE="$ROOT/.eezo-version"
+  [ -f "$VERSION_FILE" ] || {
+    echo "eezo: no .eezo-version at $ROOT." >&2
+    echo "Run \`sbt publishLocalForExample\` at the eezo repository root first." >&2
+    exit 1
+  }
+  EEZO_VERSION="$(grep '^version=' "$VERSION_FILE" | cut -d= -f2-)"
+  SCALA_VERSION="$(grep '^scalaVersion=' "$VERSION_FILE" | cut -d= -f2-)"
+  JDK_FLOOR="$(grep '^jdkFloor=' "$VERSION_FILE" | cut -d= -f2-)"
+  SBT_VERSION="$(grep '^sbt.version=' "$ROOT/examples/project/build.properties" | cut -d= -f2-)"
+}
+
+scaffold() {
+  name="${1:-}"
+  [ -n "$name" ] || { echo "eezo: new needs a name: eezo new myapp" >&2; exit 1; }
+  [ ! -e "$name" ] || { echo "eezo: ./$name already exists" >&2; exit 1; }
+  read_version_file
+
+  mkdir -p "$name/project" "$name/src/main/scala/app" "$name/src/main/scala/models"
+
+  cat > "$name/project/build.properties" <<EOF
+sbt.version=$SBT_VERSION
+EOF
+
+  cat > "$name/project/plugins.sbt" <<EOF
+// The route table generator: scans src/main/scala/app/ and your models into
+// io.eezo.generated.Routes, and provides the eezo* tasks (eezoDev, eezoStatus, ...).
+addSbtPlugin("io.eezo" % "sbt-eezo" % "$EEZO_VERSION")
+EOF
+
+  cat > "$name/build.sbt" <<EOF
+name         := "$name"
+scalaVersion := "$SCALA_VERSION"
+
+enablePlugins(EezoPlugin)
+
+libraryDependencies += "io.eezo" %% "eezo" % "$EEZO_VERSION"
+// Jetty logs through SLF4J; this routes it to java.util.logging alongside eezo's own logger.
+libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime
+
+scalacOptions ++= Seq("-release", "$JDK_FLOOR", "-deprecation", "-feature", "-unchecked", "-no-indent")
+
+// eezo needs a modern JDK to run (virtual threads without pinning), so the app forks.
+run / fork           := true
+run / outputStrategy := Some(OutputStrategy.StdoutOutput)
+EOF
+
+  cat > "$name/src/main/scala/Main.scala" <<'EOF'
+import io.eezo.EezoApp
+import io.eezo.generated.Routes
+import io.eezo.http.RouteTable
+
+/** The whole entry point. `main` is inherited and dispatches: `sbt run` serves on port 8080,
+  * `sbt "run dev"` (or `sbt eezoDev`) adds the drift check and restart-on-save, and
+  * `sbt "run status|sync|freeze|migrate"` are the schema commands.
+  *
+  * When you add a model with `derives Table`, declare it in a Schema and name it here:
+  *
+  * {{{
+  * object AppSchema extends Schema { val things = table[Thing] }
+  * // and in Main:  override def schema: Schema = AppSchema
+  * }}}
+  */
+object Main extends EezoApp {
+  override def routes: RouteTable = Routes.table()
+}
+EOF
+
+  cat > "$name/src/main/scala/app/Index.scala" <<'EOF'
+package app
+
+import io.eezo.core.html.*
+import io.eezo.http.Request
+import io.eezo.http.Response
+
+/** `app/Index.scala` mounts `GET /`, calling `def index` — the filename is the route. */
+object Index {
+
+  def index(request: Request): Response = {
+    val _ = request
+    Response.Ok(
+      Html.doctype ++ html(
+        head(meta(Attrs.charset := "utf-8"), title("eezo")),
+        body(
+          h1("it works"),
+          p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
+          p("and it mounts seven CRUD routes. ", code("sbt \"run routes\""), " lists them.")
+        )
+      )
+    )
+  }
+}
+EOF
+
+  cat > "$name/.gitignore" <<'EOF'
+target/
+.bsp/
+.metals/
+.bloop/
+EOF
+
+  echo "created ./$name (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  echo
+  echo "next:"
+  echo "  cd $name"
+  echo "  sbt eezoDev        # serve on :8080, restart on save"
+  echo "  sbt \"run routes\"   # what is mounted"
+}
+
+cmd="${1:-}"
+case "$cmd" in
+  "" | -h | --help)
+    usage
+    ;;
+  new)
+    shift
+    scaffold "$@"
+    ;;
+  dev)
+    need_sbt
+    exec sbt eezoDev
+    ;;
+  # `dev` keeps sbt's normal output on purpose: the watch loop's compile lines *are* the dev
+  # console, and `-error` would hide the restart markers along with them.
+  routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help)
+    need_sbt
+    forward "run $*"
+    ;;
+  *)
+    echo "eezo: unknown command '$cmd'" >&2
+    usage >&2
+    exit 1
+    ;;
+esac

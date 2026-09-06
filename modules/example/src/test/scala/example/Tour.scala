@@ -1,5 +1,6 @@
 package example
 
+import io.eezo.EezoApp
 import io.eezo.db.*
 import io.eezo.db.Scopes.*
 import io.eezo.core.Id
@@ -59,7 +60,7 @@ object Tour extends EezoApp {
 
   private var paused = true
 
-  def boot(args: Array[String]): Unit = {
+  override def boot(args: Array[String]): Unit = {
     paused = !args.contains("--no-pause")
     val migrations = Files.createTempDirectory("eezo-tour")
 

@@ -22,7 +22,9 @@ lazy val commonSettings = Seq(
     "-unchecked",
     "-no-indent"
   ),
-  libraryDependencies += "io.eezo" %% "eezo-http" % EezoVersion.value,
+  // The umbrella: `io.eezo.EezoApp` plus everything it dispatches to. One dependency and one
+  // import is the point — see the comment on the `eezo` module in the main build.
+  libraryDependencies += "io.eezo" %% "eezo" % EezoVersion.value,
   // Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as
   // eezo's own `System.Logger`, and silences SLF4J's no-provider warning at boot.
   libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime,
@@ -46,3 +48,16 @@ lazy val blog = (project in file("blog"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
   .settings(name := "blog")
+
+// The tour app: a model deriving `Table, Form, Resource`, an `AppSchema`, two handwritten routes,
+// and its own Postgres schema. `todo/README.md` is a guided walk through the whole CLI on it.
+lazy val todo = (project in file("todo"))
+  .enablePlugins(EezoPlugin)
+  .settings(commonSettings)
+  .settings(
+    name := "todo",
+    // `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
+    // forked run to the project dir so the terminal commands and the dev loop write one place.
+    Compile / run / forkOptions := (Compile / run / forkOptions).value
+      .withWorkingDirectory(baseDirectory.value)
+  )
