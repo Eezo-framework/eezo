@@ -45,6 +45,12 @@ import scala.util.control.NonFatal
   */
 private[eezo] object DevServer {
 
+  /** The drift page's two reserved routes, under the prefix `Eezo` keeps for the framework. Each is
+    * spelled once, so the form that posts and the route that answers cannot drift apart.
+    */
+  private val SyncPath: String   = s"${Eezo.ReservedPrefix}/sync"
+  private val FreezePath: String = s"${Eezo.ReservedPrefix}/freeze"
+
   def serve(schema: Schema, databaseSchema: String, port: Int, routes: RouteTable): Unit = {
     val drift = currentDrift(schema, databaseSchema)
     if (blockers(drift).nonEmpty) {
@@ -110,8 +116,8 @@ private[eezo] object DevServer {
       Seq(
         Route.Http(Method.GET, PathPattern.parse("/"), page),
         Route.Http(Method.GET, PathPattern.parse("/*rest"), page),
-        Route.Http(Method.POST, PathPattern.parse("/eezo/sync"), syncAction),
-        Route.Http(Method.POST, PathPattern.parse("/eezo/freeze"), freezeAction)
+        Route.Http(Method.POST, PathPattern.parse(SyncPath), syncAction),
+        Route.Http(Method.POST, PathPattern.parse(FreezePath), freezeAction)
       )
     )
   }
@@ -211,13 +217,13 @@ private[eezo] object DevServer {
       error.map(message => p(strong(message))).toSeq,
       form(
         Attrs.method := "post",
-        Attrs.action := "/eezo/sync",
+        Attrs.action := SyncPath,
         button("apply to the dev database"),
         small(" — no migration written; dev only")
       ),
       form(
         Attrs.method := "post",
-        Attrs.action := "/eezo/freeze",
+        Attrs.action := FreezePath,
         if (decisions.isEmpty) Seq.empty[Html]
         else Seq(fieldset(legend("destructive changes — decide each one"), decisions)),
         p(

@@ -14,13 +14,9 @@ class ReloadSuite extends munit.FunSuite {
   private val prod = Config(RouteTable(Seq.empty), dev = false)
 
   test("a full document gets the script as the last child of body when dev is on") {
-    val page     = Response.Ok(Html.doctype ++ html(head(title("t")), body(h1("hi"), p("x"))))
-    val rendered = Reload.inject(page, dev).body match {
-      case Body.Html(value) => value.render
-      case other            => fail(s"expected an Html body, got $other")
-    }
+    val page = Response.Ok(Html.doctype ++ html(head(title("t")), body(h1("hi"), p("x"))))
     assertEquals(
-      rendered,
+      rendered(Reload.inject(page, dev)),
       "<!DOCTYPE html><html><head><title>t</title></head>" +
         s"<body><h1>hi</h1><p>x</p>${Reload.tag.render}</body></html>"
     )

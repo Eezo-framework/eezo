@@ -9,23 +9,23 @@ import io.eezo.core.html.Tags.*
   * the server; the restart that follows a save closes it; the script then polls until the new
   * server answers and refreshes the page. Whole page, no state kept. This is the reload contract
   * (issue 153), and `Eezo` is its only caller: `inject` from the handler's one completion site, so
-  * every response passes it, and `path` from the WebSocket creator, before the user's table.
+  * every response passes it, and `listenerFor` from the WebSocket creator, before the user's table.
+  * Both read `config.dev` here, so the dev gate has one owner.
   *
-  * The `/eezo/` prefix is reserved for the framework's own routes. Today the reload endpoint is the
-  * only one dispatched here; the dev server's drift page mounts its actions under it as ordinary
-  * routes.
+  * The endpoint sits under `Eezo.ReservedPrefix`. Today it is the only framework route dispatched
+  * here; the dev server's drift page mounts its actions under the same prefix as ordinary routes.
   */
 private[http] object Reload {
 
   /** The reserved endpoint. WebSocket only: an HTTP GET on it is an ordinary 404. */
-  private[http] val path: String = "/eezo/reload"
+  private[http] val path: String = s"${Eezo.ReservedPrefix}/reload"
 
   /** The client, inline. About thirty lines held here rather than served from a second reserved
     * path, so there is no resource to locate and no caching question.
     */
   private val client: String =
-    """(function () {
-      |  var url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "/eezo/reload";
+    s"""(function () {
+      |  var url = (location.protocol === "https:" ? "wss://" : "ws://") + location.host + "$path";
       |  var lost = false;
       |  function connect() {
       |    var socket = new WebSocket(url);
@@ -46,7 +46,13 @@ private[http] object Reload {
   /** What the server does with a reload connection: nothing. The client needs only the open and
     * close events, and the restart is what produces the close.
     */
-  private[http] val listener: WsListener = new WsListener {}
+  private val listener: WsListener = new WsListener {}
+
+  /** The listener for an upgrade at `requested`: the reload listener when that is the reserved
+    * endpoint and `dev` is on, `None` otherwise so the caller falls through to the user's table.
+    */
+  private[http] def listenerFor(requested: String, config: Config): Option[WsListener] =
+    if (config.dev && requested == path) Some(listener) else None
 
   /** The script tag every dev server page carries. */
   private[http] val tag: Html = script(Html.raw(client))
@@ -66,23 +72,15 @@ private[http] object Reload {
 
   /** The tree with the tag appended to its first `body`, or the tree unchanged when it has none. */
   private def appendToBody(page: Html): Html = {
-    // Whether an earlier sibling already took the tag, so a page with two `body` elements, which
-    // no parser accepts anyway, gets exactly one script rather than one per body.
+    // Whether an earlier node already took the tag, so a page with two `body` elements, which no
+    // parser accepts anyway, gets exactly one script rather than one per body.
     var done = false
 
-    def walk(node: Html): Html =
-      if (done) node
-      else
-        node match {
-          case Html.Element("body", attrs, key, children) =>
-            done = true
-            Html.Element("body", attrs, key, children :+ tag)
-          case Html.Element(name, attrs, key, children) =>
-            Html.Element(name, attrs, key, children.map(walk))
-          case Html.Fragment(children) => Html.Fragment(children.map(walk))
-          case leaf                    => leaf
-        }
-
-    walk(page)
+    page.transform {
+      case Html.Element("body", attrs, key, children) if !done =>
+        done = true
+        Html.Element("body", attrs, key, children :+ tag)
+      case node => node
+    }
   }
 }

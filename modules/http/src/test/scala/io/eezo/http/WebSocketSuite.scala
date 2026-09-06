@@ -87,13 +87,13 @@ class WebSocketSuite extends munit.FunSuite {
     val none = RouteTable(Seq.empty)
     serving(none, dev = true) { (client, port) =>
       val session =
-        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port${Reload.path}")).get()
       assert(session.isOpen)
       session.close()
     }
     serving(none) { (client, port) =>
       val failure = intercept[java.util.concurrent.ExecutionException] {
-        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port${Reload.path}")).get()
       }
       assert(clue(failure.getCause.toString).contains("404"))
     }
@@ -104,7 +104,7 @@ class WebSocketSuite extends munit.FunSuite {
     val routes = RouteTable(
       Seq(
         Route.Ws(
-          PathPattern.parse("/eezo/reload"),
+          PathPattern.parse(Reload.path),
           _ =>
             new WsListener {
               override def onOpen(conn: WsConn): Unit = { val _ = events.offer("user") }
@@ -114,7 +114,7 @@ class WebSocketSuite extends munit.FunSuite {
     )
     serving(routes, dev = true) { (client, port) =>
       val session =
-        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port${Reload.path}")).get()
       assert(session.isOpen)
       assertEquals(events.poll(500, TimeUnit.MILLISECONDS), null)
       session.close()

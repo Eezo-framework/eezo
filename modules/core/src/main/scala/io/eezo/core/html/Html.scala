@@ -67,12 +67,24 @@ enum Html {
     * mounted route is about to return, and a mount is a property of where routes are served rather
     * than something a view decides for itself.
     */
-  private[eezo] def under(prefix: String): Html = this match {
+  private[eezo] def under(prefix: String): Html = transform {
     case Element(name, attrs, key, children) =>
-      Element(name, attrs.map(_.under(prefix)), key, children.map(_.under(prefix)))
-    case Fragment(children) => Fragment(children.map(_.under(prefix)))
+      Element(name, attrs.map(_.under(prefix)), key, children)
     // Text carries no address, and raw markup is a string eezo never parses.
     case leaf => leaf
+  }
+
+  /** This tree rebuilt top down: `f` sees a node before its children, and the walk descends into
+    * whatever `f` returned, through `Element` and `Fragment` alike. `Text` and `Raw` are leaves.
+    *
+    * The one walk both [[under]] and the dev server's reload injection are written over, so a fifth
+    * case would be added here once rather than in every caller's match.
+    */
+  private[eezo] def transform(f: Html => Html): Html = f(this) match {
+    case Element(name, attrs, key, children) =>
+      Element(name, attrs, key, children.map(_.transform(f)))
+    case Fragment(children) => Fragment(children.map(_.transform(f)))
+    case leaf               => leaf
   }
 
   /** The rendered markup, as a `String`. The HTTP boundary encodes it as UTF-8. */
