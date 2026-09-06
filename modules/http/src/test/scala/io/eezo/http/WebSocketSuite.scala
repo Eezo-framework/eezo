@@ -25,8 +25,10 @@ class WebSocketSuite extends munit.FunSuite {
     override def onWebSocketOpen(session: Session): Unit = ()
   }
 
-  private def serving(routes: RouteTable)(body: (WebSocketClient, Int) => Unit): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes))
+  private def serving(routes: RouteTable, dev: Boolean = false)(
+      body: (WebSocketClient, Int) => Unit
+  ): Unit = {
+    val server = Eezo.start(port = 0, config = Config(routes, dev = dev))
     val client = new WebSocketClient()
     client.start()
     try {
@@ -78,6 +80,44 @@ class WebSocketSuite extends munit.FunSuite {
           client.connect(new ClientListener, URI.create(s"ws://localhost:$port/nope")).get()
         }
         assert(clue(failure.getCause.toString).contains("404"))
+    }
+  }
+
+  test("the dev server accepts an upgrade on the reload path, and production refuses it") {
+    val none = RouteTable(Seq.empty)
+    serving(none, dev = true) { (client, port) =>
+      val session =
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+      assert(session.isOpen)
+      session.close()
+    }
+    serving(none) { (client, port) =>
+      val failure = intercept[java.util.concurrent.ExecutionException] {
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+      }
+      assert(clue(failure.getCause.toString).contains("404"))
+    }
+  }
+
+  test("a user route on the reload path never shadows it on the dev server") {
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/eezo/reload"),
+          _ =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = { val _ = events.offer("user") }
+            }
+        )
+      )
+    )
+    serving(routes, dev = true) { (client, port) =>
+      val session =
+        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/eezo/reload")).get()
+      assert(session.isOpen)
+      assertEquals(events.poll(500, TimeUnit.MILLISECONDS), null)
+      session.close()
     }
   }
 }
