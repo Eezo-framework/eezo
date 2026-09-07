@@ -244,4 +244,29 @@ class EezoServerSuite extends munit.FunSuite {
       assertEquals(response.body(), "destroyed 7")
     }
   }
+
+  test("the dev server appends the reload client inside body, and production serves none") {
+    serving(hello, dev = true) { (_, port) =>
+      val page = get(port, "/hello").body()
+      assert(clue(page).startsWith("<html><body><h1>hello, eezo</h1><script>"))
+      assert(clue(page).endsWith("</script></body></html>"))
+    }
+    serving(hello) { (_, port) =>
+      assertEquals(get(port, "/hello").body(), "<html><body><h1>hello, eezo</h1></body></html>")
+    }
+  }
+
+  test("the dev server's own 404 page carries the reload client too") {
+    serving(hello, dev = true) { (_, port) =>
+      val response = get(port, "/nope")
+      assertEquals(response.statusCode(), 404)
+      assert(clue(response.body()).contains("<script>"))
+    }
+  }
+
+  test("an HTTP GET on the reload path is an ordinary 404 on the dev server") {
+    serving(hello, dev = true) { (_, port) =>
+      assertEquals(get(port, Reload.path).statusCode(), 404)
+    }
+  }
 }

@@ -67,11 +67,28 @@ enum Html {
     * mounted route is about to return, and a mount is a property of where routes are served rather
     * than something a view decides for itself.
     */
-  private[eezo] def under(prefix: String): Html = this match {
-    case Element(name, attrs, key, children) =>
-      Element(name, attrs.map(_.under(prefix)), key, children.map(_.under(prefix)))
-    case Fragment(children) => Fragment(children.map(_.under(prefix)))
+  private[eezo] def under(prefix: String): Html = transform {
+    case node @ Element(name, attrs, key, children) =>
+      val rewritten = attrs.map(_.under(prefix))
+      if (Html.same(rewritten, attrs)) node else Element(name, rewritten, key, children)
     // Text carries no address, and raw markup is a string eezo never parses.
+    case leaf => leaf
+  }
+
+  /** This tree rebuilt top down: `f` sees a node before its children, and the walk descends into
+    * whatever `f` returned, through `Element` and `Fragment` alike. `Text` and `Raw` are leaves.
+    *
+    * A node `f` leaves alone, whose children the walk leaves alone, is returned as the same object,
+    * so a walk that changes one node allocates only the spine above it.
+    */
+  private[eezo] def transform(f: Html => Html): Html = f(this) match {
+    case node @ Element(name, attrs, key, children) =>
+      val walked = children.map(_.transform(f))
+      if ((node eq this) && Html.same(walked, children)) this
+      else Element(name, attrs, key, walked)
+    case node @ Fragment(children) =>
+      val walked = children.map(_.transform(f))
+      if ((node eq this) && Html.same(walked, children)) this else Fragment(walked)
     case leaf => leaf
   }
 
@@ -167,6 +184,13 @@ object Html {
       "track",
       "wbr"
     )
+
+  /** Whether `mapped` holds the same objects as `original`, position by position: the check a walk
+    * makes before allocating a parent, since a `map` that changed nothing still built a new
+    * `Vector`.
+    */
+  private def same[A <: AnyRef](mapped: Vector[A], original: Vector[A]): Boolean =
+    mapped.corresponds(original)(_ eq _)
 
   /** Escapes the five characters that can break out of a text or an attribute value.
     *

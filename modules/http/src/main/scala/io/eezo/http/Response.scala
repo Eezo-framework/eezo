@@ -15,6 +15,16 @@ enum Body {
   case Html(value: io.eezo.core.html.Html)
 
   case Empty
+
+  /** The page rewritten by `f` when this is one, and this body untouched otherwise: `Bytes` is user
+    * encoded and opaque even with an HTML content type. The one shape a mount's rewrite and the dev
+    * server's reload injection share.
+    */
+  private[http] def mapHtml(f: io.eezo.core.html.Html => io.eezo.core.html.Html): Body =
+    this match {
+      case Html(page) => Html(f(page))
+      case other      => other
+    }
 }
 
 /** A response, as a value.
@@ -59,10 +69,7 @@ final case class Response(status: Int, headers: Seq[(String, Url | String)], bod
         case (name, url: Url) => name -> url.under(prefix)
         case header           => header
       },
-      body = body match {
-        case Body.Html(page) => Body.Html(page.under(prefix))
-        case other           => other
-      }
+      body = body.mapHtml(_.under(prefix))
     )
 }
 

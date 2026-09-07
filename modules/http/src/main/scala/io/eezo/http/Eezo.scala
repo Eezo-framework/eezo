@@ -67,6 +67,12 @@ object Eezo {
 
   private val log = System.getLogger("io.eezo.http")
 
+  /** The path prefix reserved for the framework's own routes: the reload endpoint here, and the dev
+    * server's drift actions in `modules/eezo`. One spelling, so a new framework route is added
+    * under it rather than beside it.
+    */
+  private[eezo] val ReservedPrefix: String = "/eezo"
+
   /** Boots the server and blocks until it stops. */
   def run(
       port: Int,
@@ -180,22 +186,29 @@ object Eezo {
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
       val path = JettyRequest.getPathInContext(request)
 
-      config.routes.dispatchWs(path) match {
-        case Some((route, params)) =>
-          val upgradeRequest = Request(
-            method = Method.GET,
-            path = path,
-            query = queryOf(request),
-            headers = headersOf(request),
-            body = Array.emptyByteArray,
-            pathParams = params
-          )
-          new JettyListener(route.endpoint(upgradeRequest))
-
-        case None =>
+      // The reload endpoint is asked first, before the user's table, so no route can shadow it, no
+      // mount rewrites it, and it never appears in the boot listing. `Reload` owns the dev gate.
+      Reload
+        .listenerFor(path, config)
+        .orElse {
+          config.routes.dispatchWs(path).map { (route, params) =>
+            route.endpoint(
+              Request(
+                method = Method.GET,
+                path = path,
+                query = queryOf(request),
+                headers = headersOf(request),
+                body = Array.emptyByteArray,
+                pathParams = params
+              )
+            )
+          }
+        }
+        .map(new JettyListener(_))
+        .getOrElse {
           write(response, Boundary.errorResponse(NotFound(path), path, config), callback)
           null
-      }
+        }
     }
 
   /** eezo's HTTP handler: one completion site, reached unconditionally.
@@ -227,7 +240,10 @@ object Eezo {
             Boundary.toResponse(resolution)
         }
 
-      write(response, result, callback)
+      // Every HTTP response passes here, success or failure, so this is where the dev server adds
+      // the reload client: `Boundary` stays the failure boundary and does not grow a response
+      // filter. A refused upgrade is answered in `creator` and is not a page, so it skips this.
+      write(response, Reload.inject(result, config), callback)
       true
     }
   }

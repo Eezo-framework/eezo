@@ -25,8 +25,10 @@ class WebSocketSuite extends munit.FunSuite {
     override def onWebSocketOpen(session: Session): Unit = ()
   }
 
-  private def serving(routes: RouteTable)(body: (WebSocketClient, Int) => Unit): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes))
+  private def serving(routes: RouteTable, dev: Boolean = false)(
+      body: (WebSocketClient, Int) => Unit
+  ): Unit = {
+    val server = Eezo.start(port = 0, config = Config(routes, dev = dev))
     val client = new WebSocketClient()
     client.start()
     try {
@@ -36,6 +38,15 @@ class WebSocketSuite extends munit.FunSuite {
       client.stop()
       server.stop()
     }
+  }
+
+  private def connect(client: WebSocketClient, port: Int, path: String): Session =
+    client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
+
+  /** The upgrade at `path` is answered with a 404 rather than left hanging. */
+  private def refused(client: WebSocketClient, port: Int, path: String): Unit = {
+    val failure = intercept[java.util.concurrent.ExecutionException](connect(client, port, path))
+    assert(clue(failure.getCause.toString).contains("404"))
   }
 
   test("a WebSocket route receives the open event and every message, with its path parameters") {
@@ -58,8 +69,7 @@ class WebSocketSuite extends munit.FunSuite {
     )
 
     serving(routes) { (client, port) =>
-      val session =
-        client.connect(new ClientListener, URI.create(s"ws://localhost:$port/live/lobby")).get()
+      val session = connect(client, port, "/live/lobby")
       assertEquals(events.poll(5, TimeUnit.SECONDS), "open:lobby")
       session.sendText("one", Callback.NOOP)
       assertEquals(events.poll(5, TimeUnit.SECONDS), "text:one")
@@ -73,11 +83,38 @@ class WebSocketSuite extends munit.FunSuite {
 
   test("an upgrade matching no WebSocket route is refused, not left hanging") {
     serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
-      (client, port) =>
-        val failure = intercept[java.util.concurrent.ExecutionException] {
-          client.connect(new ClientListener, URI.create(s"ws://localhost:$port/nope")).get()
-        }
-        assert(clue(failure.getCause.toString).contains("404"))
+      (client, port) => refused(client, port, "/nope")
+    }
+  }
+
+  test("the dev server accepts an upgrade on the reload path, and production refuses it") {
+    val none = RouteTable(Seq.empty)
+    serving(none, dev = true) { (client, port) =>
+      val session = connect(client, port, Reload.path)
+      assert(session.isOpen)
+      session.close()
+    }
+    serving(none) { (client, port) => refused(client, port, Reload.path) }
+  }
+
+  test("a user route on the reload path never shadows it on the dev server") {
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse(Reload.path),
+          _ =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = { val _ = events.offer("user") }
+            }
+        )
+      )
+    )
+    serving(routes, dev = true) { (client, port) =>
+      val session = connect(client, port, Reload.path)
+      assert(session.isOpen)
+      assertEquals(events.poll(500, TimeUnit.MILLISECONDS), null)
+      session.close()
     }
   }
 }
