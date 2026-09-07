@@ -8,12 +8,11 @@ import io.eezo.core.html.Tags.*
   * The dev server adds a small script to every page it serves. The script keeps a WebSocket open to
   * the server; the restart that follows a save closes it; the script then polls until the new
   * server answers and refreshes the page. Whole page, no state kept. This is the reload contract
-  * (issue 153), and `Eezo` is its only caller: `inject` from the handler's one completion site, so
-  * every response passes it, and `listenerFor` from the WebSocket creator, before the user's table.
-  * Both read `config.dev` here, so the dev gate has one owner.
+  * (issue 153). Both entry points read `config.dev` here, so the dev gate has one owner.
   *
   * The endpoint sits under `Eezo.ReservedPrefix`. Today it is the only framework route dispatched
-  * here; the dev server's drift page mounts its actions under the same prefix as ordinary routes.
+  * before the user's table; the dev server's drift page mounts its actions under the same prefix as
+  * ordinary routes.
   */
 private[http] object Reload {
 
@@ -52,23 +51,19 @@ private[http] object Reload {
     * endpoint and `dev` is on, `None` otherwise so the caller falls through to the user's table.
     */
   private[http] def listenerFor(requested: String, config: Config): Option[WsListener] =
-    if (config.dev && requested == path) Some(listener) else None
+    Option.when(config.dev && requested == path)(listener)
 
   /** The script tag every dev server page carries. */
   private[http] val tag: Html = script(Html.raw(client))
 
   /** The tag, appended to a page when `dev` is on.
     *
-    * Structural, not by string search: the tree is walked, descending through `Fragment` so that
-    * `Html.doctype ++ html(...)` works, and the tag becomes the last child of the first `body`
-    * element. No `body`, no script: a fragment is not a document, and neither is `Html.raw`.
-    * `Body.Bytes` is never touched, even with an HTML content type, because it is user encoded.
+    * Structural, not by string search: the tag becomes the last child of the first `body` element,
+    * and the walk descends through `Fragment` so that `Html.doctype ++ html(...)` works. No `body`,
+    * no script: a fragment is not a document, and neither is `Html.raw`.
     */
   private[http] def inject(response: Response, config: Config): Response =
-    response.body match {
-      case Body.Html(page) if config.dev => response.copy(body = Body.Html(appendToBody(page)))
-      case _                             => response
-    }
+    if (config.dev) response.copy(body = response.body.mapHtml(appendToBody)) else response
 
   /** The tree with the tag appended to its first `body`, or the tree unchanged when it has none. */
   private def appendToBody(page: Html): Html = {

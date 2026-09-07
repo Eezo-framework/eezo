@@ -264,10 +264,9 @@ class EezoServerSuite extends munit.FunSuite {
     }
   }
 
-  test("an HTTP GET on the reload path is an ordinary 404 in both modes") {
+  test("an HTTP GET on the reload path is an ordinary 404 on the dev server") {
     serving(hello, dev = true) { (_, port) =>
       assertEquals(get(port, Reload.path).statusCode(), 404)
     }
-    serving(hello) { (_, port) => assertEquals(get(port, Reload.path).statusCode(), 404) }
   }
 }

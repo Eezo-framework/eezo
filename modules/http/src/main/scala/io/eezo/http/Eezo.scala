@@ -188,26 +188,27 @@ object Eezo {
 
       // The reload endpoint is asked first, before the user's table, so no route can shadow it, no
       // mount rewrites it, and it never appears in the boot listing. `Reload` owns the dev gate.
-      val listener = Reload.listenerFor(path, config).orElse {
-        config.routes.dispatchWs(path).map { (route, params) =>
-          val upgradeRequest = Request(
-            method = Method.GET,
-            path = path,
-            query = queryOf(request),
-            headers = headersOf(request),
-            body = Array.emptyByteArray,
-            pathParams = params
-          )
-          route.endpoint(upgradeRequest)
+      Reload
+        .listenerFor(path, config)
+        .orElse {
+          config.routes.dispatchWs(path).map { (route, params) =>
+            route.endpoint(
+              Request(
+                method = Method.GET,
+                path = path,
+                query = queryOf(request),
+                headers = headersOf(request),
+                body = Array.emptyByteArray,
+                pathParams = params
+              )
+            )
+          }
         }
-      }
-
-      listener match {
-        case Some(listener) => new JettyListener(listener)
-        case None           =>
+        .map(new JettyListener(_))
+        .getOrElse {
           write(response, Boundary.errorResponse(NotFound(path), path, config), callback)
           null
-      }
+        }
     }
 
   /** eezo's HTTP handler: one completion site, reached unconditionally.
@@ -239,8 +240,9 @@ object Eezo {
             Boundary.toResponse(resolution)
         }
 
-      // Every response passes here, success or failure, so this is where the dev server adds the
-      // reload client: `Boundary` stays the failure boundary and does not grow a response filter.
+      // Every HTTP response passes here, success or failure, so this is where the dev server adds
+      // the reload client: `Boundary` stays the failure boundary and does not grow a response
+      // filter. A refused upgrade is answered in `creator` and is not a page, so it skips this.
       write(response, Reload.inject(result, config), callback)
       true
     }
