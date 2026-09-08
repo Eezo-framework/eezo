@@ -1,4 +1,4 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.migrate.{Decision, Resolution}
 import io.eezo.db.schema.Change
@@ -77,26 +77,4 @@ object Render {
   private def verified(drift: List[Change]): String =
     if (drift.isEmpty) "database matches model ✓"
     else s"${changes(drift)}\ndatabase does not match model (${drift.size} difference(s))"
-
-  def routes(r: RouteListing): String = {
-    val warnings =
-      r.overridden.map(route =>
-        s"⚠ ${route.describe} is written by hand and also derived; the derived one is not mounted"
-      ) ++
-        r.shadowed.map { case (earlier, later) =>
-          s"⚠ ${earlier.describe} shadows ${later.describe}, which can never match"
-        } ++
-        r.orphans.map(o =>
-          s"⚠ ${o.pageRoute} is mounted without ${o.targetRoute}: submitting the form answers 405"
-        )
-
-    val table =
-      if (r.routes.isEmpty) "no routes mounted"
-      else {
-        val heading = if (r.routes.sizeIs == 1) "1 route:" else s"${r.routes.size} routes:"
-        r.routes.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
-      }
-
-    (warnings :+ table).mkString("\n")
-  }
 }

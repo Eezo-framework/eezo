@@ -113,28 +113,15 @@ lazy val auth = module("auth").dependsOn(core, http, db)
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 
-// `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`. Commands are library functions returning
-// values (design/cli.md §4, layer 1); the front-ends live above, in `modules/eezo` and the
-// launcher. `test->test` on `db` is what lets the cli suites extend `DbSuite` and inherit its
-// one-Postgres-per-run testcontainers setup; the fork and parallelism settings below are `db`'s
-// own, for the same reason `db` states on them — one installed `Database` at a time.
-lazy val cli = module("cli")
-  .dependsOn(core, http, db % "compile->compile;test->test", live, auth)
-  .settings(
-    libraryDependencies += testcontainersPg,
-    Test / fork              := true,
-    Test / parallelExecution := false
-  )
-
-// The umbrella, and the artifact an application depends on: `"io.eezo" %% "eezo"`. It exists so
-// that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which is what
-// design/objective.md's 30-minute benchmark asks of the first file a user writes. The entry point
-// lives here rather than in a lower module because it is the opposite shape from `core`'s
-// contents: it depends on everything and nothing depends on it, so it goes in the lowest module
-// that sees everything its body names — `Schema` from `db`, `RouteTable` from `http`, the
-// commands from `cli`.
+// The umbrella, and the default artifact an application depends on: `"io.eezo" %% "eezo"`. It
+// exists so that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which
+// is what design/objective.md's 30-minute benchmark asks of the first file a user writes. The two
+// edges are artifacts of their own: `eezo-http` carries `HttpApp` and `eezo-db` carries `DbApp`, so
+// an application that has only one edge depends on that edge alone and the other edge's derivations
+// are not on its classpath. `EezoApp` stacks the two entry traits, and the drift page the database
+// edge contributes to `dev` lives here because it is the one thing that needs both.
 lazy val eezo = (project in file("modules/eezo"))
-  .dependsOn(cli)
+  .dependsOn(http, db, live, auth)
   .settings(commonSettings)
   .settings(name := "eezo")
 
@@ -184,7 +171,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, cli, eezo, sbtEezo)
+  .aggregate(core, http, db, live, auth, testkit, eezo, sbtEezo)
   .settings(commonSettings)
   .settings(
     // The name `eezo` belongs to the published umbrella module above; the root is the unpublished
@@ -231,7 +218,7 @@ lazy val example = project
     Compile / run / fork      := true,
     // The Tour lives in `src/test` because it starts its own Postgres through testcontainers, and
     // that is a test-scoped dependency. It is still a program, not a suite:
-    //   sbt "example/Test/runMain example.Tour"            (--no-pause to run straight through)
+    //   sbt "example/Test/runMain example.Tour"            (-Dtour.nopause to run straight through)
     // `connectInput` is what lets its pauses and `freeze`'s prompts read stdin.
     Test / fork                  := true,
     Compile / run / connectInput := true,

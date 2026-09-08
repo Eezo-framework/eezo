@@ -1,4 +1,5 @@
 import io.eezo.EezoApp
+import io.eezo.db.Schema
 import io.eezo.generated.Routes
 import io.eezo.http.Provenance
 import io.eezo.http.Route
@@ -36,6 +37,11 @@ import io.eezo.http.RouteTable
   * method and path, so preserving that order preserves both rules.
   */
 object Main extends EezoApp {
+
+  /** No tables yet. `schema` is abstract on `EezoApp`, so an application on the umbrella says so;
+    * the examples ticket (#161) moves this example to the edge it actually has.
+    */
+  override def schema: Schema = Schema.empty
 
   override def routes: RouteTable = {
     val (derived, handwritten) =

@@ -1,4 +1,4 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.migrate.{Decision, Migration}
 import io.eezo.db.support.{Library, Widgets}

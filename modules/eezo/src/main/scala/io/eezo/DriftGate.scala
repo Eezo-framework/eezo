@@ -1,6 +1,6 @@
 package io.eezo
 
-import io.eezo.cli.{Commands, Render, StatusResult}
+import io.eezo.db.cli.{Commands, Render, StatusResult}
 import io.eezo.core.html.{Attrs, Html, Mod}
 import io.eezo.core.html.Tags.*
 import io.eezo.db.Schema
@@ -11,8 +11,10 @@ import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteT
 
 import scala.util.control.NonFatal
 
-/** The dev server (design/cli.md §5): the drift check at boot, then the app with the development
-  * listing on — or, when the drift is dangerous, an *interactive* refusal.
+/** The database edge's contribution to `dev` (design/cli.md §5): the drift check at boot, and when
+  * the drift is dangerous an *interactive* refusal page in place of the app. It answers a route
+  * table or nothing; `EezoApp.devServer` is what serves either, so the server's overrides — `port`,
+  * `maxBodySize`, `problems` — reach the drift page and the app the same way.
   *
   * The middle position §5 argues for: **refuse on destructive or risky drift, banner on additive.**
   * Destructive drift serves a page saying what is out of step, because a browser is where a
@@ -43,7 +45,7 @@ import scala.util.control.NonFatal
   * No CSRF token on the forms, deliberately: this server exists only while refusing to route in
   * development, and its actions are the ones the developer's own terminal already offers.
   */
-private[eezo] object DevServer {
+private[eezo] object DriftGate {
 
   /** The drift page's two reserved routes, under the prefix `Eezo` keeps for the framework. Each is
     * spelled once, so the form that posts and the route that answers cannot drift apart.
@@ -51,7 +53,10 @@ private[eezo] object DevServer {
   private val SyncPath: String   = s"${Eezo.ReservedPrefix}/sync"
   private val FreezePath: String = s"${Eezo.ReservedPrefix}/freeze"
 
-  def serve(schema: Schema, databaseSchema: String, port: Int, routes: RouteTable): Unit = {
+  /** The refusal table when the drift blocks, `None` when the app may serve. Prints the banners
+    * either way. Runs under the installed `Database`.
+    */
+  def apply(schema: Schema, databaseSchema: String): Option[RouteTable] = {
     val drift = currentDrift(schema, databaseSchema)
     if (blockers(drift).nonEmpty) {
       println(Render.status(StatusResult(drift)))
@@ -59,13 +64,13 @@ private[eezo] object DevServer {
         |serving the drift page instead of the app; resolve it there, or here:
         |  sync --apply     apply this to your dev database
         |  freeze <name>    write it as a migration""".stripMargin)
-      Eezo.run(port = port, routes = driftTable(schema, databaseSchema), dev = true)
+      Some(driftTable(schema, databaseSchema))
     } else {
       if (drift.nonEmpty) {
         println("[eezo] ⚠ the database does not match your models; additive only, serving anyway")
         println(Render.status(StatusResult(drift)))
       }
-      Eezo.run(port = port, routes = routes, dev = true)
+      None
     }
   }
 

@@ -6,10 +6,10 @@ import java.sql.Connection
 
 /** How an application names its database: the connection settings and the per-connection hook.
   *
-  * Split out of [[EezoApp]] so that a front-end which is not the application's entry point — the
-  * CLI dispatch in `modules/eezo`, a deploy runner — can build the same `Database` from the same
-  * settings without inheriting `boot`. `EezoApp` extends this; users override members here and
-  * never name the trait.
+  * Split out of [[DbApp]] so that a front-end which is not the application's entry point — a deploy
+  * runner, the testkit — can build the same `Database` from the same settings without inheriting
+  * `boot`. `DbApp` extends this, and the umbrella's `EezoApp` through it; users override members
+  * here and never name the trait.
   *
   * Named for [[databaseInit]], its one member that is not a string, because it is the one people
   * get wrong — see its comment.

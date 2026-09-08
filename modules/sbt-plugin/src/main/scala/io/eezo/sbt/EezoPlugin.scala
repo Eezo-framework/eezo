@@ -44,7 +44,7 @@ object EezoPlugin extends AutoPlugin {
       taskKey[Seq[File]]("Generates io.eezo.generated.Routes from src/main/scala/app/.")
 
     // The command tasks. Each is one forward to `run <command>`, so `sbt eezoStatus` and
-    // `sbt "run status"` are the same code path — the dispatch in `io.eezo.EezoApp` — and the
+    // `sbt "run status"` are the same code path — the dispatch the entry trait inherits — and the
     // plugin stays sugar rather than mechanism (design/cli.md §4). `@transient` for the same
     // reason as above: these are effectful forwards, and sbt 2 must never satisfy one from a
     // task cache.
@@ -129,6 +129,10 @@ object EezoPlugin extends AutoPlugin {
     * covers the source tree, and `eezoRestart`'s classpath dependency pulls the compile — so the
     * loop is one alias rather than machinery: research/build-reload.md measured resident `~` at
     * 148–300 ms from save to rebuilt, which is the budget this rides on.
+    *
+    * `dev` is the http edge's command. On a database-only application (`DbApp` alone) it is
+    * unknown, so `eezoDev` prints the unknown-command line on every save; a rerun-on-save loop for
+    * a job is sbt's own `~run`.
     */
   override lazy val globalSettings: Seq[Setting[_]] =
     addCommandAlias("eezoDev", "~eezoRestart")

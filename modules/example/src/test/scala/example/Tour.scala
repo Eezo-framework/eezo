@@ -1,6 +1,6 @@
 package example
 
-import io.eezo.EezoApp
+import io.eezo.db.DbApp
 import io.eezo.db.*
 import io.eezo.db.Scopes.*
 import io.eezo.core.Id
@@ -21,14 +21,16 @@ import scala.util.control.NonFatal
   * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
   * migrations are real files on disk that you can open.
   *
-  * sbt "example/run" # step through it sbt "example/run --no-pause" # run it start to finish
+  * sbt "example/Test/runMain example.Tour" steps through it; `-Dtour.nopause` runs it start to
+  * finish. A flag rather than an argument, because the empty argument list is the application and
+  * any first argument is a command.
   */
-object Tour extends EezoApp {
+object Tour extends DbApp {
 
   /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
     *
     * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
-    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `--no-pause` to let it run
+    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `-Dtour.nopause` to let it run
     * straight through.
     */
   private lazy val container: PostgreSQLContainer[?] = {
@@ -37,6 +39,8 @@ object Tour extends EezoApp {
     sys.addShutdownHook(c.stop())
     c
   }
+
+  override def schema: Schema = AppSchema
 
   override def databaseUrl: String      = container.getJdbcUrl
   override def databaseUser: String     = container.getUsername
@@ -60,8 +64,8 @@ object Tour extends EezoApp {
 
   private var paused = true
 
-  override def boot(args: Array[String]): Unit = {
-    paused = !args.contains("--no-pause")
+  override def boot(): Unit = {
+    paused = !sys.props.contains("tour.nopause")
     val migrations = Files.createTempDirectory("eezo-tour")
 
     connect() match {

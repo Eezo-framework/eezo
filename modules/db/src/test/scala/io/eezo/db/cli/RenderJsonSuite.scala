@@ -1,9 +1,7 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.migrate.{Decision, Resolution}
 import io.eezo.db.schema.{Change, ColumnSnap}
-import io.eezo.http.{Handler, Method, PathPattern, Provenance, Response, Route, RouteTable}
-
 import munit.FunSuite
 
 /** The JSON shapes are a contract for tools, so they are pinned as strings: a field rename or a
@@ -69,21 +67,6 @@ class RenderJsonSuite extends FunSuite {
     assert(
       RenderJson.migrate(MigrateResult.Tampered(List("bad"))).contains("\"outcome\": \"tampered\"")
     )
-  }
-
-  test("routes renders method, path and provenance per route") {
-    val ok: Handler = _ => Response.status(200)
-    val table       = RouteTable(
-      Seq(
-        Route.Http(Method.GET, PathPattern.parse("/todos/:id"), ok),
-        Route.Http(Method.POST, PathPattern.parse("/todos"), ok, Provenance.Derived)
-      )
-    )
-    val json = RenderJson.routes(Commands.routes(table))
-    assert(json.contains("\"method\": \"GET\""))
-    assert(json.contains("\"path\": \"/todos/:id\""))
-    assert(json.contains("\"provenance\": \"derived\""))
-    assert(json.contains("\"provenance\": \"handwritten\""))
   }
 
   test("error escapes the message") {

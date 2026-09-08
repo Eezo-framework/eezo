@@ -33,6 +33,13 @@ object Pg {
   def connect(): Connection =
     DriverManager.getConnection(container.getJdbcUrl, container.getUsername, container.getPassword)
 
+  /** The connection settings, for a suite that builds its own `Database` the way an application
+    * does: through `DbInit`'s overrides rather than through [[database]].
+    */
+  def jdbcUrl: String  = container.getJdbcUrl
+  def username: String = container.getUsername
+  def password: String = container.getPassword
+
   /** A `Database` for one suite, isolated by Postgres schema.
     *
     * The `search_path` is set by the pool's connection-init hook rather than once on a borrowed

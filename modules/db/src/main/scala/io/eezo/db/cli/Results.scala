@@ -1,15 +1,14 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.migrate.Resolution
 import io.eezo.db.schema.Change
-import io.eezo.http.{Action, Route}
 
 import java.nio.file.Path
 
-/** What the commands return. Layer 1's whole contract is here (design/cli.md §4): a command
-  * computes one of these values and never prints, so a front-end can render it as text, as JSON, or
-  * as a page — the machine-readable requirement of `design/objective.md` is satisfied by these
-  * types or nowhere.
+/** What the database edge's commands return. Layer 1's whole contract is here (design/cli.md §4): a
+  * command computes one of these values and never prints, so a front-end can render it as text, as
+  * JSON, or as a page — the machine-readable requirement of `design/objective.md` is satisfied by
+  * these types or nowhere. The http edge's results are its own, in `io.eezo.http.cli`.
   */
 
 /** The model/database diff. Empty means in sync. */
@@ -49,22 +48,3 @@ enum MigrateResult {
 final case class DropResult(tables: List[String])
 
 final case class ResetResult(dropped: List[String], ddl: List[String])
-
-/** [[io.eezo.http.Resource]]'s `Orphan`, re-stated with cli-owned visibility.
-  *
-  * `Orphan` itself is `private[eezo]`, so a public result type cannot carry it; the fields are
-  * copied instead of the type being widened, because "a derived form page whose submit target is
-  * not mounted" is a warning eezo emits, not a vocabulary users build on.
-  */
-final case class OrphanedPage(page: Action, pageRoute: String, target: Action, targetRoute: String)
-
-/** The assembled table, with everything boot warns about: the derived routes handwritten ones
-  * replaced, the pairs where an earlier route swallows a later one, and the form pages whose submit
-  * target is not mounted.
-  */
-final case class RouteListing(
-    routes: Seq[Route],
-    overridden: Seq[Route],
-    shadowed: Seq[(Route, Route)],
-    orphans: Seq[OrphanedPage]
-)

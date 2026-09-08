@@ -1,7 +1,7 @@
 package io.eezo.db.schema
 
 import io.eezo.db.ColumnDef
-import io.eezo.db.internal.J
+import io.eezo.core.internal.Json
 import io.eezo.db.internal.util.canonicalCheck
 
 final case class ColumnSnap(
@@ -12,24 +12,24 @@ final case class ColumnSnap(
     checks: List[String],
     references: Option[String]
 ) {
-  def toJson: J = J.O(
+  def toJson: Json = Json.Obj(
     List(
-      "name"       -> J.S(name),
-      "type"       -> J.S(pgType),
-      "nullable"   -> J.B(nullable),
-      "primaryKey" -> J.B(primaryKey),
-      "checks"     -> J.A(checks.map(J.S(_))),
-      "references" -> references.map(J.S(_)).getOrElse(J.Nul)
+      "name"       -> Json.Str(name),
+      "type"       -> Json.Str(pgType),
+      "nullable"   -> Json.Bool(nullable),
+      "primaryKey" -> Json.Bool(primaryKey),
+      "checks"     -> Json.Arr(checks.map(Json.Str(_))),
+      "references" -> references.map(Json.Str(_)).getOrElse(Json.Null)
     )
   )
 }
 
 final case class IndexSnap(name: String, columns: List[String], unique: Boolean) {
-  def toJson: J = J.O(
+  def toJson: Json = Json.Obj(
     List(
-      "name"    -> J.S(name),
-      "columns" -> J.A(columns.map(J.S(_))),
-      "unique"  -> J.B(unique)
+      "name"    -> Json.Str(name),
+      "columns" -> Json.Arr(columns.map(Json.Str(_))),
+      "unique"  -> Json.Bool(unique)
     )
   )
   def createDdl(table: String): String = {
@@ -40,23 +40,23 @@ final case class IndexSnap(name: String, columns: List[String], unique: Boolean)
 }
 
 final case class TableSnap(name: String, columns: List[ColumnSnap], indexes: List[IndexSnap]) {
-  def toJson: J = J.O(
+  def toJson: Json = Json.Obj(
     List(
-      "name"    -> J.S(name),
-      "columns" -> J.A(columns.map(_.toJson)),
-      "indexes" -> J.A(indexes.map(_.toJson))
+      "name"    -> Json.Str(name),
+      "columns" -> Json.Arr(columns.map(_.toJson)),
+      "indexes" -> Json.Arr(indexes.map(_.toJson))
     )
   )
 }
 
 final case class SchemaSnap(tables: List[TableSnap]) {
-  def toJson: J = J.O(
+  def toJson: Json = Json.Obj(
     List(
-      "version" -> J.N(1),
-      "tables"  -> J.A(tables.map(_.toJson))
+      "version" -> Json.Num(1),
+      "tables"  -> Json.Arr(tables.map(_.toJson))
     )
   )
-  def render: String = J.render(toJson)
+  def render: String = Json.render(toJson)
 }
 
 object Snapshot {

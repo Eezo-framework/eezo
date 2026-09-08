@@ -1,4 +1,4 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.migrate.Decision

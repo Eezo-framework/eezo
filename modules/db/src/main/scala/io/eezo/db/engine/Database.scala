@@ -44,7 +44,7 @@ private[eezo] object Installed {
     val d = current
     if (d == null)
       throw new IllegalStateException(
-        "no database has been installed. In an application this is `EezoApp`'s job, and it happens " +
+        "no database has been installed. In an application this is `DbApp`'s job, and it happens " +
           "before `boot` runs; in a test it is the testkit's. A `transact` reached during static " +
           "initialisation runs before either."
       )

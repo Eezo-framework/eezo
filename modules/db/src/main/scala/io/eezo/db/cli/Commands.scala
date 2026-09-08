@@ -1,15 +1,15 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.{DB, Schema, Tx}
 import io.eezo.db.migrate.{Decision, DeployCheck, Freeze, Migrator, Resolution}
 import io.eezo.db.schema.{Change, Ddl, Differ, Introspect}
-import io.eezo.http.{Resource, RouteTable}
 
 import java.nio.file.Path
 
-/** The commands, as library functions. Ported from `example/Cli.scala`, which was their
-  * specification (design/cli.md §3); the two rules of layer 1 apply to every entry point here:
-  * return values, never print; take capabilities, not connections.
+/** The database edge's commands, as library functions. Ported from `example/Cli.scala`, which was
+  * their specification (design/cli.md §3); the two rules of layer 1 apply to every entry point
+  * here: return values, never print; take capabilities, not connections. The http edge's are in
+  * `io.eezo.http.cli.Commands`, in the same shape.
   *
   * `dbSchema` is the Postgres schema commands introspect, defaulting to `public` the way
   * `Introspect.snapshot` does. It is a parameter for the same reason `Freeze.defaultDbDir` is: with
@@ -100,17 +100,6 @@ object Commands {
     execute(schema.ddl)
     ResetResult(dropped.tables, schema.ddl)
   }
-
-  /** The assembled table and everything boot warns about, as one value. Needs no database. */
-  def routes(table: RouteTable): RouteListing =
-    RouteListing(
-      routes = table.routes,
-      overridden = table.overridden,
-      shadowed = table.shadowed,
-      orphans = Resource
-        .orphaned(table)
-        .map(o => OrphanedPage(o.page, o.pageRoute, o.target, o.targetRoute))
-    )
 
   def ddl(schema: Schema): List[String] = schema.ddl
 
