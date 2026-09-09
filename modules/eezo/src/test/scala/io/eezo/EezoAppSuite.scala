@@ -1,9 +1,7 @@
 package io.eezo
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-
 import io.eezo.core.html.Tags.p
+import io.eezo.core.support.Captured.captured
 import io.eezo.db.Schema
 import io.eezo.db.engine.Installed
 import io.eezo.http.{Handler, Method, PathPattern, Response, Route, RouteTable}
@@ -32,19 +30,8 @@ class EezoAppSuite extends munit.FunSuite {
 
     override def boot(): Unit = {
       booted = true
-      bootedUnderDb =
-        try { Installed.get; true }
-        catch { case _: IllegalStateException => false }
+      bootedUnderDb = Installed.installed
     }
-  }
-
-  private def captured(body: => Int): (Int, String, String) = {
-    val out  = new ByteArrayOutputStream()
-    val err  = new ByteArrayOutputStream()
-    val code = Console.withOut(new PrintStream(out)) {
-      Console.withErr(new PrintStream(err)) { body }
-    }
-    (code, out.toString, err.toString)
   }
 
   test("no arguments runs boot with a Database installed, and uninstalls it after") {
@@ -52,11 +39,7 @@ class EezoAppSuite extends munit.FunSuite {
     assertEquals(app.run(Nil), 0)
     assert(app.booted)
     assert(app.bootedUnderDb, "boot on an EezoApp must see the installed Database")
-    assert(
-      try { Installed.get; false }
-      catch { case _: IllegalStateException => true },
-      "the Database is uninstalled once boot returns"
-    )
+    assert(!Installed.installed, "the Database is uninstalled once boot returns")
   }
 
   test("both edges' commands are known: routes needs no database, help lists both") {

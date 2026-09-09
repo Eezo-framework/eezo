@@ -127,7 +127,4 @@ object RenderJson {
   def dump(snapshot: SchemaSnap): String = Json.render(
     Json.Obj(List("command" -> Json.Str("dump"), "schema" -> snapshot.toJson))
   )
-
-  def error(message: String): String =
-    Json.render(Json.Obj(List("error" -> Json.Str(message))))
 }

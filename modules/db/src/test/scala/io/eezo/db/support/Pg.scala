@@ -48,16 +48,16 @@ object Pg {
     * wrong schema. This is the reason `Pool` takes the hook at all (DESIGN §8.7).
     */
   def database(schema: String): Database =
-    Database.connect(
-      container.getJdbcUrl,
-      container.getUsername,
-      container.getPassword,
-      init = c => {
-        val st = c.createStatement()
-        try st.execute(s"""set search_path to "$schema" """): Unit
-        finally st.close()
-      }
-    )
+    Database.connect(jdbcUrl, username, password, init = searchPath(schema))
+
+  /** The connection-init hook that isolates a suite by schema: [[database]]'s, and the one a suite
+    * that builds its own `Database` through `DbInit` names as `databaseInit`.
+    */
+  def searchPath(schema: String): Connection -> Unit = c => {
+    val st = c.createStatement()
+    try st.execute(s"""set search_path to "$schema" """): Unit
+    finally st.close()
+  }
 }
 
 /** A suite that installs a `Database` on eezo's holder for its duration, isolated by schema.

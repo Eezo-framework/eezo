@@ -61,7 +61,7 @@ trait HttpApp extends Dispatch {
     case "dev" :: _        => devServer(); 0
     case "routes" :: flags =>
       val result = Commands.routes(routes)
-      println(if (flags.contains("--json")) RenderJson.routes(result) else Render.routes(result))
+      println(if (json(flags)) RenderJson.routes(result) else Render.routes(result))
       0
   }: PartialFunction[List[String], Int]) orElse super.commands
 

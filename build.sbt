@@ -84,12 +84,12 @@ lazy val core = module("core")
 
 // Jetty boot, request parsing, response writing, file-based routing.
 lazy val http = module("http")
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
   .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, jettyWsClient))
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db")
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(postgresql, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
@@ -119,9 +119,10 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // edges are artifacts of their own: `eezo-http` carries `HttpApp` and `eezo-db` carries `DbApp`, so
 // an application that has only one edge depends on that edge alone and the other edge's derivations
 // are not on its classpath. `EezoApp` stacks the two entry traits, and the drift page the database
-// edge contributes to `dev` lives here because it is the one thing that needs both.
+// edge contributes to `dev` lives here because it is the one thing that needs both. `test->test` on
+// `core`, here and on the two edges, is what lets every entry-trait suite share `core`'s `Captured`.
 lazy val eezo = (project in file("modules/eezo"))
-  .dependsOn(http, db, live, auth)
+  .dependsOn(core % "compile->compile;test->test", http, db, live, auth)
   .settings(commonSettings)
   .settings(name := "eezo")
 

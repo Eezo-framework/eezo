@@ -28,7 +28,7 @@ object Database {
 
 /** Where the installed `Database` lives.
   *
-  * `private[eezo]` because installing is the edge's job: `EezoApp` in production, the testkit in
+  * `private[eezo]` because installing is the edge's job: `DbApp` in production, the testkit in
   * tests. `Test / parallelExecution := false` is set on the `db` project, which is what makes one
   * install point enough — see the comment on that setting.
   */
@@ -39,6 +39,8 @@ private[eezo] object Installed {
   private[eezo] def install(d: Database): Unit = { current = d }
 
   private[eezo] def uninstall(): Unit = { current = null }
+
+  private[eezo] def installed: Boolean = current != null
 
   private[eezo] def get: Database = {
     val d = current

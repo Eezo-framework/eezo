@@ -68,13 +68,4 @@ class RenderJsonSuite extends FunSuite {
       RenderJson.migrate(MigrateResult.Tampered(List("bad"))).contains("\"outcome\": \"tampered\"")
     )
   }
-
-  test("error escapes the message") {
-    assertEquals(
-      RenderJson.error("""a "quoted" thing"""),
-      """{
-        |  "error": "a \"quoted\" thing"
-        |}""".stripMargin
-    )
-  }
 }

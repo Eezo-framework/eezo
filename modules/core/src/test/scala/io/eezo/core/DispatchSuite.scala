@@ -1,7 +1,6 @@
 package io.eezo.core
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
+import io.eezo.core.support.Captured.captured
 
 /** `Dispatch` as `core` owns it: `main`, the chained `commands`, and `help` over `usage`.
   *
@@ -10,16 +9,6 @@ import java.io.PrintStream
   * argument is exit 2, and a later mixin's arm shadows an earlier one's.
   */
 class DispatchSuite extends munit.FunSuite {
-
-  /** Runs `body` with stdout and stderr captured, and returns what each received. */
-  private def captured(body: => Int): (Int, String, String) = {
-    val out  = new ByteArrayOutputStream()
-    val err  = new ByteArrayOutputStream()
-    val code = Console.withOut(new PrintStream(out)) {
-      Console.withErr(new PrintStream(err)) { body }
-    }
-    (code, out.toString, err.toString)
-  }
 
   trait Greeter extends Dispatch {
     override protected def commands: PartialFunction[List[String], Int] = ({
@@ -61,6 +50,13 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(out, "")
     assert(err.contains("unknown command: status --json"), err)
     assert(err.contains("help"), err)
+  }
+
+  test("an unrecognised first argument under --json is the one error shape, escaped") {
+    val (code, out, err) = captured(Greeting.run(List("say", "\"hi\"", "--json")))
+    assertEquals(code, 2)
+    assertEquals(out, "")
+    assert(err.startsWith("{\n  \"error\": \"unknown command: say \\\"hi\\\" --json"), err)
   }
 
   test("help lists one line per usage entry and is exit 0") {

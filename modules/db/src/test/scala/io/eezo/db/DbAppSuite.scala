@@ -1,12 +1,11 @@
 package io.eezo.db
 
+import io.eezo.core.support.Captured.captured
 import io.eezo.db.Scopes.read
 import io.eezo.db.cli.Commands
 import io.eezo.db.engine.Installed
 import io.eezo.db.support.{Library, Pg, PgSuite}
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
 import java.sql.Connection
 
 /** The database edge's entry trait: what `sbt "run <command>"` answers on an application that has
@@ -30,11 +29,7 @@ class DbAppSuite extends PgSuite {
     override def databaseUser: String     = Pg.username
     override def databasePassword: String = Pg.password
 
-    override def databaseInit: Connection -> Unit = { c =>
-      val st = c.createStatement()
-      try st.execute(s"""set search_path to "$pgSchema" """): Unit
-      finally st.close()
-    }
+    override def databaseInit: Connection -> Unit = Pg.searchPath(pgSchema)
 
     override def boot(): Unit = {
       ran = true
@@ -42,18 +37,7 @@ class DbAppSuite extends PgSuite {
     }
   }
 
-  private def captured(body: => Int): (Int, String, String) = {
-    val out  = new ByteArrayOutputStream()
-    val err  = new ByteArrayOutputStream()
-    val code = Console.withOut(new PrintStream(out)) {
-      Console.withErr(new PrintStream(err)) { body }
-    }
-    (code, out.toString, err.toString)
-  }
-
-  private def installed: Boolean =
-    try { Installed.get; true }
-    catch { case _: IllegalStateException => false }
+  private def installed: Boolean = Installed.installed
 
   test("no arguments is the program, run with a Database installed and uninstalled after") {
     val app = new Job

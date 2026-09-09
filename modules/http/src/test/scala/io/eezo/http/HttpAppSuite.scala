@@ -1,9 +1,7 @@
 package io.eezo.http
 
-import java.io.ByteArrayOutputStream
-import java.io.PrintStream
-
 import io.eezo.core.html.Tags.p
+import io.eezo.core.support.Captured.captured
 
 /** The http edge's entry trait: what `sbt "run <command>"` answers on an application that has only
   * this edge.
@@ -29,15 +27,6 @@ class HttpAppSuite extends munit.FunSuite {
     override def boot(): Unit = booted = true
 
     override protected def devServer(): Unit = developed = true
-  }
-
-  private def captured(body: => Int): (Int, String, String) = {
-    val out  = new ByteArrayOutputStream()
-    val err  = new ByteArrayOutputStream()
-    val code = Console.withOut(new PrintStream(out)) {
-      Console.withErr(new PrintStream(err)) { body }
-    }
-    (code, out.toString, err.toString)
   }
 
   test("no arguments is the application: boot runs") {

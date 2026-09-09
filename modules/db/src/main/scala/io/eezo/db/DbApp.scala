@@ -7,6 +7,7 @@ import io.eezo.db.engine.Installed
 import io.eezo.db.migrate.Decision
 import io.eezo.db.schema.Change
 
+import scala.annotation.retainsCap
 import scala.caps.unsafe.unsafeAssumePure
 import scala.io.StdIn
 
@@ -67,8 +68,12 @@ trait DbApp extends Dispatch with DbInit {
   override protected def commands: PartialFunction[List[String], Int] =
     own.unsafeAssumePure orElse super.commands
 
-  /** This edge's arms: the program, and the eight schema commands [[Known]] lists. */
-  private def dispatch(args: List[String]): Int = args match {
+  /** This edge's arms: the program, and the eight schema commands. The patterns are the one list of
+    * what this edge answers; `isDefinedAt` over them runs no body. The capture annotation is `^`
+    * spelled the way scalafmt can parse: the literal closes over `this`, and [[own]] is where that
+    * is asserted away.
+    */
+  private def arms: PartialFunction[List[String], Int] @retainsCap = {
     case Nil =>
       withDatabase(boot())
       0
@@ -94,7 +99,7 @@ trait DbApp extends Dispatch with DbInit {
       // space-splitting argument parser with quotes.
       val name = rest.filterNot(_.startsWith("--")).mkString(" ")
       if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
-      val result = Commands.freeze(schema, name, freezePolicy(rest, json(rest)))
+      val result = Commands.freeze(schema, name, freezePolicy(rest))
       println(if (json(rest)) RenderJson.freeze(result) else Render.freeze(result))
       0
 
@@ -105,10 +110,10 @@ trait DbApp extends Dispatch with DbInit {
       })
       println(if (json(flags)) RenderJson.migrate(result) else Render.migrate(result))
       result match {
-        case MigrateResult.Tampered(_)                       => 1
-        case MigrateResult.UpToDate(drift) if drift.nonEmpty => 1
-        case MigrateResult.Applied(_, drift)                 => if (drift.isEmpty) 0 else 1
-        case _                                               => 0
+        case MigrateResult.Tampered(_)       => 1
+        case MigrateResult.UpToDate(drift)   => if (drift.isEmpty) 0 else 1
+        case MigrateResult.Applied(_, drift) => if (drift.isEmpty) 0 else 1
+        case MigrateResult.Pending(_)        => 0
       }
 
     case "reset" :: flags =>
@@ -129,8 +134,6 @@ trait DbApp extends Dispatch with DbInit {
       if (json(flags)) println(RenderJson.ddl(Commands.ddl(schema)))
       else Commands.ddl(schema).foreach(s => println(s + ";"))
       0
-
-    case other => throw new MatchError(other)
   }
 
   override protected def usage: List[String] = List(
@@ -144,42 +147,29 @@ trait DbApp extends Dispatch with DbInit {
     "dump              print the derived snapshot",
     "ddl               print full DDL",
     "",
-    "every command takes --json for machine-readable output (same exit codes);",
     "freeze takes --accept-all / --skip-destructive in place of the prompt",
     "(bare --json implies --skip-destructive)",
     ""
   ) ++ super.usage
 
-  /** `--json` renders the same result values through `RenderJson` instead of `Render` — the
-    * machine-readable half of design/objective.md's dev loop. Exit codes are identical in both
-    * modes, so a caller gates on the code and parses the body.
-    */
-  private def json(flags: List[String]): Boolean = flags.contains("--json")
-
-  /** The first arguments this edge answers. A set rather than `isDefinedAt` over the arms, so that
-    * asking never runs one.
-    */
-  private val Known: Set[String] =
-    Set("status", "sync", "freeze", "migrate", "reset", "drop", "dump", "ddl")
-
-  /** The arms behind the `SchemaError` catch and its `--json` rendering. The catch is here and not
-    * in `core`, which cannot see the type; the http edge has nothing that throws it. Exit 1.
+  /** [[arms]] behind the `SchemaError` catch. The catch is here and not in `core`, which cannot see
+    * the type; the http edge has nothing that throws it. Exit 1, through `Dispatch.fail` so the
+    * line is JSON under `--json`.
     *
-    * The type is inferred and then asserted pure, deliberately. `Dispatch.commands` is typed in
-    * `core`, outside capture checking, so here it reads as a pure function, while this object
-    * closes over `this`, which the checker counts as a capability (DESIGN §8.8,
-    * research/capture-checking.md §3). The assertion holds because the application carries no
-    * capability: `DbInit`'s hook is a `->`, and every other member is a value.
+    * The type is inferred and then asserted pure at the `commands` site, deliberately.
+    * `Dispatch.commands` is typed in `core`, outside capture checking, so there it reads as a pure
+    * function, while this object closes over `this`, which the checker counts as a capability
+    * (DESIGN §8.8, research/capture-checking.md §3). The assertion holds because the application
+    * carries no capability: `DbInit`'s hook is a `->`, and every other member is a value.
     */
   private def own = new PartialFunction[List[String], Int] {
-    def isDefinedAt(args: List[String]): Boolean = args.headOption.forall(Known)
+    def isDefinedAt(args: List[String]): Boolean = arms.isDefinedAt(args)
 
     def apply(args: List[String]): Int =
-      try dispatch(args)
+      try arms(args)
       catch {
         case e: SchemaError =>
-          if (json(args)) Console.err.println(RenderJson.error(e.getMessage))
-          else Console.err.println(s"\n[eezo] ${e.getMessage}\n")
+          fail(args, e.getMessage)
           1
       }
   }
@@ -189,9 +179,9 @@ trait DbApp extends Dispatch with DbInit {
     * `--skip-destructive`, because a machine caller must never hang on a prompt and skip is the
     * choice that loses nothing.
     */
-  private def freezePolicy(flags: List[String], json: Boolean): Change => Decision =
+  private def freezePolicy(flags: List[String]): Change => Decision =
     if (flags.contains("--accept-all")) _ => Decision.Accept
-    else if (flags.contains("--skip-destructive") || json)
+    else if (flags.contains("--skip-destructive") || json(flags))
       change => if (change.destructive) Decision.Skip else Decision.Accept
     else decide
 

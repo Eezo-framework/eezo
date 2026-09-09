@@ -107,7 +107,9 @@ object EezoPlugin extends AutoPlugin {
       val log  = streams.value.log
       val main = (Compile / run / mainClass).value
         .getOrElse(
-          sys.error("eezoRestart: no main class. Define an `object Main extends EezoApp`.")
+          sys.error(
+            "eezoRestart: no main class. Define an `object Main` extending `EezoApp`, `HttpApp` or `DbApp`."
+          )
         )
       DevProcess.restart(
         javaHome = (Compile / run / javaHome).value,
