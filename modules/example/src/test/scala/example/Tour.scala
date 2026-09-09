@@ -21,16 +21,18 @@ import scala.util.control.NonFatal
   * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
   * migrations are real files on disk that you can open.
   *
-  * sbt "example/Test/runMain example.Tour" steps through it; `-Dtour.nopause` runs it start to
-  * finish. A flag rather than an argument, because the empty argument list is the application and
-  * any first argument is a command.
+  * sbt "example/Test/runMain example.Tour" steps through it; TOUR_NOPAUSE=1 runs it start to
+  * finish. An environment variable rather than an argument, because the empty argument list is
+  * the application and any first argument is a command; and rather than a `-D` property, because
+  * `Test / run` forks a child JVM that inherits the environment but not the sbt launcher's system
+  * properties.
   */
 object Tour extends DbApp {
 
   /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
     *
     * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
-    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `-Dtour.nopause` to let it run
+    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `TOUR_NOPAUSE=1` to let it run
     * straight through.
     */
   private lazy val container: PostgreSQLContainer[?] = {
@@ -65,7 +67,7 @@ object Tour extends DbApp {
   private var paused = true
 
   override def boot(): Unit = {
-    paused = !sys.props.contains("tour.nopause")
+    paused = !sys.env.contains("TOUR_NOPAUSE")
     val migrations = Files.createTempDirectory("eezo-tour")
 
     connect() match {
