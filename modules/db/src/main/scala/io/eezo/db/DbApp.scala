@@ -75,69 +75,77 @@ trait DbApp extends Dispatch with DbInit {
     * that is asserted away.
     */
   private def arms: PartialFunction[List[String], Int] @retainsCap = {
-    case Nil =>
-      withDatabase(boot())
-      0
+    // Read once, outside every closure below. `read` and `transact` take a pure body under capture
+    // checking, and a closure over `this` is not pure, while these two values are. The same lines
+    // compiled on `main` because they lived in the umbrella, which is not capture checked.
+    val model = schema
+    val live  = databaseSchema
 
-    case "status" :: flags =>
-      val result = withDatabase(read { Commands.status(schema, databaseSchema) })
-      emit(flags)(RenderJson.status(result), Render.status(result))
-      if (result.inSync) 0 else 1
+    {
+      case Nil =>
+        withDatabase(boot())
+        0
 
-    case "sync" :: flags =>
-      val apply  = flags.contains("--apply")
-      val force  = flags.contains("--force")
-      val result = withDatabase(transact { Commands.sync(schema, apply, force, databaseSchema) })
-      emit(flags)(
-        RenderJson.sync(result, applyRequested = apply),
-        Render.sync(result, applyRequested = apply)
-      )
-      if (apply && !result.applied && result.changes.nonEmpty) 1 else 0
+      case "status" :: flags =>
+        val result = withDatabase(read { Commands.status(model, live) })
+        emit(flags)(RenderJson.status(result), Render.status(result))
+        if (result.inSync) 0 else 1
 
-    case "freeze" :: rest =>
-      // Everything that is not a flag is the name, joined: `run freeze add isbn to book` names
-      // the migration "add isbn to book" without the caller having to fight sbt's
-      // space splitting argument parser with quotes.
-      val name = rest.filterNot(_.startsWith("--")).mkString(" ")
-      if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
-      val result = Commands.freeze(schema, name, freezePolicy(rest))
-      emit(rest)(RenderJson.freeze(result), Render.freeze(result))
-      0
+      case "sync" :: flags =>
+        val apply  = flags.contains("--apply")
+        val force  = flags.contains("--force")
+        val result = withDatabase(transact { Commands.sync(model, apply, force, live) })
+        emit(flags)(
+          RenderJson.sync(result, applyRequested = apply),
+          Render.sync(result, applyRequested = apply)
+        )
+        if (apply && !result.applied && result.changes.nonEmpty) 1 else 0
 
-    case "migrate" :: flags =>
-      val apply  = flags.contains("--apply")
-      val result = withDatabase(transact {
-        Commands.migrate(schema, apply, dbSchema = databaseSchema)
-      })
-      emit(flags)(RenderJson.migrate(result), Render.migrate(result))
-      result match {
-        case MigrateResult.Tampered(_)       => 1
-        case MigrateResult.UpToDate(drift)   => if (drift.isEmpty) 0 else 1
-        case MigrateResult.Applied(_, drift) => if (drift.isEmpty) 0 else 1
-        case MigrateResult.Pending(_)        => 0
-      }
+      case "freeze" :: rest =>
+        // Everything that is not a flag is the name, joined: `run freeze add isbn to book` names
+        // the migration "add isbn to book" without the caller having to fight sbt's
+        // space splitting argument parser with quotes.
+        val name = rest.filterNot(_.startsWith("--")).mkString(" ")
+        if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
+        val result = Commands.freeze(schema, name, freezePolicy(rest))
+        emit(rest)(RenderJson.freeze(result), Render.freeze(result))
+        0
 
-    case "reset" :: flags =>
-      val result = withDatabase(transact { Commands.reset(schema, databaseSchema) })
-      emit(flags)(RenderJson.reset(result), "reset ✓")
-      0
+      case "migrate" :: flags =>
+        val apply  = flags.contains("--apply")
+        val result = withDatabase(transact {
+          Commands.migrate(model, apply, dbSchema = live)
+        })
+        emit(flags)(RenderJson.migrate(result), Render.migrate(result))
+        result match {
+          case MigrateResult.Tampered(_)       => 1
+          case MigrateResult.UpToDate(drift)   => if (drift.isEmpty) 0 else 1
+          case MigrateResult.Applied(_, drift) => if (drift.isEmpty) 0 else 1
+          case MigrateResult.Pending(_)        => 0
+        }
 
-    case "drop" :: flags =>
-      val result = withDatabase(transact { Commands.drop(databaseSchema) })
-      emit(flags)(RenderJson.drop(result), "dropped ✓")
-      0
+      case "reset" :: flags =>
+        val result = withDatabase(transact { Commands.reset(model, live) })
+        emit(flags)(RenderJson.reset(result), "reset ✓")
+        0
 
-    case "dump" :: flags =>
-      emit(flags)(RenderJson.dump(schema.snapshot), Commands.dump(schema))
-      0
+      case "drop" :: flags =>
+        val result = withDatabase(transact { Commands.drop(live) })
+        emit(flags)(RenderJson.drop(result), "dropped ✓")
+        0
 
-    case "ddl" :: flags =>
-      // As text, one statement per line, each closed with its semicolon: the output is pasteable
-      // into psql as it stands.
-      val statements = Commands.ddl(schema)
-      if (json(flags)) println(RenderJson.ddl(statements))
-      else statements.foreach(s => println(s + ";"))
-      0
+      case "dump" :: flags =>
+        emit(flags)(RenderJson.dump(schema.snapshot), Commands.dump(schema))
+        0
+
+      case "ddl" :: flags =>
+        // As text, one statement per line, each closed with its semicolon: the output is pasteable
+        // into psql as it stands.
+        val statements = Commands.ddl(schema)
+        if (json(flags)) println(RenderJson.ddl(statements))
+        else statements.foreach(s => println(s + ";"))
+        0
+    }
   }
 
   override protected def usage: List[Usage] = List(
