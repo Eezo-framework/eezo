@@ -220,7 +220,9 @@ lazy val example = project
     Compile / run / fork      := true,
     // The Tour lives in `src/test` because it starts its own Postgres through testcontainers, and
     // that is a test scoped dependency. It is still a program, not a suite:
-    //   sbt "example/Test/runMain example.Tour"            (-Dtour.nopause to run straight through)
+    //   sbt "example/Test/runMain example.Tour"            (TOUR_NOPAUSE=1 to run straight through)
+    // An environment variable, because `Test / fork` starts a child JVM that inherits the environment
+    // but not a `-D` property given to the sbt launcher.
     // `connectInput` is what lets its pauses and `freeze`'s prompts read stdin.
     Test / fork                  := true,
     Compile / run / connectInput := true,
