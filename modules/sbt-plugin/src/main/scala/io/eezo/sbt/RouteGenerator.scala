@@ -290,6 +290,37 @@ object RouteGenerator {
         |    io.eezo.http.InMemoryStore[A]()
         |""".stripMargin
 
+  /** An indented `case class` at column > 0. */
+  private val IndentedCaseClass: Regex =
+    new Regex("(?m)^[ \\t]+(?:final\\s+)?case class\\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+  /** The mounting failure `modelsIn`'s column-zero rule produces in silence: a `case class`
+    * carrying a `derives` clause at a column the scan does not read. An indented top-level model is
+    * legal Scala that mounts nothing, and a nested one cannot be mounted by name at all — either
+    * way the user wrote `derives` and got no routes, and the first field deploy of `eezo deploy`
+    * spent its debugging time on exactly this. The scan cannot tell the two cases apart, so the
+    * warning names them both.
+    */
+  def unscannableModels(relative: String, content: String): Seq[String] =
+    if (!relative.endsWith(".scala")) Nil
+    else {
+      val starts = Declaration.findAllMatchIn(content).map(_.start).toVector
+      IndentedCaseClass
+        .findAllMatchIn(content)
+        .toVector
+        .flatMap { declaration =>
+          val next = starts.find(_ > declaration.start).getOrElse(content.length)
+          val body = content.substring(declaration.start, next)
+          if (Derives.findFirstIn(body).isDefined)
+            Some(
+              s"src/main/scala/$relative: `case class ${declaration.group(1)}` has a derives " +
+                "clause but does not start at column zero, so the route generator cannot mount " +
+                "it. A top-level model must be unindented; a nested model is never mounted."
+            )
+          else None
+        }
+    }
+
   /** The one warning a text scan can decide: a file under `app/` that does not define the `def` its
     * name promises. Everything the compiler would say better is left to the compiler.
     */

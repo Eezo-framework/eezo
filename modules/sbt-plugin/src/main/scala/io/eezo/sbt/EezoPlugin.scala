@@ -71,6 +71,17 @@ object EezoPlugin extends AutoPlugin {
 
     @transient val eezoStop: TaskKey[Unit] =
       taskKey[Unit]("Stops the application `eezoRestart` started, if it is running.")
+
+    // Deployment staging: everything sbt-shaped that `eezo deploy` needs, so the launcher itself
+    // never touches a classpath. `@transient` because the result is a `File`.
+    @transient val eezoStage: TaskKey[File] =
+      taskKey[File](
+        "Stages the application for deployment under target/eezo/stage: lib/ with every runtime " +
+          "jar, the db/ migrations, and a generated Dockerfile."
+      )
+
+    val eezoJavaVersion: SettingKey[String] =
+      settingKey[String]("Java version of the deployment base image (eclipse-temurin JRE).")
   }
 
   import autoImport._
@@ -124,6 +135,49 @@ object EezoPlugin extends AutoPlugin {
     eezoStop := {
       val log = streams.value.log
       DevProcess.stop(quiet = false, log = message => log.info(message))
+    },
+    eezoJavaVersion := "25",
+    // The staged layout is the whole deployment contract: lib/ holds every runtime jar (this
+    // project's own classes via packageBin, so directory classpath entries are not shipped raw),
+    // db/ holds the committed migrations (present even when empty, so the Dockerfile's COPY never
+    // fails), and the Dockerfile is regenerated every time — it lives in target/, is never
+    // user-edited, and `Deploy.dockerfile`'s comment says why its shape is what it is.
+    eezoStage := {
+      val log   = streams.value.log
+      val stage = target.value / "eezo" / "stage"
+      val lib   = stage / "lib"
+      IO.delete(stage)
+      IO.createDirectory(lib)
+
+      val own       = EezoClasspath.packagedJar.value
+      val classpath = EezoClasspath.files.value
+      val jars      = classpath.filter(f => f.isFile && f.getName.endsWith(".jar")) :+ own
+      classpath.filter(_.isDirectory).foreach { dir =>
+        // The project's own classes directory is covered by packageBin. Anything else here is an
+        // internal dependency of a multi-project build, which v0 staging does not package.
+        log.debug(s"eezoStage: skipping directory classpath entry $dir")
+      }
+
+      // Names can collide across artifacts; the first keeps its name, later ones are prefixed.
+      val used = scala.collection.mutable.Set.empty[String]
+      jars.foreach { jar =>
+        var name  = jar.getName
+        var index = 1
+        while (!used.add(name)) { name = s"$index-${jar.getName}"; index += 1 }
+        IO.copyFile(jar, lib / name)
+      }
+
+      IO.createDirectory(stage / "db")
+      val db = baseDirectory.value / "db"
+      if (db.exists) IO.copyDirectory(db, stage / "db")
+
+      val main = (Compile / run / mainClass).value.getOrElse(
+        sys.error("eezoStage: no main class. Define an `object Main extends EezoApp`.")
+      )
+      IO.write(stage / "Dockerfile", Deploy.dockerfile(main, eezoJavaVersion.value))
+
+      log.info(s"eezoStage: ${jars.size} jars staged at $stage")
+      stage
     }
   )
 
@@ -314,7 +368,11 @@ object EezoPlugin extends AutoPlugin {
       }
 
       val models = modelInputs.toSeq.sortBy(_.getAbsolutePath).flatMap { source =>
-        relative(sourceRoot, source).toSeq.flatMap(RouteGenerator.modelsIn(_, IO.read(source)))
+        relative(sourceRoot, source).toSeq.flatMap { relativePath =>
+          val content = IO.read(source)
+          RouteGenerator.unscannableModels(relativePath, content).foreach(log.warn(_))
+          RouteGenerator.modelsIn(relativePath, content)
+        }
       }
 
       writeIfChanged(destination, RouteGenerator.render(routes, models, dbOnClasspath))

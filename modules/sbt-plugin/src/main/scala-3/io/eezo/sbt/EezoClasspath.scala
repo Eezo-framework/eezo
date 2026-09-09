@@ -14,4 +14,8 @@ private[sbt] object EezoClasspath {
     val converter = fileConverter.value
     (Runtime / fullClasspath).value.map(entry => converter.toPath(entry.data).toFile)
   }
+  /** This project's own artifact, as a plain file — same split, same reason. */
+  def packagedJar: Def.Initialize[Task[File]] = Def.task {
+    fileConverter.value.toPath((Compile / packageBin).value).toFile
+  }
 }

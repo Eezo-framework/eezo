@@ -4,10 +4,10 @@ One model deriving `Table, Form, Resource`, an `AppSchema` with two indexes, two
 routes, and a Postgres schema of its own. Everything the CLI currently does can be exercised from
 this directory. Every output block below was captured from a real run.
 
-**One honest caveat before you start:** the derived CRUD pages write to an in-memory store that is
-minted per boot, while the schema commands manage Postgres. The two are not wired together yet —
-that integration is the next milestone. So todos you create in the browser vanish on restart, and
-`sync`/`migrate` manage the *table*, not those rows.
+**Update since this guide was written:** the Store↔Table integration landed (`JdbcStore`). A model
+deriving `Table` — like `Todo` — now gets derived CRUD backed by Postgres, so todos you create in
+the browser survive restarts, and the migrate-before-serve order in this guide is load-bearing:
+browse `/todos` before the table exists and you'll meet a real database error.
 
 ## 0. Setup
 

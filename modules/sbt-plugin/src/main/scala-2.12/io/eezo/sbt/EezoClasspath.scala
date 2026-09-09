@@ -14,4 +14,9 @@ private[sbt] object EezoClasspath {
   def files: Def.Initialize[Task[Seq[File]]] = Def.task {
     (Runtime / fullClasspath).value.map(_.data)
   }
+
+  /** This project's own artifact, as a plain file — same split, same reason. */
+  def packagedJar: Def.Initialize[Task[File]] = Def.task {
+    (Compile / packageBin).value
+  }
 }

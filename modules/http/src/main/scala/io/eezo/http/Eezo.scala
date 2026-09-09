@@ -92,6 +92,19 @@ object Eezo {
     */
   private[eezo] val ReservedPrefix: String = "/eezo"
 
+  /** The health endpoint, answered by the framework on every eezo server, dev and production
+    * alike. Deliberately the cheapest possible truth (the server is accepting and answering
+    * requests), because a deploy platform's checker and `eezo deploy`'s post-deploy poll both ask
+    * it every few seconds, and a health check that touches the database turns a database blip
+    * into a restart loop. It lives under [[ReservedPrefix]] and is asked before the user's table,
+    * like the reload endpoint: no route can shadow it, no mount rewrites it, and it never appears
+    * in the boot listing.
+    */
+  private[eezo] val HealthPath: String = s"$ReservedPrefix/health"
+
+  private val healthy: Response =
+    Response(200, Seq("Content-Type" -> "text/plain; charset=utf-8"), Body.Bytes("ok".getBytes))
+
   /** Boots the server and blocks until it stops.
     *
     * The server comes down with the JVM: a shutdown hook stops it, which returns `join`, and then
@@ -283,8 +296,11 @@ object Eezo {
       val path = JettyRequest.getPathInContext(request)
 
       val result =
-        try config.routes.dispatch(readRequest(request, path, config.maxBodySize))
-        catch {
+        try {
+          val incoming = readRequest(request, path, config.maxBodySize)
+          if (incoming.method == Method.GET && path == HealthPath) healthy
+          else config.routes.dispatch(incoming)
+        } catch {
           case failure: Throwable =>
             // Resolved once: the log decision and the response both read off this single value,
             // rather than each re-matching the failure to ask its own question of it.
