@@ -92,13 +92,13 @@ object Eezo {
     */
   private[eezo] val ReservedPrefix: String = "/eezo"
 
-  /** The health endpoint, answered by the framework on every eezo server, dev and production
-    * alike. Deliberately the cheapest possible truth (the server is accepting and answering
-    * requests), because a deploy platform's checker and `eezo deploy`'s post-deploy poll both ask
-    * it every few seconds, and a health check that touches the database turns a database blip
-    * into a restart loop. It lives under [[ReservedPrefix]] and is asked before the user's table,
-    * like the reload endpoint: no route can shadow it, no mount rewrites it, and it never appears
-    * in the boot listing.
+  /** The health endpoint, answered by the framework on every eezo server, dev and production alike.
+    * Deliberately the cheapest possible truth (the server is accepting and answering requests),
+    * because a deploy platform's checker and `eezo deploy`'s post-deploy poll both ask it every few
+    * seconds, and a health check that touches the database turns a database blip into a restart
+    * loop. It lives under [[ReservedPrefix]] and is asked before the user's table, like the reload
+    * endpoint: no route can shadow it, no mount rewrites it, and it never appears in the boot
+    * listing.
     */
   private[eezo] val HealthPath: String = s"$ReservedPrefix/health"
 

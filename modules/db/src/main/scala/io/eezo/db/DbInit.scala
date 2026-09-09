@@ -16,11 +16,11 @@ import java.sql.Connection
   * get wrong; see its comment.
   *
   * **Two spellings of the environment, one mechanism.** `EEZO_DB_URL`/`EEZO_DB_USER`/
-  * `EEZO_DB_PASS` are eezo's own and always win. When they are absent and `DATABASE_URL` is
-  * present (the `postgres://user:pass@host/db` form every PaaS injects: Fly, Heroku, Render), it
-  * is parsed into the three, so a deployed application configures itself from the one secret the
-  * platform already set. This is a fallback, not a second configuration system: the members below
-  * are still the only way the settings are read.
+  * `EEZO_DB_PASS` are eezo's own and always win. When they are absent and `DATABASE_URL` is present
+  * (the `postgres://user:pass@host/db` form every PaaS injects: Fly, Heroku, Render), it is parsed
+  * into the three, so a deployed application configures itself from the one secret the platform
+  * already set. This is a fallback, not a second configuration system: the members below are still
+  * the only way the settings are read.
   */
 trait DbInit {
 
