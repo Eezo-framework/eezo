@@ -4,15 +4,15 @@ import io.eezo.db.engine.Database
 
 import java.sql.Connection
 
-/** How an application names its database: the connection settings and the per-connection hook.
+/** How an application names its database: the connection settings and the per connection hook.
   *
-  * Split out of [[DbApp]] so that a front-end which is not the application's entry point — a deploy
-  * runner, the testkit — can build the same `Database` from the same settings without inheriting
+  * Split out of [[DbApp]] so that a front end which is not the application's entry point (a deploy
+  * runner, the testkit) can build the same `Database` from the same settings without inheriting
   * `boot`. `DbApp` extends this, and the umbrella's `EezoApp` through it; users override members
   * here and never name the trait.
   *
   * Named for [[databaseInit]], its one member that is not a string, because it is the one people
-  * get wrong — see its comment.
+  * get wrong; see its comment.
   */
 trait DbInit {
 
@@ -24,7 +24,7 @@ trait DbInit {
 
   def databasePassword: String = sys.env.getOrElse("EEZO_DB_PASS", "postgres")
 
-  /** Run on **every** connection the pool creates, not once on a borrowed one — DESIGN §8.7.
+  /** Run on **every** connection the pool creates, not once on a borrowed one (DESIGN §8.7).
     *
     * This is where `search_path`, `application_name` and statement timeouts belong. Without it an
     * application that works in a non-`public` schema silently splits in two: its own connections

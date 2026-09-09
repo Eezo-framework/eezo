@@ -8,7 +8,7 @@ import munit.FunSuite
 import java.nio.file.Files
 
 /** `freeze` needs no database: it diffs the committed snapshot against the code and writes files. A
-  * plain suite, so the property stays pinned — if a capability creeps into its signature, this file
+  * plain suite, so the property stays pinned; if a capability creeps into its signature, this file
   * stops compiling.
   */
 class FreezeCommandSuite extends FunSuite {

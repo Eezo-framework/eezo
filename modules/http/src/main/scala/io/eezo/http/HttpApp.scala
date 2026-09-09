@@ -1,6 +1,7 @@
 package io.eezo.http
 
 import io.eezo.core.Dispatch
+import io.eezo.core.Dispatch.Usage
 import io.eezo.http.cli.{Commands, Render, RenderJson}
 
 /** The http edge's entry trait: the one an application on `eezo-http` alone extends.
@@ -61,12 +62,12 @@ trait HttpApp extends Dispatch {
     case "dev" :: _        => devServer(); 0
     case "routes" :: flags =>
       val result = Commands.routes(routes)
-      println(if (json(flags)) RenderJson.routes(result) else Render.routes(result))
+      emit(flags)(RenderJson.routes(result), Render.routes(result))
       0
   }: PartialFunction[List[String], Int]) orElse super.commands
 
-  override protected def usage: List[String] = List(
-    "dev               serve with the route listing and the reload client on",
-    "routes [--json]   the mounted table, with boot's warnings"
+  override protected def usage: List[Usage] = List(
+    Usage("dev", "serve with the route listing and the reload client on"),
+    Usage("routes", "the mounted table, with boot's warnings")
   ) ++ super.usage
 }

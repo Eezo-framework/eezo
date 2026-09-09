@@ -13,33 +13,33 @@ import scala.util.control.NonFatal
 
 /** The database edge's contribution to `dev` (design/cli.md §5): the drift check at boot, and when
   * the drift is dangerous an *interactive* refusal page in place of the app. It answers a route
-  * table or nothing; `EezoApp.devServer` is what serves either, so the server's overrides — `port`,
-  * `maxBodySize`, `problems` — reach the drift page and the app the same way.
+  * table or nothing; `EezoApp.devServer` is what serves either, so the server's overrides (`port`,
+  * `maxBodySize`, `problems`) reach the drift page and the app the same way.
   *
   * The middle position §5 argues for: **refuse on destructive or risky drift, banner on additive.**
-  * Destructive drift serves a page saying what is out of step, because a browser is where a
-  * dev-loop user is looking; additive drift is a console warning and the app serves, because a new
+  * Destructive drift serves a page saying what is out of step, because a browser is where a dev
+  * loop user is looking; additive drift is a console warning and the app serves, because a new
   * column the database does not have yet breaks nothing until the code touches it. A database that
   * cannot be reached at all is a warning too, not a refusal: `eezo dev` with Postgres down still
   * serves whatever does not need it.
   *
   * **The decisions live on the page, not in the terminal.** Under `eezoDev` the forked app shares
-  * one stdin with sbt's watch ("press enter to interrupt"), so a boot-time console prompt would
-  * race the watch for every keystroke — the reason sbt-revolver never did interactive forked apps
+  * one stdin with sbt's watch ("press enter to interrupt"), so a boot time console prompt would
+  * race the watch for every keystroke, the reason sbt-revolver never did interactive forked apps
   * either. The drift page instead carries the same choices the CLI's freeze prompt offers, per
-  * destructive change, posted back to two reserved routes. Both handlers feed the *same* layer-1
-  * functions the terminal does — `Commands.sync`, `Commands.freeze`'s `decide` parameter — so the
-  * form is a third front-end over one mechanism.
+  * destructive change, posted back to two reserved routes. Both handlers feed the *same* layer 1
+  * functions the terminal does (`Commands.sync`, `Commands.freeze`'s `decide` parameter), so the
+  * form is a third front end over one mechanism.
   *
-  * The drift is re-checked on **every GET**, so resolving it — from the page or from a second
-  * terminal — turns the refusal into "resolved ✓ — save a file to restart" on the next refresh
+  * The drift is checked again on **every GET**, so resolving it, from the page or from a second
+  * terminal, turns the refusal into "resolved ✓ — save a file to restart" on the next refresh
   * rather than a stale refusal. What a refresh cannot do is serve the app: the route table and the
-  * app's state are minted at process boot, and restart is eezo's reload model — the next file save
+  * app's state are minted at process boot, and restart is eezo's reload model: the next file save
   * is the restart.
   *
   * An app with no declared schema skips the check entirely, even against a reachable database with
   * tables in it: `status` answers that question honestly (drop everything), but refusing to *serve*
-  * over tables the app never declared would block every db-less app that happens to share a
+  * over tables the app never declared would block every app with no schema that happens to share a
   * Postgres with something else.
   *
   * No CSRF token on the forms, deliberately: this server exists only while refusing to route in
@@ -96,7 +96,7 @@ private[eezo] object DriftGate {
     }
 
     // The prototyping path: the terminal's `sync --apply --force`, one button. Force, because
-    // this page only exists when the drift is destructive or risky — an unforced sync would
+    // this page only exists when the drift is destructive or risky; an unforced sync would
     // refuse by construction, and the button *is* the review.
     val syncAction: Handler = _ =>
       attempt(schema, databaseSchema) {
@@ -104,7 +104,7 @@ private[eezo] object DriftGate {
         println("[eezo] drift applied to the dev database from the drift page")
       }
 
-    // The keeping path: `freeze <name>` with the page's per-change decisions standing in for the
+    // The keeping path: `freeze <name>` with the page's per change decisions standing in for the
     // terminal prompt, then `migrate --apply` so the database converges in the same submit.
     val freezeAction: Handler = request => {
       request.form.get("name").flatMap(_.headOption).map(_.trim).filter(_.nonEmpty) match {
@@ -127,13 +127,13 @@ private[eezo] object DriftGate {
     )
   }
 
-  /** Runs one page action; a failure re-renders the refusal with the database's own words on it.
+  /** Runs one page action; a failure renders the refusal again with the database's own words on it.
     *
-    * This is not decoration: the first live run of this page hit exactly it — a `[risky]`
+    * This is not decoration: the first live run of this page hit exactly it: a `[risky]`
     * `set not null` that Postgres refused over existing rows. That failure is the `risky` flag
     * doing its job, and it belongs on the page the user is looking at, not in a stack trace behind
-    * a 500. The transaction has already rolled back by the time it is caught, so re-rendering over
-    * a half-applied state is not a possibility.
+    * a 500. The transaction has already rolled back by the time it is caught, so rendering again
+    * over a half applied state is not a possibility.
     */
   private def attempt(schema: Schema, databaseSchema: String)(action: => Unit): Response =
     try {
@@ -179,8 +179,8 @@ private[eezo] object DriftGate {
   }
 
   /** The form field carrying one destructive change's decision. Keyed by `describe` rather than by
-    * position, because the freeze diff at submit time need not be the drift list the page rendered
-    * — `describe` is the one name both sides share.
+    * position, because the freeze diff at submit time need not be the drift list the page rendered;
+    * `describe` is the one name both sides share.
     */
   private def decisionField(change: Change): String = s"decision:${change.describe}"
 

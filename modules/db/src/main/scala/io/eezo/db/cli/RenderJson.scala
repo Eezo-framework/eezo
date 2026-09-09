@@ -4,16 +4,16 @@ import io.eezo.core.internal.Json
 import io.eezo.db.migrate.{Decision, Resolution}
 import io.eezo.db.schema.{Change, Ddl, SchemaSnap}
 
-/** The machine front-end: the same result values [[Render]] turns into text, as JSON.
+/** The machine front end: the same result values [[Render]] turns into text, as JSON.
   *
-  * This is `design/objective.md`'s "every step emits machine-readable output" landing — an agent
+  * This is `design/objective.md`'s "every step emits machine-readable output" landing: an agent
   * drives the loop on `--json` and never parses prose. It exists this cheaply only because layer 1
   * returns values; every function here is a fold over one of them.
   *
-  * The encoding is deliberately hand-rolled over `Json` rather than derived: these shapes are a
+  * The encoding is deliberately hand rolled over `Json` rather than derived: these shapes are a
   * public contract for tools, and a contract should not silently change because a field was renamed
   * in a Scala case class. Each object carries a `"command"` discriminator so a stream of results
-  * needs no out-of-band context.
+  * needs no out of band context.
   *
   * Every change carries its `sql` alongside the classification, because the reader most likely to
   * be here is deciding whether to run it.

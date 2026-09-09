@@ -6,7 +6,7 @@ import io.eezo.http.{Resource, RouteTable}
   * apply: return values, never print; take what the command needs, not the process.
   *
   * One command today. The database edge's are in `io.eezo.db.cli.Commands`, in the same shape, and
-  * the entry trait of each edge is the only front-end that prints.
+  * the entry trait of each edge is the only front end that prints.
   */
 object Commands {
 

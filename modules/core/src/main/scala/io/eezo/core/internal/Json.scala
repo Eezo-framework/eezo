@@ -1,11 +1,11 @@
 package io.eezo.core.internal
 
-/** A JSON value and its writer, hand-rolled and deliberately small.
+/** A JSON value and its writer, hand rolled and deliberately small.
   *
   * It lives in `core` for the reason `build.sbt` gives for everything here: no dependencies of its
   * own and two dependents that never see each other. The database edge writes the schema snapshot
-  * and its command results with it, the http edge writes the route listing, and a second
-  * hand-written escape in either would be the same code twice. It is not a JSON library, and
+  * and its command results with it, the http edge writes the route listing, and a second hand
+  * written escape in either would be the same code twice. It is not a JSON library, and
   * `derives Api` will not be built on it.
   */
 enum Json {

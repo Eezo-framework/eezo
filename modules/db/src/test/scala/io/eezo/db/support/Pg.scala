@@ -14,8 +14,8 @@ import java.sql.DriverManager
 /** One Postgres for the whole test run.
   *
   * Starting a container costs seconds. Isolating suites from each other costs nothing once the
-  * server is up, because they are separated by Postgres *schema* rather than by server — which
-  * works only because `Introspect.snapshot` already takes a schema name (DESIGN §6).
+  * server is up, because they are separated by Postgres *schema* rather than by server, which works
+  * only because `Introspect.snapshot` already takes a schema name (DESIGN §6).
   *
   * A real Postgres is not an implementation detail of the suite. Half of what `db` claims is a
   * claim about Postgres: that the catalog reads back what we wrote, that constraints reject what
@@ -42,15 +42,15 @@ object Pg {
 
   /** A `Database` for one suite, isolated by Postgres schema.
     *
-    * The `search_path` is set by the pool's connection-init hook rather than once on a borrowed
-    * connection, because `search_path` is per-connection: set once on one connection, every other
+    * The `search_path` is set by the pool's connection init hook rather than once on a borrowed
+    * connection, because `search_path` is per connection: set once on one connection, every other
     * connection the pool hands out would still be on `public` and the suite would silently read the
     * wrong schema. This is the reason `Pool` takes the hook at all (DESIGN §8.7).
     */
   def database(schema: String): Database =
     Database.connect(jdbcUrl, username, password, init = searchPath(schema))
 
-  /** The connection-init hook that isolates a suite by schema: [[database]]'s, and the one a suite
+  /** The connection init hook that isolates a suite by schema: [[database]]'s, and the one a suite
     * that builds its own `Database` through `DbInit` names as `databaseInit`.
     */
   def searchPath(schema: String): Connection -> Unit = c => {

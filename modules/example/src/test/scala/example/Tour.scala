@@ -46,7 +46,7 @@ object Tour extends DbApp {
   override def databaseUser: String     = container.getUsername
   override def databasePassword: String = container.getPassword
 
-  /** The tour works in its own schema, so eezo's connections have to be told about it too —
+  /** The tour works in its own schema, so eezo's connections have to be told about it too;
     * otherwise the migrator writes to `public` while the drift checks read `eezo_tour`, and a
     * replay looks like it never happened. DESIGN §8.7.
     */

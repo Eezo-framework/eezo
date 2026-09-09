@@ -1,10 +1,10 @@
 package io.eezo.http.cli
 
-/** The text front-end's rendering: result values in, `String` out, printing left to the caller.
+/** The text front end's rendering: result values in, `String` out, printing left to the caller.
   *
-  * A separate object from [[Commands]] because it is one front-end among several — [[RenderJson]]
-  * is the same shape over the same values — and because layer 1's rule is that nothing in
-  * `Commands` decides what a user sees.
+  * A separate object from [[Commands]] because it is one front end among several ([[RenderJson]] is
+  * the same shape over the same values), and because layer 1's rule is that nothing in `Commands`
+  * decides what a user sees.
   */
 object Render {
 

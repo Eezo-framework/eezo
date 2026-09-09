@@ -4,8 +4,8 @@ import java.sql.Connection
 
 /** A database, and the only thing that owns a `Pool`.
   *
-  * Users never name this type. It is built once at the edge — `EezoApp` in production, the testkit
-  * in tests — installed, and reached only through `transact` and `read`.
+  * Users never name this type. It is built once at the edge (`EezoApp` in production, the testkit
+  * in tests), installed, and reached only through `transact` and `read`.
   */
 final class Database private[eezo] (private[eezo] val pool: Pool) {
 
@@ -30,7 +30,7 @@ object Database {
   *
   * `private[eezo]` because installing is the edge's job: `DbApp` in production, the testkit in
   * tests. `Test / parallelExecution := false` is set on the `db` project, which is what makes one
-  * install point enough — see the comment on that setting.
+  * install point enough; see the comment on that setting.
   */
 private[eezo] object Installed {
 
@@ -40,6 +40,9 @@ private[eezo] object Installed {
 
   private[eezo] def uninstall(): Unit = { current = null }
 
+  /** Exists so the entry trait suites can observe whether a `Database` was installed around `boot`
+    * and `dev`, without a query.
+    */
   private[eezo] def installed: Boolean = current != null
 
   private[eezo] def get: Database = {

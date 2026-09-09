@@ -17,7 +17,7 @@ import java.sql.Connection
   */
 class DbAppSuite extends PgSuite {
 
-  /** A database-only application whose program records that it ran under an installed database. */
+  /** A database only application whose program records that it ran under an installed database. */
   private class Job extends DbApp {
     var ran         = false
     var sawDatabase = false
@@ -96,13 +96,18 @@ class DbAppSuite extends PgSuite {
     assert(!app.ran)
   }
 
-  test("help names this edge's commands and not the http edge's") {
+  test("help names this edge's commands and not the http edge's, with the freeze note last") {
     val (code, out, _) = captured(new Job().run(List("help")))
     assertEquals(code, 0)
-    List("status", "sync", "freeze", "migrate", "reset", "drop", "dump", "ddl").foreach { c =>
-      assert(out.contains(c), s"$c missing from:\n$out")
+    val lines = out.linesIterator.toList
+    List("status", "sync", "freeze", "migrate", "reset", "drop", "dump", "ddl", "help").foreach {
+      c => assert(lines.exists(_.trim.startsWith(c)), s"$c missing from:\n$out")
     }
+    // The note is a caveat on the whole table, so it follows every row, `help`'s included.
+    val note = lines.indexWhere(_.startsWith("freeze takes --accept-all"))
+    val help = lines.indexWhere(_.trim.startsWith("help"))
+    assert(note > help, out)
     assert(!out.contains("routes"), out)
-    assert(!out.linesIterator.exists(_.trim.startsWith("dev")), out)
+    assert(!lines.exists(_.trim.startsWith("dev")), out)
   }
 }

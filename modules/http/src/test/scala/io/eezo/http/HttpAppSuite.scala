@@ -67,11 +67,16 @@ class HttpAppSuite extends munit.FunSuite {
     assert(!app.booted)
   }
 
-  test("help names this edge's two commands") {
+  test("help names this edge's two commands, in one column with help's own row") {
     val (code, out, _) = captured(new Recording().run(List("help")))
     assertEquals(code, 0)
-    assert(out.contains("dev"), out)
-    assert(out.contains("routes"), out)
+    val lines = out.linesIterator.toList
+    assert(
+      lines.contains("  dev     serve with the route listing and the reload client on"),
+      out
+    )
+    assert(lines.contains("  routes  the mounted table, with boot's warnings"), out)
+    assert(lines.contains("  help    this list"), out)
     assert(!out.contains("status"), out)
   }
 

@@ -3,13 +3,11 @@ package io.eezo.http.cli
 import io.eezo.core.internal.Json
 import io.eezo.http.Route
 
-/** The machine front-end: the same result values [[Render]] turns into text, as JSON.
-  *
-  * This is `design/objective.md`'s "every step emits machine-readable output" landing — an agent
-  * drives the loop on `--json` and never parses prose. The encoding is deliberately hand-rolled
-  * over `Json` rather than derived: these shapes are a public contract for tools, and a contract
-  * should not silently change because a field was renamed in a Scala case class. Each object
-  * carries a `"command"` discriminator so a stream of results needs no out-of-band context.
+/** The machine side of this edge's CLI: the same result values [[Render]] turns into text, as JSON.
+  * The format rules, and why the encoding is written by hand over `Json` rather than derived, are
+  * explained once on the db edge's `RenderJson` (`io.eezo.db.cli.RenderJson`) and hold here
+  * unchanged: a `"command"` discriminator on every object, and shapes that are a contract for
+  * tools.
   */
 object RenderJson {
 

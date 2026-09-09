@@ -1,12 +1,14 @@
 package io.eezo.core
 
+import io.eezo.core.Dispatch.Usage
 import io.eezo.core.support.Captured.captured
 
-/** `Dispatch` as `core` owns it: `main`, the chained `commands`, and `help` over `usage`.
+/** `Dispatch` as `core` owns it: `main`, the chained `commands`, `help` over `usage`, and `emit`.
   *
   * Nothing here starts or stops anything. Each edge chains its own arms in front of
-  * `super.commands`, and this suite pins the two things the edges build on: an unknown first
-  * argument is exit 2, and a later mixin's arm shadows an earlier one's.
+  * `super.commands`, and this suite pins the things the edges build on: an unknown first argument
+  * is exit 2, a later mixin's arm shadows an earlier one's, `help` lays the table out once for
+  * every edge, and `emit` is the one place the `--json` choice is made.
   */
 class DispatchSuite extends munit.FunSuite {
 
@@ -16,21 +18,33 @@ class DispatchSuite extends munit.FunSuite {
       case "greet" :: who => println(s"hello ${who.mkString(" ")}"); 0
     }: PartialFunction[List[String], Int]) orElse super.commands
 
-    override protected def usage: List[String] = List("greet <who>     says hello") ++ super.usage
+    override protected def usage: List[Usage] =
+      List(Usage("greet <who>", "says hello")) ++ super.usage
   }
 
   trait Counter extends Dispatch {
     override protected def commands: PartialFunction[List[String], Int] = ({
-      case Nil          => println("counter booted"); 0
-      case "count" :: _ => println("1 2 3"); 0
+      case Nil              => println("counter booted"); 0
+      case "count" :: flags =>
+        emit(flags)("{\"count\": [1, 2, 3]}", "1 2 3")
+        0
     }: PartialFunction[List[String], Int]) orElse super.commands
 
-    override protected def usage: List[String] = List("count           counts") ++ super.usage
+    override protected def usage: List[Usage] = List(Usage("count", "counts")) ++ super.usage
+
+    override protected def notes: List[String] =
+      List("count takes no arguments", "(it always counts to three)") ++ super.notes
   }
 
   object Greeting extends Greeter
 
   object Both extends Greeter with Counter
+
+  private val footer = List(
+    "",
+    "every command takes --json for machine-readable output (same exit codes);",
+    "no arguments runs the application"
+  )
 
   test("no arguments is the application: the Nil arm runs") {
     val (code, out, _) = captured(Greeting.run(Nil))
@@ -59,12 +73,53 @@ class DispatchSuite extends munit.FunSuite {
     assert(err.startsWith("{\n  \"error\": \"unknown command: say \\\"hi\\\" --json"), err)
   }
 
-  test("help lists one line per usage entry and is exit 0") {
+  test("help pads every command to the widest spelling, help itself included, and is exit 0") {
+    val (code, out, _) = captured(Greeting.run(List("help")))
+    assertEquals(code, 0)
+    val expected = List(
+      "eezo",
+      "  greet <who>  says hello",
+      "  help         this list"
+    ) ++ footer
+    assertEquals(out.linesIterator.toList, expected)
+  }
+
+  test("help prints the notes after the table and before the footer, once for every edge") {
     val (code, out, _) = captured(Both.run(List("help")))
     assertEquals(code, 0)
-    assert(out.contains("greet <who>     says hello"), out)
-    assert(out.contains("count           counts"), out)
-    assert(out.contains("help"), out)
+    val expected = List(
+      "eezo",
+      "  count        counts",
+      "  greet <who>  says hello",
+      "  help         this list",
+      "",
+      "count takes no arguments",
+      "(it always counts to three)"
+    ) ++ footer
+    assertEquals(out.linesIterator.toList, expected)
+  }
+
+  test("emit prints the text side, or the JSON side under --json, and evaluates only that one") {
+    val (code, text, _) = captured(Both.run(List("count")))
+    assertEquals(code, 0)
+    assertEquals(text.trim, "1 2 3")
+
+    val (jsonCode, json, _) = captured(Both.run(List("count", "--json")))
+    assertEquals(jsonCode, 0)
+    assertEquals(json.trim, "{\"count\": [1, 2, 3]}")
+
+    object Lazy extends Dispatch {
+      def onlyText(flags: List[String]): Int = {
+        emit(flags)(sys.error("json was forced"), "text")
+        0
+      }
+      def onlyJson(flags: List[String]): Int = {
+        emit(flags)("json", sys.error("text was forced"))
+        0
+      }
+    }
+    assertEquals(captured(Lazy.onlyText(Nil))._2.trim, "text")
+    assertEquals(captured(Lazy.onlyJson(List("--json")))._2.trim, "json")
   }
 
   test("a later mixin's arm is consulted first, and the earlier one's still answers") {

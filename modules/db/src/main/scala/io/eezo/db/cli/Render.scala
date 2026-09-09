@@ -3,19 +3,19 @@ package io.eezo.db.cli
 import io.eezo.db.migrate.{Decision, Resolution}
 import io.eezo.db.schema.Change
 
-/** The text front-end's rendering: result values in, `String` out, printing left to the caller.
+/** The text front end's rendering: result values in, `String` out, printing left to the caller.
   *
   * This is `example/Cli.scala`'s output, moved. It stays a separate object from [[Commands]]
-  * because it is one front-end among several — the JSON renderer is the same shape over the same
-  * values — and because layer 1's rule is that nothing in it decides what a user sees.
+  * because it is one front end among several (the JSON renderer is the same shape over the same
+  * values), and because layer 1's rule is that nothing in it decides what a user sees.
   */
 object Render {
 
   private def flag(c: Change): String =
     if (c.destructive) "  [destructive]" else if (c.risky) "  [risky]" else ""
 
-  /** One change with its classification: the line every listing prints, exposed for front-ends that
-    * lay their own page around it — the dev server's drift page is one.
+  /** One change with its classification: the line every listing prints, exposed for front ends that
+    * lay their own page around it; the dev server's drift page is one.
     */
   def change(c: Change): String = s"${c.describe}${flag(c)}"
 
