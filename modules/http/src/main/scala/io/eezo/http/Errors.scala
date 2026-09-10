@@ -25,7 +25,7 @@ final case class NotFound(path: String) extends EezoException(s"no route matches
 final case class MethodNotAllowed(allowed: Seq[Method])
     extends EezoException(s"allowed: ${allowed.mkString(", ")}")
 
-/** The request body exceeded `Eezo.run`'s `maxBodySize`. */
+/** The request body exceeded `HttpApp.maxBodySize`. */
 final case class PayloadTooLarge(limit: Long)
     extends EezoException(s"request body exceeds the $limit byte limit")
 

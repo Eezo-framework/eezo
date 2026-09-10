@@ -6,7 +6,7 @@ import io.eezo.core.html.*
   *
   * Status is a fact about this boundary and never a field on an exception, so the mapping is one
   * exhaustive match over the sealed set. Extension sits in the same place: a user's own exception
-  * reaches a status through the `problems` hook on `Eezo.run`, tried after eezo's set and before
+  * reaches a status through the `problems` override on `HttpApp`, tried after eezo's set and before
   * the 500 fallback.
   */
 private[http] object Boundary {

@@ -9,7 +9,7 @@ import io.eezo.core.html.Tags.{body, html, p}
 import io.eezo.core.support.Captured.captured
 import io.eezo.db.{Schema, SchemaError, Table}
 import io.eezo.db.engine.Installed
-import io.eezo.http.{Handler, Method, PathPattern, Response, Route, RouteTable}
+import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteTable}
 
 /** The umbrella's entry trait: both edges stacked, `EezoApp extends HttpApp with DbApp`.
   *
@@ -66,25 +66,21 @@ class EezoAppSuite extends munit.FunSuite {
 
   /** Runs `dev` on `app` for real and hands `body` the answer to `GET /` once the server is up.
     *
-    * `serve` is final and `Eezo.run` blocks until the server stops, keeping the `Server` as a
-    * local, so the command runs on a daemon thread and the test holds nothing it could stop.
-    * Interrupting that thread is what ends `run`: Jetty's `join` throws, `withDatabase` uninstalls
-    * and closes on the way out, and the listener itself is left to die with the JVM.
+    * `serve` is final and `Eezo.run` blocks until the server stops, so the command runs on its own
+    * thread and `Eezo.stop` brings the server down afterwards: `run` returns, `serve` returns, and
+    * `withDatabase` uninstalls and closes on the way out, the same unwinding a SIGTERM causes
+    * through the shutdown hook. The thread ends normally, which is what the callers' "uninstalled
+    * once the dev server stops" assertions are about.
     */
   private def developing(app: Recording)(body: HttpResponse[String] => Unit): Unit = {
-    val thread = new Thread(
-      () => {
-        try { app.run(List("dev")); () }
-        catch { case _: InterruptedException => () }
-      },
-      "eezo-dev"
-    )
+    val thread = new Thread(() => { app.run(List("dev")); () }, "eezo-dev")
     thread.setDaemon(true)
     thread.start()
     try body(awaitPage(app.port))
     finally {
-      thread.interrupt()
+      Eezo.stop()
       thread.join(5000)
+      assert(!thread.isAlive, "dev did not return once the server was stopped")
     }
   }
 

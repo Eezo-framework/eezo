@@ -51,21 +51,40 @@ private[http] object Config {
 
 /** Booting eezo.
   *
-  * The user writes the entry point, and names the route table in it:
+  * Nothing in user code calls this object. The entry point is `HttpApp`, which names the route
+  * table and inherits `main`:
   *
   * ```scala
-  * import io.eezo.generated.Routes
-  * @main def main(): Unit = Eezo.run(port = 8080, routes = Routes.table, dev = true)
+  * object Main extends HttpApp {
+  *   override def routes: RouteTable = Routes.table()
+  * }
   * ```
   *
-  * The table is an ordinary parameter rather than something `run` finds by reflection, because a
-  * route transformation such as `under("/admin")` needs somewhere to be applied, and because "the
-  * sbt plugin is not enabled" should be a compile error at the user's `@main` rather than a runtime
-  * message.
+  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[eezo]` so that stays true
+  * by visibility rather than by convention. The table is an abstract member of the trait rather
+  * than something found by reflection, because a route transformation such as `under("/admin")`
+  * needs somewhere to be applied, and because "the sbt plugin is not enabled" should be a compile
+  * error at the user's `Main` rather than a runtime message.
+  *
+  * The framework brings the server up and down. [[run]] blocks until the server stops, and the
+  * server stops on the JVM's shutdown, so a SIGTERM unwinds `run`, `HttpApp.serve` returns, and
+  * whatever wrapped it (the database edge's `withDatabase`) runs its `finally`. [[stop]] is the
+  * same path for a test that started a server through `run` and wants it back down.
   */
 object Eezo {
 
   private val log = System.getLogger("io.eezo.http")
+
+  /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
+    * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
+    * `DevProcess.stop` gives the child before `destroyForcibly`.
+    */
+  private val UnwindTimeout: Duration = Duration.ofSeconds(10)
+
+  /** The server [[run]] is joining, if any, so that [[stop]] and the shutdown hook can reach it.
+    * One slot, not a set: `run` is what `main` ends in, once per process.
+    */
+  @volatile private var running: Option[Server] = None
 
   /** The path prefix reserved for the framework's own routes: the reload endpoint here, and the dev
     * server's drift actions in `modules/eezo`. One spelling, so a new framework route is added
@@ -73,26 +92,63 @@ object Eezo {
     */
   private[eezo] val ReservedPrefix: String = "/eezo"
 
-  /** Boots the server and blocks until it stops. */
-  def run(
+  /** Boots the server and blocks until it stops.
+    *
+    * The server comes down with the JVM: a shutdown hook stops it, which returns `join`, and then
+    * waits up to [[UnwindTimeout]] for the calling thread to finish, so the caller's `finally`
+    * blocks run before the process exits. The hook is removed again when `run` returns any other
+    * way, and the `IllegalStateException` the removal throws during a shutdown is the case where
+    * the hook is what returned `join`.
+    */
+  private[eezo] def run(
       port: Int,
       routes: RouteTable,
       maxBodySize: Long = Config.DefaultMaxBodySize,
       dev: Boolean = Config.DefaultDev,
       problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
   ): Unit = {
-    val server = start(port, Config(routes, maxBodySize, dev, problems))
-    server.join()
+    val server = build(port, Config(routes, maxBodySize, dev, problems))
+    val caller = Thread.currentThread()
+    val hook   = new Thread(
+      () => {
+        server.stop()
+        caller.join(UnwindTimeout.toMillis)
+      },
+      "eezo-shutdown"
+    )
+    Runtime.getRuntime.addShutdownHook(hook)
+    // Published before the server starts, so a `stop` that races the first request finds it.
+    running = Some(server)
+    try {
+      server.start()
+      server.join()
+    } finally {
+      running = None
+      try Runtime.getRuntime.removeShutdownHook(hook): Unit
+      catch { case _: IllegalStateException => () }
+    }
   }
 
-  /** Boots the server and returns it, still running.
+  /** Stops the server [[run]] is joining, so that `run` returns. Nothing if none is running. */
+  private[eezo] def stop(): Unit = running.foreach(_.stop())
+
+  /** Boots the server and returns it, still running: [[build]] and then `start`, for a suite that
+    * holds the handle itself.
+    */
+  private[http] def start(port: Int, config: Config): Server = {
+    val server = build(port, config)
+    server.start()
+    server
+  }
+
+  /** The server, configured and announced but not started.
     *
     * The configuration below is `research/http-server.md` section 12, and every override in it is
     * an override of a Jetty default the research measured and calls a defect: a thread pool that is
     * not virtual-thread-native, a 30 second WebSocket idle timeout, a 64 KiB text message cap, and
     * an unbounded outgoing frame queue that grew a single stalled connection to 293.6 MiB of heap.
     */
-  private[http] def start(port: Int, config: Config): Server = {
+  private def build(port: Int, config: Config): Server = {
     val pool = new VirtualThreadPool()
     // No semaphore ceiling. The pool's default caps concurrent tasks, which reintroduces the
     // queueing that virtual threads exist to remove.
@@ -119,8 +175,6 @@ object Eezo {
     server.setHandler(upgrade)
 
     announce(config)
-
-    server.start()
     server
   }
 
