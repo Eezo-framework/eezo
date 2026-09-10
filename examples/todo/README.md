@@ -1,13 +1,19 @@
 # The todo app — a guided tour of the eezo CLI
 
+| | |
+|---|---|
+| artifact | `"io.eezo" %% "eezo"` (the umbrella) |
+| entry trait | `io.eezo.EezoApp` |
+| edges | database and http |
+
 One model deriving `Table, Form, Resource`, an `AppSchema` with two indexes, two handwritten
 routes, and a Postgres schema of its own. Everything the CLI currently does can be exercised from
 this directory. Every output block below was captured from a real run.
 
-**One honest caveat before you start:** the derived CRUD pages write to an in-memory store that is
-minted per boot, while the schema commands manage Postgres. The two are not wired together yet —
-that integration is the next milestone. So todos you create in the browser vanish on restart, and
-`sync`/`migrate` manage the *table*, not those rows.
+Because `Todo` carries a `Table`, the derived CRUD pages read and write rows in Postgres through a
+`JdbcStore`, and the schema commands manage the table those rows live in. The table has to exist
+before the first request, which is what section 3 does; a todo created in the browser is still
+there after a restart.
 
 ## 0. Setup
 
@@ -46,7 +52,8 @@ whatever your machine runs on 8080) and keeps its tables in a Postgres schema na
 - `src/main/scala/app/Health.scala` — a custom name mounts a GET at its own segment:
   `GET /health`.
 - `src/main/scala/Main.scala` — the entry point: name `schema` and `routes`, done. `main` is
-  inherited from `EezoApp` and dispatches.
+  inherited from `EezoApp` and dispatches. `EezoApp` is the umbrella's trait, both edges stacked;
+  an application with one edge extends that edge's trait instead (`../hello`, `../reminders`).
 
 ## 2. The route table — no database needed
 

@@ -1,3 +1,5 @@
+import java.sql.Connection
+
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
@@ -5,16 +7,18 @@ import io.eezo.http.Provenance
 import io.eezo.http.Route
 import io.eezo.http.RouteTable
 
-/** The whole entry point: name the generated table, and `EezoApp` does the rest.
+/** The whole entry point: name the schema and the generated table, and `EezoApp` does the rest.
   *
-  * `Routes.table()` is a `def` rather than a `val` because it mints the store the derived routes
-  * write to. Nothing in this file, and nothing in the model, names that store: it is a throwaway
-  * standing in for a query runtime that is still being built.
+  * This application has both edges. It depends on the umbrella `eezo`, so `EezoApp` is the trait it
+  * extends, and it names the two things an application with both edges has: a `schema` and its
+  * `routes`. `Routes.table()` is a `def` rather than a `val` because it mints the store the derived
+  * routes write to; `Post` derives `Table`, so that store is `JdbcStore` and the posts live in
+  * Postgres. Nothing in this file names the store: the generated table picks it per model.
   *
-  * `main` is inherited and dispatches: `sbt run` serves on port 8080, `sbt "run dev"` (or
-  * `sbt eezoDev`) adds the drift check and the route listing, and the drift commands (`status`,
-  * `sync`, `freeze`, `migrate`) run against the schema this app names (none yet; see
-  * `Schema.empty`'s default).
+  * `main` is inherited and dispatches: `sbt run` serves on port 8080 with a `Database` installed,
+  * `sbt "run dev"` (or `sbt eezoDev`) adds the drift check and the route listing, and the schema
+  * commands (`status`, `sync`, `freeze`, `migrate`) run against `AppSchema`. The table has to exist
+  * before the first request: `sbt "run sync --apply"` once, or `eezoDev`'s drift page.
   *
   * The table is a value rather than something the server finds by reflection, which is what leaves
   * room for the lines in `routes` below. They split it on provenance and mount one half: the seven
@@ -38,10 +42,22 @@ import io.eezo.http.RouteTable
   */
 object Main extends EezoApp {
 
-  /** No tables yet. `schema` is abstract on `EezoApp`, so an application on the umbrella says so;
-    * the examples ticket (#161) moves this example to the edge it actually has.
+  override def schema: Schema = AppSchema
+
+  /** This app keeps its table in a Postgres schema of its own, so it can share the dev database
+    * with the other examples without their drift bleeding into each other. Two halves, told once
+    * each: the init hook runs on **every** pooled connection (search_path is per connection), and
+    * `databaseSchema` points the drift commands' catalog reads at the same name.
     */
-  override def schema: Schema = Schema.empty
+  override def databaseSchema: String = "blog"
+
+  override def databaseInit: Connection => Unit = { c =>
+    val st = c.createStatement()
+    try {
+      st.execute("""create schema if not exists "blog"""")
+      st.execute("""set search_path to "blog"""")
+    } finally st.close()
+  }
 
   override def routes: RouteTable = {
     val (derived, handwritten) =

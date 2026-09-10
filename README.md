@@ -6,24 +6,44 @@ Building and running eezo requires JDK 25 or newer. JEP 491, delivered in JDK 24
 
 ## The example applications
 
-eezo is not released yet, so both examples resolve it from the local ivy cache:
+An application has one or two edges: the database edge (the connection and the schema commands)
+and the http edge (the server and the routes). It opts into them by artifact. `eezo-http` alone
+carries `HttpApp`, `eezo-db` alone carries `DbApp`, and the umbrella `eezo`, the default dependency,
+carries both and `EezoApp`. A derivation belongs to one edge, so deriving for an edge the application
+does not have is a compile error. Each example is on the artifact of the edges it has, and its
+README shows the derivation of the missing edge failing:
+
+| example | artifact | entry trait | edges |
+|---|---|---|---|
+| `examples/hello` | `eezo-http` | `HttpApp` | http |
+| `examples/reminders` | `eezo-db` | `DbApp` | database |
+| `examples/blog` | `eezo` | `EezoApp` | both |
+| `examples/todo` | `eezo` | `EezoApp` | both |
+
+eezo is not released yet, so the examples resolve it from the local ivy cache:
 
 ```bash
 sbt publishLocalForExample      # publishes eezo and sbt-eezo locally, records the version
 cd examples
 sbt hello/run                   # http://localhost:8080/hello
-sbt blog/run                    # http://localhost:8080
+sbt reminders/run               # runs the job once against the dev Postgres
+sbt blog/run                    # http://localhost:8080, after `sbt "blog/run sync --apply"`
 ```
 
 `examples/hello` is one handwritten route, no database and no derivation. The route is not mounted
 anywhere: `src/main/scala/app/Hello.scala` defines `def hello`, and the sbt plugin turns the file's
 name and location into `GET /hello` in a generated `io.eezo.generated.Routes`, which the
-application names in its own `@main`.
+application names as its `routes`.
 
-`examples/blog` is one case class. `models/Post.scala` carries `derives Form, Resource`, and that
-mounts seven CRUD routes — list, new, create, show, edit, update, delete — served in a browser over
-an in-memory store the generated table mints. Its `app/Index.scala` is a handwritten route beside
-them, listed first, because a handwritten route wins a path a derived one would also match.
+`examples/reminders` is one case class deriving `Table` and a `boot` that is a nightly job over its
+rows: deliver what is due, mark it sent. No server, no plugin; `sbt run` runs the job once with a
+database installed, and the schema commands manage its table.
+
+`examples/blog` is one case class deriving all three. `models/Post.scala` carries `derives Table,
+Form, Resource`, and that mounts seven CRUD routes — list, new, create, show, edit, update, delete —
+served in a browser over rows in Postgres, because a model with a `Table` gets a `JdbcStore` from
+the generated table. Its `app/Index.scala` is a handwritten route beside them, listed first, because
+a handwritten route wins a path a derived one would also match.
 
 Half of that table is then served under a prefix: `Main.scala` splits the routes on where they came
 from and wraps only the derived ones in `Route.under("/admin")`. The handwritten index keeps
