@@ -22,12 +22,6 @@ lazy val commonSettings = Seq(
     "-unchecked",
     "-no-indent"
   ),
-  // The umbrella: `io.eezo.EezoApp` plus everything it dispatches to. One dependency and one
-  // import is the point — see the comment on the `eezo` module in the main build.
-  libraryDependencies += "io.eezo" %% "eezo" % EezoVersion.value,
-  // Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as
-  // eezo's own `System.Logger`, and silences SLF4J's no-provider warning at boot.
-  libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime,
   // eezo needs JDK 25 to run: JEP 491, which removed virtual-thread pinning on `synchronized`,
   // landed in JDK 24, and the server design depends on it.
   run / fork := true,
@@ -36,28 +30,63 @@ lazy val commonSettings = Seq(
   run / outputStrategy := Some(OutputStrategy.StdoutOutput)
 )
 
-// Skeleton one: one handwritten route, no database, no derivation.
+// Each example depends on the artifact of the edges it has, and that dependency is the one line
+// that decides what compiles in it. `eezo-http` alone carries `HttpApp`, `Form` and `Resource`;
+// `eezo-db` alone carries `DbApp` and `Table`; the umbrella `eezo` carries both and `EezoApp`. A
+// derivation for an edge the example does not have is a compile error, because the type is not on
+// the classpath: see each example's README for the line that proves it.
+def edge(artifact: String) = "io.eezo" %% artifact % EezoVersion.value
+
+// Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as eezo's
+// own `System.Logger`, and silences SLF4J's no-provider warning at boot. Only an example with the
+// http edge carries Jetty, so only those carry this.
+lazy val jettyLogging = "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime
+
+// `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
+// forked run to the project dir so the terminal commands and the dev loop write one place.
+lazy val runInProjectDir =
+  Compile / run / forkOptions := (Compile / run / forkOptions).value
+    .withWorkingDirectory(baseDirectory.value)
+
+// The http edge alone: one handwritten route, no database, no derivation. `derives Table` does not
+// compile here.
 lazy val hello = (project in file("hello"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
-  .settings(name := "hello")
+  .settings(
+    name := "hello",
+    libraryDependencies ++= Seq(edge("eezo-http"), jettyLogging)
+  )
 
-// Skeleton two: one model, `derives Form, Resource`, seven CRUD routes in a browser over the
-// in-memory store the generated table mints.
+// The database edge alone: one model deriving `Table`, an `AppSchema`, and a `boot` that is a job
+// over rows. No routes, so no `EezoPlugin`; `derives Form` does not compile here.
+lazy val reminders = (project in file("reminders"))
+  .settings(commonSettings)
+  .settings(
+    name := "reminders",
+    libraryDependencies += edge("eezo-db"),
+    runInProjectDir
+  )
+
+// Both edges: one model deriving `Table, Form, Resource`, seven CRUD routes in a browser over rows
+// in Postgres, and the derived half of the table mounted under `/admin`.
 lazy val blog = (project in file("blog"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
-  .settings(name := "blog")
+  .settings(
+    name := "blog",
+    libraryDependencies ++= Seq(edge("eezo"), jettyLogging),
+    runInProjectDir
+  )
 
-// The tour app: a model deriving `Table, Form, Resource`, an `AppSchema`, two handwritten routes,
-// and its own Postgres schema. `todo/README.md` is a guided walk through the whole CLI on it.
+// The tour app, on both edges: a model deriving `Table, Form, Resource`, an `AppSchema`, two
+// handwritten routes, and its own Postgres schema. `todo/README.md` is a guided walk through the
+// whole CLI on it.
 lazy val todo = (project in file("todo"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
   .settings(
     name := "todo",
-    // `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
-    // forked run to the project dir so the terminal commands and the dev loop write one place.
-    Compile / run / forkOptions := (Compile / run / forkOptions).value
-      .withWorkingDirectory(baseDirectory.value)
+    libraryDependencies ++= Seq(edge("eezo"), jettyLogging),
+    runInProjectDir
   )
