@@ -1,8 +1,8 @@
-# The entry traits landed four things their decision tickets had settled otherwise
+# The entry traits landed five things their decision tickets had settled otherwise
 
 **Status:** accepted
 
-Issue #160 is the build ticket for the three entry traits, and it inherits its shape from two decision tickets: #158 settled `Dispatch`, `HttpApp`, `DbApp` and `EezoApp`, and #159 settled where `Commands`, `Render` and `RenderJson` live and which `build.sbt` arrows remain. The two commits that closed it, 9303c7e and e996f9c, differ from those records in four places: the second commit moved two decisions the first had honoured, a conflict between the tickets forced the third, and a decided signature forced the fourth. This ADR names each piece, what the ticket said, what landed, and records that the decision is to keep all four.
+Issue #160 is the build ticket for the three entry traits, and it inherits its shape from two decision tickets: #158 settled `Dispatch`, `HttpApp`, `DbApp` and `EezoApp`, and #159 settled where `Commands`, `Render` and `RenderJson` live and which `build.sbt` arrows remain. The two commits that closed it, 9303c7e and e996f9c, differ from those records in four places: the second commit moved two decisions the first had honoured, a conflict between the tickets forced the third, and a decided signature forced the fourth. Review of PR #163 added a fifth, on the one member #158 had rejected by name. This ADR names each piece, what the ticket said, what landed, and records that the decision is to keep all five.
 
 ## The unknown command answers in JSON under `--json`
 
@@ -26,15 +26,27 @@ The arrow #159 removed was `eezo` on `db`'s tests, which existed so that `cli`'s
 
 `modules/example/src/test/scala/example/Tour.scala` used to override `boot(args: Array[String])` and read `--no-pause` from it. #158 decision 3 makes `boot()` take no arguments, because the empty argument list is the application and any first argument is a command, so `run --no-pause` is now an unknown command, exit 2. The Tour became a `DbApp`, the edge it has, and the switch became the environment variable `TOUR_NOPAUSE`, read from `sys.env`; the `example` block in `build.sbt` documents the spelling. It is an environment variable rather than a `-D` system property because `Test / fork` is on for the example project, and a forked JVM inherits the parent process environment but not a property given to the sbt launcher, so `-Dtour.nopause` never reached the Tour; review of PR #163 caught that. This is a consequence of decision 3, not a deviation from it, and it is the shape any program that wants a flag rather than a command will take.
 
+## `program` is a hook on `Dispatch`, and `EezoApp` overrides it
+
+#158 decision 1 says the ancestor holds `main`, `commands` and `usage` and nothing else: "No `around`, no `failures`, no `program`. A lifecycle hook in `core` with one implementor was rejected (map note 9)." Its composition paragraph then explains how the program composes without one: each edge owns a `case Nil` arm, each writes `own orElse super.commands`, so in `EezoApp extends HttpApp with DbApp` the database edge's arm shadows the http edge's, and "the order `HttpApp with DbApp` is load-bearing and `EezoApp` is written once". 9303c7e and e996f9c landed exactly that.
+
+Review of PR #163 found what that leaves open. `object Main extends DbApp with HttpApp` compiled on the umbrella, and on it `sbt run` booted the server with no `Database` installed and `dev` served with no drift check, because the same two arms shadow the other way round and nothing but the scaladoc said which order was meant. `dev` composed by a different mechanism, the `devServer` override, so "run the http edge under the database" was said twice in two shapes and enforced in neither.
+
+What landed instead: `Dispatch` declares an abstract `protected def program(): Unit` and owns the one `case Nil => program(); 0`; `HttpApp` implements it as `boot()`, `DbApp` as `withDatabase(boot())`, neither with `override`; `EezoApp` inherits two concrete `program`s and has to override it, and writes `withDatabase(boot())` there, beside `devServer`. A trait or object that stacks the two edges by hand, in either order, is refused by the compiler with "inherits conflicting members" until it says which program it means. `DispatchSuite` pins the refusal on two fake edges and `EezoAppSuite` pins it on the real ones in both orders. The `override` omission is not style: an implementation marked `override` is one a later mixin's silently replaces, which is the hazard the member exists to close, and `Dispatch.program`'s scaladoc says so.
+
+Map note 9 rejected the hook because it would have had one implementor. It has two by construction, one per edge, and the umbrella is a third that chooses between them, so the note is cleared rather than overruled. `DbApp`'s `SchemaError` catch now covers the chain after its own arms as well, so a `SchemaError` out of the program still exits 1 with the one line, as it did on `main` where the whole dispatch sat under one catch. Kept.
+
 ## Considered options
 
 **Restore the two tickets' letter in e996f9c's two places.** Rejected. Putting `error` back on `db`'s `RenderJson` would make `http` write a second one the day its `routes` arm has anything to refuse, and would leave the unknown command as the one line that ignores `--json`. Deleting the `test->test` arrows would restore three copies of `Captured`.
+
+**Keep the two `Nil` arms and pin the order with a test instead of a hook.** Rejected. A test on `EezoApp` proves the umbrella's own line and nothing about a user's `Main extends DbApp with HttpApp`, which is the case the review named; only the compiler sees that code. Naming the edge from `EezoApp` (`super[DbApp].commands(Nil)`) was tried first in 288b2e3 and rejected for the same reason: it fixed the umbrella's dependence on its own mixin order and left a hand stacking compiling, while adding a third composition idiom next to `orElse` chaining and the `devServer` hook.
 
 **Default `schema` to `Schema.empty` on `EezoApp` so #160's "unchanged" holds.** Rejected, because it reopens #158 decision 5, and an application on the umbrella without a schema is exactly the mistake that decision wants the compiler to catch. Two explicit stopgaps in two example files cost less than a silent default in the framework.
 
 ## Consequences
 
-#158 and #159 are closed and their comments still read as the record; this ADR is the correction on both. #158's unknown command paragraph is superseded by `Dispatch.fail`'s scaladoc, and #159's arrow table gains `core % "compile->compile;test->test"` on the `http`, `db` and `eezo` rows.
+#158 and #159 are closed and their comments still read as the record; this ADR is the correction on both. #158's unknown command paragraph is superseded by `Dispatch.fail`'s scaladoc, its decision 1 gains `program` and its composition paragraph is superseded by `EezoApp`'s scaladoc, and #159's arrow table gains `core % "compile->compile;test->test"` on the `http`, `db` and `eezo` rows.
 
 #161 inherits two obligations: replace `Schema.empty` in `blog` with a real `AppSchema`, and drop the override from `hello` when it moves to `eezo-http`. If #161 ships without either, the stopgap outlives the ticket it was written for, and this ADR is where to look for why it exists.
 

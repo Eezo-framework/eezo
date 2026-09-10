@@ -33,7 +33,7 @@ import scala.io.StdIn
   * touch it, so they work with the database down; the program and the other commands get one for
   * their whole duration. Today installing is free even when nothing queries, because `Pool` opens
   * connections per use and `Database.connect` never touches the network; if the pool ever becomes
-  * eager, the `Nil` arm below is the one that has to become lazy.
+  * eager, [[program]] is the one that has to become lazy.
   */
 trait DbApp extends Dispatch with DbInit {
 
@@ -66,13 +66,19 @@ trait DbApp extends Dispatch with DbInit {
     }
   }
 
-  override protected def commands: PartialFunction[List[String], Int] =
-    guarded.unsafeAssumePure orElse super.commands
+  /** What `sbt run` does on this edge: [[boot]] with a `Database` installed around it. Concrete
+    * here and in the http edge both, so a trait that stacks the two inherits two and must say which
+    * one it means; the umbrella says this one. No `override` here, deliberately: see
+    * `Dispatch.program`.
+    */
+  protected def program(): Unit = withDatabase(boot())
 
-  /** This edge's arms: the program, and the eight schema commands. The patterns are the one list of
-    * what this edge answers; `isDefinedAt` over them runs no body. The capture annotation is `^`
-    * spelled the way scalafmt can parse: the literal closes over `this`, and [[guarded]] is where
-    * that is asserted away.
+  override protected def commands: PartialFunction[List[String], Int] = guarded.unsafeAssumePure
+
+  /** This edge's arms, the eight schema commands. The patterns are the one list of what this edge
+    * answers; `isDefinedAt` over them runs no body. The capture annotation is `^` spelled the way
+    * scalafmt can parse: the literal closes over `this`, and [[guarded]] is where that is asserted
+    * away.
     */
   private def arms: PartialFunction[List[String], Int] @retainsCap = {
     // Read once, outside every closure below. `read` and `transact` take a pure body under capture
@@ -82,10 +88,6 @@ trait DbApp extends Dispatch with DbInit {
     val live  = databaseSchema
 
     {
-      case Nil =>
-        withDatabase(boot())
-        0
-
       case "status" :: flags =>
         val result = withDatabase(read { Commands.status(model, live) })
         emit(flags)(RenderJson.status(result), Render.status(result))
@@ -164,9 +166,11 @@ trait DbApp extends Dispatch with DbInit {
     "(bare --json implies --skip-destructive)"
   ) ++ super.notes
 
-  /** [[arms]] behind the `SchemaError` catch. The catch is here and not in `core`, which cannot see
-    * the type; the http edge has nothing that throws it. Exit 1, through `Dispatch.fail` so the
-    * line is JSON under `--json`.
+  /** [[arms]], and the rest of the chain after them, behind the `SchemaError` catch. The catch is
+    * here and not in `core`, which cannot see the type; the http edge has nothing that throws it,
+    * but the program does run under this edge's `Database` and may, so the catch covers
+    * `super.commands` too rather than this edge's arms alone. Exit 1, through `Dispatch.fail` so
+    * the line is JSON under `--json`.
     *
     * The type is inferred and then asserted pure at the `commands` site, deliberately.
     * `Dispatch.commands` is typed in `core`, outside capture checking, so there it reads as a pure
@@ -175,10 +179,12 @@ trait DbApp extends Dispatch with DbInit {
     * carries no capability: `DbInit`'s hook is a `->`, and every other member is a value.
     */
   private def guarded = new PartialFunction[List[String], Int] {
-    def isDefinedAt(args: List[String]): Boolean = arms.isDefinedAt(args)
+    private def chain = arms orElse DbApp.super.commands
+
+    def isDefinedAt(args: List[String]): Boolean = chain.isDefinedAt(args)
 
     def apply(args: List[String]): Int =
-      try arms(args)
+      try chain(args)
       catch {
         case e: SchemaError =>
           fail(args, e.getMessage)

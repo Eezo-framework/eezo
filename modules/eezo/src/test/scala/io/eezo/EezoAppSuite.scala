@@ -15,11 +15,12 @@ import io.eezo.http.{Handler, Method, PathPattern, Response, Route, RouteTable}
   *
   * What this suite pins: `sbt run` on an `EezoApp` answers `Nil` through the database edge, which
   * installs a `Database` around the http edge's `boot`, and `dev` is the one override, the drift
-  * check under that same `Database` and then the http edge's dev server. `EezoApp` names its `Nil`
-  * answer explicitly (`super[DbApp]`), so this holds regardless of which of `HttpApp` and `DbApp`
-  * the trait happens to be written after. No Postgres is needed: `Database.connect` never touches
-  * the network, so a bogus URL installs and closes without a query, and the drift check skips an
-  * empty schema and warns about a database it cannot reach.
+  * check under that same `Database` and then the http edge's dev server. Both are overrides of a
+  * hook each edge implements (`program`, `devServer`), and the compiler refuses a trait that stacks
+  * the two edges without overriding `program`, so the suite also pins that a hand stacking in
+  * either order does not compile. No Postgres is needed: `Database.connect` never touches the
+  * network, so a bogus URL installs and closes without a query, and the drift check skips an empty
+  * schema and warns about a database it cannot reach.
   */
 class EezoAppSuite extends munit.FunSuite {
 
@@ -158,10 +159,11 @@ class EezoAppSuite extends munit.FunSuite {
     assert(err.contains("unknown command: deploy"), err)
   }
 
-  test("no arguments still answers through the database edge's own guard, not a reimplementation") {
-    // `EezoApp` names its `Nil` answer as `super[DbApp].commands(Nil)` rather than writing
-    // `withDatabase(boot())` again itself, so a `SchemaError` out of `boot` is still caught where
-    // `DbApp` already catches it, not left to escape a second, unguarded copy.
+  test(
+    "a SchemaError out of the program is exit 1 with the line, and the Database is uninstalled"
+  ) {
+    // On `main` the whole dispatch sat under one `SchemaError` catch; the database edge's guard now
+    // covers the chain after its own arms too, so the program keeps that answer.
     val app = new Recording {
       override def boot(): Unit = throw SchemaError("boom")
     }
@@ -169,6 +171,30 @@ class EezoAppSuite extends munit.FunSuite {
     assertEquals(code, 1)
     assert(err.contains("boom"), err)
     assert(!Installed.installed, "the Database is uninstalled even when boot throws")
+  }
+
+  test("stacking the two edges by hand does not compile, in either order") {
+    // `program` is concrete in both edges, so a trait that inherits both must override it and say
+    // which; `EezoApp` says the database edge's. Without that override the compiler refuses the
+    // stacking, and with it a user's own `Main` cannot boot with no `Database` installed by
+    // writing the supertypes in the wrong order.
+    val dbFirst = compileErrors("""
+      object Wrong extends io.eezo.db.DbApp with io.eezo.http.HttpApp {
+        override def schema: io.eezo.db.Schema       = io.eezo.db.Schema.empty
+        override def routes: io.eezo.http.RouteTable = io.eezo.http.RouteTable.empty
+      }
+    """)
+    val httpFirst = compileErrors("""
+      object Wrong extends io.eezo.http.HttpApp with io.eezo.db.DbApp {
+        override def schema: io.eezo.db.Schema       = io.eezo.db.Schema.empty
+        override def routes: io.eezo.http.RouteTable = io.eezo.http.RouteTable.empty
+      }
+    """)
+    List(dbFirst, httpFirst).foreach { e =>
+      assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
+      assert(e.contains("conflicting members"), e)
+      assert(e.contains("program"), e)
+    }
   }
 }
 

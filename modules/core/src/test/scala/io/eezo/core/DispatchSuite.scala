@@ -7,15 +7,19 @@ import io.eezo.core.support.Captured.captured
   *
   * Nothing here starts or stops anything. Each edge chains its own arms in front of
   * `super.commands`, and this suite pins the things the edges build on: an unknown first argument
-  * is exit 2, a later mixin's arm shadows an earlier one's, `help` lays the table out once for
-  * every edge, and `emit` is the one place the `--json` choice is made.
+  * is exit 2, `Nil` is `program` and is answered here rather than by an edge, two edges that both
+  * implement `program` cannot be stacked without saying which one wins, a later mixin's arm shadows
+  * an earlier one's, `help` lays the table out once for every edge, and `emit` is the one place the
+  * `--json` choice is made.
   */
 class DispatchSuite extends munit.FunSuite {
 
   trait Greeter extends Dispatch {
+    protected def program(): Unit = println("greeter booted")
+
     override protected def commands: PartialFunction[List[String], Int] = ({
-      case Nil            => println("greeter booted"); 0
       case "greet" :: who => println(s"hello ${who.mkString(" ")}"); 0
+      case "name" :: _    => println("greeter"); 0
     }: PartialFunction[List[String], Int]) orElse super.commands
 
     override protected def usage: List[Usage] =
@@ -23,11 +27,13 @@ class DispatchSuite extends munit.FunSuite {
   }
 
   trait Counter extends Dispatch {
+    protected def program(): Unit = println("counter booted")
+
     override protected def commands: PartialFunction[List[String], Int] = ({
-      case Nil              => println("counter booted"); 0
       case "count" :: flags =>
         emit(flags)("{\"count\": [1, 2, 3]}", "1 2 3")
         0
+      case "name" :: _ => println("counter"); 0
     }: PartialFunction[List[String], Int]) orElse super.commands
 
     override protected def usage: List[Usage] = List(Usage("count", "counts")) ++ super.usage
@@ -38,7 +44,15 @@ class DispatchSuite extends munit.FunSuite {
 
   object Greeting extends Greeter
 
-  object Both extends Greeter with Counter
+  /** Two edges stacked. `program` is concrete in both, so this object has to say which one it
+    * means, and it says both, in the earlier one's order.
+    */
+  object Both extends Greeter with Counter {
+    override protected def program(): Unit = {
+      super[Greeter].program()
+      super[Counter].program()
+    }
+  }
 
   private val footer = List(
     "",
@@ -46,10 +60,21 @@ class DispatchSuite extends munit.FunSuite {
     "no arguments runs the application"
   )
 
-  test("no arguments is the application: the Nil arm runs") {
+  test("no arguments is the application: program runs, through Dispatch's own Nil arm") {
     val (code, out, _) = captured(Greeting.run(Nil))
     assertEquals(code, 0)
     assertEquals(out.trim, "greeter booted")
+  }
+
+  test("two edges that both implement program cannot be stacked without choosing one") {
+    val e = compileErrors("object Wrong extends Greeter with Counter")
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
+    assert(e.contains("conflicting members"), e)
+    assert(e.contains("program"), e)
+
+    val (code, out, _) = captured(Both.run(Nil))
+    assertEquals(code, 0)
+    assertEquals(out.linesIterator.toList, List("greeter booted", "counter booted"))
   }
 
   test("a recognised first argument runs its arm with the rest of the line") {
@@ -109,6 +134,8 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(json.trim, "{\"count\": [1, 2, 3]}")
 
     object Lazy extends Dispatch {
+      override protected def program(): Unit = ()
+
       def onlyText(flags: List[String]): Int = {
         emit(flags)(sys.error("json was forced"), "text")
         0
@@ -123,8 +150,8 @@ class DispatchSuite extends munit.FunSuite {
   }
 
   test("a later mixin's arm is consulted first, and the earlier one's still answers") {
-    val (_, booted, _) = captured(Both.run(Nil))
-    assertEquals(booted.trim, "counter booted")
+    val (_, name, _) = captured(Both.run(List("name")))
+    assertEquals(name.trim, "counter")
 
     val (code, out, _) = captured(Both.run(List("greet", "you")))
     assertEquals(code, 0)

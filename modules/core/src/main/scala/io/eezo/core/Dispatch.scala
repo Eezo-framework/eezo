@@ -14,11 +14,24 @@ import io.eezo.core.internal.Json
   */
 trait Dispatch {
 
-  /** The commands this application answers, as `first argument :: rest`. `Nil` is the application
-    * itself. Each edge writes `own orElse super.commands`, so the later mixin's arms are consulted
-    * first.
+  /** The application itself: what `sbt run` with no arguments does. Abstract, and the one member
+    * every edge implements, so an application that stacks two edges by hand inherits two concrete
+    * `program`s and the compiler refuses the stacking until it says which one it means. That is how
+    * the umbrella is made to state "the http edge under the database" in words, instead of getting
+    * it from whichever edge happens to be the later mixin.
+    *
+    * The refusal depends on the edges implementing this without `override`. An implementation
+    * marked `override` is one the linearization may let a later mixin's silently replace, and two
+    * of those stack in either order with no error, which is the hazard this member exists to close.
+    * Only the trait that resolves the conflict writes `override`.
     */
-  protected def commands: PartialFunction[List[String], Int] = PartialFunction.empty
+  protected def program(): Unit
+
+  /** The commands this application answers, as `first argument :: rest`. `Nil` is [[program]] and
+    * is answered here, once, so no edge owns it. Each edge writes `own orElse super.commands` for
+    * its own commands, so the later mixin's arms are consulted first.
+    */
+  protected def commands: PartialFunction[List[String], Int] = { case Nil => program(); 0 }
 
   /** One row per command, for `help`. Each edge writes `own ++ super.usage`, and names only the
     * spelling and the description: the columns are [[help]]'s to lay out, once, over every edge's

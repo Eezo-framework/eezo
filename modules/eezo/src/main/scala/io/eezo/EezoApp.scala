@@ -18,27 +18,20 @@ import io.eezo.http.HttpApp
   * application inherits "serve" regardless of which of the two supertypes below is written first,
   * and a `Main` that overrides `boot` still wins.
   *
-  * The program, no arguments, used to be the one place mixin order mattered: each edge writes
-  * `own orElse super.commands`, so whichever of `HttpApp` and `DbApp` is written second answered
-  * `Nil` first, and only `DbApp`'s answer installs a `Database` around `boot`. That made the single
-  * line below, `extends HttpApp with DbApp`, the only thing standing between a correct application
-  * and one that boots with no `Database` installed, with nothing but convention saying so.
-  * `commands` answers `Nil` itself, through `super[DbApp]` by name rather than through whichever
-  * edge the linearization happens to favour, so the order the two supertypes are written in no
-  * longer changes what the program runs under.
-  *
-  * The other override is the database edge's contribution to `dev`: the drift check before the
-  * server comes up, and the refusal page in place of the app while the drift is dangerous. It needs
-  * no such pinning, because `DbApp` never defines `devServer` at all.
+  * What is this trait's own is the one idea both overrides spell: the http edge runs under the
+  * database. `program` is concrete in both edges, `boot()` in one and `withDatabase(boot())` in the
+  * other, so the compiler refuses any trait that stacks the two until it overrides `program` and
+  * says which; this one says the database edge's. A user's own `extends DbApp with HttpApp` fails
+  * the same way, in either order, instead of booting with no `Database` installed. `dev` composes
+  * through `devServer` alike: the drift check before the server comes up, and the refusal page in
+  * place of the app while the drift is dangerous, all under the same `Database`.
   */
 trait EezoApp extends HttpApp with DbApp {
 
-  /** `Nil`, the program itself, answered through `DbApp` by name: see the trait scaladoc for why.
-    * Every other command still reaches both edges through `super.commands`, unchanged.
+  /** The http edge's `boot` under the database edge's lifecycle: the one line the compiler makes
+    * this trait write.
     */
-  override protected def commands: PartialFunction[List[String], Int] =
-    ({ case Nil => super[DbApp].commands(Nil) }: PartialFunction[List[String], Int]) orElse
-      super.commands
+  override protected def program(): Unit = withDatabase(boot())
 
   override protected def devServer(): Unit = withDatabase {
     DriftGate(schema, databaseSchema) match {

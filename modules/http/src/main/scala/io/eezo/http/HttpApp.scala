@@ -20,7 +20,8 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   * on `eezo` and extends `EezoApp`, which stacks both edges.
   *
   * [[serve]] is the only call site of `Eezo.run` in the entry traits, so [[boot]] and `dev` see the
-  * same overrides; the umbrella overrides [[devServer]] to run the drift check first.
+  * same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot` under
+  * the database, [[devServer]] to run the drift check first.
   */
 trait HttpApp extends Dispatch {
 
@@ -57,8 +58,13 @@ trait HttpApp extends Dispatch {
     */
   protected def devServer(): Unit = serve(routes, dev = true)
 
+  /** What `sbt run` does on this edge alone: [[boot]], under nothing. The umbrella overrides it to
+    * run the same `boot` under the database edge's lifecycle, the way it overrides [[devServer]].
+    * No `override` here, deliberately: see `Dispatch.program`.
+    */
+  protected def program(): Unit = boot()
+
   override protected def commands: PartialFunction[List[String], Int] = ({
-    case Nil               => boot(); 0
     case "dev" :: _        => devServer(); 0
     case "routes" :: flags =>
       val result = Commands.routes(routes)
