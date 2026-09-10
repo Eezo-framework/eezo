@@ -7,18 +7,19 @@ import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import io.eezo.core.Id
 import io.eezo.core.html.Tags.{body, html, p}
 import io.eezo.core.support.Captured.captured
-import io.eezo.db.{Schema, Table}
+import io.eezo.db.{Schema, SchemaError, Table}
 import io.eezo.db.engine.Installed
 import io.eezo.http.{Handler, Method, PathPattern, Response, Route, RouteTable}
 
 /** The umbrella's entry trait: both edges stacked, `EezoApp extends HttpApp with DbApp`.
   *
-  * The order is load bearing and the trait is written once, so what this suite pins is what the
-  * order buys: `sbt run` on an `EezoApp` is the database edge's `Nil` arm, which installs a
-  * `Database` around the http edge's `boot`, and `dev` is the one override, the drift check under
-  * that same `Database` and then the http edge's dev server. No Postgres is needed:
-  * `Database.connect` never touches the network, so a bogus URL installs and closes without a
-  * query, and the drift check skips an empty schema and warns about a database it cannot reach.
+  * What this suite pins: `sbt run` on an `EezoApp` answers `Nil` through the database edge, which
+  * installs a `Database` around the http edge's `boot`, and `dev` is the one override, the drift
+  * check under that same `Database` and then the http edge's dev server. `EezoApp` names its `Nil`
+  * answer explicitly (`super[DbApp]`), so this holds regardless of which of `HttpApp` and `DbApp`
+  * the trait happens to be written after. No Postgres is needed: `Database.connect` never touches
+  * the network, so a bogus URL installs and closes without a query, and the drift check skips an
+  * empty schema and warns about a database it cannot reach.
   */
 class EezoAppSuite extends munit.FunSuite {
 
@@ -155,6 +156,19 @@ class EezoAppSuite extends munit.FunSuite {
     val (code, _, err) = captured(new Recording().run(List("deploy")))
     assertEquals(code, 2)
     assert(err.contains("unknown command: deploy"), err)
+  }
+
+  test("no arguments still answers through the database edge's own guard, not a reimplementation") {
+    // `EezoApp` names its `Nil` answer as `super[DbApp].commands(Nil)` rather than writing
+    // `withDatabase(boot())` again itself, so a `SchemaError` out of `boot` is still caught where
+    // `DbApp` already catches it, not left to escape a second, unguarded copy.
+    val app = new Recording {
+      override def boot(): Unit = throw SchemaError("boom")
+    }
+    val (code, _, err) = captured(app.run(Nil))
+    assertEquals(code, 1)
+    assert(err.contains("boom"), err)
+    assert(!Installed.installed, "the Database is uninstalled even when boot throws")
   }
 }
 

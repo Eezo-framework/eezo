@@ -14,16 +14,31 @@ import io.eezo.http.HttpApp
   *
   * Nothing here is new: `HttpApp` brings `routes`, the server's overrides, `boot`'s default of
   * serving, and the `dev` and `routes` commands; `DbApp` brings `schema`, the database lifecycle,
-  * and the schema commands. The order `HttpApp with DbApp` is load bearing and this trait is
-  * written once: each edge chains its commands in front of `super`'s, so the later mixin's arms
-  * win, and `DbApp`'s empty argument arm (the program, with a `Database` installed) shadows
-  * `HttpApp`'s. `boot` is concrete in `HttpApp` and abstract in `DbApp`, so an application inherits
-  * "serve" and a `Main` that overrides it still wins.
+  * and the schema commands. `boot` is concrete in `HttpApp` and abstract in `DbApp`, so an
+  * application inherits "serve" regardless of which of the two supertypes below is written first,
+  * and a `Main` that overrides `boot` still wins.
   *
-  * The one override is the database edge's contribution to `dev`: the drift check before the server
-  * comes up, and the refusal page in place of the app while the drift is dangerous.
+  * The program, no arguments, used to be the one place mixin order mattered: each edge writes
+  * `own orElse super.commands`, so whichever of `HttpApp` and `DbApp` is written second answered
+  * `Nil` first, and only `DbApp`'s answer installs a `Database` around `boot`. That made the single
+  * line below, `extends HttpApp with DbApp`, the only thing standing between a correct application
+  * and one that boots with no `Database` installed, with nothing but convention saying so.
+  * `commands` answers `Nil` itself, through `super[DbApp]` by name rather than through whichever
+  * edge the linearization happens to favour, so the order the two supertypes are written in no
+  * longer changes what the program runs under.
+  *
+  * The other override is the database edge's contribution to `dev`: the drift check before the
+  * server comes up, and the refusal page in place of the app while the drift is dangerous. It needs
+  * no such pinning, because `DbApp` never defines `devServer` at all.
   */
 trait EezoApp extends HttpApp with DbApp {
+
+  /** `Nil`, the program itself, answered through `DbApp` by name: see the trait scaladoc for why.
+    * Every other command still reaches both edges through `super.commands`, unchanged.
+    */
+  override protected def commands: PartialFunction[List[String], Int] =
+    ({ case Nil => super[DbApp].commands(Nil) }: PartialFunction[List[String], Int]) orElse
+      super.commands
 
   override protected def devServer(): Unit = withDatabase {
     DriftGate(schema, databaseSchema) match {
