@@ -24,7 +24,7 @@ import sbt.plugins.JvmPlugin
   * there is permissive rather than restrictive: it lets Scala 3 syntax through, so
   * `import scala.collection.mutable.*` compiles, while it still accepts Scala 2 constructs that
   * Scala 3 hard rejects, such as procedure syntax, symbol literals, `forSome`, `do ... while`, and
-  * auto-application of an empty-paren method. It says nothing about silent semantic divergence
+  * automatic application of an empty paren method. It says nothing about silent semantic divergence
   * either, such as a leading infix operand, which compiles clean on both axes and means different
   * things on each. Building both axes is the only real check.
   */
@@ -44,7 +44,7 @@ object EezoPlugin extends AutoPlugin {
       taskKey[Seq[File]]("Generates io.eezo.generated.Routes from src/main/scala/app/.")
 
     // The command tasks. Each is one forward to `run <command>`, so `sbt eezoStatus` and
-    // `sbt "run status"` are the same code path — the dispatch in `io.eezo.EezoApp` — and the
+    // `sbt "run status"` are the same code path (the dispatch the entry trait inherits) and the
     // plugin stays sugar rather than mechanism (design/cli.md §4). `@transient` for the same
     // reason as above: these are effectful forwards, and sbt 2 must never satisfy one from a
     // task cache.
@@ -64,8 +64,8 @@ object EezoPlugin extends AutoPlugin {
       inputKey[Unit]("Forwards to `run freeze <name>`: writes a migration from the model diff.")
 
     // The dev loop's two halves. `eezoRestart` is the kernel: kill the app's JVM, fork it again
-    // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev` — the
-    // command a user actually types — is a command alias over it, defined in `globalSettings`.
+    // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev`, the
+    // command a user actually types, is a command alias over it, defined in `globalSettings`.
     @transient val eezoRestart: TaskKey[Unit] =
       taskKey[Unit]("(Re)starts the application in dev mode in a background JVM.")
 
@@ -82,15 +82,15 @@ object EezoPlugin extends AutoPlugin {
     // exist on disk. A file written anywhere else is invisible to the editor that has to navigate
     // it.
     Compile / sourceGenerators += (Compile / eezoGenerateRoutes).taskValue,
-    // What the dev loop watches. `sourceGenerators` re-runs every generator on every evaluation,
+    // What the dev loop watches. `sourceGenerators` runs every generator again on every evaluation,
     // so the caching below is this generator's own job; the trigger is what makes `~compile` react
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
-    // The command tasks, project-level rather than `Compile`-scoped so that `sbt eezoStatus`
+    // The command tasks, project level rather than scoped to `Compile` so that `sbt eezoStatus`
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
-    // inherits everything the build already decided about running — fork, working directory,
-    // javaOptions — instead of restating it.
+    // inherits everything the build already decided about running (fork, working directory,
+    // javaOptions) instead of restating it.
     eezoStatus  := unit((Compile / run).toTask(" status")).value,
     eezoRoutes  := unit((Compile / run).toTask(" routes")).value,
     eezoSync    := forward("sync").evaluated,
@@ -102,12 +102,14 @@ object EezoPlugin extends AutoPlugin {
     Compile / run / connectInput := true,
     // The restart kernel. `fullClasspath` is what makes it compile first: asking for the
     // classpath compiles the project, so a broken edit fails here and the previous process keeps
-    // serving — the dev loop never kills a working server for a compile error.
+    // serving; the dev loop never kills a working server for a compile error.
     eezoRestart := {
       val log  = streams.value.log
       val main = (Compile / run / mainClass).value
         .getOrElse(
-          sys.error("eezoRestart: no main class. Define an `object Main extends EezoApp`.")
+          sys.error(
+            "eezoRestart: no main class. Define an `object Main` extending `EezoApp`, `HttpApp` or `DbApp`."
+          )
         )
       DevProcess.restart(
         javaHome = (Compile / run / javaHome).value,
@@ -125,10 +127,14 @@ object EezoPlugin extends AutoPlugin {
     }
   )
 
-  /** `eezoDev`: restart on every edit. The watch is sbt's own — `watchTriggers` above already
-    * covers the source tree, and `eezoRestart`'s classpath dependency pulls the compile — so the
-    * loop is one alias rather than machinery: research/build-reload.md measured resident `~` at
-    * 148–300 ms from save to rebuilt, which is the budget this rides on.
+  /** `eezoDev`: restart on every edit. The watch is sbt's own (`watchTriggers` above already covers
+    * the source tree, and `eezoRestart`'s classpath dependency pulls the compile), so the loop is
+    * one alias rather than machinery: research/build-reload.md measured resident `~` at 148 to 300
+    * ms from save to rebuilt, which is the budget this rides on.
+    *
+    * `dev` is the http edge's command. On a database only application (`DbApp` alone) it is
+    * unknown, so `eezoDev` prints the unknown command line on every save; a rerun on save loop for
+    * a job is sbt's own `~run`.
     */
   override lazy val globalSettings: Seq[Setting[_]] =
     addCommandAlias("eezoDev", "~eezoRestart")
@@ -153,7 +159,7 @@ object EezoPlugin extends AutoPlugin {
 
   /** A textual fingerprint of `RouteGenerator`'s emitted shape, written into the stamp file
     * `generate` hashes alongside the application's own sources below. It concatenates `render` on
-    * no routes with `render` on one fixed, synthetic route, so the file's preamble, the empty-table
+    * no routes with `render` on one fixed, synthetic route, so the file's preamble, the empty table
     * arm, and a single row's own template are all part of the fingerprint: a change to any of the
     * three changes this string, and therefore invalidates every project's cache automatically, with
     * no constant a human has to remember to bump. What it does not cover: a change to `routeFor`,
@@ -165,8 +171,8 @@ object EezoPlugin extends AutoPlugin {
     * `dbOnClasspath` is folded in rather than left to the emitted text alone, and it is the one
     * input that no source file carries. Adding `eezo-db` to an existing application changes its
     * `libraryDependencies` and nothing under `src/main/scala`, so without the flag here every
-    * hashed input would be byte-identical, the cache would hit, and the application would keep a
-    * `Routes.scala` whose `storeFor` only ever mints an in-memory store. Every model deriving
+    * hashed input would be byte identical, the cache would hit, and the application would keep a
+    * `Routes.scala` whose `storeFor` only ever mints an in memory store. Every model deriving
     * `Table` would then go on losing its rows at shutdown, with no error anywhere to say why. The
     * flag being part of the fingerprint is what turns adding the dependency into a cache miss.
     *
@@ -195,8 +201,8 @@ object EezoPlugin extends AutoPlugin {
     Seq("eezoWitness/_id/Show.scala", "eezoWitness/New.scala")
 
   /** One model, run through `modelsIn` rather than written as a `ModelCandidate` by hand, so that
-    * the scan's own rules — the package prefix and the `derives` window — are inside the
-    * fingerprint alongside the derived half of `render`'s template.
+    * the scan's own rules (the package prefix and the `derives` window) are inside the fingerprint
+    * alongside the derived half of `render`'s template.
     */
   private val WitnessModelSource: String = "eezoWitness/Model.scala"
 
@@ -215,7 +221,7 @@ object EezoPlugin extends AutoPlugin {
     * shape changes `witness`, and therefore a hashed input, with no version number to bump by hand;
     * it also guarantees the input set is never empty when a project has no `app/` directory yet, so
     * the cached body still runs once and writes a table with no rows. The output is tracked by
-    * content hash rather than existence, so a hand-edited or truncated Routes.scala is repaired on
+    * content hash rather than existence, so a hand edited or truncated Routes.scala is repaired on
     * the next run, not only a deleted one.
     */
   private def generate: Def.Initialize[Task[Seq[File]]] = Def.task {
@@ -234,7 +240,7 @@ object EezoPlugin extends AutoPlugin {
     // the emitted `storeFor` may name `io.eezo.db.Table`. Read off the resolution report rather
     // than off `libraryDependencies`, because the declared list misses an `eezo-db` that arrives
     // transitively, through a shared internal module that depends on it. That miss is silent data
-    // loss rather than an error: the generator would emit the in-memory-only arm, every model
+    // loss rather than an error: the generator would emit the in memory only arm, every model
     // deriving `Table` would compile and serve, and its rows would die at shutdown.
     //
     // The report has to be narrowed to one configuration, and the configuration is
@@ -253,9 +259,9 @@ object EezoPlugin extends AutoPlugin {
     // `% Optional` ones (six upickle modules), every one of which is genuinely on the compile
     // classpath. Reading it would produce the mirror image of the bug above, and the worse half of
     // it: `eezo-db` present to the compiler, this flag false, and every model deriving `Table`
-    // silently handed an in-memory store that loses its rows at shutdown. `ConfigRef(
+    // silently handed an in memory store that loses its rows at shutdown. `ConfigRef(
     // "compile-internal")` is equal to it, with zero modules missing and zero extra, on both sbt
-    // versions, and including the inter-project case where a library reaches the compile classpath
+    // versions, and including the inter project case where a library reaches the compile classpath
     // through `web.dependsOn(models)` while being absent from `web`'s own `libraryDependencies`.
     //
     // One source file serves both axes because `UpdateReport.configuration` has an identical
@@ -263,9 +269,9 @@ object EezoPlugin extends AutoPlugin {
     // `Option[ConfigurationReport]` result, and the same `allModules` on that report.
     //
     // `Compile / dependencyClasspath` is accurate by construction and is still not used. It forces
-    // every upstream project to compile before this generator may run, and on sbt 1 an in-build
-    // sibling arrives on it as a directory named `classes`, which no filename match can identify as
-    // `eezo-db`.
+    // every upstream project to compile before this generator may run, and on sbt 1 a sibling
+    // in the build arrives on it as a directory named `classes`, which no filename match can
+    // identify as `eezo-db`.
     //
     // Reading a resolution task from a source generator does not risk a cycle here: `update`
     // depends on `libraryDependencies` and `projectDependencies`, never on `Compile / sources`, so
@@ -276,7 +282,7 @@ object EezoPlugin extends AutoPlugin {
     // project's own `compile` are not. Their failure mode is not a reported cycle that names the
     // keys involved; it is a silent hang.
     //
-    // The name is matched with its cross-version suffix as well as bare, because the resolved
+    // The name is matched with its cross version suffix as well as bare, because the resolved
     // report carries the artifact name, which for a Scala library is `eezo-db_3`.
     val dbOnClasspath = update.value
       .configuration(ConfigRef("compile-internal"))
@@ -321,8 +327,8 @@ object EezoPlugin extends AutoPlugin {
   /** `sourceGenerators` runs on every evaluation and the hashed input set covers the whole source
     * tree, so an edit to a file with no routes and no models in it reaches this point. Writing
     * identical bytes would still move the timestamp of the one file the following compile is
-    * guaranteed to read, and so retrigger the work downstream of it; comparing first keeps a no-op
-    * regeneration invisible to everything that watches the file.
+    * guaranteed to read, and so retrigger the work downstream of it; comparing first keeps an
+    * unchanged regeneration invisible to everything that watches the file.
     */
   private def writeIfChanged(destination: File, contents: String): Unit =
     if (!destination.exists() || IO.read(destination) != contents) IO.write(destination, contents)

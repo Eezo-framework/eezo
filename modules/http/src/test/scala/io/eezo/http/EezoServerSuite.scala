@@ -50,6 +50,56 @@ class EezoServerSuite extends munit.FunSuite {
       )
     )
 
+  test("run blocks until stop brings the server down, then returns and frees the port") {
+    // `run` hands back no handle, so it goes on its own thread and `stop` is the way back. That
+    // thread ends normally, not by interrupt: the same unwinding a SIGTERM causes through the
+    // shutdown hook, which is what lets whatever wrapped `run` reach its `finally`.
+    val port     = freePort()
+    var returned = false
+    val runner   = new Thread(
+      () => {
+        Eezo.run(port, hello)
+        returned = true
+      },
+      "eezo-run"
+    )
+    runner.setDaemon(true)
+    runner.start()
+    try assertEquals(awaiting(port, "/hello").statusCode(), 200)
+    finally {
+      Eezo.stop()
+      runner.join(5000)
+    }
+    assert(returned, "run did not return after stop")
+    intercept[java.io.IOException](get(port, "/hello"))
+  }
+
+  test("stop with nothing running is a no-op") {
+    Eezo.stop()
+  }
+
+  /** A port nobody is listening on right now, for a server started through `run`, which binds the
+    * port it is given and hands back nothing to ask.
+    */
+  private def freePort(): Int = {
+    val socket = new java.net.ServerSocket(0)
+    try socket.getLocalPort
+    finally socket.close()
+  }
+
+  /** `get`, retried while the server is still coming up. */
+  private def awaiting(port: Int, path: String): HttpResponse[String] = {
+    val deadline                        = System.nanoTime() + 10_000_000_000L
+    def attempt(): HttpResponse[String] =
+      try get(port, path)
+      catch {
+        case _: java.io.IOException if System.nanoTime() < deadline =>
+          Thread.sleep(50)
+          attempt()
+      }
+    attempt()
+  }
+
   test("a handwritten route renders HTML produced by the core DSL") {
     serving(hello) { (_, port) =>
       val response = get(port, "/hello")

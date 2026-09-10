@@ -36,7 +36,7 @@ object FromPath {
 
 /** One request, read whole.
   *
-  * The body is eager and capped: `Eezo.run`'s `maxBodySize` decides how much of it is read, and
+  * The body is eager and capped: `HttpApp.maxBodySize` decides how much of it is read, and
   * exceeding the cap is a 413 rather than a stream nobody drains. What is deliberately absent is an
   * untyped `attachment: AnyRef` bag. A capability arrives through the handler's `using` list, where
   * its absence is a compile error rather than a `sys.error` on the first request that needs it.

@@ -113,6 +113,7 @@ EOF
 
   cat > "$name/src/main/scala/Main.scala" <<'EOF'
 import io.eezo.EezoApp
+import io.eezo.db.Schema
 import io.eezo.generated.Routes
 import io.eezo.http.RouteTable
 
@@ -120,7 +121,9 @@ import io.eezo.http.RouteTable
   * `sbt "run dev"` (or `sbt eezoDev`) adds the drift check and restart-on-save, and
   * `sbt "run status|sync|freeze|migrate"` are the schema commands.
   *
-  * When you add a model with `derives Table`, declare it in a Schema and name it here:
+  * `schema` is abstract on `EezoApp`, so an application on the umbrella always says what it has,
+  * and a new one has no tables yet. When you add a model with `derives Table`, declare it in a
+  * Schema and name that here instead of `Schema.empty`:
   *
   * {{{
   * object AppSchema extends Schema { val things = table[Thing] }
@@ -128,6 +131,7 @@ import io.eezo.http.RouteTable
   * }}}
   */
 object Main extends EezoApp {
+  override def schema: Schema     = Schema.empty
   override def routes: RouteTable = Routes.table()
 }
 EOF

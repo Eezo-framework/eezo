@@ -1,4 +1,4 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.migrate.Decision
@@ -7,10 +7,10 @@ import io.eezo.db.support.{DbSuite, Library}
 
 import java.nio.file.Files
 
-/** The database-backed commands, against the same testcontainers Postgres `db`'s suites use.
+/** The database backed commands, against the same testcontainers Postgres `db`'s suites use.
   *
   * `DbSuite` installs a `Database` isolated by Postgres schema and points `search_path` at it, so
-  * `transact`/`read` land in `pgSchema` — which is why every call below passes it where
+  * `transact`/`read` land in `pgSchema`, which is why every call below passes it where
   * `example/Cli.scala` relied on `public`.
   */
 class CommandsSuite extends DbSuite {
@@ -76,7 +76,7 @@ class CommandsSuite extends DbSuite {
     assert(result.dropped.contains("stray"))
 
     assert(read { Commands.status(Library, pgSchema) }.inSync)
-    // The ledger went too — `Introspect` hides it from snapshots, so ask Postgres directly.
+    // The ledger went too; `Introspect` hides it from snapshots, so ask Postgres directly.
     assert(rejected(exec("""select 1 from "eezo_migrations"""")))
   }
 }

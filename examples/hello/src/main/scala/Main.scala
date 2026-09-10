@@ -1,4 +1,5 @@
 import io.eezo.EezoApp
+import io.eezo.db.Schema
 import io.eezo.generated.Routes
 import io.eezo.http.RouteTable
 
@@ -13,5 +14,10 @@ import io.eezo.http.RouteTable
   * Override `def boot` for anything beyond serving [[routes]].
   */
 object Main extends EezoApp {
+
+  /** No tables yet. `schema` is abstract on `EezoApp`, so an application on the umbrella says so;
+    * the examples ticket (#161) moves this example to the edge it actually has.
+    */
+  override def schema: Schema = Schema.empty
   override def routes: RouteTable = Routes.table()
 }

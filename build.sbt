@@ -43,7 +43,7 @@ Global / onLoad := {
 }
 
 // The db suite is deliberately two things at once. `check` is the regression signal and is
-// expected to be green; `backlog` is the to-do list from design/backlog.md, written as tests
+// expected to be green; `backlog` is the list of open work from design/backlog.md, written as tests
 // that assert what eezo should do, and is expected to be red. A backlog test turns green by
 // the bug being fixed, never by the assertion being weakened.
 addCommandAlias("check", "db/testOnly -- --exclude-tags=backlog")
@@ -82,18 +82,18 @@ def module(id: String): Project =
 // an HTTP status.
 lazy val core = module("core")
 
-// Jetty boot, request parsing, response writing, file-based routing.
+// Jetty boot, request parsing, response writing, file based routing.
 lazy val http = module("http")
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
   .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, jettyWsClient))
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db")
-  .dependsOn(core)
+  .dependsOn(core % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(postgresql, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
-    // a preference. research/capture-checking.md §6.3 measured that a capture-checked library
+    // a preference. research/capture-checking.md §6.3 measured that a capture checked library
     // requires nothing of downstream and gives downstream nothing: the guarantee is real inside
     // this module and inside any consumer that opts in, and absent, silently, everywhere else.
     scalacOptions += "-language:experimental.captureChecking",
@@ -113,39 +113,28 @@ lazy val auth = module("auth").dependsOn(core, http, db)
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 
-// `eezo new`, `dev`, `routes`, `g`, `db`, `deploy`. Commands are library functions returning
-// values (design/cli.md §4, layer 1); the front-ends live above, in `modules/eezo` and the
-// launcher. `test->test` on `db` is what lets the cli suites extend `DbSuite` and inherit its
-// one-Postgres-per-run testcontainers setup; the fork and parallelism settings below are `db`'s
-// own, for the same reason `db` states on them — one installed `Database` at a time.
-lazy val cli = module("cli")
-  .dependsOn(core, http, db % "compile->compile;test->test", live, auth)
-  .settings(
-    libraryDependencies += testcontainersPg,
-    Test / fork              := true,
-    Test / parallelExecution := false
-  )
-
-// The umbrella, and the artifact an application depends on: `"io.eezo" %% "eezo"`. It exists so
-// that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which is what
-// design/objective.md's 30-minute benchmark asks of the first file a user writes. The entry point
-// lives here rather than in a lower module because it is the opposite shape from `core`'s
-// contents: it depends on everything and nothing depends on it, so it goes in the lowest module
-// that sees everything its body names — `Schema` from `db`, `RouteTable` from `http`, the
-// commands from `cli`.
+// The umbrella, and the default artifact an application depends on: `"io.eezo" %% "eezo"`. It
+// exists so that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which
+// is what design/objective.md's 30 minute benchmark asks of the first file a user writes. The two
+// edges are artifacts of their own: `eezo-http` carries `HttpApp` and `eezo-db` carries `DbApp`, so
+// an application that has only one edge depends on that edge alone and the other edge's derivations
+// are not on its classpath. `EezoApp` stacks the two entry traits, and the drift page the database
+// edge contributes to `dev` lives here because it is the one thing that needs both. `test->test` on
+// `core`, here and on the two edges, is what lets every entry trait suite share `core`'s
+// `Captured`.
 lazy val eezo = (project in file("modules/eezo"))
-  .dependsOn(cli)
+  .dependsOn(core % "compile->compile;test->test", http, db, live, auth)
   .settings(commonSettings)
   .settings(name := "eezo")
 
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
-// plugins are named that way, and it is cross-built for sbt 1 and sbt 2 from one source. See
+// plugins are named that way, and it is cross built for sbt 1 and sbt 2 from one source. See
 // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md` for why.
 lazy val sbtEezo = (project in file("modules/sbt-plugin"))
   .enablePlugins(SbtPlugin)
   .settings(
     name := "sbt-eezo",
-    // The build-level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
+    // The build level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
     // would fail.
     scalaVersion       := Toolchain.PluginScalaVersion,
     crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.ScalaVersion),
@@ -184,7 +173,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, cli, eezo, sbtEezo)
+  .aggregate(core, http, db, live, auth, testkit, eezo, sbtEezo)
   .settings(commonSettings)
   .settings(
     // The name `eezo` belongs to the published umbrella module above; the root is the unpublished
@@ -230,8 +219,10 @@ lazy val example = project
     Compile / run / mainClass := Some("example.Cli"),
     Compile / run / fork      := true,
     // The Tour lives in `src/test` because it starts its own Postgres through testcontainers, and
-    // that is a test-scoped dependency. It is still a program, not a suite:
-    //   sbt "example/Test/runMain example.Tour"            (--no-pause to run straight through)
+    // that is a test scoped dependency. It is still a program, not a suite:
+    //   sbt "example/Test/runMain example.Tour"            (TOUR_NOPAUSE=1 to run straight through)
+    // An environment variable, because `Test / fork` starts a child JVM that inherits the environment
+    // but not a `-D` property given to the sbt launcher.
     // `connectInput` is what lets its pauses and `freeze`'s prompts read stdin.
     Test / fork                  := true,
     Compile / run / connectInput := true,

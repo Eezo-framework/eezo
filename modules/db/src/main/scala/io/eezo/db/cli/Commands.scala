@@ -1,23 +1,23 @@
-package io.eezo.cli
+package io.eezo.db.cli
 
 import io.eezo.db.{DB, Schema, Tx}
 import io.eezo.db.migrate.{Decision, DeployCheck, Freeze, Migrator, Resolution}
 import io.eezo.db.schema.{Change, Ddl, Differ, Introspect}
-import io.eezo.http.{Resource, RouteTable}
 
 import java.nio.file.Path
 
-/** The commands, as library functions. Ported from `example/Cli.scala`, which was their
-  * specification (design/cli.md §3); the two rules of layer 1 apply to every entry point here:
-  * return values, never print; take capabilities, not connections.
+/** The database edge's commands, as library functions. Ported from `example/Cli.scala`, which was
+  * their specification (design/cli.md §3); the two rules of layer 1 apply to every entry point
+  * here: return values, never print; take capabilities, not connections. The http edge's are in
+  * `io.eezo.http.cli.Commands`, in the same shape.
   *
   * `dbSchema` is the Postgres schema commands introspect, defaulting to `public` the way
   * `Introspect.snapshot` does. It is a parameter for the same reason `Freeze.defaultDbDir` is: with
   * it baked in, nothing here could be exercised outside the real database of whatever process is
-  * running — the suites isolate by Postgres schema, and pass their own.
+  * running; the suites isolate by Postgres schema, and pass their own.
   *
   * `freeze` takes no capability: it diffs the committed snapshot against the code and writes files,
-  * and the live database is deliberately not consulted (that is `sync`'s job). Front-ends must not
+  * and the live database is deliberately not consulted (that is `sync`'s job). Front ends must not
   * install a `Database` to run it.
   */
 object Commands {
@@ -26,7 +26,7 @@ object Commands {
   def status(schema: Schema, dbSchema: String = "public")(using DB): StatusResult =
     StatusResult(Differ.diff(Introspect.snapshot(Conn.connection, dbSchema), schema.snapshot))
 
-  /** The same diff, executed directly when `apply` — dev only, migrations are the reviewed path.
+  /** The same diff, executed directly when `apply`: dev only, migrations are the reviewed path.
     *
     * A destructive or risky change refuses an unforced apply, exactly as `example/Cli.scala` did;
     * `force` applies everything, including what was blocked.
@@ -44,9 +44,9 @@ object Commands {
   /** Drift since the last freeze, written as a numbered, fingerprinted migration.
     *
     * `decide` is asked about **every** change, not only destructive ones: policy belongs to the
-    * front-end — the interactive one auto-accepts what is safe and prompts on the rest, an agent
-    * passes its own — and a mechanism that pre-filtered would leave `--skip-destructive`-shaped
-    * policies nowhere to live.
+    * front end (the interactive one accepts what is safe on its own and prompts on the rest, an
+    * agent passes its own), and a mechanism that filtered in advance would leave policies shaped
+    * like `--skip-destructive` nowhere to live.
     */
   def freeze(
       schema: Schema,
@@ -94,23 +94,12 @@ object Commands {
     DropResult(tables)
   }
 
-  /** [[drop]], then the model's full DDL — the same code path migrations take. */
+  /** [[drop]], then the model's full DDL, the same code path migrations take. */
   def reset(schema: Schema, dbSchema: String = "public")(using Tx): ResetResult = {
     val dropped = drop(dbSchema)
     execute(schema.ddl)
     ResetResult(dropped.tables, schema.ddl)
   }
-
-  /** The assembled table and everything boot warns about, as one value. Needs no database. */
-  def routes(table: RouteTable): RouteListing =
-    RouteListing(
-      routes = table.routes,
-      overridden = table.overridden,
-      shadowed = table.shadowed,
-      orphans = Resource
-        .orphaned(table)
-        .map(o => OrphanedPage(o.page, o.pageRoute, o.target, o.targetRoute))
-    )
 
   def ddl(schema: Schema): List[String] = schema.ddl
 

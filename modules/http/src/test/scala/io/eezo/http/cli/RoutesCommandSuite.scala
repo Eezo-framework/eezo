@@ -1,4 +1,4 @@
-package io.eezo.cli
+package io.eezo.http.cli
 
 import io.eezo.core.html.Tags.p
 import io.eezo.http.{Handler, Method, PathPattern, Provenance, Response, Route, RouteTable}

@@ -1,4 +1,5 @@
 import io.eezo.EezoApp
+import io.eezo.db.Schema
 import io.eezo.generated.Routes
 import io.eezo.http.Provenance
 import io.eezo.http.Route
@@ -11,8 +12,8 @@ import io.eezo.http.RouteTable
   * standing in for a query runtime that is still being built.
   *
   * `main` is inherited and dispatches: `sbt run` serves on port 8080, `sbt "run dev"` (or
-  * `sbt eezoDev`) adds the drift check and the route listing, and the drift commands — `status`,
-  * `sync`, `freeze`, `migrate` — run against the schema this app names (none yet; see
+  * `sbt eezoDev`) adds the drift check and the route listing, and the drift commands (`status`,
+  * `sync`, `freeze`, `migrate`) run against the schema this app names (none yet; see
   * `Schema.empty`'s default).
   *
   * The table is a value rather than something the server finds by reflection, which is what leaves
@@ -36,6 +37,11 @@ import io.eezo.http.RouteTable
   * method and path, so preserving that order preserves both rules.
   */
 object Main extends EezoApp {
+
+  /** No tables yet. `schema` is abstract on `EezoApp`, so an application on the umbrella says so;
+    * the examples ticket (#161) moves this example to the edge it actually has.
+    */
+  override def schema: Schema = Schema.empty
 
   override def routes: RouteTable = {
     val (derived, handwritten) =
