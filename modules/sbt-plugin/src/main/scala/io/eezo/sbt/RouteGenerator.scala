@@ -64,19 +64,194 @@ object RouteGenerator {
   /** A file's `package` clauses, in order, so that nested ones join into the prefix the compiler
     * resolves. `package object` is excluded by requiring a plain identifier path.
     */
-  private val PackageClause: Regex = new Regex("(?m)^package\\s+((?!object\\b)[A-Za-z_][\\w.]*)")
-
-  /** A top level case class, at column zero. */
-  private val CaseClass: Regex =
-    new Regex("(?m)^(?:final\\s+)?case class\\s+([A-Za-z_][A-Za-z0-9_]*)")
-
-  /** Where one declaration's text stops: the next top level declaration of any kind. */
-  private val Declaration: Regex =
-    new Regex(
-      "(?m)^(?:final\\s+|sealed\\s+|abstract\\s+|open\\s+)*(?:case\\s+)?(?:class|object|trait|enum|type|given|val|def)\\b"
-    )
+  private val PackageClause: Regex =
+    // Not column-anchored: the same editor that indents a model indents its package clause,
+    // and the code mask already keeps `package` in a comment or string from matching.
+    new Regex("\\bpackage\\s+((?!object\\b)[A-Za-z_][\\w.]*)")
 
   private val Derives: Regex = new Regex("\\bderives\\b")
+
+  // ── the model scan's structural half ──────────────────────────────────────────────────────
+  //
+  // "Top level" used to mean "column zero", which is a heuristic with a failure on each side: an
+  // editor-indented top-level model compiled, deployed, and silently mounted nothing (found on the
+  // first field deploy), and a column-zero class nested inside braces would have produced a name
+  // that does not compile. Both were the same mistake — reading layout where the question is
+  // structure — so the scan now tracks structure: a code mask strips comments and strings, brace
+  // depth decides nesting, and an enclosing-container stack names what is nested. Column only
+  // matters in the one place structure genuinely cannot answer: a depth-zero indented declaration
+  // in a file using significant indentation, where the indent *is* the structure and the scan
+  // says so instead of guessing.
+
+  private val CaseClassAnywhere: Regex =
+    new Regex("\\bcase\\s+class\\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+  /** Containers that can enclose a model. `case class` matches too (at its `class` token), which is
+    * wanted: a class body is a real enclosure.
+    */
+  private val ContainerDecl: Regex =
+    new Regex("\\b(object|class|trait|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)")
+
+  /** Anything that means "the next `{` is not the pending container's body": a member keyword or an
+    * `=`. Over-clearing is the safe direction — an unattributed brace pushes an anonymous frame,
+    * which can only demote a candidate to a warning, never mint a wrong name.
+    */
+  private val PendingClear: Regex =
+    new Regex("\\b(?:val|var|def|given|type|import|package|new)\\b|=")
+
+  /** A container opened with a colon: the file nests by indentation, and depth stops meaning
+    * nesting for what follows.
+    */
+  private val ContainerColon: Regex =
+    new Regex("(?m)\\b(?:object|class|trait|enum)\\s+[A-Za-z_][A-Za-z0-9_]*[^\\n{}]*:[ \\t]*$")
+
+  /** Which characters are code — not comments (line, nested block) and not string or character
+    * literals. Interpolated `$${...}` blocks inside strings are masked with the string; their
+    * braces are balanced within it, so depth is unaffected either way.
+    */
+  private def codeMask(content: String): Array[Boolean] = {
+    val n    = content.length
+    val mask = new Array[Boolean](n)
+    var i    = 0
+    while (i < n) {
+      val c = content.charAt(i)
+      if (c == '/' && i + 1 < n && content.charAt(i + 1) == '/') {
+        while (i < n && content.charAt(i) != '\n') i += 1
+      } else if (c == '/' && i + 1 < n && content.charAt(i + 1) == '*') {
+        var depth = 1
+        i += 2
+        while (i < n && depth > 0) {
+          if (content.charAt(i) == '/' && i + 1 < n && content.charAt(i + 1) == '*') {
+            depth += 1; i += 2
+          } else if (content.charAt(i) == '*' && i + 1 < n && content.charAt(i + 1) == '/') {
+            depth -= 1; i += 2
+          } else i += 1
+        }
+      } else if (
+        c == '"' && i + 2 < n && content.charAt(i + 1) == '"' && content.charAt(i + 2) == '"'
+      ) {
+        i += 3
+        var open = true
+        while (i < n && open) {
+          if (
+            content.charAt(i) == '"' && i + 2 < n &&
+            content.charAt(i + 1) == '"' && content.charAt(i + 2) == '"'
+          ) {
+            i += 3
+            while (i < n && content.charAt(i) == '"') i += 1
+            open = false
+          } else i += 1
+        }
+      } else if (c == '"') {
+        i += 1
+        var open = true
+        while (i < n && open) {
+          val s = content.charAt(i)
+          if (s == '\\' && i + 1 < n) i += 2
+          else if (s == '"' || s == '\n') { i += 1; open = false }
+          else i += 1
+        }
+      } else if (c == '\'') {
+        if (i + 1 < n && content.charAt(i + 1) == '\\') {
+          i += 2
+          while (i < n && content.charAt(i) != '\'') i += 1
+          i += 1
+        } else if (i + 2 < n && content.charAt(i + 2) == '\'') i += 3
+        else { mask(i) = true; i += 1 }
+      } else {
+        mask(i) = true
+        i += 1
+      }
+    }
+    mask
+  }
+
+  /** One `case class` as the walk saw it: where, how deep, inside what, and whether its declaration
+    * carries a `derives` clause.
+    */
+  private final case class ScannedClass(
+      name: String,
+      column: Int,
+      enclosing: List[Option[(String, String)]], // innermost first; None = anonymous block
+      derives: Boolean
+  )
+
+  private def maskedIn(regex: Regex, content: String, mask: Array[Boolean]) =
+    regex.findAllMatchIn(content).filter(m => mask(m.start)).toVector
+
+  private def scanClasses(content: String): (Vector[ScannedClass], Boolean) = {
+    val mask = codeMask(content)
+
+    // The event stream: braces, container declarations, case classes, and pending-clearers, in
+    // document order. Sorting merges four regex passes into one walk.
+    sealed trait Event { def pos: Int }
+    case class Open(pos: Int)                                  extends Event
+    case class Close(pos: Int)                                 extends Event
+    case class Container(pos: Int, kind: String, name: String) extends Event
+    case class Clazz(pos: Int, name: String)                   extends Event
+    case class Clear(pos: Int)                                 extends Event
+
+    val braces = (0 until content.length).iterator
+      .filter(mask)
+      .collect {
+        case i if content.charAt(i) == '{' => Open(i)
+        case i if content.charAt(i) == '}' => Close(i)
+      }
+      .toVector
+    // `ContainerDecl` also matches the `class` token inside every `case class`. As an enclosure
+    // (the pending container for a following body brace) that reading is wanted; as a declaration
+    // *boundary* it would end the case class's own derives window five characters in, so those
+    // positions are marked and skipped when boundaries are recorded below.
+    val classTokens: Set[Int] =
+      maskedIn(CaseClassAnywhere, content, mask)
+        .map(m => m.start + m.matched.indexOf("class"))
+        .toSet
+
+    val events: Vector[Event] =
+      (braces ++
+        maskedIn(ContainerDecl, content, mask).map(m =>
+          Container(m.start, m.group(1), m.group(2))
+        ) ++
+        maskedIn(CaseClassAnywhere, content, mask).map(m => Clazz(m.start, m.group(1))) ++
+        maskedIn(PendingClear, content, mask).map(m => Clear(m.start))).sortBy(_.pos)
+
+    var stack   = List.empty[Option[(String, String)]]
+    var pending = Option.empty[(String, String)]
+    // (position, depth) of every declaration and container-close, for the derives windows below.
+    val boundaries = Vector.newBuilder[(Int, Int)]
+    val closes     = Vector.newBuilder[(Int, Int)]
+    val found      = Vector.newBuilder[(Int, String, Int, List[Option[(String, String)]])]
+
+    events.foreach {
+      case Open(_)  => stack = pending :: stack; pending = None
+      case Close(p) => if (stack.nonEmpty) { stack = stack.tail; closes += ((p, stack.length)) }
+      case Container(p, kind, name) =>
+        if (!classTokens.contains(p)) boundaries += ((p, stack.length))
+        pending = Some((kind, name))
+      case Clear(_)       => pending = None
+      case Clazz(p, name) =>
+        boundaries += ((p, stack.length))
+        val column = p - (content.lastIndexOf('\n', p - 1) + 1)
+        found += ((p, name, column, stack))
+    }
+
+    val allBoundaries = boundaries.result()
+    val allCloses     = closes.result()
+    val derivesAt     = maskedIn(Derives, content, mask).map(_.start)
+
+    val classes = found.result().map { case (pos, name, column, enclosing) =>
+      val depth = enclosing.length
+      // The declaration's text ends at the next declaration at the same or an enclosing depth, or
+      // where its own container closes — whichever comes first.
+      val windowEnd = (
+        allBoundaries.collect { case (p, d) if p > pos && d <= depth => p } ++
+          allCloses.collect { case (p, d) if p > pos && d < depth => p } :+ content.length
+      ).min
+      ScannedClass(name, column, enclosing, derivesAt.exists(d => d > pos && d < windowEnd))
+    }
+
+    (classes, maskedIn(ContainerColon, content, mask).nonEmpty)
+  }
 
   /** The route a file under `app/` mounts, or nothing when the file is not Scala source.
     *
@@ -121,41 +296,48 @@ object RouteGenerator {
       comparison < 0
     }
 
-  /** Every top level `case class` in one file that carries a `derives` clause.
+  /** Every mountable `case class` in one file that carries a `derives` clause.
     *
-    * Textual, and deliberately permissive rather than accurate. A false positive is free: the
-    * emitted `Resource.routesOf[X]` resolves to `Nil` when `X` has no instance, so a `derives`
-    * inside a comment costs a dead line rather than a wrong route, which is why none of skiff's
-    * comment stripping, paren matching or fixed-width lookahead is here. A false negative is the
-    * only real failure, so the window a `derives` may appear in runs to the next top level
-    * declaration rather than to a character count, which is what lets a multi-line constructor
-    * carry its clause on a line of its own.
+    * Textual, and deliberately permissive rather than accurate: a false positive costs one line
+    * whose `Resource.routesOf[X]` resolves to `Nil`, a false *name* would break the generated
+    * file's compile, and a false negative mounts nothing in silence. So the rules mint a name only
+    * where the scan is sure of it, and everything else warns (see [[unscannableModels]]):
     *
-    * Only declarations at column zero are candidates. A nested one is skipped because its name is
-    * `Outer.Inner`, which this scan cannot see and which `package.Inner` would name wrongly: the
-    * generated file would then fail to compile, and a generator that can break a build it was meant
-    * to serve is worse than one that misses a shape nobody writes.
+    *   - **depth zero, any column** — top level. Column stopped being the test the day an
+    *     editor-indented model deployed and mounted nothing; brace depth is the structure. The one
+    *     exception: in a file whose containers open with `:` (significant indentation), depth
+    *     cannot see nesting, so there an indented depth-zero class is ambiguous and warns rather
+    *     than guesses.
+    *   - **nested, every enclosing frame a named `object`** — mounted as `pkg.Outer.Inner`, the
+    *     stable path the compiler resolves.
+    *   - **nested in a class, trait, enum, or anonymous block** — no stable path exists; warns.
     */
   def modelsIn(relative: String, content: String): Seq[ModelCandidate] =
     if (!relative.endsWith(".scala")) Nil
     else {
-      val prefix = PackageClause.findAllMatchIn(content).map(_.group(1)).mkString(".")
-      val source = "src/main/scala/" + relative
+      val (classes, colonStyle) = scanClasses(content)
+      val prefix                = packagePrefix(content)
+      val source                = "src/main/scala/" + relative
 
-      val starts = Declaration.findAllMatchIn(content).map(_.start).toVector
-      CaseClass
-        .findAllMatchIn(content)
-        .map { declaration =>
-          val next = starts.find(_ > declaration.start).getOrElse(content.length)
-          val body = content.substring(declaration.start, next)
-          val name = declaration.group(1)
-          (name, Derives.findFirstIn(body).isDefined)
-        }
-        .collect { case (name, true) =>
-          ModelCandidate(if (prefix.isEmpty) name else s"$prefix.$name", source)
-        }
-        .toVector
+      classes.collect {
+        case c if c.derives && mountablePath(c, colonStyle).isDefined =>
+          val path = mountablePath(c, colonStyle).get
+          ModelCandidate(((prefix ++ path) :+ c.name).mkString("."), source)
+      }
     }
+
+  /** The dotted path in front of a mountable class's name, or `None` when it cannot be mounted. */
+  private def mountablePath(c: ScannedClass, colonStyle: Boolean): Option[Seq[String]] =
+    if (c.enclosing.isEmpty) {
+      if (c.column == 0 || !colonStyle) Some(Seq.empty) else None
+    } else if (c.enclosing.forall(_.exists(_._1 == "object")))
+      Some(c.enclosing.reverse.map(_.get._2))
+    else None
+
+  private def packagePrefix(content: String): Seq[String] = {
+    val mask = codeMask(content)
+    maskedIn(PackageClause, content, mask).map(_.group(1)).flatMap(_.split('.').toSeq)
+  }
 
   /** The generated file: one object, the handwritten rows under `app/` and then one
     * `Resource.routesOf` line per candidate model.
@@ -289,6 +471,34 @@ object RouteGenerator {
         |  private inline def storeFor[A]: io.eezo.core.Store[A] =
         |    io.eezo.http.InMemoryStore[A]()
         |""".stripMargin
+
+  /** The warnings for a `derives`-carrying `case class` that [[modelsIn]] cannot mount — the
+    * silent-failure cases, each named for what it actually is. Found necessary on the first field
+    * deploy, where an editor-indented model compiled, deployed, and mounted nothing.
+    */
+  def unscannableModels(relative: String, content: String): Seq[String] =
+    if (!relative.endsWith(".scala")) Nil
+    else {
+      val (classes, colonStyle) = scanClasses(content)
+      val at                    = "src/main/scala/" + relative
+
+      classes.collect {
+        case c if c.derives && mountablePath(c, colonStyle).isEmpty =>
+          if (c.enclosing.isEmpty)
+            s"$at: `case class ${c.name}` has a derives clause but is indented in a file that " +
+              "nests by significant indentation, so the route generator cannot tell whether it " +
+              "is top level. Unindent it, or give its enclosing scopes braces, to mount it."
+          else {
+            val culprit = c.enclosing
+              .find(!_.exists(_._1 == "object"))
+              .map(_.map { case (kind, name) => s"$kind $name" }.getOrElse("a block"))
+              .getOrElse("a block")
+            s"$at: `case class ${c.name}` has a derives clause but is nested inside $culprit, " +
+              "which is not a stable path the route table can name. Move it to the top level or " +
+              "into an object, or mount it explicitly with Resource.routesOf."
+          }
+      }
+    }
 
   /** The one warning a text scan can decide: a file under `app/` that does not define the `def` its
     * name promises. Everything the compiler would say better is left to the compiler.
