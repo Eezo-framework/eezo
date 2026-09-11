@@ -22,7 +22,7 @@ eezo — the framework launcher
   eezo dev              serve, restarting on every save (runs `sbt eezoDev`)
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
-      --target fly      the only supported target (and the default)
+      --fly             the Fly.io target (the default; long form: --target fly)
       --app <name>      Fly app name (first deploy; required when non-interactive)
 
 forwarded to the application (run from the project directory):
@@ -56,26 +56,93 @@ need_sbt() {
 #
 # Only SLF4J's own "no providers" stderr grumble is filtered by pattern, because it has a prefix
 # nothing else uses.
-forward() {
-  set +e
+# The spinner: a braille wheel on stderr while a slow step works. Stderr and only when it is a
+# TTY, so a redirected stdout (`--json > file`) never receives a spinner byte, and CI logs stay
+# clean. The trap clears the line however the script leaves.
+SPIN_PID=""
+
+spin_start() {
+  [ -t 2 ] || return 0
+  (
+    frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    i=0
+    while :; do
+      printf '\r\033[2K%s %s' "${frames[i % 10]}" "$1" >&2
+      i=$((i + 1))
+      sleep 0.1
+    done
+  ) &
+  SPIN_PID=$!
+}
+
+spin_stop() {
+  if [ -n "$SPIN_PID" ]; then
+    kill "$SPIN_PID" 2> /dev/null || true
+    wait "$SPIN_PID" 2> /dev/null || true
+    SPIN_PID=""
+    printf '\r\033[2K' >&2
+  fi
+}
+trap spin_stop EXIT
+
+sbt_cmd() {
   SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow" \
-    sbt -error -batch "$@" \
-    2> >(grep -vE '^SLF4J\(' >&2) \
-    | grep -vE '^\[error\] ([Nn]onzero exit code returned from runner|\([^)]*[Rr]un\) [Nn]onzero exit code|Total time:)'
-  local code="${PIPESTATUS[0]}"
+    sbt -error -batch "$@"
+}
+
+# Runs a command under the spinner, streams captured separately (stdout must stay machine-pure),
+# replayed by replay_captured afterwards. Returns the command's code.
+CAPTURED_OUT=""
+CAPTURED_ERR=""
+
+run_captured() { # <label> <command...>
+  local label="$1"
+  shift
+  CAPTURED_OUT="$(mktemp)"
+  CAPTURED_ERR="$(mktemp)"
+  spin_start "$label"
+  set +e
+  "$@" > "$CAPTURED_OUT" 2> "$CAPTURED_ERR"
+  local code=$?
   set -e
+  spin_stop
+  return "$code"
+}
+
+replay_captured() { # <stdout filter regex, or '' for none>
+  if [ -n "$1" ]; then grep -vE "$1" "$CAPTURED_OUT" || true; else cat "$CAPTURED_OUT"; fi
+  grep -vE '^SLF4J\(' "$CAPTURED_ERR" >&2 || true
+  rm -f "$CAPTURED_OUT" "$CAPTURED_ERR"
+  CAPTURED_OUT=""
+  CAPTURED_ERR=""
+}
+
+# The three "[error] Nonzero exit code" lines sbt prints when the app exits 1: that exit code is
+# the command's *answer* (drift, refusal — design/cli.md), not a failure of the build, so they are
+# dropped; the app's code is still this script's code.
+SBT_NOISE='^\[error\] ([Nn]onzero exit code returned from runner|\([^)]*[Rr]un\) [Nn]onzero exit code|Total time:)'
+
+# A forwarded command, spun: sbt works silently behind the wheel, then the app's own output lands
+# exactly as it was written, streams intact.
+forward() { # <label> <sbt args...>
+  local label="$1"
+  shift
+  local code=0
+  run_captured "$label" sbt_cmd "$@" || code=$?
+  replay_captured "$SBT_NOISE"
   exit "$code"
 }
 
-# Quiet sbt for internal steps: same silencing as `forward`, but *returns* instead of exiting, so
-# a deploy step can wrap the failure in its own message. Compile errors still come through.
-run_sbt() {
+# The same forward without capture, for the one command that talks back: `freeze` prompts on
+# destructive changes, and a prompt behind a spinner is a hang with good intentions.
+forward_live() {
   set +e
-  SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow" \
-    sbt -error -batch "$@" 2> >(grep -vE '^SLF4J\(' >&2)
-  local code=$?
+  sbt_cmd "$@" \
+    2> >(grep -vE '^SLF4J\(' >&2) \
+    | grep -vE "$SBT_NOISE"
+  local code="${PIPESTATUS[0]}"
   set -e
-  return "$code"
+  exit "$code"
 }
 
 # ---------------------------------------------------------------------------------------------
@@ -156,6 +223,7 @@ deploy() {
   local target="fly" app=""
   while [ $# -gt 0 ]; do
     case "$1" in
+      --fly) target="fly"; shift ;;
       --target) target="$2"; shift 2 ;;
       --target=*) target="${1#*=}"; shift ;;
       --app) app="$2"; shift 2 ;;
@@ -216,8 +284,10 @@ MSG
     fi
   fi
 
-  echo "→ staging the application"
-  run_sbt eezoStage || {
+  local staged=0
+  run_captured "staging the application" sbt_cmd eezoStage || staged=$?
+  replay_captured ''
+  [ "$staged" -eq 0 ] || {
     echo "✗ build failed; deployment was not attempted" >&2
     exit 1
   }
@@ -390,17 +460,22 @@ case "$cmd" in
     ;;
   build)
     need_sbt
-    forward eezoStage
+    forward "staging the application" eezoStage
     ;;
   deploy)
     shift
     deploy "$@"
     ;;
-  # `dev` keeps sbt's normal output on purpose: the watch loop's compile lines *are* the dev
-  # console, and `-error` would hide the restart markers along with them.
-  routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help)
+  # `freeze` bypasses the spinner: it prompts on destructive changes, and a prompt behind a
+  # spinner is a hang with good intentions. `dev` (above) keeps sbt's normal output entirely: the
+  # watch loop's compile lines *are* the dev console.
+  freeze)
     need_sbt
-    forward "run $*"
+    forward_live "run $*"
+    ;;
+  routes | status | sync | migrate | reset | drop | dump | ddl | help)
+    need_sbt
+    forward "eezo $cmd" "run $*"
     ;;
   *)
     echo "eezo: unknown command '$cmd'" >&2
