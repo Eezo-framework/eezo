@@ -201,6 +201,23 @@ object Html {
     * once, and a context sensitive split is a rule that eventually gets applied to the wrong
     * context.
     */
+  /** The inverse of [[escape]], for the one reader of escaped text outside rendering: the differ in
+    * `modules/live` ships a text change as the *unescaped* value, because the client applies it
+    * with `data`, which is literal, not parsed. It lives here beside [[escape]] because the five
+    * entities are this file's choice, and an inverse maintained elsewhere is the pair drifting
+    * apart. `&amp;` is decoded last for the reason it is encoded first: every other entity's
+    * ampersand must not be re-read.
+    */
+  private[eezo] def unescape(escaped: String): String =
+    if (!escaped.contains('&')) escaped
+    else
+      escaped
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+
   private[html] def escape(value: String): String = {
     val sb = new StringBuilder(value.length)
     value.foreach {

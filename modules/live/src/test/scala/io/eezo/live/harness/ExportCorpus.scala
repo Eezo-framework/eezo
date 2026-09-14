@@ -32,7 +32,22 @@ object ExportCorpus {
       ("a raw child appearing", div(span("tail")), div(Html.raw("<b>x</b><i>y</i>"), span("tail"))),
       ("a keyed list reordered", list(Seq("a", "b", "c")), list(Seq("c", "a", "d"))),
       ("a void element gaining an attribute", div(input()), div(input(Attrs.value := ""))),
-      ("nesting change", div(p("deep")), div(section(p("deep"))))
+      ("nesting change", div(p("deep")), div(section(p("deep")))),
+      (
+        "input value and checked change",
+        form(input(Attrs.tpe := "checkbox", Attrs.value := "v1", Attrs.checked := true)),
+        form(input(Attrs.tpe := "checkbox", Attrs.value := "v2"))
+      ),
+      (
+        "attribute order swap, a difference no browser can observe",
+        div(Attrs.cls   := "a", Attrs.title := "t", "x"),
+        div(Attrs.title := "t", Attrs.cls   := "a", "x")
+      ),
+      (
+        "trailing removals and a deep text edit in one frame",
+        ul(li("keep"), li("edit"), li("drop"), li("drop too")),
+        ul(li("keep"), li("edited"))
+      )
     )
   }
 

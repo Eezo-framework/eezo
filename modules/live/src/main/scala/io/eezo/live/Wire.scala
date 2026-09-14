@@ -12,7 +12,9 @@ import io.eezo.core.internal.Json
   *
   * `Html` payloads are rendered here, at the boundary, and nowhere earlier: patches carry trees so
   * the reference applier can apply them structurally, and the wire carries markup because that is
-  * what `template.innerHTML` on the other side wants.
+  * what `template.innerHTML` on the other side wants. Every op spells `path` the same way, `expect`
+  * is the node name or null (null only at the anchor), and node payloads are always under `html` —
+  * the applier reads one shape, not seven.
   */
 object Wire {
 
@@ -27,16 +29,50 @@ object Wire {
     )
 
   private def one(patch: Patch): Json = patch match {
+    case Patch.SetText(path, text) =>
+      obj("setText", path, "text" -> Json.Str(text))
+
+    case Patch.SetAttr(path, expect, name, value) =>
+      obj(
+        "setAttr",
+        path,
+        "expect" -> Json.Str(expect),
+        "name"   -> Json.Str(name),
+        "value"  -> Json.Str(value)
+      )
+
+    case Patch.RemoveAttr(path, expect, name) =>
+      obj("removeAttr", path, "expect" -> Json.Str(expect), "name" -> Json.Str(name))
+
+    case Patch.ReplaceNode(path, expect, node) =>
+      obj("replaceNode", path, "expect" -> Json.Str(expect), "html" -> Json.Str(node.render))
+
+    case Patch.RemoveNode(path, expect) =>
+      obj("removeNode", path, "expect" -> Json.Str(expect))
+
+    case Patch.AppendChildren(path, expect, children) =>
+      obj(
+        "appendChildren",
+        path,
+        "expect" -> Json.Str(expect),
+        "html"   -> Json.Str(rendered(children))
+      )
+
     case Patch.SetChildren(path, expect, children) =>
-      Json.Obj(
-        List(
-          "op"     -> Json.Str("setChildren"),
-          "path"   -> Json.Arr(path.map(i => Json.Num(i.toLong))),
-          "expect" -> expect.fold[Json](Json.Null)(Json.Str.apply),
-          "html"   -> Json.Str(rendered(children))
-        )
+      obj(
+        "setChildren",
+        path,
+        "expect" -> expect.fold[Json](Json.Null)(Json.Str.apply),
+        "html"   -> Json.Str(rendered(children))
       )
   }
+
+  private def obj(op: String, path: List[Int], fields: (String, Json)*): Json =
+    Json.Obj(
+      ("op"     -> Json.Str(op)) ::
+        ("path" -> Json.Arr(path.map(i => Json.Num(i.toLong)))) ::
+        fields.toList
+    )
 
   private def rendered(children: Vector[Html]): String = {
     val sb = new StringBuilder
