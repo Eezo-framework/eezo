@@ -20,9 +20,11 @@ import javax.crypto.spec.SecretKeySpec
   */
 final class Secret private (private val bytes: Array[Byte]) {
 
+  private val key = new SecretKeySpec(bytes, Secret.Algorithm)
+
   private[http] def sign(payload: Array[Byte]): Array[Byte] = {
     val mac = Mac.getInstance(Secret.Algorithm)
-    mac.init(new SecretKeySpec(bytes, Secret.Algorithm))
+    mac.init(key)
     mac.doFinal(payload)
   }
 

@@ -37,19 +37,20 @@ private[http] final case class Config(
     maxBodySize: Long = Config.DefaultMaxBodySize,
     dev: Boolean = Config.DefaultDev,
     problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
-    secret: Secret = Secret.gen()
+    secret: Secret = Config.DefaultSecret
 )
 
 private[http] object Config {
 
   /** The one place each of `Eezo.run`'s optional defaults is stated. `run`'s own parameter defaults
-    * read off these, so changing a default is one edit rather than two. The secret has no constant
-    * here: its default is a fresh throwaway per `Config`, which is what a test wants and what
-    * `HttpApp.secret` replaces with the configured one.
+    * read off these, so changing a default is one edit rather than two. The secret is a `def`: a
+    * fresh throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with
+    * the configured one.
     */
   private[http] val DefaultMaxBodySize: Long                             = 1.MiB
   private[http] val DefaultDev: Boolean                                  = false
   private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
+  private[http] def DefaultSecret: Secret                                = Secret.gen()
 }
 
 /** Booting eezo.
@@ -109,7 +110,7 @@ object Eezo {
       maxBodySize: Long = Config.DefaultMaxBodySize,
       dev: Boolean = Config.DefaultDev,
       problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
-      secret: Secret = Secret.gen()
+      secret: Secret = Config.DefaultSecret
   ): Unit = {
     val server = build(port, Config(routes, maxBodySize, dev, problems, secret))
     val caller = Thread.currentThread()
@@ -239,6 +240,9 @@ object Eezo {
     * Jetty documents that a creator returning `null` "is responsible for completing the Callback
     * and sending a response", so an upgrade request matching no `Route.Ws` is answered here with a
     * 404 rather than falling through to the HTTP handler.
+    *
+    * The endpoint's request carries the session the handshake's cookie did, read the way the HTTP
+    * handler reads it. Nothing is written back: an upgrade has no response a cookie could ride on.
     */
   private def creator(config: Config): WebSocketCreator =
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
@@ -251,13 +255,9 @@ object Eezo {
         .orElse {
           config.routes.dispatchWs(path).map { (route, params) =>
             route.endpoint(
-              Request(
-                method = Method.GET,
-                path = path,
-                query = queryOf(request),
-                headers = headersOf(request),
-                body = Array.emptyByteArray,
-                pathParams = params
+              SessionCookie.read(
+                requestOf(request, Method.GET, path, Array.emptyByteArray, params),
+                config.secret
               )
             )
           }
@@ -293,8 +293,9 @@ object Eezo {
 
       val result =
         try {
-          val read = readRequest(request, path, config)
-          SessionCookie.write(read, config.routes.dispatch(read), request.isSecure, config.secret)
+          val read =
+            SessionCookie.read(readRequest(request, path, config.maxBodySize), config.secret)
+          SessionCookie.write(read, config.routes.dispatch(read), config.secret)
         } catch {
           case failure: Throwable =>
             // Resolved once: the log decision and the response both read off this single value,
@@ -313,14 +314,13 @@ object Eezo {
     }
   }
 
-  /** Reads one request, whole, with the body capped, and its session out of the cookie.
+  /** Reads one request, whole, with the body capped.
     *
     * The cap is enforced by reading one byte past it and refusing: a `Content-Length` a client
     * controls is not a limit, and a stream nobody drains is not an answer either.
     */
-  private def readRequest(request: JettyRequest, path: String, config: Config): Request = {
-    val maxBodySize = config.maxBodySize
-    val method      = Method
+  private def readRequest(request: JettyRequest, path: String, maxBodySize: Long): Request = {
+    val method = Method
       .parse(request.getMethod)
       .getOrElse(throw NotImplemented(request.getMethod))
 
@@ -330,21 +330,30 @@ object Eezo {
       finally stream.close()
     if (body.length > maxBodySize) throw PayloadTooLarge(maxBodySize)
 
-    // The override and the session are both applied here, so that dispatch and every handler
-    // downstream see the verb the form asked for rather than the `POST` a browser was able to
-    // issue, and the session the cookie carried rather than the header it came in.
-    SessionCookie.read(
-      Request.withMethodOverride(
-        Request(
-          method = method,
-          path = path,
-          query = queryOf(request),
-          headers = headersOf(request),
-          body = body,
-          pathParams = Map.empty
-        )
-      ),
-      config.secret
+    // The override is applied here, so that dispatch and every handler downstream see the verb the
+    // form asked for rather than the `POST` a browser was able to issue.
+    Request.withMethodOverride(requestOf(request, method, path, body, Map.empty))
+  }
+
+  /** The one place a Jetty request becomes eezo's, for the HTTP handler and the WebSocket creator
+    * alike, so both agree on the headers and on whether the browser used HTTPS.
+    */
+  private def requestOf(
+      request: JettyRequest,
+      method: Method,
+      path: String,
+      body: Array[Byte],
+      pathParams: Map[String, String]
+  ): Request = {
+    val headers = headersOf(request)
+    Request(
+      method = method,
+      path = path,
+      query = queryOf(request),
+      headers = headers,
+      body = body,
+      pathParams = pathParams,
+      secure = Request.isSecure(request.isSecure, headers)
     )
   }
 

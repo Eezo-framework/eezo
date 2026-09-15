@@ -61,21 +61,13 @@ class SessionSuite extends munit.FunSuite {
     assert(Cookie("eezo_session", cookie).render.nonEmpty, "the value is made of cookie octets")
   }
 
+  private def roundTrip(session: Session): Session =
+    SessionCookie.decode(SessionCookie.encode(session, secret), secret)
+
   test("a delivered flash is dropped from what goes out again, unless written again") {
-    val in = SessionCookie.decode(
-      SessionCookie.encode(Session.empty.flash("notice", "created"), secret),
-      secret
-    )
-    assertEquals(
-      SessionCookie.decode(SessionCookie.encode(in, secret), secret).flash("notice"),
-      None
-    )
-    assertEquals(
-      SessionCookie
-        .decode(SessionCookie.encode(in.flash("notice", "again"), secret), secret)
-        .flash("notice"),
-      Some("again")
-    )
+    val in = roundTrip(Session.empty.flash("notice", "created"))
+    assertEquals(roundTrip(in).flash("notice"), None)
+    assertEquals(roundTrip(in.flash("notice", "again")).flash("notice"), Some("again"))
   }
 
   test("a tampered, forged, truncated or garbled cookie reads as the empty session") {
@@ -101,10 +93,16 @@ class SessionSuite extends munit.FunSuite {
 
   private def setCookie(response: Response): Option[String] = response.header("Set-Cookie")
 
+  /** The session the response signed into its `Set-Cookie`. */
+  private def written(response: Response): Session = {
+    val header = setCookie(response).getOrElse(fail("no Set-Cookie"))
+    SessionCookie.decode(header.takeWhile(_ != ';').stripPrefix("eezo_session="), secret)
+  }
+
   test("a request with no cookie and a handler that set nothing writes nothing") {
     val req = SessionCookie.read(request(None), secret)
     assertEquals(
-      setCookie(SessionCookie.write(req, Response.Ok(p("x")), secure = false, secret)),
+      setCookie(SessionCookie.write(req, Response.Ok(p("x")), secret)),
       None
     )
   }
@@ -114,21 +112,20 @@ class SessionSuite extends munit.FunSuite {
     val response = SessionCookie.write(
       req,
       Response.Ok(p("x")).withSession(req.session.set("user", "42")),
-      secure = false,
       secret
     )
-    val header = setCookie(response).getOrElse(fail("no Set-Cookie"))
-    val value  = header.takeWhile(_ != ';').stripPrefix("eezo_session=")
-    assertEquals(SessionCookie.decode(value, secret).get("user"), Some("42"))
-    assertEquals(header.dropWhile(_ != ';'), "; Path=/; HttpOnly; SameSite=Lax")
+    assertEquals(written(response).get("user"), Some("42"))
+    assertEquals(
+      setCookie(response).map(_.dropWhile(_ != ';')),
+      Some("; Path=/; HttpOnly; SameSite=Lax")
+    )
   }
 
   test("over HTTPS the session cookie is Secure") {
-    val req      = SessionCookie.read(request(None), secret)
+    val req      = SessionCookie.read(request(None), secret).copy(secure = true)
     val response = SessionCookie.write(
       req,
       Response.Ok(p("x")).withSession(req.session.set("user", "42")),
-      secure = true,
       secret
     )
     assert(setCookie(response).exists(_.contains("; Secure; ")), setCookie(response).toString)
@@ -139,11 +136,11 @@ class SessionSuite extends munit.FunSuite {
     val req    = SessionCookie.read(request(Some(cookie)), secret)
     assertEquals(req.session.get("user"), Some("42"))
     assertEquals(
-      setCookie(SessionCookie.write(req, Response.Ok(p("x")), secure = false, secret)),
+      setCookie(SessionCookie.write(req, Response.Ok(p("x")), secret)),
       None
     )
     val same =
-      SessionCookie.write(req, Response.Ok(p("x")).withSession(req.session), secure = false, secret)
+      SessionCookie.write(req, Response.Ok(p("x")).withSession(req.session), secret)
     assertEquals(setCookie(same), None)
   }
 
@@ -153,7 +150,6 @@ class SessionSuite extends munit.FunSuite {
     val response = SessionCookie.write(
       req,
       Response.Redirect("/").withSession(Session.empty),
-      secure = false,
       secret
     )
     assertEquals(
@@ -165,7 +161,7 @@ class SessionSuite extends munit.FunSuite {
   test("a cookie that did not verify is expired, so the browser stops sending it") {
     val req = SessionCookie.read(request(Some("forged.cookie")), secret)
     assert(req.session.isEmpty)
-    val response = SessionCookie.write(req, Response.Ok(p("x")), secure = false, secret)
+    val response = SessionCookie.write(req, Response.Ok(p("x")), secret)
     assertEquals(
       setCookie(response),
       Some("eezo_session=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax")
@@ -177,12 +173,7 @@ class SessionSuite extends munit.FunSuite {
       SessionCookie.encode(Session.empty.set("user", "42").flash("notice", "created"), secret)
     val req = SessionCookie.read(request(Some(cookie)), secret)
     assertEquals(req.session.flash("notice"), Some("created"))
-    val response = SessionCookie.write(req, Response.Ok(p("x")), secure = false, secret)
-    val value    = setCookie(response)
-      .getOrElse(fail("no Set-Cookie"))
-      .takeWhile(_ != ';')
-      .stripPrefix("eezo_session=")
-    val next = SessionCookie.decode(value, secret)
+    val next = written(SessionCookie.write(req, Response.Ok(p("x")), secret))
     assertEquals(next.flash("notice"), None)
     assertEquals(next.get("user"), Some("42"))
   }

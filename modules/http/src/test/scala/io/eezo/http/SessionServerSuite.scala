@@ -5,6 +5,8 @@ import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 
+import scala.jdk.CollectionConverters.*
+
 import io.eezo.core.html.Tags.*
 import org.eclipse.jetty.server.ServerConnector
 
@@ -55,10 +57,12 @@ class SessionServerSuite extends munit.FunSuite {
       port: Int,
       method: String,
       path: String,
-      cookie: Option[String]
+      cookie: Option[String],
+      headers: Seq[(String, String)] = Nil
   ): HttpResponse[String] = {
     val builder = HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path"))
     cookie.foreach(value => builder.header("Cookie", s"eezo_session=$value"))
+    headers.foreach(builder.header(_, _))
     val request = method match {
       case "GET" => builder.GET()
       case other => builder.method(other, HttpRequest.BodyPublishers.noBody())
@@ -67,15 +71,10 @@ class SessionServerSuite extends munit.FunSuite {
   }
 
   private def sessionCookie(response: HttpResponse[String]): Option[String] =
-    response
-      .headers()
-      .allValues("Set-Cookie")
-      .stream()
-      .filter(_.startsWith("eezo_session="))
-      .findFirst()
-      .map[String](_.takeWhile(_ != ';').stripPrefix("eezo_session="))
-      .map[Option[String]](Some(_))
-      .orElse(None)
+    response.headers().allValues("Set-Cookie").asScala.collectFirst {
+      case header if header.startsWith("eezo_session=") =>
+        header.takeWhile(_ != ';').stripPrefix("eezo_session=")
+    }
 
   test(
     "a session set on one response is read on the next request, and the flash is delivered once"
@@ -104,6 +103,18 @@ class SessionServerSuite extends munit.FunSuite {
       val second = send(port, "GET", "/me", Some(swept))
       assertEquals(second.body(), "<p>user=42 notice=-</p>")
       assertEquals(sessionCookie(second), None)
+    }
+  }
+
+  test("behind a proxy that terminated TLS, the session cookie is Secure") {
+    serving { port =>
+      val https = send(port, "POST", "/login", None, Seq("X-Forwarded-Proto" -> "https"))
+      assert(https.headers().firstValue("Set-Cookie").orElse("").contains("; Secure; "))
+      // A chain of proxies lists the schemes in order, and the first is the one the browser used.
+      val chain = send(port, "POST", "/login", None, Seq("X-Forwarded-Proto" -> "HTTPS, http"))
+      assert(chain.headers().firstValue("Set-Cookie").orElse("").contains("; Secure; "))
+      val http = send(port, "POST", "/login", None, Seq("X-Forwarded-Proto" -> "http"))
+      assert(!http.headers().firstValue("Set-Cookie").orElse("").contains("Secure"))
     }
   }
 

@@ -1,6 +1,5 @@
 package io.eezo.http
 
-import java.net.URLDecoder
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
@@ -50,34 +49,11 @@ final case class Session private[http] (
     * of the request that follows, and gone after it.
     */
   def flash(name: String, value: String): Session = copy(pending = pending + (name -> value))
-
-  /** The map that goes out: entries plus the pending flash under its reserved prefix. */
-  private[http] def payload: Map[String, String] =
-    entries ++ pending.map { case (name, value) => SessionCookie.FlashPrefix + name -> value }
-
-  /** The map that came in: entries plus the delivered flash, which is what the cookie held. What
-    * [[payload]] is compared against to decide whether anything changed.
-    */
-  private[http] def arrived: Map[String, String] =
-    entries ++ delivered.map { case (name, value) => SessionCookie.FlashPrefix + name -> value }
 }
 
 object Session {
 
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
-
-  /** A session as read from a cookie: the reserved flash names are delivered, the rest are entries.
-    */
-  private[http] def arrived(payload: Map[String, String]): Session = {
-    val (flash, entries) = payload.partition { case (name, _) =>
-      name.startsWith(SessionCookie.FlashPrefix)
-    }
-    Session(
-      entries,
-      flash.map { case (name, value) => name.drop(SessionCookie.FlashPrefix.length) -> value },
-      Map.empty
-    )
-  }
 }
 
 /** The session's cookie: the name, the wire format, and the one rule for when it is written.
@@ -104,8 +80,10 @@ private[http] object SessionCookie {
   private val decoder = Base64.getUrlDecoder
 
   def encode(session: Session, secret: Secret): String = {
-    val payload = encoder.encodeToString(form(session.payload).getBytes(StandardCharsets.UTF_8))
-    val tag     = encoder.encodeToString(secret.sign(payload.getBytes(StandardCharsets.US_ASCII)))
+    val flash   = session.pending.map { case (name, value) => FlashPrefix + name -> value }
+    val payload =
+      encoder.encodeToString(form(session.entries ++ flash).getBytes(StandardCharsets.UTF_8))
+    val tag = encoder.encodeToString(secret.sign(payload.getBytes(StandardCharsets.US_ASCII)))
     s"$payload.$tag"
   }
 
@@ -118,7 +96,7 @@ private[http] object SessionCookie {
         val received = decoder.decode(value.substring(dot + 1))
         val expected = secret.sign(payload.getBytes(StandardCharsets.US_ASCII))
         if (!MessageDigest.isEqual(expected, received)) Session.empty
-        else Session.arrived(unform(new String(decoder.decode(payload), StandardCharsets.UTF_8)))
+        else arrived(unform(new String(decoder.decode(payload), StandardCharsets.UTF_8)))
       }
     } catch { case NonFatal(_) => Session.empty }
 
@@ -130,17 +108,29 @@ private[http] object SessionCookie {
     * dispatch. The session that goes out is the one the response names, or else the one the request
     * carried into the handler. Nothing is written when it matches what arrived; an emptied session,
     * or a cookie that did not verify, is expired so the browser stops sending it; anything else is
-    * signed. `Secure` follows the scheme the request arrived on.
+    * signed. `Secure` follows the scheme the browser used.
     */
-  def write(request: Request, response: Response, secure: Boolean, secret: Secret): Response = {
-    val incoming = request.session
-    val outgoing = response.session.getOrElse(incoming)
-    val present  = request.cookie(Name).isDefined
-    val payload  = outgoing.payload
+  def write(request: Request, response: Response, secret: Secret): Response = {
+    val incoming  = request.session
+    val outgoing  = response.session.getOrElse(incoming)
+    val present   = request.cookie(Name).isDefined
+    val unchanged = outgoing.entries == incoming.entries && outgoing.pending == incoming.delivered
+    val empty     = outgoing.entries.isEmpty && outgoing.pending.isEmpty
 
-    if (payload == incoming.arrived && (payload.nonEmpty || !present)) response
-    else if (payload.isEmpty) response.withCookie(Cookie.expired(Name))
-    else response.withCookie(Cookie(Name, encode(outgoing, secret), secure = secure))
+    if (unchanged && (!empty || !present)) response
+    else if (empty) response.withCookie(Cookie.expired(Name))
+    else response.withCookie(Cookie(Name, encode(outgoing, secret), secure = request.secure))
+  }
+
+  /** A session as read from a cookie: the reserved flash names are delivered, the rest are entries.
+    */
+  private def arrived(payload: Map[String, String]): Session = {
+    val (flash, entries) = payload.partition { case (name, _) => name.startsWith(FlashPrefix) }
+    Session(
+      entries,
+      flash.map { case (name, value) => name.drop(FlashPrefix.length) -> value },
+      Map.empty
+    )
   }
 
   private def form(payload: Map[String, String]): String =
@@ -148,19 +138,9 @@ private[http] object SessionCookie {
       .map { case (name, value) => s"${urlEncode(name)}=${urlEncode(value)}" }
       .mkString("&")
 
+  /** The form decoder the request body uses; the payload's names are a map's keys, so one each. */
   private def unform(raw: String): Map[String, String] =
-    raw
-      .split('&')
-      .iterator
-      .filter(_.nonEmpty)
-      .map { pair =>
-        val index = pair.indexOf('=')
-        if (index < 0) urlDecode(pair)   -> ""
-        else urlDecode(pair.take(index)) -> urlDecode(pair.drop(index + 1))
-      }
-      .toMap
+    Request.decodeForm(raw).map { case (name, values) => name -> values.head }
 
   private def urlEncode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
-
-  private def urlDecode(value: String): String = URLDecoder.decode(value, StandardCharsets.UTF_8)
 }

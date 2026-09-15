@@ -36,7 +36,7 @@ final case class Cookie(
       maxAge.map(seconds => s"Max-Age=$seconds"),
       Option.when(secure)("Secure"),
       Option.when(httpOnly)("HttpOnly"),
-      Some(s"SameSite=${sameSite.render}")
+      Some(s"SameSite=$sameSite")
     ).flatten
     (s"$name=$value" +: attributes).mkString("; ")
   }
@@ -44,15 +44,13 @@ final case class Cookie(
 
 object Cookie {
 
-  enum SameSite(private[http] val render: String) {
-    case Strict extends SameSite("Strict")
-    case Lax    extends SameSite("Lax")
-    case None   extends SameSite("None")
+  /** Each case renders as its own name. */
+  enum SameSite {
+    case Strict, Lax, None
   }
 
   /** The cookie that tells a browser to drop `name`: an empty value and `Max-Age=0`. */
-  def expired(name: String, path: String = "/"): Cookie =
-    Cookie(name, "", path = path, maxAge = Some(0))
+  def expired(name: String): Cookie = Cookie(name, "", maxAge = Some(0))
 
   /** RFC 2616 `token`: one or more US-ASCII characters that are neither controls nor separators. */
   private def isToken(name: String): Boolean =
@@ -80,9 +78,8 @@ object Cookie {
         val index = pair.indexOf('=')
         if (index < 0) pair -> "" else pair.take(index).trim -> unquote(pair.drop(index + 1).trim)
       }
-      .foldLeft(Map.empty[String, String]) { case (acc, (name, value)) =>
-        if (acc.contains(name)) acc else acc + (name -> value)
-      }
+      .distinctBy(_._1)
+      .toMap
 
   private def unquote(value: String): String =
     if (value.length >= 2 && value.head == '"' && value.last == '"')
