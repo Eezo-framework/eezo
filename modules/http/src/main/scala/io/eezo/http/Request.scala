@@ -40,6 +40,9 @@ object FromPath {
   * exceeding the cap is a 413 rather than a stream nobody drains. What is deliberately absent is an
   * untyped `attachment: AnyRef` bag. A capability arrives through the handler's `using` list, where
   * its absence is a compile error rather than a `sys.error` on the first request that needs it.
+  *
+  * The session is read for the handler, before dispatch, out of the signed cookie: a request built
+  * by hand carries the empty one, and a test that wants a session says so with `copy`.
   */
 final case class Request(
     method: Method,
@@ -47,7 +50,8 @@ final case class Request(
     query: Map[String, Seq[String]],
     headers: Map[String, Seq[String]],
     body: Array[Byte],
-    pathParams: Map[String, String]
+    pathParams: Map[String, String],
+    session: Session = Session.empty
 ) {
 
   /** A header, case insensitively, first value wins. */
@@ -56,6 +60,16 @@ final case class Request(
 
   /** A query parameter, first value wins. */
   def queryParam(name: String): Option[String] = query.get(name).flatMap(_.headOption)
+
+  /** The `Cookie` header, split into pairs, decoded once and remembered. Every header of that name
+    * counts, and the first of a repeated name wins. What a handler reads for its own cookies; the
+    * session cookie is read for it, into [[session]], before dispatch.
+    */
+  lazy val cookies: Map[String, String] =
+    Cookie.parse(headers.collect { case (k, v) if k.equalsIgnoreCase("Cookie") => v }.flatten.toSeq)
+
+  /** One cookie by name. */
+  def cookie(name: String): Option[String] = cookies.get(name)
 
   /** The form encoded body, decoded once and remembered.
     *

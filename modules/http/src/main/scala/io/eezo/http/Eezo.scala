@@ -28,21 +28,24 @@ extension (n: Int) {
   def MiB: Long = n.toLong * 1024 * 1024
 }
 
-/** The server-wide set: the route table and the three settings that travel everywhere it is
+/** The server-wide set: the route table and the four settings that travel everywhere it is
   * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` pass one
-  * value instead of four.
+  * value instead of five.
   */
 private[http] final case class Config(
     routes: RouteTable,
     maxBodySize: Long = Config.DefaultMaxBodySize,
     dev: Boolean = Config.DefaultDev,
-    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
+    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
+    secret: Secret = Secret.gen()
 )
 
 private[http] object Config {
 
-  /** The one place each of `Eezo.run`'s three optional defaults is stated. `run`'s own parameter
-    * defaults read off these, so changing a default is one edit rather than two.
+  /** The one place each of `Eezo.run`'s optional defaults is stated. `run`'s own parameter defaults
+    * read off these, so changing a default is one edit rather than two. The secret has no constant
+    * here: its default is a fresh throwaway per `Config`, which is what a test wants and what
+    * `HttpApp.secret` replaces with the configured one.
     */
   private[http] val DefaultMaxBodySize: Long                             = 1.MiB
   private[http] val DefaultDev: Boolean                                  = false
@@ -105,9 +108,10 @@ object Eezo {
       routes: RouteTable,
       maxBodySize: Long = Config.DefaultMaxBodySize,
       dev: Boolean = Config.DefaultDev,
-      problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
+      problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
+      secret: Secret = Secret.gen()
   ): Unit = {
-    val server = build(port, Config(routes, maxBodySize, dev, problems))
+    val server = build(port, Config(routes, maxBodySize, dev, problems, secret))
     val caller = Thread.currentThread()
     val hook   = new Thread(
       () => {
@@ -272,6 +276,11 @@ object Eezo {
     * throw; and `write` is the only function in eezo that touches Jetty's `Callback`. `handle`
     * always returns `true`, because an unmatched route throws `NotFound` here rather than falling
     * through to Jetty's own error page.
+    *
+    * The session cookie is written here, once, on the success path: the session the response names,
+    * or else the one the request carried into the handler, and only when it differs from what
+    * arrived. A failure that reached the boundary writes no cookie, so an error page leaves the
+    * browser's session, flash included, exactly as it was.
     */
   private final class EezoHandler(config: Config) extends JettyHandler.Abstract {
 
@@ -283,8 +292,10 @@ object Eezo {
       val path = JettyRequest.getPathInContext(request)
 
       val result =
-        try config.routes.dispatch(readRequest(request, path, config.maxBodySize))
-        catch {
+        try {
+          val read = readRequest(request, path, config)
+          SessionCookie.write(read, config.routes.dispatch(read), request.isSecure, config.secret)
+        } catch {
           case failure: Throwable =>
             // Resolved once: the log decision and the response both read off this single value,
             // rather than each re-matching the failure to ask its own question of it.
@@ -302,13 +313,14 @@ object Eezo {
     }
   }
 
-  /** Reads one request, whole, with the body capped.
+  /** Reads one request, whole, with the body capped, and its session out of the cookie.
     *
     * The cap is enforced by reading one byte past it and refusing: a `Content-Length` a client
     * controls is not a limit, and a stream nobody drains is not an answer either.
     */
-  private def readRequest(request: JettyRequest, path: String, maxBodySize: Long): Request = {
-    val method = Method
+  private def readRequest(request: JettyRequest, path: String, config: Config): Request = {
+    val maxBodySize = config.maxBodySize
+    val method      = Method
       .parse(request.getMethod)
       .getOrElse(throw NotImplemented(request.getMethod))
 
@@ -318,17 +330,21 @@ object Eezo {
       finally stream.close()
     if (body.length > maxBodySize) throw PayloadTooLarge(maxBodySize)
 
-    // The override is applied here, so that dispatch and every handler downstream see the verb the
-    // form asked for rather than the `POST` a browser was able to issue.
-    Request.withMethodOverride(
-      Request(
-        method = method,
-        path = path,
-        query = queryOf(request),
-        headers = headersOf(request),
-        body = body,
-        pathParams = Map.empty
-      )
+    // The override and the session are both applied here, so that dispatch and every handler
+    // downstream see the verb the form asked for rather than the `POST` a browser was able to
+    // issue, and the session the cookie carried rather than the header it came in.
+    SessionCookie.read(
+      Request.withMethodOverride(
+        Request(
+          method = method,
+          path = path,
+          query = queryOf(request),
+          headers = headersOf(request),
+          body = body,
+          pathParams = Map.empty
+        )
+      ),
+      config.secret
     )
   }
 
