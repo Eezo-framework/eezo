@@ -36,9 +36,11 @@ trait HttpApp extends Dispatch {
   /** The request body cap, and the WebSocket text message cap with it. */
   def maxBodySize: Long = Config.DefaultMaxBodySize
 
-  /** The key the session cookie is signed with. `EEZO_SECRET` by default, and a throwaway announced
-    * at WARNING when that is not set, so that `hello` runs with no configuration and a deployment
-    * that forgot is told. Read once, when [[serve]] boots.
+  /** The key the session cookie is signed with. `EEZO_SECRET` by default. The sbt plugin's dev loop
+    * sets it to one secret per sbt session, so a restart on edit keeps the developer signed in. A
+    * run outside that loop with nothing set gets a throwaway announced at WARNING, so that `hello`
+    * runs with no configuration and a deployment that forgot is told. Read once, when [[serve]]
+    * boots.
     */
   def secret: Secret = Secret.fromEnv()
 
@@ -57,7 +59,7 @@ trait HttpApp extends Dispatch {
     * stops. `dev` turns the listing and the reload client on.
     */
   protected final def serve(table: RouteTable, dev: Boolean = false): Unit =
-    Eezo.run(port, table, maxBodySize, dev, problems, secret)
+    Eezo.run(port, Config(table, maxBodySize, dev, problems, secret))
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift
     * page when the check blocks.

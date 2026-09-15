@@ -26,7 +26,7 @@ class WebSocketSuite extends munit.FunSuite {
     override def onWebSocketOpen(session: Session): Unit = ()
   }
 
-  private val secret = Secret.parse("websocket secret")
+  private val secret = Secret.parse("websocket secret, thirty two bytes")
 
   private def serving(routes: RouteTable, dev: Boolean = false)(
       body: (WebSocketClient, Int) => Unit

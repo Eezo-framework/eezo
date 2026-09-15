@@ -60,7 +60,7 @@ final case class Request(
 
   /** A header, case insensitively, first value wins. */
   def header(name: String): Option[String] =
-    headers.collectFirst { case (k, v) if k.equalsIgnoreCase(name) => v }.flatMap(_.headOption)
+    Request.headerValues(headers, name).headOption
 
   /** A query parameter, first value wins. */
   def queryParam(name: String): Option[String] = query.get(name).flatMap(_.headOption)
@@ -70,7 +70,7 @@ final case class Request(
     * session cookie is read for it, into [[session]], before dispatch.
     */
   lazy val cookies: Map[String, String] =
-    Cookie.parse(headers.collect { case (k, v) if k.equalsIgnoreCase("Cookie") => v }.flatten.toSeq)
+    Cookie.parse(Request.headerValues(headers, "Cookie"))
 
   /** One cookie by name. */
   def cookie(name: String): Option[String] = cookies.get(name)
@@ -122,10 +122,14 @@ object Request {
     * is the one the browser used.
     */
   private[http] def isSecure(tls: Boolean, headers: Map[String, Seq[String]]): Boolean =
-    tls || headers.exists { case (name, values) =>
-      name.equalsIgnoreCase("X-Forwarded-Proto") &&
-      values.headOption.exists(_.split(',').head.trim.equalsIgnoreCase("https"))
-    }
+    tls || headerValues(headers, "X-Forwarded-Proto").headOption
+      .exists(_.split(',').head.trim.equalsIgnoreCase("https"))
+
+  /** Every value of a header, case insensitively, in order. Over the bare map rather than a
+    * [[Request]], because [[isSecure]] is asked before there is one.
+    */
+  private[http] def headerValues(headers: Map[String, Seq[String]], name: String): Seq[String] =
+    headers.iterator.collect { case (k, v) if k.equalsIgnoreCase(name) => v }.flatten.toSeq
 
   /** The field name a browser sends the verb it cannot issue under. */
   private[http] val MethodField = "_method"

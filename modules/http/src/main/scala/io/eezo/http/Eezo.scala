@@ -29,8 +29,8 @@ extension (n: Int) {
 }
 
 /** The server-wide set: the route table and the four settings that travel everywhere it is
-  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` pass one
-  * value instead of five.
+  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` take one
+  * value instead of five, and a new setting is a field here rather than a parameter at every hop.
   */
 private[http] final case class Config(
     routes: RouteTable,
@@ -42,15 +42,15 @@ private[http] final case class Config(
 
 private[http] object Config {
 
-  /** The one place each of `Eezo.run`'s optional defaults is stated. `run`'s own parameter defaults
-    * read off these, so changing a default is one edit rather than two. The secret is a `def`: a
-    * fresh throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with
-    * the configured one.
+  /** The one place each setting's default is stated: the case class's parameter defaults read off
+    * these, and so do `HttpApp`'s `maxBodySize` and `problems`. The secret is a `def`: a fresh
+    * throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with the
+    * configured one.
     */
   private[http] val DefaultMaxBodySize: Long                             = 1.MiB
   private[http] val DefaultDev: Boolean                                  = false
   private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
-  private[http] def DefaultSecret: Secret                                = Secret.gen()
+  private[http] def DefaultSecret: Secret                                = Secret.throwaway()
 }
 
 /** Booting eezo.
@@ -64,7 +64,7 @@ private[http] object Config {
   * }
   * ```
   *
-  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[eezo]` so that stays true
+  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[http]` so that stays true
   * by visibility rather than by convention. The table is an abstract member of the trait rather
   * than something found by reflection, because a route transformation such as `under("/admin")`
   * needs somewhere to be applied, and because "the sbt plugin is not enabled" should be a compile
@@ -77,7 +77,8 @@ private[http] object Config {
   */
 object Eezo {
 
-  private val log = System.getLogger("io.eezo.http")
+  /** The module's one logger, which [[Secret]] also writes to. */
+  private[http] val log = System.getLogger("io.eezo.http")
 
   /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
     * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
@@ -104,15 +105,8 @@ object Eezo {
     * way, and the `IllegalStateException` the removal throws during a shutdown is the case where
     * the hook is what returned `join`.
     */
-  private[eezo] def run(
-      port: Int,
-      routes: RouteTable,
-      maxBodySize: Long = Config.DefaultMaxBodySize,
-      dev: Boolean = Config.DefaultDev,
-      problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
-      secret: Secret = Config.DefaultSecret
-  ): Unit = {
-    val server = build(port, Config(routes, maxBodySize, dev, problems, secret))
+  private[http] def run(port: Int, config: Config): Unit = {
+    val server = build(port, config)
     val caller = Thread.currentThread()
     val hook   = new Thread(
       () => {

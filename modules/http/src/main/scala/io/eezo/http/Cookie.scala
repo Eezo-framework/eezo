@@ -9,19 +9,18 @@ package io.eezo.http
   * one place a value that would break the header can be refused with a message that names it;
   * anything that is not already an octet, a base64url payload for one, encodes before it gets here.
   *
-  * The defaults are the ones the surveyed frameworks agree on: `Path=/`, `HttpOnly`,
-  * `SameSite=Lax`, no `Max-Age` so the cookie lives with the browser session, and `Secure` off,
-  * because it is the request's scheme, not the cookie, that knows whether it can be on. `Domain` is
-  * deliberately absent until something asks for it.
+  * The attributes are eezo's choice, the one the surveyed frameworks agree on, rather than
+  * defaults: every cookie is `Path=/`, `HttpOnly` and `SameSite=Lax`, and lives with the browser
+  * session. Only `Secure` is a parameter, because it is the request's scheme, not the cookie, that
+  * knows whether it can be on. `Max-Age` is set only by [[Cookie.expired]]. A custom path, a cookie
+  * scripts can read, another `SameSite` or a lifetime arrive when something needs them, and so does
+  * `Domain`.
   */
-final case class Cookie(
+final case class Cookie private[http] (
     name: String,
     value: String,
-    path: String = "/",
-    maxAge: Option[Long] = None,
-    secure: Boolean = false,
-    httpOnly: Boolean = true,
-    sameSite: Cookie.SameSite = Cookie.SameSite.Lax
+    secure: Boolean,
+    private[http] val maxAge: Option[Long]
 ) {
   require(Cookie.isToken(name), s"cookie name '$name' is not an RFC 2616 token")
   require(
@@ -29,14 +28,14 @@ final case class Cookie(
     s"cookie value for '$name' holds a character outside RFC 6265's cookie-octet rule; encode it"
   )
 
-  /** The `Set-Cookie` value, attributes in the order Jetty writes them, each only when set. */
+  /** The `Set-Cookie` value, attributes in the order Jetty writes them. */
   def render: String = {
     val attributes = Seq(
-      Some(s"Path=$path"),
+      Some("Path=/"),
       maxAge.map(seconds => s"Max-Age=$seconds"),
       Option.when(secure)("Secure"),
-      Option.when(httpOnly)("HttpOnly"),
-      Some(s"SameSite=$sameSite")
+      Some("HttpOnly"),
+      Some("SameSite=Lax")
     ).flatten
     (s"$name=$value" +: attributes).mkString("; ")
   }
@@ -44,13 +43,12 @@ final case class Cookie(
 
 object Cookie {
 
-  /** Each case renders as its own name. */
-  enum SameSite {
-    case Strict, Lax, None
-  }
+  /** A cookie that lives with the browser session, `Secure` only when `secure` says so. */
+  def apply(name: String, value: String, secure: Boolean = false): Cookie =
+    new Cookie(name, value, secure, None)
 
   /** The cookie that tells a browser to drop `name`: an empty value and `Max-Age=0`. */
-  def expired(name: String): Cookie = Cookie(name, "", maxAge = Some(0))
+  def expired(name: String): Cookie = new Cookie(name, "", false, Some(0))
 
   /** RFC 2616 `token`: one or more US-ASCII characters that are neither controls nor separators. */
   private def isToken(name: String): Boolean =
@@ -68,15 +66,19 @@ object Cookie {
   /** Splits one or more `Cookie` header values into pairs: `;` separated, the name before the first
     * `=`, surrounding double quotes dropped from the value, and the first of a repeated name kept,
     * which is the pair the browser put first because it matched the longest path.
+    *
+    * A pair with no `=`, or whose name is empty or not an RFC 2616 token, is dropped rather than
+    * read, which is the rule Jetty's RFC 6265 parser applies: no browser sends such a pair, so it
+    * names no cookie, and inventing an empty one would let it shadow a well formed pair of the same
+    * name further on. The value stays lenient and is not checked against `cookie-octet`.
     */
   private[http] def parse(headers: Seq[String]): Map[String, String] =
     headers.iterator
       .flatMap(_.split(';').iterator)
-      .map(_.trim)
-      .filter(_.nonEmpty)
-      .map { pair =>
+      .flatMap { pair =>
         val index = pair.indexOf('=')
-        if (index < 0) pair -> "" else pair.take(index).trim -> unquote(pair.drop(index + 1).trim)
+        val name  = if (index < 0) "" else pair.take(index).trim
+        Option.when(isToken(name))(name -> unquote(pair.drop(index + 1).trim))
       }
       .distinctBy(_._1)
       .toMap

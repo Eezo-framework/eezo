@@ -9,19 +9,28 @@ import io.eezo.core.html.Tags.p
   */
 class SessionSuite extends munit.FunSuite {
 
-  private val secret = Secret.parse("correct horse battery staple")
+  private val secret = Secret.parse("correct horse battery staple, and a nail")
 
   // Secret
 
   test("a secret is parsed from text and generated at random, and never prints") {
     intercept[IllegalArgumentException](Secret.parse(""))
-    assertEquals(Secret.parse("x"), Secret.parse("x"))
-    assertNotEquals(Secret.gen(), Secret.gen())
-    assertEquals(Secret.parse("x").toString, "Secret(redacted)")
+    assertEquals(Secret.parse("x" * 32), Secret.parse("x" * 32))
+    assertNotEquals(Secret.throwaway(), Secret.throwaway())
+    assertEquals(Secret.parse("x" * 32).toString, "Secret(redacted)")
+  }
+
+  test("a secret shorter than 32 bytes is refused, and the length is counted in UTF-8 bytes") {
+    val short = intercept[IllegalArgumentException](Secret.parse("a" * 31))
+    assert(short.getMessage.contains("EEZO_SECRET"), short.getMessage)
+    assert(short.getMessage.contains("openssl rand -base64 32"), short.getMessage)
+    Secret.parse("a" * 32)
+    Secret.parse("é" * 16)
+    intercept[IllegalArgumentException](Secret.parse("é" * 15 + "a"))
   }
 
   test("the default secret is the environment variable, or a throwaway when it is not set") {
-    assertEquals(Secret.fromEnv(Map("EEZO_SECRET" -> "x")), Secret.parse("x"))
+    assertEquals(Secret.fromEnv(Map("EEZO_SECRET" -> "x" * 32)), Secret.parse("x" * 32))
     assertNotEquals(Secret.fromEnv(Map.empty), Secret.fromEnv(Map.empty))
   }
 
@@ -74,9 +83,10 @@ class SessionSuite extends munit.FunSuite {
     val cookie              = SessionCookie.encode(Session.empty.set("user", "42"), secret)
     val Array(payload, tag) = cookie.split('.')
     val flipped             = if (payload.head == 'A') 'B' else 'A'
+    val elsewhere           = Secret.parse("another secret, from somewhere else")
     assert(SessionCookie.decode(s"$flipped${payload.tail}.$tag", secret).isEmpty, "payload edited")
     assert(SessionCookie.decode(s"$payload.${tag.reverse}", secret).isEmpty, "tag edited")
-    assert(SessionCookie.decode(cookie, Secret.parse("another")).isEmpty, "signed elsewhere")
+    assert(SessionCookie.decode(cookie, elsewhere).isEmpty, "signed elsewhere")
     assert(SessionCookie.decode(payload, secret).isEmpty, "no tag")
     assert(SessionCookie.decode(s"$payload.", secret).isEmpty, "empty tag")
     assert(SessionCookie.decode("", secret).isEmpty, "empty")

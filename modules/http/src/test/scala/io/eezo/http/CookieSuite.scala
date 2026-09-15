@@ -8,24 +8,18 @@ import io.eezo.core.html.Tags.p
   */
 class CookieSuite extends munit.FunSuite {
 
-  test("the defaults are the ones every surveyed framework agrees on") {
+  test("a cookie is Path=/, HttpOnly and SameSite=Lax, which is eezo's choice, not a default") {
     assertEquals(
       Cookie("eezo_session", "abc").render,
       "eezo_session=abc; Path=/; HttpOnly; SameSite=Lax"
     )
   }
 
-  test("every attribute renders in Jetty's order, only when set") {
-    val cookie = Cookie(
-      "a",
-      "b",
-      path = "/admin",
-      maxAge = Some(60),
-      secure = true,
-      httpOnly = false,
-      sameSite = Cookie.SameSite.Strict
+  test("a secure cookie renders Secure in Jetty's order, before HttpOnly") {
+    assertEquals(
+      Cookie("eezo_session", "abc", secure = true).render,
+      "eezo_session=abc; Path=/; Secure; HttpOnly; SameSite=Lax"
     )
-    assertEquals(cookie.render, "a=b; Path=/admin; Max-Age=60; Secure; SameSite=Strict")
   }
 
   test("an expired cookie is the one that tells a browser to drop the name") {
@@ -77,6 +71,31 @@ class CookieSuite extends munit.FunSuite {
   ) {
     val req = request(Map("cookie" -> Seq("a=\"1\"; a=2", "c=3")))
     assertEquals(req.cookies, Map("a" -> "1", "c" -> "3"))
+  }
+
+  test("every Cookie header counts, whatever the case of its name") {
+    val req = request(Map("Cookie" -> Seq("a=1"), "COOKIE" -> Seq("b=2")))
+    assertEquals(req.cookies, Map("a" -> "1", "b" -> "2"))
+  }
+
+  test("a pair with no '=' is dropped, not read as an empty value") {
+    val req = request(Map("Cookie" -> Seq("a=1; flag; b=2")))
+    assertEquals(req.cookies, Map("a" -> "1", "b" -> "2"))
+  }
+
+  test("a pair with an empty name is dropped") {
+    val req = request(Map("Cookie" -> Seq("=value; a=1; = 2")))
+    assertEquals(req.cookies, Map("a" -> "1"))
+  }
+
+  test("a pair whose name is not a token is dropped") {
+    val req = request(Map("Cookie" -> Seq("a b=1; c/d=2; e=3; [f]=4")))
+    assertEquals(req.cookies, Map("e" -> "3"))
+  }
+
+  test("a malformed pair does not shadow a later well formed pair of the same name") {
+    val req = request(Map("Cookie" -> Seq("eezo_session; a=1", "eezo_session=abc")))
+    assertEquals(req.cookies, Map("a" -> "1", "eezo_session" -> "abc"))
   }
 
   test("no Cookie header is no cookies") {

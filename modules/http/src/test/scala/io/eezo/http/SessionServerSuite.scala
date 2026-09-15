@@ -17,7 +17,7 @@ class SessionServerSuite extends munit.FunSuite {
 
   private val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()
 
-  private val secret = Secret.parse("server secret")
+  private val secret = Secret.parse("server secret, at least thirty two bytes")
 
   private val routes: RouteTable = RouteTable(
     Seq(
@@ -148,8 +148,8 @@ class SessionServerSuite extends munit.FunSuite {
     assertEquals(app.secret.getClass, classOf[Secret])
     val fixed = new HttpApp {
       override def routes: RouteTable = RouteTable.empty
-      override def secret: Secret     = Secret.parse("fixed")
+      override def secret: Secret     = Secret.parse("fixed secret, at least thirty two bytes")
     }
-    assertEquals(fixed.secret, Secret.parse("fixed"))
+    assertEquals(fixed.secret, Secret.parse("fixed secret, at least thirty two bytes"))
   }
 }
