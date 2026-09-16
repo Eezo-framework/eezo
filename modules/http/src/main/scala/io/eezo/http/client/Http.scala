@@ -1,6 +1,6 @@
 package io.eezo.http.client
 
-import java.net.URI
+import java.net.{Proxy, ProxySelector, SocketAddress, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.time.Duration
@@ -75,6 +75,7 @@ final class Http(timeout: Duration) {
     .newBuilder()
     .followRedirects(HttpClient.Redirect.NORMAL)
     .connectTimeout(timeout)
+    .proxy(Http.LoopbackSpared)
     .build()
 
   def get(url: String, headers: (String, String)*): Reply =
@@ -155,4 +156,35 @@ object Http {
 
   /** The same calls under another deadline, for the caller who knows better. */
   def withTimeout(timeout: Duration): Http = new Http(timeout)
+
+  /** The environment's proxy rules, except that loopback is never proxied.
+    *
+    * The JDK client proxies whatever the inherited configuration says — `http.proxyHost` in
+    * JAVA_OPTS, `java.net.useSystemProxies`, an `http.nonProxyHosts` override that dropped the
+    * default localhost exemption — and a component calling its own server then waits out the
+    * connect timeout against a proxy that was never meant to see loopback traffic. Found the hard
+    * way: the same page answered on one machine and reported `Unreachable` on another, and the
+    * difference was the shell that launched the server. Matching is by the URL's host text
+    * (`localhost`, `*.localhost`, `127.*`, `::1`), because `select` runs before resolution; a DNS
+    * name that happens to resolve to loopback is out of scope on purpose.
+    */
+  private[client] object LoopbackSpared
+      extends LoopbackSparing(() => Option(ProxySelector.getDefault))
+
+  private[client] class LoopbackSparing(fallback: () => Option[ProxySelector])
+      extends ProxySelector {
+
+    private def isLoopback(rawHost: String | Null): Boolean = {
+      val host = Option(rawHost).getOrElse("").stripPrefix("[").stripSuffix("]").toLowerCase
+      host == "localhost" || host.endsWith(".localhost") || host.startsWith("127.") ||
+      host == "::1" || host == "0:0:0:0:0:0:0:1"
+    }
+
+    override def select(uri: URI): java.util.List[Proxy] =
+      if (isLoopback(uri.getHost)) java.util.List.of(Proxy.NO_PROXY)
+      else fallback().map(_.select(uri)).getOrElse(java.util.List.of(Proxy.NO_PROXY))
+
+    override def connectFailed(uri: URI, address: SocketAddress, cause: java.io.IOException): Unit =
+      fallback().foreach(_.connectFailed(uri, address, cause))
+  }
 }

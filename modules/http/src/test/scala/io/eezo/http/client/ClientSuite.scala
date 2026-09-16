@@ -116,4 +116,41 @@ class ClientSuite extends munit.FunSuite {
       }
     }
   }
+
+  test("loopback is never proxied, whatever the environment's proxy rules say") {
+    import java.net.{Proxy, ProxySelector, InetSocketAddress, SocketAddress, URI}
+
+    // A hostile default: everything through a proxy that does not exist.
+    val hostile = new ProxySelector {
+      override def select(uri: URI): java.util.List[Proxy] =
+        java.util.List.of(new Proxy(Proxy.Type.HTTP, new InetSocketAddress("10.255.255.1", 9999)))
+      override def connectFailed(uri: URI, a: SocketAddress, c: java.io.IOException): Unit = ()
+    }
+    val selector = new Http.LoopbackSparing(() => Some(hostile))
+
+    def chosen(url: String) = selector.select(URI.create(url))
+
+    for (
+      spared <- List(
+        "http://localhost:8080/api",
+        "http://sub.localhost/api",
+        "http://127.0.0.1:8080/api",
+        "http://127.1.2.3/api",
+        "http://[::1]:8080/api"
+      )
+    )
+      assertEquals(chosen(spared), java.util.List.of(Proxy.NO_PROXY), spared)
+
+    // Everything else still follows the environment's rules.
+    assertEquals(chosen("https://api.example.com/x"), hostile.select(URI.create("https://x")))
+  }
+
+  test("with no default selector at all, everything goes direct") {
+    import java.net.{Proxy, URI}
+    val selector = new Http.LoopbackSparing(() => None)
+    assertEquals(
+      selector.select(URI.create("https://api.example.com/x")),
+      java.util.List.of(Proxy.NO_PROXY)
+    )
+  }
 }

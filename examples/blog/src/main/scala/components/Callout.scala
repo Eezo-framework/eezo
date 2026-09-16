@@ -27,7 +27,7 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
       s.copy(token = if (s.token == "let-me-in") "wrong-token" else "let-me-in")
 
     case "fetch" =>
-      async.get("http://localhost:8080/api", Auth.bearer(s.token)) {
+      async.get("http://127.0.0.1:8080/api", Auth.bearer(s.token)) {
         case Reply.Ok(r)            => done(s"ok: ${r.text}")
         case Reply.Denied(r)        => done(s"denied (${r.status}): the token is bad — fix it and retry")
         case Reply.Failed(r)        => done(s"failed (${r.status}): the upstream answered, badly")
@@ -36,7 +36,7 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
       s.copy(loading = true)
 
     case "fetch-missing" =>
-      async.get("http://localhost:8080/api/no-such-thing") {
+      async.get("http://127.0.0.1:8080/api/no-such-thing") {
         case Reply.Ok(r)            => done(s"ok: ${r.text}")
         case Reply.Denied(r)        => done(s"denied (${r.status})")
         case Reply.Failed(r)        => done(s"failed (${r.status}): the upstream answered, badly")
@@ -64,8 +64,9 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
       p(
         Attrs.style := "color: gray",
         "The call happens on the server: this page's handle runs in the JVM, and async.get " +
-          "fetches /api over the loopback. The browser's network tab shows only the WebSocket " +
-          "frames - the event going up, the outcome patching down."
+          "fetches /api over the loopback (127.0.0.1, matching Jetty's IPv4 bind - `localhost` " +
+          "can resolve to IPv6 ::1 and time out). The browser's network tab shows only the " +
+          "WebSocket frames: the event going up, the outcome patching down."
       )
     )
 }
