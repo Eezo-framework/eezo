@@ -173,12 +173,9 @@ final class RouteTable(mounted: Seq[Route]) {
     * otherwise it is a [[NotFound]]. Only a single pass can populate that header, which RFC 9110
     * makes mandatory on a 405.
     *
-    * Between the match and the handler sits the CSRF token: [[Csrf.ensure]] mints one into a
-    * session that has none, and [[Csrf.verify]] refuses an unsafe request that does not return it.
-    * After the match, so a 404 stays a 404 and a 405 a 405; before the handler and before any
-    * wrapper a guard puts around it, so a forged `POST` to a guarded route is refused as forged,
-    * never redirected to login. The session the handler saw, token included, goes out on the
-    * response when the handler named none, which is what lets the adapter write the mint once.
+    * Between the match and the handler sits the CSRF token, [[Csrf.protect]]: after the match, so a
+    * 404 stays a 404 and a 405 a 405; before the handler and before any wrapper a guard puts around
+    * it, so a forged `POST` to a guarded route is refused as forged, never redirected to login.
     */
   def dispatch(request: Request): Response = {
     val allowed = Seq.newBuilder[Method]
@@ -195,12 +192,8 @@ final class RouteTable(mounted: Seq[Route]) {
       .nextOption()
 
     matched match {
-      case Some((handler, params)) =>
-        val ready = Csrf.ensure(request.copy(pathParams = params))
-        Csrf.verify(ready)
-        val response = handler(ready)
-        if (response.session.isDefined) response else response.withSession(ready.session)
-      case None =>
+      case Some((handler, params)) => Csrf.protect(handler)(request.copy(pathParams = params))
+      case None                    =>
         val methods = allowed.result().distinct
         if (methods.isEmpty) throw NotFound(request.path)
         else throw MethodNotAllowed(methods)

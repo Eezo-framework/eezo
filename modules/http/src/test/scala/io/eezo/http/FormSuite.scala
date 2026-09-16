@@ -80,7 +80,7 @@ class FormSuite extends munit.FunSuite {
   }
 
   test("every form carries the CSRF token as a hidden input, whatever its verb") {
-    val hidden = s"""<input type="hidden" name="_csrf" value="${token.value}">"""
+    val hidden = Csrf.hidden(token).render
     val post   = Form[Widget].render("/widgets", Method.POST, None, token).render
     assert(post.contains(hidden), post)
     val put = Form[Widget].render("/widgets/1", Method.PUT, None, token).render

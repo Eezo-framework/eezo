@@ -113,9 +113,9 @@ object Form {
   def apply[A](using f: Form[A]): Form[A] = f
 
   /** The reserved hidden inputs a form carries: `_method` when its verb is one a browser cannot
-    * issue, and the CSRF token on every verb but `GET`. A `GET` form is a search, and its fields go
-    * into the address bar: a token there rides into referrers and logs and protects nothing, since
-    * a `GET` is never verified.
+    * issue, and the CSRF token on every verb dispatch verifies, which is every verb that is not
+    * safe. A `GET` form is a search, and its fields go into the address bar: a token there rides
+    * into referrers and logs and protects nothing, since a `GET` is never verified.
     *
     * Two places emit them, the `<form>` below and the delete button a derived `show` page renders,
     * since a browser cannot issue `DELETE` from a link either, and one place reads each,
@@ -123,19 +123,18 @@ object Form {
     * in three files and each copy would be pinned by its own test, which is how two of them agree
     * and the third drifts.
     */
-  private[http] def hidden(method: Method, token: Csrf.Token): Seq[Html] = {
-    val over = method match {
-      case Method.GET | Method.POST => Nil
-      case other                    =>
-        Seq(
-          input(
-            Attrs.tpe   := "hidden",
-            Attrs.name  := Request.MethodField,
-            Attrs.value := other.toString
-          )
-        )
-    }
-    if (method == Method.GET) over else over :+ Csrf.hidden(token)
+  private[http] def hidden(method: Method, token: Csrf.Token): Seq[Html] = method match {
+    case verb if verb.safe => Nil
+    case Method.POST       => Seq(Csrf.hidden(token))
+    case other             =>
+      Seq(
+        input(
+          Attrs.tpe   := "hidden",
+          Attrs.name  := Request.MethodField,
+          Attrs.value := other.toString
+        ),
+        Csrf.hidden(token)
+      )
   }
 
   /** `inline` only long enough to read the `Mirror`, then straight into [[make]].

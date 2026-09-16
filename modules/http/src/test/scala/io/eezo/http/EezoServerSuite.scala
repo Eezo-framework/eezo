@@ -53,7 +53,7 @@ class EezoServerSuite extends munit.FunSuite {
         .newBuilder(URI.create(s"http://localhost:$port$path"))
         .header("Content-Type", "application/x-www-form-urlencoded")
         .header("Cookie", s"${SessionCookie.Name}=$session")
-        .POST(HttpRequest.BodyPublishers.ofString(s"$form&_csrf=${token.value}"))
+        .POST(HttpRequest.BodyPublishers.ofString(s"$form&${Csrf.Field}=${token.value}"))
         .build(),
       HttpResponse.BodyHandlers.ofString()
     )

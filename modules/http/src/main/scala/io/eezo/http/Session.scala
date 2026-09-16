@@ -44,7 +44,7 @@ final case class Session private[http] (
     * keeps under its reserved names: a session that carries only a notice, or only the CSRF token
     * dispatch minted into it, names nobody.
     */
-  def isEmpty: Boolean = !entries.keysIterator.exists(!_.startsWith(Session.Reserved))
+  def isEmpty: Boolean = entries.keysIterator.forall(_.startsWith(Session.Reserved))
 
   /** A flash delivered by the request that carried this session, readable on this request alone. */
   def flash(name: String): Option[String] = delivered.get(name)

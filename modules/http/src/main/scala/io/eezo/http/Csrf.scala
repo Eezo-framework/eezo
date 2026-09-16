@@ -18,12 +18,12 @@ import io.eezo.core.html.Tags.input
   * masking defends against BREACH, which needs response compression, and eezo compresses nothing.
   * The day gzip arrives, masking is added here alone.
   *
-  * Both halves happen at dispatch, after a route has matched and before its handler runs.
-  * [[ensure]] mints a token into a session that has none, so every request past dispatch has one
-  * and reading it cannot fail; [[verify]] refuses a `POST`, `PUT`, `PATCH` or `DELETE` whose form
-  * does not return the session's token, derived and handwritten alike, with no way to opt out.
-  * `GET`, `HEAD` and `OPTIONS` are never checked; a WebSocket upgrade is a `GET`. Only the form
-  * field is read: a header for JavaScript waits until an example fetches.
+  * Both halves happen at dispatch, after a route has matched and before its handler runs, and
+  * [[protect]] is where: it mints a token into a session that has none, so every request past
+  * dispatch has one and reading it cannot fail, and it refuses a `POST`, `PUT`, `PATCH` or `DELETE`
+  * whose form does not return the session's token, derived and handwritten alike, with no way to
+  * opt out. The safe methods, `GET`, `HEAD` and `OPTIONS`, are never checked; a WebSocket upgrade
+  * is a `GET`. Only the form field is read: a header for JavaScript waits until an example fetches.
   */
 object Csrf {
 
@@ -44,8 +44,6 @@ object Csrf {
       random.nextBytes(bytes)
       encoder.encodeToString(bytes)
     }
-
-    private[http] def apply(value: String): Token = value
 
     extension (token: Token) {
       def value: String = token
@@ -73,10 +71,23 @@ object Csrf {
   private[http] def carrying(session: Session, token: Token): Session =
     session.copy(entries = session.entries + (Entry -> token))
 
+  /** The handler with the token around it, which is how `RouteTable.dispatch` runs the route it
+    * matched: [[ensure]] first, [[verify]] on what it produced, and the session the handler saw,
+    * minted token included, going out on the response when the handler named none. That last step
+    * is what lets the adapter write the mint once, since it compares against the session it read
+    * from the cookie, not the one dispatch amended.
+    */
+  private[http] def protect(handler: Handler): Handler = request => {
+    val ready = ensure(request)
+    verify(ready)
+    val response = handler(ready)
+    if (response.session.isDefined) response else response.withSession(ready.session)
+  }
+
   /** The request with a token in its session, minted now if it had none. The cost of the mint is
     * one `Set-Cookie` on a first anonymous `GET`, which Rails and Spring pay too.
     */
-  private[http] def ensure(request: Request): Request =
+  private def ensure(request: Request): Request =
     if (read(request.session).isDefined) request
     else request.copy(session = carrying(request.session, Token.gen()))
 
@@ -88,21 +99,15 @@ object Csrf {
     * @throws Forbidden
     *   on a missing or mismatched token, which the boundary maps to a 403.
     */
-  private[http] def verify(request: Request): Unit =
-    if (isUnsafe(request.method)) {
-      val matches = (read(request.session), request.form.get(Field).flatMap(_.headOption)) match {
-        case (Some(expected), Some(submitted)) =>
-          MessageDigest.isEqual(bytes(expected), bytes(submitted))
-        case _ => false
+  private def verify(request: Request): Unit =
+    if (!request.method.safe) {
+      val returned = request.form.get(Field).flatMap(_.headOption)
+      val matches  = read(request.session).zip(returned).exists { case (expected, submitted) =>
+        MessageDigest.isEqual(bytes(expected), bytes(submitted))
       }
       if (!matches)
         throw Forbidden("the form's token is missing or stale; reload the page and try again")
     }
-
-  private def isUnsafe(method: Method): Boolean = method match {
-    case Method.POST | Method.PUT | Method.PATCH | Method.DELETE => true
-    case _                                                       => false
-  }
 
   private def bytes(text: String): Array[Byte] = text.getBytes(StandardCharsets.UTF_8)
 }

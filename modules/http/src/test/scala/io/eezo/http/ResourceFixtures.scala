@@ -27,17 +27,20 @@ trait ResourceFixtures { self: munit.FunSuite =>
     * body shape the derived routes read.
     */
   def request(method: Method, path: String, form: (String, String)*): Request = {
-    val returned = method match {
-      case Method.GET | Method.HEAD | Method.OPTIONS => form
-      case _                                         => form :+ (Csrf.Field -> token.value)
-    }
+    val returned = if (method.safe) form else form :+ (Csrf.Field -> token.value)
     forged(method, path, returned*)
   }
 
   /** A request from a page eezo did not serve: the browser has a session, so the token is there to
     * compare against, and the body does not return it.
     */
-  def forged(method: Method, path: String, form: (String, String)*): Request = {
+  def forged(method: Method, path: String, form: (String, String)*): Request =
+    anonymous(method, path, form*).copy(session = Csrf.carrying(Session.empty, token))
+
+  /** A request from a browser never seen before: no session, so no token anywhere, and a form
+    * encoded body when there are fields.
+    */
+  def anonymous(method: Method, path: String, form: (String, String)*): Request = {
     val body = form
       .map { case (k, v) =>
         s"${URLEncoder.encode(k, StandardCharsets.UTF_8)}=${URLEncoder.encode(v, StandardCharsets.UTF_8)}"
@@ -51,8 +54,7 @@ trait ResourceFixtures { self: munit.FunSuite =>
         if (form.isEmpty) Map.empty
         else Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
       body = body.getBytes(StandardCharsets.UTF_8),
-      pathParams = Map.empty,
-      session = Csrf.carrying(Session.empty, token)
+      pathParams = Map.empty
     )
   }
 

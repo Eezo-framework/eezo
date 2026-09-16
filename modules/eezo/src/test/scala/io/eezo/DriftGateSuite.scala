@@ -20,7 +20,7 @@ class DriftGateSuite extends munit.FunSuite {
   test("both forms on the drift page carry the CSRF token, since both apply changes") {
     val token  = Csrf.Token.gen()
     val page   = markup(token)
-    val hidden = s"""<input type="hidden" name="_csrf" value="${token.value}">"""
+    val hidden = Csrf.hidden(token).render
     val forms  = page.split("<form").drop(1)
     assertEquals(forms.length, 2, page)
     forms.foreach(form => assert(form.contains(hidden), form))

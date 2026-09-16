@@ -226,7 +226,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val page = markup(routes.dispatch(request(Method.GET, s"/widgets/${saved.head.id.show}")))
     assert(page.contains(s"""href="/widgets/${saved.head.id.show}/edit""""), page)
     assert(page.contains("""<input type="hidden" name="_method" value="DELETE">"""), page)
-    assert(page.contains(s"""<input type="hidden" name="_csrf" value="${token.value}">"""), page)
+    assert(page.contains(Csrf.hidden(token).render), page)
 
     val store = InMemoryStore[Note]()
     val note  = Note(Id.gen[Note](), "read me")
@@ -304,7 +304,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     "new and edit render forms carrying the request's token, and a rejected one carries it back"
   ) {
     val (_, routes, saved) = widgets("Bolt" -> 3)
-    val hidden             = s"""<input type="hidden" name="_csrf" value="${token.value}">"""
+    val hidden             = Csrf.hidden(token).render
     assert(markup(routes.dispatch(request(Method.GET, "/widgets/new"))).contains(hidden))
     assert(
       markup(routes.dispatch(request(Method.GET, s"/widgets/${saved.head.id.show}/edit")))

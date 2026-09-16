@@ -75,33 +75,36 @@ class SessionServerSuite extends munit.FunSuite {
     client.send(request.build(), HttpResponse.BodyHandlers.ofString())
   }
 
-  /** A browser's first visit: the cookie it was handed, and the token inside it. */
-  private def visit(port: Int): (String, Csrf.Token) = {
+  /** What a browser holds after its first visit: the session cookie it was handed, and the token
+    * inside it. A later response may replace the cookie; the token stays.
+    */
+  private final case class Browser(cookie: String, token: Csrf.Token)
+
+  private def visit(port: Int): Browser = {
     val cookie = sessionCookie(send(port, "GET", "/me", None))
       .getOrElse(fail("the first visit was handed no session cookie"))
     val token = Csrf
       .read(SessionCookie.decode(cookie, secret))
       .getOrElse(fail("the first visit's cookie carries no token"))
-    (cookie, token)
+    Browser(cookie, token)
   }
 
-  /** A `POST` the way a form on a served page makes it: under the session cookie, returning the
-    * token. `cookie` is the one to send when it is not the first visit's.
+  /** A `POST` the way a form on a served page makes it: under the browser's session cookie,
+    * returning its token.
     */
   private def submit(
       port: Int,
       path: String,
-      seen: (String, Csrf.Token),
-      cookie: Option[String] = None,
+      browser: Browser,
       headers: Seq[(String, String)] = Nil
   ): HttpResponse[String] =
     send(
       port,
       "POST",
       path,
-      cookie.orElse(Some(seen._1)),
+      Some(browser.cookie),
       headers,
-      form = Some(s"_csrf=${seen._2.value}")
+      form = Some(s"${Csrf.Field}=${browser.token.value}")
     )
 
   private def sessionCookie(response: HttpResponse[String]): Option[String] =
@@ -118,7 +121,7 @@ class SessionServerSuite extends munit.FunSuite {
       assertEquals(anonymous.body(), "<p>user=nobody notice=-</p>")
       val seen = visit(port)
       assertEquals(
-        sessionCookie(send(port, "GET", "/me", Some(seen._1))),
+        sessionCookie(send(port, "GET", "/me", Some(seen.cookie))),
         None,
         "a page that only reads writes no cookie, once the token has been minted"
       )
@@ -177,7 +180,7 @@ class SessionServerSuite extends munit.FunSuite {
     serving { port =>
       val seen     = visit(port)
       val cookie   = sessionCookie(submit(port, "/login", seen)).get
-      val response = submit(port, "/logout", seen, cookie = Some(cookie))
+      val response = submit(port, "/logout", seen.copy(cookie = cookie))
       assertEquals(response.statusCode(), 303)
       assertEquals(
         response.headers().firstValue("Set-Cookie").orElse(""),
@@ -202,23 +205,23 @@ class SessionServerSuite extends munit.FunSuite {
 
   test("a first visit is handed the session cookie carrying the token, and only the first") {
     serving { port =>
-      val (cookie, token) = visit(port)
-      assert(token.value.nonEmpty)
-      val again = send(port, "GET", "/me", Some(cookie))
+      val browser = visit(port)
+      assert(browser.token.value.nonEmpty)
+      val again = send(port, "GET", "/me", Some(browser.cookie))
       assertEquals(sessionCookie(again), None, "the token is minted once")
       assertEquals(
-        Csrf.read(SessionCookie.decode(cookie, secret)),
-        Some(token),
+        Csrf.read(SessionCookie.decode(browser.cookie, secret)),
+        Some(browser.token),
         "the cookie carries the token and nothing the handler set"
       )
-      assert(SessionCookie.decode(cookie, secret).isEmpty, "the token is not an entry")
+      assert(SessionCookie.decode(browser.cookie, secret).isEmpty, "the token is not an entry")
     }
   }
 
   test("a POST that does not return the token is a 403, and writes no cookie") {
     serving { port =>
-      val (cookie, _) = visit(port)
-      val forged      = send(port, "POST", "/login", Some(cookie))
+      val cookie = visit(port).cookie
+      val forged = send(port, "POST", "/login", Some(cookie))
       assertEquals(forged.statusCode(), 403)
       assert(forged.body().contains("missing or stale"), forged.body())
       assertEquals(sessionCookie(forged), None)
@@ -226,7 +229,7 @@ class SessionServerSuite extends munit.FunSuite {
       assertEquals(send(port, "POST", "/login", None).statusCode(), 403)
       // A token from another browser's session is not this one's.
       val other = visit(port)
-      assertEquals(submit(port, "/login", other, cookie = Some(cookie)).statusCode(), 403)
+      assertEquals(submit(port, "/login", other.copy(cookie = cookie)).statusCode(), 403)
     }
   }
 }

@@ -8,6 +8,14 @@ package io.eezo.http
   */
 enum Method {
   case GET, POST, PUT, DELETE, PATCH, HEAD, OPTIONS
+
+  /** RFC 9110's safe methods, the ones that ask the server to change nothing. What `Csrf.verify`
+    * never checks, and so what a form need not carry a token for.
+    */
+  def safe: Boolean = this match {
+    case GET | HEAD | OPTIONS => true
+    case _                    => false
+  }
 }
 
 object Method {
