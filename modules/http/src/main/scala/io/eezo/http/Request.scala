@@ -75,6 +75,21 @@ final case class Request(
   /** One cookie by name. */
   def cookie(name: String): Option[String] = cookies.get(name)
 
+  /** The CSRF token this browser's forms must carry: what a handler hands to `Form.render` and
+    * `Csrf.hidden`. Dispatch mints one into the session before any handler runs, so inside a route
+    * this cannot fail; a request built by hand and never dispatched has none, and asking is a bug
+    * in the caller rather than a bad request.
+    */
+  def csrf: Csrf.Token =
+    Csrf
+      .read(session)
+      .getOrElse(
+        throw new IllegalStateException(
+          "this request has no CSRF token: dispatch mints one before a handler runs, so a " +
+            "request built by hand has to be dispatched, or the form given Csrf.Token.gen()"
+        )
+      )
+
   /** The form encoded body, decoded once and remembered.
     *
     * Multi valued, because checkbox groups and multi selects genuinely produce repeats and a

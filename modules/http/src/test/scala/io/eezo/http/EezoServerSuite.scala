@@ -22,11 +22,13 @@ class EezoServerSuite extends munit.FunSuite {
 
   private val client = HttpClient.newHttpClient()
 
+  private val secret = Secret.parse("server secret, at least thirty two bytes")
+
   /** Boots a server for one test and stops it afterwards. */
   private def serving(routes: RouteTable, maxBodySize: Long = 1.MiB, dev: Boolean = false)(
       body: (Server, Int) => Unit
   ): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, maxBodySize, dev))
+    val server = Eezo.start(port = 0, config = Config(routes, maxBodySize, dev, secret = secret))
     try {
       val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
       body(server, port)
@@ -38,6 +40,24 @@ class EezoServerSuite extends munit.FunSuite {
       HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path")).GET().build(),
       HttpResponse.BodyHandlers.ofString()
     )
+
+  /** A form `POST` the way a browser that has seen the application makes it: the session cookie
+    * carrying the CSRF token, and the token returned in the body. The tables here mount no page to
+    * be handed the cookie on, so it is signed by hand with the server's secret.
+    */
+  private def post(port: Int, path: String, form: String): HttpResponse[String] = {
+    val token   = Csrf.Token.gen()
+    val session = SessionCookie.encode(Csrf.carrying(Session.empty, token), secret)
+    client.send(
+      HttpRequest
+        .newBuilder(URI.create(s"http://localhost:$port$path"))
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .header("Cookie", s"${SessionCookie.Name}=$session")
+        .POST(HttpRequest.BodyPublishers.ofString(s"$form&_csrf=${token.value}"))
+        .build(),
+      HttpResponse.BodyHandlers.ofString()
+    )
+  }
 
   private val hello: RouteTable =
     RouteTable(
@@ -210,14 +230,7 @@ class EezoServerSuite extends munit.FunSuite {
       )
     )
     serving(routes) { (_, port) =>
-      val response = client.send(
-        HttpRequest
-          .newBuilder(URI.create(s"http://localhost:$port/widgets/7?q=hi"))
-          .header("Content-Type", "application/x-www-form-urlencoded")
-          .POST(HttpRequest.BodyPublishers.ofString("name=Tom+%26+Jerry"))
-          .build(),
-        HttpResponse.BodyHandlers.ofString()
-      )
+      val response = post(port, "/widgets/7?q=hi", "name=Tom+%26+Jerry")
       assertEquals(response.body(), "7|hi|Tom &amp; Jerry")
     }
   }
@@ -283,14 +296,7 @@ class EezoServerSuite extends munit.FunSuite {
       )
     )
     serving(routes) { (_, port) =>
-      val response = client.send(
-        HttpRequest
-          .newBuilder(URI.create(s"http://localhost:$port/widgets/7"))
-          .header("Content-Type", "application/x-www-form-urlencoded")
-          .POST(HttpRequest.BodyPublishers.ofString("_method=DELETE"))
-          .build(),
-        HttpResponse.BodyHandlers.ofString()
-      )
+      val response = post(port, "/widgets/7", "_method=DELETE")
       assertEquals(response.body(), "destroyed 7")
     }
   }

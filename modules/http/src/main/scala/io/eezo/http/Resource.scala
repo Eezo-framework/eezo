@@ -208,12 +208,12 @@ object Resource {
       )
     }
 
-    def blank: Handler = _ =>
+    def blank: Handler = request =>
       Response.Ok(
         page(
           s"New $modelName",
           h1(s"New $modelName"),
-          shape.render(collection, Method.POST, None),
+          shape.render(collection, Method.POST, None, request.csrf),
           backToIndex
         )
       )
@@ -234,7 +234,7 @@ object Resource {
     ): Response =
       shape.parse(request.form, Some(key.show)) match {
         case Left(errors) =>
-          rejected(heading, shape.render(target, verb, None, errors, request.form))
+          rejected(heading, shape.render(target, verb, None, request.csrf, errors, request.form))
         case Right(record) =>
           if (!persist(record)) throw NotFound(request.path)
           Response.Redirect(afterWrite(key))
@@ -261,7 +261,7 @@ object Resource {
             form(
               Attrs.action := member(key),
               Attrs.method := "post",
-              Form.methodOverride(Method.DELETE),
+              Form.hidden(Method.DELETE, request.csrf),
               button(Attrs.tpe := "submit", "Delete")
             )
           ),
@@ -277,7 +277,7 @@ object Resource {
         page(
           s"Edit $modelName",
           h1(s"Edit $modelName"),
-          shape.render(member(key), Method.PUT, Some(record)),
+          shape.render(member(key), Method.PUT, Some(record), request.csrf),
           backToIndex
         )
       )

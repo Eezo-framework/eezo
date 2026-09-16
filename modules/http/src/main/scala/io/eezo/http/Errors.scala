@@ -25,6 +25,12 @@ final case class NotFound(path: String) extends EezoException(s"no route matches
 final case class MethodNotAllowed(allowed: Seq[Method])
     extends EezoException(s"allowed: ${allowed.mkString(", ")}")
 
+/** A request the application understood and refuses: a form whose CSRF token is missing or stale,
+  * or later a write to a row the current user does not own. Constraint 5 of the auth map: no status
+  * here, and a redirect to login is a `Response`, never an error.
+  */
+final case class Forbidden(detail: String) extends EezoException(detail)
+
 /** The request body exceeded `HttpApp.maxBodySize`. */
 final case class PayloadTooLarge(limit: Long)
     extends EezoException(s"request body exceeds the $limit byte limit")

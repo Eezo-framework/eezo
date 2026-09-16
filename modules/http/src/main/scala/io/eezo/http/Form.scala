@@ -40,6 +40,9 @@ object FormErrors {
   * `Form` emits the **whole** `<form>` element rather than a bag of inputs, because it is the one
   * place that knows both the target verb and the encoding, and so it is the only place that can own
   * the `_method` override. A `Resource` hands it `Method.PUT` without knowing the override exists.
+  * The CSRF token is the other reserved input, and it is a required parameter of [[render]] rather
+  * than a default or a given: a form without a token is not expressible, which is the whole
+  * protection, and the caller already holds it as `request.csrf`.
   *
   * The key is never rendered. A form that carried its own key would either need a placeholder value
   * meaning "not set", which is a real value the server cannot tell from a real one, or a hidden
@@ -66,7 +69,12 @@ trait Form[A] {
     */
   def show(value: A): Seq[(FormField, String)]
 
-  /** The whole `<form>`, including its submit button and, when the verb needs one, `_method`.
+  /** The whole `<form>`, including its submit button, the CSRF token and, when the verb needs one,
+    * `_method`.
+    *
+    * `token` is the request's, `request.csrf` inside a handler and `Csrf.Token.gen()` in a test
+    * that renders outside one. It sits after `value` and before the defaulted parameters because it
+    * has no default: see the class comment.
     *
     * `raw` is submitted text, winning field by field over `value`. A rejected submission has no `A`
     * to render from, which is why it was rejected, so without `raw` the user gets an empty form
@@ -80,6 +88,7 @@ trait Form[A] {
       action: Url | String,
       method: Method,
       value: Option[A],
+      token: Csrf.Token,
       errors: FormErrors = FormErrors.empty,
       raw: Map[String, Seq[String]] = Map.empty
   ): Html
@@ -87,8 +96,8 @@ trait Form[A] {
   /** Reads a submission.
     *
     * `key` is the caller's, and is required exactly when the model has a key field. Extra keys in
-    * `data` are ignored, which is what lets `_method` and a later CSRF token travel in the same
-    * body without either being declared here.
+    * `data` are ignored, which is what lets `_method` and `_csrf` travel in the same body without
+    * either being declared here.
     *
     * @throws BadRequest
     *   if the key is present but will not decode.
@@ -103,25 +112,30 @@ object Form {
 
   def apply[A](using f: Form[A]): Form[A] = f
 
-  /** The hidden input a form needs when its verb is one a browser cannot issue, and nothing at all
-    * when it is not.
+  /** The reserved hidden inputs a form carries: `_method` when its verb is one a browser cannot
+    * issue, and the CSRF token on every verb but `GET`. A `GET` form is a search, and its fields go
+    * into the address bar: a token there rides into referrers and logs and protects nothing, since
+    * a `GET` is never verified.
     *
-    * Two places emit it — the `<form>` below, and the delete button a derived `show` page renders,
-    * since a browser cannot issue `DELETE` from a link either — and one place reads it,
-    * [[Request.withMethodOverride]]. Written out twice, the field name would live in three files
-    * and each copy would be pinned by its own test, which is how two of them agree and the third
-    * drifts.
+    * Two places emit them, the `<form>` below and the delete button a derived `show` page renders,
+    * since a browser cannot issue `DELETE` from a link either, and one place reads each,
+    * [[Request.withMethodOverride]] and [[Csrf.verify]]. Written out twice, a field name would live
+    * in three files and each copy would be pinned by its own test, which is how two of them agree
+    * and the third drifts.
     */
-  private[http] def methodOverride(method: Method): Seq[Html] = method match {
-    case Method.GET | Method.POST => Nil
-    case other                    =>
-      Seq(
-        input(
-          Attrs.tpe   := "hidden",
-          Attrs.name  := Request.MethodField,
-          Attrs.value := other.toString
+  private[http] def hidden(method: Method, token: Csrf.Token): Seq[Html] = {
+    val over = method match {
+      case Method.GET | Method.POST => Nil
+      case other                    =>
+        Seq(
+          input(
+            Attrs.tpe   := "hidden",
+            Attrs.name  := Request.MethodField,
+            Attrs.value := other.toString
+          )
         )
-      )
+    }
+    if (method == Method.GET) over else over :+ Csrf.hidden(token)
   }
 
   /** `inline` only long enough to read the `Mirror`, then straight into [[make]].
@@ -171,10 +185,11 @@ object Form {
           action: Url | String,
           method: Method,
           value: Option[A],
+          token: Csrf.Token,
           errors: FormErrors,
           raw: Map[String, Seq[String]]
       ): Html = {
-        val over = Form.methodOverride(method)
+        val reserved = Form.hidden(method, token)
 
         val rows = visible.map { case (f, i) =>
           val current  = raw.get(f.name).flatMap(_.headOption).orElse(value.map(text(_, i)))
@@ -208,7 +223,7 @@ object Form {
           // address, which is what `Url.Absolute` means, and one place in the package decides that.
           Attrs.action := Response.asUrl(action),
           Attrs.method := (if (method == Method.GET) "get" else "post"),
-          over,
+          reserved,
           rows,
           button(Attrs.tpe := "submit", "Save")
         )

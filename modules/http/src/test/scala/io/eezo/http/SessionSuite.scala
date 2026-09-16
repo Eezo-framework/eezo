@@ -50,6 +50,12 @@ class SessionSuite extends munit.FunSuite {
     intercept[IllegalArgumentException](Session.empty.set("_flash.notice", "x"))
   }
 
+  test("the reserved token entry does not count either: a session with only a token names nobody") {
+    val session = Csrf.carrying(Session.empty, Csrf.Token.gen())
+    assert(session.isEmpty)
+    assert(!session.set("user", "42").isEmpty)
+  }
+
   test("a flash written now is not readable now, and does not count as an entry") {
     val session = Session.empty.flash("notice", "created")
     assertEquals(session.flash("notice"), None)

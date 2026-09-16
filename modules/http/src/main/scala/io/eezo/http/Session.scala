@@ -31,16 +31,20 @@ final case class Session private[http] (
   def get(name: String): Option[String] = entries.get(name)
 
   def set(name: String, value: String): Session = {
-    require(!name.startsWith("_"), s"session entry '$name' starts with '_', which eezo reserves")
+    require(
+      !name.startsWith(Session.Reserved),
+      s"session entry '$name' starts with '${Session.Reserved}', which eezo reserves"
+    )
     copy(entries = entries + (name -> value))
   }
 
   def remove(name: String): Session = copy(entries = entries - name)
 
-  /** Whether any entry is held. Flash does not count: a session that carries only a notice names
-    * nobody.
+  /** Whether the application holds any entry. Flash does not count, and neither does what eezo
+    * keeps under its reserved names: a session that carries only a notice, or only the CSRF token
+    * dispatch minted into it, names nobody.
     */
-  def isEmpty: Boolean = entries.isEmpty
+  def isEmpty: Boolean = !entries.keysIterator.exists(!_.startsWith(Session.Reserved))
 
   /** A flash delivered by the request that carried this session, readable on this request alone. */
   def flash(name: String): Option[String] = delivered.get(name)
@@ -54,6 +58,11 @@ final case class Session private[http] (
 object Session {
 
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
+
+  /** The prefix of the names eezo keeps for itself, the flash and the CSRF token, which [[set]]
+    * refuses and [[isEmpty]] looks past.
+    */
+  private[http] val Reserved: String = "_"
 }
 
 /** The session's cookie: the name, the wire format, and the one rule for when it is written.
@@ -123,9 +132,11 @@ private[http] object SessionCookie {
 
   /** The response with the session cookie set, when it has to be: what the adapter does after
     * dispatch. The session that goes out is the one the response names, or else the one the request
-    * carried into the handler. Nothing is written when it matches what arrived; an emptied session,
-    * or a cookie that did not verify, is expired so the browser stops sending it; anything else is
-    * signed. `Secure` follows the scheme the browser used.
+    * carried into the handler, which dispatch has amended with a CSRF token when it had none.
+    * Nothing is written when it matches what arrived; an emptied session is expired so the browser
+    * stops sending it; anything else is signed. A cookie that did not verify read as empty, so on a
+    * served page it is replaced by a fresh signed one carrying only a minted token, and on an error
+    * page it is left alone like every cookie. `Secure` follows the scheme the browser used.
     */
   def write(request: Request, response: Response, secret: Secret): Response = {
     val incoming  = request.session
