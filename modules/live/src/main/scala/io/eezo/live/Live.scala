@@ -87,7 +87,16 @@ object Live {
       Method.GET,
       PathPattern.parse(s"${Eezo.ReservedPrefix}/live.js"),
       _ =>
-        Response(200, Seq("Content-Type" -> "text/javascript; charset=utf-8"), Body.Bytes(clientJs))
+        Response(
+          200,
+          Seq(
+            "Content-Type" -> "text/javascript; charset=utf-8",
+            // Revalidate every load: the script changes with the framework, and a browser holding
+            // a stale copy across a dev rebuild is a debugging session that blames the wrong code.
+            "Cache-Control" -> "no-cache"
+          ),
+          Body.Bytes(clientJs)
+        )
     )
   )
 

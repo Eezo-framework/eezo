@@ -138,12 +138,13 @@ class LiveServerSuite extends munit.FunSuite {
     }
   }
 
-  test("the client script is served whole: applier plus client") {
+  test("the client script is served whole, and told to revalidate") {
     serving { rig =>
       val response = rig.get("/eezo/live.js")
       assertEquals(response.statusCode(), 200)
       assert(response.body().contains("applyPatches"))
       assert(response.body().contains("__eezoLiveClient"))
+      assertEquals(response.headers().firstValue("Cache-Control").orElse(""), "no-cache")
     }
   }
 

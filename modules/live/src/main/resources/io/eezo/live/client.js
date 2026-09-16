@@ -40,8 +40,26 @@
     var socket = null;
     var attempts = 0;
     var leaving = false;
+    var watchdog = null; // fires if a connect attempt never opens (see connect())
 
     var GUARD = "eezoLiveReload";
+
+    // The connection state, mirrored onto the anchor so it is visible in the Elements panel and
+    // stylable ([data-eezo-state="lost"] { ... }). "connecting" until the first frame lands.
+    function state(value) {
+      anchor.setAttribute("data-eezo-state", value);
+    }
+    state("connecting");
+
+    // A steady retry: no reload while the server is simply unreachable, so this can log the first
+    // loss once and then stay quiet until it recovers.
+    function retry() {
+      if (attempts === 0) console.info("eezo live: connection lost, reconnecting…");
+      attempts++;
+      var delay = Math.min(250 * Math.pow(2, attempts - 1), 3000);
+      state("lost");
+      setTimeout(connect, delay);
+    }
 
     // Reloads to recover, unless we already reloaded moments ago without establishing a session —
     // that would be a loop (a cached response serving the same page id), so stop and say why.
@@ -70,8 +88,17 @@
     function connect() {
       socket = new WebSocket(url);
 
+      // A connect attempt that neither opens nor closes stalls the whole loop — and this is the
+      // common case while a server restarts: the OS port is bound (or the JVM is still coming up)
+      // so the socket sits in CONNECTING with no event ever firing. Force the issue: if it has
+      // not opened within the window, close it, which fires onclose and schedules the next retry.
+      clearTimeout(watchdog);
+      watchdog = setTimeout(function () {
+        if (socket && socket.readyState === 0) socket.close();
+      }, 4000);
+
       socket.onopen = function () {
-        attempts = 0;
+        clearTimeout(watchdog);
         socket.send(JSON.stringify({ kind: "join", base: base }));
       };
 
@@ -84,9 +111,13 @@
           return;
         }
         if (frame.kind === "patches") {
-          // A real session: clear the reload guard so future recoveries are allowed. A 4404/4409
-          // connection never reaches here, so it can never clear the guard.
+          // A real session: the connection is healthy. Clear the reload guard (a 4404/4409
+          // connection never reaches here, so it can never clear it), announce a recovery if this
+          // followed a loss, and reset the backoff.
           try { sessionStorage.removeItem(GUARD); } catch (e) {}
+          if (attempts > 0) console.info("eezo live: reconnected");
+          attempts = 0;
+          state("connected");
           var failures = window.EezoLive.applyPatches(anchor, frame.patches);
           for (var i = 0; i < failures.length; i++) {
             console.error("eezo live: refused patch: " + failures[i].reason);
@@ -98,16 +129,15 @@
       };
 
       socket.onclose = function (event) {
+        clearTimeout(watchdog);
         if (leaving) return;
         // Server reachable, connection unwanted: reload into a fresh page id.
         if (event.code === 4404) { recover("page no longer on the server"); return; }
         if (event.code === 4409) { recover("this page is open in another tab"); return; }
-        if (event.code === 4403) { console.error("eezo live: refused (origin)"); return; }
+        if (event.code === 4403) { console.error("eezo live: refused (origin)"); state("lost"); return; }
         // Server unreachable: retry steadily, forever, capped. Never reload — there is nothing
         // to reload to, and the next attempt that opens will recover on its own.
-        attempts++;
-        var delay = Math.min(250 * Math.pow(2, attempts - 1), 3000);
-        setTimeout(connect, delay);
+        retry();
       };
 
       socket.onerror = function () {
