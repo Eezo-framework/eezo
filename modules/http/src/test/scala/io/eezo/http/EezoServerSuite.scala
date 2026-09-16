@@ -58,7 +58,7 @@ class EezoServerSuite extends munit.FunSuite {
     var returned = false
     val runner   = new Thread(
       () => {
-        Eezo.run(port, hello)
+        Eezo.run(port, Config(hello))
         returned = true
       },
       "eezo-run"

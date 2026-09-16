@@ -27,6 +27,13 @@ class RequestSuite extends munit.FunSuite {
     assertEquals(req.header("accept"), None)
   }
 
+  test("a forwarded scheme is the first of the first value, whatever the name's case") {
+    assert(Request.isSecure(false, Map("x-forwarded-proto" -> Seq("HTTPS, http", "http"))))
+    assert(!Request.isSecure(false, Map("X-FORWARDED-PROTO" -> Seq("http", "https"))))
+    assert(!Request.isSecure(false, Map.empty))
+    assert(Request.isSecure(true, Map("X-Forwarded-Proto" -> Seq("http"))))
+  }
+
   test("queryParam returns the first value of a repeated key") {
     val req = request(query = Map("tag" -> Seq("a", "b")))
     assertEquals(req.queryParam("tag"), Some("a"))

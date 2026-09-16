@@ -28,25 +28,29 @@ extension (n: Int) {
   def MiB: Long = n.toLong * 1024 * 1024
 }
 
-/** The server-wide set: the route table and the three settings that travel everywhere it is
-  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` pass one
-  * value instead of four.
+/** The server-wide set: the route table and the four settings that travel everywhere it is
+  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` take one
+  * value instead of five, and a new setting is a field here rather than a parameter at every hop.
   */
 private[http] final case class Config(
     routes: RouteTable,
     maxBodySize: Long = Config.DefaultMaxBodySize,
     dev: Boolean = Config.DefaultDev,
-    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
+    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
+    secret: Secret = Config.DefaultSecret
 )
 
 private[http] object Config {
 
-  /** The one place each of `Eezo.run`'s three optional defaults is stated. `run`'s own parameter
-    * defaults read off these, so changing a default is one edit rather than two.
+  /** The one place each setting's default is stated: the case class's parameter defaults read off
+    * these, and so do `HttpApp`'s `maxBodySize` and `problems`. The secret is a `def`: a fresh
+    * throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with the
+    * configured one.
     */
   private[http] val DefaultMaxBodySize: Long                             = 1.MiB
   private[http] val DefaultDev: Boolean                                  = false
   private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
+  private[http] def DefaultSecret: Secret                                = Secret.throwaway()
 }
 
 /** Booting eezo.
@@ -60,7 +64,7 @@ private[http] object Config {
   * }
   * ```
   *
-  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[eezo]` so that stays true
+  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[http]` so that stays true
   * by visibility rather than by convention. The table is an abstract member of the trait rather
   * than something found by reflection, because a route transformation such as `under("/admin")`
   * needs somewhere to be applied, and because "the sbt plugin is not enabled" should be a compile
@@ -73,7 +77,8 @@ private[http] object Config {
   */
 object Eezo {
 
-  private val log = System.getLogger("io.eezo.http")
+  /** The module's one logger, which [[Secret]] also writes to. */
+  private[http] val log = System.getLogger("io.eezo.http")
 
   /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
     * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
@@ -113,14 +118,8 @@ object Eezo {
     * way, and the `IllegalStateException` the removal throws during a shutdown is the case where
     * the hook is what returned `join`.
     */
-  private[eezo] def run(
-      port: Int,
-      routes: RouteTable,
-      maxBodySize: Long = Config.DefaultMaxBodySize,
-      dev: Boolean = Config.DefaultDev,
-      problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
-  ): Unit = {
-    val server = build(port, Config(routes, maxBodySize, dev, problems))
+  private[http] def run(port: Int, config: Config): Unit = {
+    val server = build(port, config)
     val caller = Thread.currentThread()
     val hook   = new Thread(
       () => {
@@ -248,6 +247,10 @@ object Eezo {
     * Jetty documents that a creator returning `null` "is responsible for completing the Callback
     * and sending a response", so an upgrade request matching no `Route.Ws` is answered here with a
     * 404 rather than falling through to the HTTP handler.
+    *
+    * The endpoint's request carries the session the handshake's cookie did, read the way the HTTP
+    * handler reads it, but with its flash stripped: see [[readHandshake]] for why. Nothing is
+    * written back either way: an upgrade has no response a cookie could ride on.
     */
   private def creator(config: Config): WebSocketCreator =
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
@@ -260,13 +263,9 @@ object Eezo {
         .orElse {
           config.routes.dispatchWs(path).map { (route, params) =>
             route.endpoint(
-              Request(
-                method = Method.GET,
-                path = path,
-                query = queryOf(request),
-                headers = headersOf(request),
-                body = Array.emptyByteArray,
-                pathParams = params
+              readHandshake(
+                requestOf(request, Method.GET, path, Array.emptyByteArray, params),
+                config.secret
               )
             )
           }
@@ -278,6 +277,18 @@ object Eezo {
         }
     }
 
+  /** The handshake's request with its session read, minus the flash.
+    *
+    * An upgrade has no response a cookie could ride on, so a flash handed to the endpoint here
+    * could never be swept the way `EezoHandler` sweeps one on the HTTP path, and the browser would
+    * carry it into the next request too, delivering it twice. Entries are unaffected: nothing
+    * sweeps them either, on a WebSocket or on HTTP, so they travel the same way on both.
+    */
+  private def readHandshake(request: Request, secret: Secret): Request = {
+    val carried = SessionCookie.read(request, secret)
+    carried.copy(session = carried.session.copy(delivered = Map.empty))
+  }
+
   /** eezo's HTTP handler: one completion site, reached unconditionally.
     *
     * `readRequest` sits inside the `try` because it is what throws `PayloadTooLarge` and
@@ -285,6 +296,11 @@ object Eezo {
     * throw; and `write` is the only function in eezo that touches Jetty's `Callback`. `handle`
     * always returns `true`, because an unmatched route throws `NotFound` here rather than falling
     * through to Jetty's own error page.
+    *
+    * The session cookie is written here, once, on the success path: the session the response names,
+    * or else the one the request carried into the handler, and only when it differs from what
+    * arrived. A failure that reached the boundary writes no cookie, so an error page leaves the
+    * browser's session, flash included, exactly as it was.
     */
   private final class EezoHandler(config: Config) extends JettyHandler.Abstract {
 
@@ -298,8 +314,13 @@ object Eezo {
       val result =
         try {
           val incoming = readRequest(request, path, config.maxBodySize)
+          // Health is answered before the session is read: a probe carries no cookie and wants
+          // none back, and the endpoint's whole point is to cost nothing.
           if (incoming.method == Method.GET && path == HealthPath) healthy
-          else config.routes.dispatch(incoming)
+          else {
+            val read = SessionCookie.read(incoming, config.secret)
+            SessionCookie.write(read, config.routes.dispatch(read), config.secret)
+          }
         } catch {
           case failure: Throwable =>
             // Resolved once: the log decision and the response both read off this single value,
@@ -336,15 +357,28 @@ object Eezo {
 
     // The override is applied here, so that dispatch and every handler downstream see the verb the
     // form asked for rather than the `POST` a browser was able to issue.
-    Request.withMethodOverride(
-      Request(
-        method = method,
-        path = path,
-        query = queryOf(request),
-        headers = headersOf(request),
-        body = body,
-        pathParams = Map.empty
-      )
+    Request.withMethodOverride(requestOf(request, method, path, body, Map.empty))
+  }
+
+  /** The one place a Jetty request becomes eezo's, for the HTTP handler and the WebSocket creator
+    * alike, so both agree on the headers and on whether the browser used HTTPS.
+    */
+  private def requestOf(
+      request: JettyRequest,
+      method: Method,
+      path: String,
+      body: Array[Byte],
+      pathParams: Map[String, String]
+  ): Request = {
+    val headers = headersOf(request)
+    Request(
+      method = method,
+      path = path,
+      query = queryOf(request),
+      headers = headers,
+      body = body,
+      pathParams = pathParams,
+      secure = Request.isSecure(request.isSecure, headers)
     )
   }
 

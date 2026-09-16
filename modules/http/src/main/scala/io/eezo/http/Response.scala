@@ -32,9 +32,16 @@ enum Body {
   * The status is a plain `Int`, reached through the named constructors below, because a framework
   * that cannot return 418 is a framework people work around. Headers are an ordered `Seq` that
   * permits duplicates, deliberately asymmetric with the request's `Map`: writing wants order and
-  * repetition, `Set-Cookie` being both, while reading wants keyed lookup.
+  * repetition, `Set-Cookie` being both, while reading wants keyed lookup. The session is carried as
+  * a value beside them rather than pre-rendered into one, because signing needs the secret and the
+  * handler does not have it.
   */
-final case class Response(status: Int, headers: Seq[(String, Url | String)], body: Body) {
+final case class Response(
+    status: Int,
+    headers: Seq[(String, Url | String)],
+    body: Body,
+    session: Option[Session] = None
+) {
 
   /** Appends a header, keeping any header of the same name that is already there.
     *
@@ -45,6 +52,17 @@ final case class Response(status: Int, headers: Seq[(String, Url | String)], bod
     */
   def withHeader(name: String, value: Url | String): Response =
     copy(headers = headers :+ (name -> value))
+
+  /** Sets a cookie: one more `Set-Cookie` header, rendered by the cookie itself. The session cookie
+    * never goes through here from user code; it is written once, from [[session]], after dispatch.
+    */
+  def withCookie(cookie: Cookie): Response = withHeader("Set-Cookie", cookie.render)
+
+  /** The session this response keeps: usually the request's, amended. `None`, the default, keeps
+    * the request's session exactly as the handler saw it, so a handler that only reads costs
+    * nothing. The cookie itself is written once, after dispatch, and only when the session changed.
+    */
+  def withSession(session: Session): Response = copy(session = Some(session))
 
   /** The first value carried under this name, as it goes on the wire.
     *
