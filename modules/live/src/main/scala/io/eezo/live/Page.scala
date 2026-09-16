@@ -1,7 +1,10 @@
 package io.eezo.live
 
-import java.util.concurrent.{ArrayBlockingQueue, CompletableFuture, CompletionException}
+import java.util.concurrent.ArrayBlockingQueue
 import java.util.concurrent.atomic.AtomicLong
+
+import scala.concurrent.{Await, Promise}
+import scala.concurrent.duration.Duration
 
 import io.eezo.core.html.Html
 
@@ -40,7 +43,7 @@ private[live] final class Page[S](
 ) {
 
   private enum Msg {
-    case FromClient(event: Event, done: CompletableFuture[Void])
+    case FromClient(event: Event, done: Promise[Unit])
     case FromTopic(transition: S => S)
     case Resync
     case Stop
@@ -84,13 +87,13 @@ private[live] final class Page[S](
     */
   def event(event: Event): Unit = {
     if (closed) throw new IllegalStateException(s"page $id closed")
-    val done = new CompletableFuture[Void]()
+    val done = Promise[Unit]()
     mailbox.put(Msg.FromClient(event, done))
-    try {
-      val _ = done.join()
-    } catch {
-      case e: CompletionException if e.getCause != null => throw e.getCause
-    }
+    // `Await` on a virtual thread parks rather than pins, and a `Promise` failure surfaces the
+    // original exception directly — no `CompletionException` to unwrap, the reason `CompletableFuture`
+    // was not the right tool for an in-house completion signal. The wait is unbounded on purpose:
+    // a `handle` that never returns is a page-loop bug, not a caller's timeout to guess at.
+    Await.result(done.future, Duration.Inf)
   }
 
   /** A topic delivery: enqueue and return, never work on the publisher's thread. On a full mailbox
@@ -189,8 +192,8 @@ private[live] final class Page[S](
 
     waiters.foreach { case (done, failure) =>
       failure.orElse(outcome) match {
-        case Some(error) => val _ = done.completeExceptionally(error)
-        case None        => val _ = done.complete(null)
+        case Some(error) => val _ = done.failure(error)
+        case None        => val _ = done.success(())
       }
     }
   }
@@ -199,8 +202,8 @@ private[live] final class Page[S](
     * whose `handle` throws fails alone and moves nothing; the rest of the batch still applies. A
     * topic transition that throws is logged and skipped — nobody is waiting on it.
     */
-  private def applied(work: List[Msg]): (S, List[(CompletableFuture[Void], Option[Throwable])]) =
-    work.foldLeft((state, List.empty[(CompletableFuture[Void], Option[Throwable])])) {
+  private def applied(work: List[Msg]): (S, List[(Promise[Unit], Option[Throwable])]) =
+    work.foldLeft((state, List.empty[(Promise[Unit], Option[Throwable])])) {
       case ((s, acc), Msg.FromClient(event, done)) =>
         try (component.handle(event, s), (done, None) :: acc)
         catch { case e: Exception => (s, (done, Some(e)) :: acc) }
@@ -228,7 +231,7 @@ private[live] final class Page[S](
     val _    = mailbox.drainTo(rest)
     scala.jdk.CollectionConverters.ListHasAsScala(rest).asScala.foreach {
       case Msg.FromClient(_, done) =>
-        val _ = done.completeExceptionally(new IllegalStateException(s"page $id closed"))
+        val _ = done.failure(new IllegalStateException(s"page $id closed"))
       case _ => ()
     }
   }

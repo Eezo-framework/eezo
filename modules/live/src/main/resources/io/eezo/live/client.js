@@ -1,10 +1,22 @@
 /* eezo live: the page client.
  *
  * Served concatenated after applier.js as /eezo/live.js. Finds the mount anchor, opens the
- * socket, joins, applies patch frames, and forwards bound events. Reconnects with capped
- * exponential backoff; a server that no longer knows the page (4404 - a restart, a reaped page)
- * means the state is gone, and the honest recovery is a full reload into a fresh mount. In dev
- * the reload script drives the same recovery; the two agree by both ending in location.reload().
+ * socket, joins, applies patch frames, and forwards bound events.
+ *
+ * Recovery has two distinct shapes, and conflating them is a bug:
+ *   - The server is UNREACHABLE (killed, restarting, a network blip). Every connect attempt
+ *     fails before it opens. Retry steadily and forever, capped — never reload, because there
+ *     is nothing to reload to. When the server returns, the next attempt opens.
+ *   - The server is REACHABLE but does not want this connection: 4404 (it no longer knows the
+ *     page — a restart or a reap; state is gone) and 4409 (this page id already has a live
+ *     socket — a DUPLICATED tab carries the original's id in its copied HTML). Both are healed
+ *     by a full reload: a fresh GET mints a fresh page id, so a duplicate becomes its own
+ *     independent page and a stale tab rejoins a live server.
+ *
+ * A reload guard in sessionStorage breaks the one loop this could form (a reload served the same
+ * id from cache): the guard is cleared only once a real session is established — the first
+ * patches frame — so a connection that opens and is immediately closed with 4404/4409 cannot
+ * clear it. In dev the reload script drives the same recovery; the two agree by both reloading.
  */
 (function () {
   "use strict";
@@ -29,8 +41,27 @@
     var attempts = 0;
     var leaving = false;
 
+    var GUARD = "eezoLiveReload";
+
+    // Reloads to recover, unless we already reloaded moments ago without establishing a session —
+    // that would be a loop (a cached response serving the same page id), so stop and say why.
+    function recover(reason) {
+      var now = Date.now();
+      try {
+        var last = parseInt(sessionStorage.getItem(GUARD) || "0", 10);
+        if (now - last < 3000) {
+          console.error("eezo live: " + reason + " (reload suppressed to avoid a loop)");
+          return;
+        }
+        sessionStorage.setItem(GUARD, String(now));
+      } catch (e) {
+        // sessionStorage unavailable (private mode, etc.): recover anyway, loop or not.
+      }
+      location.reload();
+    }
+
     window.addEventListener("beforeunload", function () {
-      // 1000 marks the close as intentional: the server frees the page at once, and the backoff
+      // 1000 marks the close as intentional: the server frees the page at once, and the retry
       // loop below knows not to fire.
       leaving = true;
       if (socket && socket.readyState === 1) socket.close(1000, "leaving");
@@ -53,6 +84,9 @@
           return;
         }
         if (frame.kind === "patches") {
+          // A real session: clear the reload guard so future recoveries are allowed. A 4404/4409
+          // connection never reaches here, so it can never clear the guard.
+          try { sessionStorage.removeItem(GUARD); } catch (e) {}
           var failures = window.EezoLive.applyPatches(anchor, frame.patches);
           for (var i = 0; i < failures.length; i++) {
             console.error("eezo live: refused patch: " + failures[i].reason);
@@ -65,14 +99,14 @@
 
       socket.onclose = function (event) {
         if (leaving) return;
-        if (event.code === 4404) { location.reload(); return; }
-        if (event.code === 4409 || event.code === 4403) {
-          console.error("eezo live: refused: " + (event.reason || event.code));
-          return;
-        }
+        // Server reachable, connection unwanted: reload into a fresh page id.
+        if (event.code === 4404) { recover("page no longer on the server"); return; }
+        if (event.code === 4409) { recover("this page is open in another tab"); return; }
+        if (event.code === 4403) { console.error("eezo live: refused (origin)"); return; }
+        // Server unreachable: retry steadily, forever, capped. Never reload — there is nothing
+        // to reload to, and the next attempt that opens will recover on its own.
         attempts++;
-        if (attempts > 8) { location.reload(); return; }
-        var delay = Math.min(500 * Math.pow(2, attempts - 1), 8000);
+        var delay = Math.min(250 * Math.pow(2, attempts - 1), 3000);
         setTimeout(connect, delay);
       };
 
