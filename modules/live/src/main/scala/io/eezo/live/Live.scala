@@ -81,11 +81,21 @@ object Live {
     * says so in an attribute the client logs — a busy site degrades to working pages that do not
     * update, never to errors (design/live.md §2.5).
     */
-  def mount[S](component: Component[S]): Html =
+  def mount[S](component: Component[S]): Html = mount((_: Async[S]) => component)
+
+  /** The factory overload for a component that calls out: the [[Async]] it is built with is the
+    * page's own, so work it declares comes back through this page's mailbox. Wired through a relay
+    * because the page cannot exist before its component does; the relay is aimed before `init`
+    * runs, so even a fetch-at-mount lands.
+    */
+  def mount[S](create: Async[S] => Component[S]): Html =
     registry.register { id =>
       val sender = new Sender(id)
       val _      = senders.put(id, sender)
-      new Page(id, component, sender.send)
+      val relay  = new Relay[S]
+      val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
+      relay.aim(page)
+      page
     } match {
       case Some(page) =>
         try {
@@ -102,7 +112,9 @@ object Live {
           System.Logger.Level.WARNING,
           s"live page registry at capacity (${PageRegistry.DefaultCap}); serving a static render"
         )
-        anchor(staticRender(component), DeadAttr := "capacity")
+        // A throwaway instance with a no-op Async: whatever it starts has nowhere to land,
+        // which is exactly what a static render means.
+        anchor(staticRender(create(new Async[S](_ => ()))), DeadAttr := "capacity")
     }
 
   /** What [[io.eezo.http.HttpApp.frameworkRoutes]] carries when `LiveApp` is mixed in: the one
@@ -271,6 +283,19 @@ object Live {
           catch { case _: Exception => false }
         }
     }
+
+  /** Breaks the page-needs-component-needs-async cycle at mount: transitions posted before the
+    * relay is aimed can only come from the component's constructor, which is code running before
+    * its own page exists, and they are dropped as such.
+    */
+  private final class Relay[S] {
+
+    @volatile private var target: Option[Page[S]] = None
+
+    def aim(page: Page[S]): Unit = target = Some(page)
+
+    def post(transition: S => S): Unit = target.foreach(_.post(transition))
+  }
 
   /** The socket a page's frames leave through, if one is attached. Detached, frames drop by design:
     * the resync at the next join replays the tree, so nothing is owed to a socket that is not

@@ -425,4 +425,71 @@ class LiveServerSuite extends munit.FunSuite {
       wire.close()
     }
   }
+
+  test("a component that calls out: loading now, Ok, Denied and Unreachable each patch in") {
+    import io.eezo.http.client.{Auth, Http, Reply}
+
+    val baseUrl = new java.util.concurrent.atomic.AtomicReference[String]("")
+
+    final class Caller(async: Async[String]) extends Component[String] {
+      def init(ctx: Init[String]): String = "idle"
+
+      private def outcome(reply: Reply): String => String = reply match {
+        case Reply.Ok(r)          => _ => s"got ${r.text}"
+        case Reply.Denied(r)      => _ => s"denied ${r.status}"
+        case Reply.Failed(r)      => _ => s"failed ${r.status}"
+        case Reply.Unreachable(_) => _ => "unreachable"
+      }
+
+      def handle(event: Event, s: String): String = {
+        event.name match {
+          case "fetch" => async.get(s"${baseUrl.get}/api", Auth.bearer("let-me-in"))(outcome)
+          case "broke" => async.get(s"${baseUrl.get}/api", Auth.bearer("wrong"))(outcome)
+          case "gone"  => async(outcome(Http.get("http://localhost:1/api")))
+          case _       => ()
+        }
+        "loading"
+      }
+
+      def render(s: String): Html = div(span(s))
+    }
+
+    val api = Route.Http(
+      Method.GET,
+      PathPattern.parse("/api"),
+      request =>
+        if (request.header("Authorization").contains("Bearer let-me-in"))
+          Response(200, Seq("Content-Type" -> "text/plain"), Body.Bytes("the goods".getBytes))
+        else Response.status(401)
+    )
+
+    servingRoutes(Seq(api, pageRoute(Live.mount(new Caller(_))))) { rig =>
+      baseUrl.set(s"http://localhost:${rig.port}")
+      val wire = rig.connect(rig.mountedPageId())
+      wire.join()
+      val _ = wire.frame()
+
+      def untilFrame(marker: String): Unit = {
+        val deadline = System.currentTimeMillis + 5000
+        var found    = false
+        while (!found && System.currentTimeMillis < deadline) {
+          val frame = wire.poll(200)
+          if (frame != null && frame.contains(marker)) found = true
+        }
+        assert(found, s"no frame containing '$marker' within 5s")
+      }
+
+      // The loading state is the event's own frame; the outcome patches in after the call.
+      wire.event("fetch")
+      assert(wire.frame().contains("loading"))
+      untilFrame("got the goods")
+
+      wire.event("broke")
+      untilFrame("denied 401")
+
+      wire.event("gone")
+      untilFrame("unreachable")
+      wire.close()
+    }
+  }
 }

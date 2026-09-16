@@ -105,7 +105,7 @@ private[live] final class Page[S](
   /** A topic delivery: enqueue and return, never work on the publisher's thread. On a full mailbox
     * the message is dropped and counted; the loop resyncs (class comment).
     */
-  private def post(transition: S => S): Unit =
+  private[live] def post(transition: S => S): Unit =
     if (!mailbox.offer(Msg.FromTopic(transition))) {
       val _ = dropped.incrementAndGet()
     }

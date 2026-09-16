@@ -49,6 +49,60 @@ object Event {
   def apply(name: String): Event = Event(name, Map.empty)
 }
 
+/** Work declared now, applied later: the capability a component that calls out is built with.
+  *
+  * `async { work }` runs `work` on its own virtual thread and posts the transition it returns
+  * through the page's mailbox — the topic-delivery path, so it is serialized with everything else,
+  * coalesced under load, and dropped without noise if the page has closed by the time it lands.
+  * `work` is ordinary blocking direct-style code: an outbound call through
+  * `io.eezo.http.client.Http`, a `transact` block, both.
+  *
+  * The capability arrives by constructor, through `Live.mount(async => new Weather(async))`, so
+  * `Component`'s three methods stay exactly as they are; `Init` extends this, so `init` can start a
+  * load and return a loading state — the page responds instantly and the data patches in. `render`
+  * must not call it: render runs per event, and work started there is work started per keystroke.
+  *
+  * [[get]] and [[post]] are [[apply]] pre-composed with the HTTP client, shaped so the reaction is
+  * a **total** function over `Reply`'s four arms: the compiler itself asks what happens when
+  * credentials die (design/live.md M6).
+  */
+class Async[S] private[live] (post: (S => S) => Unit) {
+
+  private val log = System.getLogger("io.eezo.live")
+
+  /** Runs `work` off the page thread; its returned transition applies like a topic message. A
+    * `work` that throws is logged and moves nothing — nobody is blocked on it, so the log line is
+    * the whole story.
+    */
+  def apply(work: => S => S): Unit = {
+    val _ = Thread
+      .ofVirtual()
+      .name("eezo-live-async")
+      .start(() =>
+        try post(work)
+        catch {
+          case e: Exception =>
+            log.log(System.Logger.Level.ERROR, "async work failed; the state is unchanged", e)
+        }
+      )
+  }
+
+  def get(url: String, headers: (String, String)*)(
+      react: io.eezo.http.client.Reply => S => S
+  ): Unit =
+    apply(react(io.eezo.http.client.Http.get(url, headers*)))
+
+  def post(
+      url: String,
+      body: String,
+      contentType: String = "application/json",
+      headers: (String, String)*
+  )(
+      react: io.eezo.http.client.Reply => S => S
+  ): Unit =
+    apply(react(io.eezo.http.client.Http.post(url, body, contentType, headers*)))
+}
+
 /** The mount-time context: what [[Component.init]] may do beyond computing state.
   *
   * `subscribe` registers a transition to run when a topic delivers: the message and the state at
@@ -56,7 +110,7 @@ object Event {
   * window closes when `init` returns — the page seals the context — so the phase rule
   * "subscriptions happen in init" is a thrown exception rather than a convention.
   */
-final class Init[S] private[live] (post: (S => S) => Unit) {
+final class Init[S] private[live] (post: (S => S) => Unit) extends Async[S](post) {
 
   @volatile private var open = true
 

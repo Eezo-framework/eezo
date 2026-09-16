@@ -292,4 +292,118 @@ class PageSuite extends munit.FunSuite {
     assert(!all.exists(_.contains("/admin/admin")), all)
     page.close()
   }
+
+  /** Spins until the emitted frames satisfy `cond`, because async transitions land on their own
+    * schedule and the suite has no socket to block on.
+    */
+  private def eventually(cond: => Boolean): Unit = {
+    val deadline = System.currentTimeMillis + 5000
+    while (!cond && System.currentTimeMillis < deadline) Thread.sleep(10)
+    assert(cond, "condition not met within 5s")
+  }
+
+  /** A page wired the way Live.mount wires one: the Async posts into the page it belongs to. */
+  private def mountedWithAsync[S](
+      create: Async[S] => Component[S],
+      send: List[Patch] => Unit
+  ): Page[S] = {
+    val holder = new java.util.concurrent.atomic.AtomicReference[Page[S]]
+    val page   = new Page[S](
+      "p-async",
+      create(new Async[S](transition => Option(holder.get).foreach(_.post(transition)))),
+      send
+    )
+    holder.set(page)
+    val _ = page.mount()
+    page
+  }
+
+  test(
+    "async in handle: the loading state ships now, the result lands later, a throw moves nothing"
+  ) {
+    import java.util.concurrent.CountDownLatch
+    val (frames, send) = collector()
+    val gate           = new CountDownLatch(1)
+
+    final class Loader(async: Async[String]) extends Component[String] {
+      def init(ctx: Init[String]): String         = "idle"
+      def handle(event: Event, s: String): String = event.name match {
+        case "load" =>
+          async {
+            gate.await()
+            _ => "loaded"
+          }
+          "loading"
+        case "boom" =>
+          async(throw new IllegalStateException("work failed"))
+          s
+        case _ => s
+      }
+      def render(s: String): Html = div(span(s))
+    }
+
+    val page = mountedWithAsync[String](new Loader(_), send)
+
+    def rendered: String =
+      replayed(Canonical.root(div(span("idle"))), frames).map(_.render).mkString
+
+    // The loading state is in the event's own frame: event() returned, so it was sent.
+    page.event(Event("load"))
+    assertEquals(rendered, "<div><span>loading</span></div>")
+
+    gate.countDown()
+    eventually(rendered == "<div><span>loaded</span></div>")
+
+    // A throwing work is a log line, not a state change and not a dead page.
+    page.event(Event("boom"))
+    Thread.sleep(100)
+    assertEquals(rendered, "<div><span>loaded</span></div>")
+    page.event(Event("fence"))
+    page.close()
+  }
+
+  test("async in init: fetch-at-mount renders the loading state instantly, then patches in") {
+    val (frames, send) = collector()
+
+    final class Eager(async: Async[String]) extends Component[String] {
+      def init(ctx: Init[String]): String = {
+        async(_ => "ready")
+        "waiting"
+      }
+      def handle(event: Event, s: String): String = s
+      def render(s: String): Html                 = div(span(s))
+    }
+
+    val page = mountedWithAsync[String](new Eager(_), send)
+
+    eventually(
+      replayed(Canonical.root(div(span("waiting"))), frames)
+        .map(_.render)
+        .mkString == "<div><span>ready</span></div>"
+    )
+    page.close()
+  }
+
+  test("an async result arriving after close is dropped without noise") {
+    import java.util.concurrent.CountDownLatch
+    val (frames, send) = collector()
+    val gate           = new CountDownLatch(1)
+
+    final class Late(async: Async[Int]) extends Component[Int] {
+      def init(ctx: Init[Int]): Int         = 0
+      def handle(event: Event, n: Int): Int = {
+        async { gate.await(); _ + 1 }
+        n
+      }
+      def render(n: Int): Html = div(span(n))
+    }
+
+    val page = mountedWithAsync[Int](new Late(_), send)
+    page.event(Event("go"))
+    page.close()
+    val before = frames.size
+    gate.countDown()
+    Thread.sleep(150)
+    assertEquals(frames.size, before)
+  }
 }
