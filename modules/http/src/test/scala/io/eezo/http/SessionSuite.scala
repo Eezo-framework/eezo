@@ -73,6 +73,20 @@ class SessionSuite extends munit.FunSuite {
   private def roundTrip(session: Session): Session =
     SessionCookie.decode(SessionCookie.encode(session, secret), secret)
 
+  test("a session whose cookie would land right at the cap still round trips") {
+    val atCap  = Session.empty.set("k", "x" * 2815)
+    val cookie = SessionCookie.encode(atCap, secret)
+    assertEquals(cookie.length, SessionCookie.MaxValue)
+    assertEquals(SessionCookie.decode(cookie, secret).get("k"), Some("x" * 2815))
+  }
+
+  test("a session whose cookie would pass the cap is refused rather than sent to the browser") {
+    val overCap = Session.empty.set("k", "x" * 2816)
+    val failure = intercept[IllegalArgumentException](SessionCookie.encode(overCap, secret))
+    assert(failure.getMessage.contains(SessionCookie.MaxValue.toString), failure.getMessage)
+    assert(failure.getMessage.contains("bytes"), failure.getMessage)
+  }
+
   test("a delivered flash is dropped from what goes out again, unless written again") {
     val in = roundTrip(Session.empty.flash("notice", "created"))
     assertEquals(roundTrip(in).flash("notice"), None)

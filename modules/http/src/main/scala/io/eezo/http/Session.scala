@@ -76,6 +76,17 @@ private[http] object SessionCookie {
     */
   val FlashPrefix: String = "_flash."
 
+  /** The largest encoded session `encode` will hand back, a conservative margin under the roughly
+    * 4096 bytes every major browser keeps of one cookie. A `Set-Cookie` past that limit is not
+    * refused by the browser with an error the server ever sees: it is dropped in silence, so the
+    * next request arrives with no session or a stale one, and nothing anywhere says why. Refusing
+    * here, before the header is built, turns that into a loud failure at the point the oversized
+    * value was produced. The margin leaves room for `Name`, the `=`, and the fixed attribute tail
+    * `Cookie.render` always writes, so it is well under 4096 rather than measured exactly against
+    * it.
+    */
+  val MaxValue: Int = 3800
+
   private val encoder = Base64.getUrlEncoder.withoutPadding
   private val decoder = Base64.getUrlDecoder
 
@@ -83,8 +94,14 @@ private[http] object SessionCookie {
     val flash   = session.pending.map { case (name, value) => FlashPrefix + name -> value }
     val payload =
       encoder.encodeToString(form(session.entries ++ flash).getBytes(StandardCharsets.UTF_8))
-    val tag = encoder.encodeToString(secret.sign(payload.getBytes(StandardCharsets.US_ASCII)))
-    s"$payload.$tag"
+    val tag    = encoder.encodeToString(secret.sign(payload.getBytes(StandardCharsets.US_ASCII)))
+    val cookie = s"$payload.$tag"
+    require(
+      cookie.length <= MaxValue,
+      s"the session encodes to ${cookie.length} bytes, past the $MaxValue a browser will keep; " +
+        "store a key here and the data elsewhere"
+    )
+    cookie
   }
 
   def decode(value: String, secret: Secret): Session =

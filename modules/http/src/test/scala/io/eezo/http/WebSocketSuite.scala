@@ -110,6 +110,37 @@ class WebSocketSuite extends munit.FunSuite {
     }
   }
 
+  test("a WebSocket route reads entries the handshake's cookie carried, but not its flash") {
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/live"),
+          request =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = {
+                val user  = request.session.get("user").getOrElse("nobody")
+                val flash = request.session.flash("notice").getOrElse("none")
+                val _     = events.offer(s"user:$user flash:$flash")
+              }
+            }
+        )
+      )
+    )
+
+    serving(routes) { (client, port) =>
+      val cookie = SessionCookie.encode(
+        io.eezo.http.Session.empty.set("user", "42").flash("notice", "welcome"),
+        secret
+      )
+      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
+      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
+      val session = client.connect(new ClientListener, upgrade).get()
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42 flash:none")
+      session.close()
+    }
+  }
+
   test("an upgrade matching no WebSocket route is refused, not left hanging") {
     serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
       (client, port) => refused(client, port, "/nope")

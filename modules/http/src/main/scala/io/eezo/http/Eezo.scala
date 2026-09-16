@@ -236,7 +236,8 @@ object Eezo {
     * 404 rather than falling through to the HTTP handler.
     *
     * The endpoint's request carries the session the handshake's cookie did, read the way the HTTP
-    * handler reads it. Nothing is written back: an upgrade has no response a cookie could ride on.
+    * handler reads it, but with its flash stripped: see [[readHandshake]] for why. Nothing is
+    * written back either way: an upgrade has no response a cookie could ride on.
     */
   private def creator(config: Config): WebSocketCreator =
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
@@ -249,7 +250,7 @@ object Eezo {
         .orElse {
           config.routes.dispatchWs(path).map { (route, params) =>
             route.endpoint(
-              SessionCookie.read(
+              readHandshake(
                 requestOf(request, Method.GET, path, Array.emptyByteArray, params),
                 config.secret
               )
@@ -262,6 +263,18 @@ object Eezo {
           null
         }
     }
+
+  /** The handshake's request with its session read, minus the flash.
+    *
+    * An upgrade has no response a cookie could ride on, so a flash handed to the endpoint here
+    * could never be swept the way `EezoHandler` sweeps one on the HTTP path, and the browser would
+    * carry it into the next request too, delivering it twice. Entries are unaffected: nothing
+    * sweeps them either, on a WebSocket or on HTTP, so they travel the same way on both.
+    */
+  private def readHandshake(request: Request, secret: Secret): Request = {
+    val carried = SessionCookie.read(request, secret)
+    carried.copy(session = carried.session.copy(delivered = Map.empty))
+  }
 
   /** eezo's HTTP handler: one completion site, reached unconditionally.
     *
