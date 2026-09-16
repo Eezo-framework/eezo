@@ -32,21 +32,21 @@ extension (n: Int) {
   * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` pass one
   * value instead of four.
   */
-private[http] final case class Config(
+private[eezo] final case class Config(
     routes: RouteTable,
     maxBodySize: Long = Config.DefaultMaxBodySize,
     dev: Boolean = Config.DefaultDev,
     problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
 )
 
-private[http] object Config {
+private[eezo] object Config {
 
   /** The one place each of `Eezo.run`'s three optional defaults is stated. `run`'s own parameter
     * defaults read off these, so changing a default is one edit rather than two.
     */
-  private[http] val DefaultMaxBodySize: Long                             = 1.MiB
-  private[http] val DefaultDev: Boolean                                  = false
-  private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
+  private[eezo] val DefaultMaxBodySize: Long                             = 1.MiB
+  private[eezo] val DefaultDev: Boolean                                  = false
+  private[eezo] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
 }
 
 /** Booting eezo.
@@ -148,7 +148,7 @@ object Eezo {
   /** Boots the server and returns it, still running: [[build]] and then `start`, for a suite that
     * holds the handle itself.
     */
-  private[http] def start(port: Int, config: Config): Server = {
+  private[eezo] def start(port: Int, config: Config): Server = {
     val server = build(port, config)
     server.start()
     server

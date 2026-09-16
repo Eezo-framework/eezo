@@ -18,6 +18,71 @@ import io.eezo.core.internal.Json
   */
 object Wire {
 
+  /** What a browser may say, after validation. Everything else is a `Left` with the reason, which
+    * the socket answers with an error frame and survives: every inbound frame is untrusted input
+    * (design/live.md §1.1), and a malformed one must never take down the page loop.
+    */
+  private[live] enum ClientMessage {
+
+    /** The first message after the socket opens: the client is ready to apply patches, and reports
+      * the rendered `data-eezo-base` so a mounted page's re-renders can follow the same prefix the
+      * response was rewritten with (design/live.md §2.6).
+      */
+    case Join(base: String)
+
+    case Emit(event: Event)
+
+    /** Keeps the connection under the server's idle timeout; answered with a pong. */
+    case Ping
+  }
+
+  /** More entries than any real form; fewer than a hostile client would like. */
+  private val MaxPayloadEntries = 64
+
+  private[live] def read(text: String): Either[String, ClientMessage] =
+    Json.parse(text).flatMap {
+      case Json.Obj(fields) =>
+        val map = fields.toMap
+        map.get("kind") match {
+          case Some(Json.Str("join")) =>
+            map.get("base") match {
+              case Some(Json.Str(base)) => Right(ClientMessage.Join(base))
+              case _                    => Left("a join carries a string 'base'")
+            }
+          case Some(Json.Str("event")) => event(map)
+          case Some(Json.Str("ping"))  => Right(ClientMessage.Ping)
+          case Some(Json.Str(other))   => Left(s"unknown kind '$other'")
+          case _                       => Left("a frame carries a string 'kind'")
+        }
+      case _ => Left("a frame is a JSON object")
+    }
+
+  private def event(map: Map[String, Json]): Either[String, ClientMessage] =
+    (map.get("name"), map.getOrElse("payload", Json.Obj(Nil))) match {
+      case (Some(Json.Str(name)), Json.Obj(payload)) if name.nonEmpty =>
+        if (payload.sizeIs > MaxPayloadEntries)
+          Left(s"a payload holds at most $MaxPayloadEntries entries")
+        else {
+          val entries = payload.map {
+            case (key, Json.Str(value)) => Right(key -> value)
+            case (key, other)           => Left(s"payload entry '$key' is not a string: $other")
+          }
+          entries.collectFirst { case Left(problem) => problem } match {
+            case Some(problem) => Left(problem)
+            case None          =>
+              Right(ClientMessage.Emit(Event(name, entries.collect { case Right(e) => e }.toMap)))
+          }
+        }
+      case (Some(Json.Str(_)), _) => Left("an event's 'payload' is an object")
+      case _                      => Left("an event carries a non-empty string 'name'")
+    }
+
+  private[live] val pong: String =
+    Json.render(Json.Obj(List("kind" -> Json.Str("pong"))))
+
+  private[live] def error(message: String): String =
+    Json.render(Json.Obj(List("kind" -> Json.Str("error"), "message" -> Json.Str(message))))
+
   def patches(patches: List[Patch]): String =
     Json.render(
       Json.Obj(

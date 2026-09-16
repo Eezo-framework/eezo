@@ -59,9 +59,16 @@ object Json {
     override def fillInStackTrace(): Throwable = this
   }
 
+  /** Deep enough for any frame eezo writes or reads, shallow enough that a hostile `[[[[…` frame
+    * inside the transport's size cap is a parse error rather than a stack overflow: the parser is
+    * recursive, and recursion depth on untrusted input is a resource like any other.
+    */
+  private val MaxDepth = 64
+
   private final class Parser(s: String) {
 
-    private var at = 0
+    private var at    = 0
+    private var depth = 0
 
     def done: Boolean = at >= s.length
 
@@ -107,10 +114,17 @@ object Json {
       }
     }
 
+    private def descend(): Unit = {
+      depth += 1
+      if (depth > MaxDepth)
+        throw Parse(s"nesting deeper than $MaxDepth at offset $at: refused, not recursed")
+    }
+
     private def obj(): Json = {
+      descend()
       expect('{')
       skipWhitespace()
-      if (!done && s.charAt(at) == '}') { at += 1; return Json.Obj(Nil) }
+      if (!done && s.charAt(at) == '}') { at += 1; depth -= 1; return Json.Obj(Nil) }
       val fields = List.newBuilder[(String, Json)]
       var more   = true
       while (more) {
@@ -124,13 +138,15 @@ object Json {
         else more = false
       }
       expect('}')
+      depth -= 1
       Json.Obj(fields.result())
     }
 
     private def arr(): Json = {
+      descend()
       expect('[')
       skipWhitespace()
-      if (!done && s.charAt(at) == ']') { at += 1; return Json.Arr(Nil) }
+      if (!done && s.charAt(at) == ']') { at += 1; depth -= 1; return Json.Arr(Nil) }
       val items = List.newBuilder[Json]
       var more  = true
       while (more) {
@@ -140,6 +156,7 @@ object Json {
         else more = false
       }
       expect(']')
+      depth -= 1
       Json.Arr(items.result())
     }
 

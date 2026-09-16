@@ -47,11 +47,20 @@ trait HttpApp extends Dispatch {
     */
   def boot(): Unit = serve(routes)
 
+  /** Routes the framework itself contributes, appended to whatever table [[serve]] is given so that
+    * every caller — `boot`'s default, a user's own `serve` in an overridden `boot`, `dev` — serves
+    * them without knowing they exist. Empty here: `eezo-live`'s `LiveApp` overrides it with the
+    * live socket and its client script, and `EezoApp` mixes that in. Appended, so the user's table
+    * keeps winning any path both name; they show in the boot listing (they are served, and the
+    * listing does not lie) but not in `eezo routes`, which is the user's table.
+    */
+  protected def frameworkRoutes: Seq[Route] = Nil
+
   /** The only caller of `Eezo.run`: boots the server on this trait's overrides and blocks until it
     * stops. `dev` turns the listing and the reload client on.
     */
   protected final def serve(table: RouteTable, dev: Boolean = false): Unit =
-    Eezo.run(port, table, maxBodySize, dev, problems)
+    Eezo.run(port, table ++ RouteTable(frameworkRoutes), maxBodySize, dev, problems)
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift
     * page when the check blocks.

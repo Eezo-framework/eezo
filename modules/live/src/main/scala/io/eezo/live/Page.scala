@@ -42,6 +42,7 @@ private[live] final class Page[S](
   private enum Msg {
     case FromClient(event: Event, done: CompletableFuture[Void])
     case FromTopic(transition: S => S)
+    case Resync
     case Stop
   }
 
@@ -100,6 +101,17 @@ private[live] final class Page[S](
       val _ = dropped.incrementAndGet()
     }
 
+  /** Asks the loop for one full-tree frame after whatever is already queued: the first thing a
+    * connecting or reconnecting socket receives, which heals both the mount-to-join gap (topic
+    * messages may have moved the state while no socket was attached to carry the frames) and a
+    * rejoin inside the grace window. Enqueue-and-return, like any non-client work; a full mailbox
+    * is already heading for a drop-driven resync, so the request is granted either way.
+    */
+  private[live] def resync(): Unit =
+    if (!mailbox.offer(Msg.Resync)) {
+      val _ = dropped.incrementAndGet()
+    }
+
   /** Stops the page: cancels its subscriptions, stops the thread, and fails whatever callers were
     * still waiting. Idempotent, callable from any thread — the registry reaps through this.
     */
@@ -129,10 +141,19 @@ private[live] final class Page[S](
           case Msg.Stop => running = false; false
           case _        => true
         }
-        if (work.nonEmpty) step(work)
+        val (resyncs, changes) = work.partition(_ == Msg.Resync)
+        if (changes.nonEmpty) step(changes)
+        // After the changes, so the joining client gets the tree those changes produced.
+        if (resyncs.nonEmpty) sendWholeTree()
 
         val lost = dropped.getAndSet(0)
-        if (lost > 0) resync(lost)
+        if (lost > 0) {
+          log.log(
+            System.Logger.Level.WARNING,
+            s"page $id mailbox overflowed; $lost messages were dropped, resyncing the client"
+          )
+          sendWholeTree()
+        }
       }
     } catch {
       case _: InterruptedException => ()
@@ -190,21 +211,16 @@ private[live] final class Page[S](
             log.log(System.Logger.Level.WARNING, s"page $id dropped a failing topic transition", e)
             (s, acc)
         }
-      case ((s, acc), Msg.Stop) => (s, acc)
+      case ((s, acc), Msg.Resync | Msg.Stop) => (s, acc)
     } match {
       case (s, acc) => (s, acc.reverse)
     }
 
-  /** The mailbox overflowed: `lost` messages never reached the state. One full resync makes the DOM
-    * agree with the state the page actually has, and the log says what was sacrificed.
+  /** One frame carrying the whole current tree: what a joining socket starts from, and what an
+    * overflow falls back to. Always against `lastTree`, so it says exactly what the page knows.
     */
-  private def resync(lost: Long): Unit = {
-    log.log(
-      System.Logger.Level.WARNING,
-      s"page $id mailbox overflowed; $lost topic messages were dropped, resyncing the client"
-    )
+  private def sendWholeTree(): Unit =
     send(List(Patch.SetChildren(Nil, None, Vector(lastTree))))
-  }
 
   /** Whoever was still queued when the page closed must not wait forever. */
   private def drainPendingAsClosed(): Unit = {

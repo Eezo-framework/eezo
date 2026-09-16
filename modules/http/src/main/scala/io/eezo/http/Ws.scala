@@ -1,14 +1,19 @@
 package io.eezo.http
 
+import java.time.Duration
+import java.util.concurrent.TimeUnit
+
 import org.eclipse.jetty.websocket.api.Callback
 import org.eclipse.jetty.websocket.api.Session
 
 /** A live WebSocket connection.
   *
   * An opaque wrapper over Jetty's `Session`, so `modules/live` never sees Jetty. The outgoing
-  * surface is deliberately not settled here: `research/http-server.md` section 5.2 lays out three
-  * send regimes, and choosing between them means choosing what to do when the outgoing queue is
-  * full, which cannot be evaluated without a diff protocol to coalesce.
+  * surface is the regime `research/http-server.md` §5.2 measured and chose: block until the frame
+  * is on the wire, but give up on a stalled client. Blocking is real backpressure (a virtual thread
+  * parks rather than pins on the `join`), and the timeout is what keeps one dead client from
+  * parking a page loop forever — `send` throwing is the caller's cue to close the connection and
+  * let the page's grace window take over.
   */
 opaque type WsConn = Session
 
@@ -21,6 +26,17 @@ object WsConn {
     def isOpen: Boolean = conn.isOpen
 
     def close(code: Int, reason: String): Unit = conn.close(code, reason, Callback.NOOP)
+
+    /** Blocks until the frame is on the wire, or throws: a `TimeoutException` (wrapped in
+      * `CompletionException`) for a client that stopped reading, whatever Jetty failed with for a
+      * connection that is gone. Never silently drops.
+      */
+    def send(text: String, within: Duration = Duration.ofSeconds(10)): Unit = {
+      val _ = Callback.Completable
+        .`with`(callback => conn.sendText(text, callback))
+        .orTimeout(within.toMillis, TimeUnit.MILLISECONDS)
+        .join()
+    }
   }
 }
 

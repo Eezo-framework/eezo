@@ -84,4 +84,14 @@ class JsonSuite extends munit.FunSuite {
   test("a control character inside a string is refused, as RFC 8259 requires") {
     assert(Json.parse("\"a\nb\"").isLeft)
   }
+
+  test("hostile nesting is a parse error, not a stack overflow") {
+    val deep = "[" * 100_000 + "]" * 100_000
+    assertEquals(Json.parse(deep).left.map(_.contains("nesting deeper")), Left(true))
+
+    val nested64 = "[" * 64 + "0" + "]" * 64
+    assert(Json.parse(nested64).isRight, "64 levels are within the cap")
+    val nested65 = "[" * 65 + "0" + "]" * 65
+    assert(Json.parse(nested65).isLeft, "65 levels are past it")
+  }
 }
