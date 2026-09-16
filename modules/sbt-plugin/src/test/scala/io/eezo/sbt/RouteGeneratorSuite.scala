@@ -209,7 +209,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
   }
 
-  test("a nested case class is not a candidate, because its name is not the one that compiles") {
+  test("a case class nested in objects is a candidate, named through the enclosing path") {
     val source =
       """package models
         |
@@ -217,7 +217,10 @@ class RouteGeneratorSuite extends munit.FunSuite {
         |  case class Widget(id: Long) derives Form
         |}
         |""".stripMargin
-    assertEquals(RouteGenerator.modelsIn("models/Inner.scala", source), Seq.empty[ModelCandidate])
+    assertEquals(
+      RouteGenerator.modelsIn("models/Inner.scala", source).map(_.fqn),
+      Seq("models.Inner.Widget")
+    )
   }
 
   test("a file that is not Scala source is scanned for nothing") {

@@ -20,6 +20,10 @@ eezo — the framework launcher
 
   eezo new <name>       scaffold a new application in ./<name>
   eezo dev              serve, restarting on every save (runs `sbt eezoDev`)
+  eezo build            stage the app for deployment (jars, migrations, Dockerfile)
+  eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
+      --fly             the Fly.io target (the default; long form: --target fly)
+      --app <name>      Fly app name (first deploy; required when non-interactive)
 
 forwarded to the application (run from the project directory):
   eezo routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help
@@ -52,15 +56,279 @@ need_sbt() {
 #
 # Only SLF4J's own "no providers" stderr grumble is filtered by pattern, because it has a prefix
 # nothing else uses.
-forward() {
-  set +e
+# The spinner: a braille wheel on stderr while a slow step works. Stderr and only when it is a
+# TTY, so a redirected stdout (`--json > file`) never receives a spinner byte, and CI logs stay
+# clean. The trap clears the line however the script leaves.
+SPIN_PID=""
+
+spin_start() {
+  [ -t 2 ] || return 0
+  (
+    frames=(⠋ ⠙ ⠹ ⠸ ⠼ ⠴ ⠦ ⠧ ⠇ ⠏)
+    i=0
+    while :; do
+      printf '\r\033[2K%s %s' "${frames[i % 10]}" "$1" >&2
+      i=$((i + 1))
+      sleep 0.1
+    done
+  ) &
+  SPIN_PID=$!
+}
+
+spin_stop() {
+  if [ -n "$SPIN_PID" ]; then
+    kill "$SPIN_PID" 2> /dev/null || true
+    wait "$SPIN_PID" 2> /dev/null || true
+    SPIN_PID=""
+    printf '\r\033[2K' >&2
+  fi
+}
+trap spin_stop EXIT
+
+sbt_cmd() {
   SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow" \
-    sbt -error -batch "$@" \
+    sbt -error -batch "$@"
+}
+
+# Runs a command under the spinner, streams captured separately (stdout must stay machine-pure),
+# replayed by replay_captured afterwards. Returns the command's code.
+CAPTURED_OUT=""
+CAPTURED_ERR=""
+
+run_captured() { # <label> <command...>
+  local label="$1"
+  shift
+  CAPTURED_OUT="$(mktemp)"
+  CAPTURED_ERR="$(mktemp)"
+  spin_start "$label"
+  set +e
+  "$@" > "$CAPTURED_OUT" 2> "$CAPTURED_ERR"
+  local code=$?
+  set -e
+  spin_stop
+  return "$code"
+}
+
+replay_captured() { # <stdout filter regex, or '' for none>
+  if [ -n "$1" ]; then grep -vE "$1" "$CAPTURED_OUT" || true; else cat "$CAPTURED_OUT"; fi
+  grep -vE '^SLF4J\(' "$CAPTURED_ERR" >&2 || true
+  rm -f "$CAPTURED_OUT" "$CAPTURED_ERR"
+  CAPTURED_OUT=""
+  CAPTURED_ERR=""
+}
+
+# The three "[error] Nonzero exit code" lines sbt prints when the app exits 1: that exit code is
+# the command's *answer* (drift, refusal — design/cli.md), not a failure of the build, so they are
+# dropped; the app's code is still this script's code.
+SBT_NOISE='^\[error\] ([Nn]onzero exit code returned from runner|\([^)]*[Rr]un\) [Nn]onzero exit code|Total time:)'
+
+# A forwarded command, spun: sbt works silently behind the wheel, then the app's own output lands
+# exactly as it was written, streams intact.
+forward() { # <label> <sbt args...>
+  local label="$1"
+  shift
+  local code=0
+  run_captured "$label" sbt_cmd "$@" || code=$?
+  replay_captured "$SBT_NOISE"
+  exit "$code"
+}
+
+# The same forward without capture, for the one command that talks back: `freeze` prompts on
+# destructive changes, and a prompt behind a spinner is a hang with good intentions.
+forward_live() {
+  set +e
+  sbt_cmd "$@" \
     2> >(grep -vE '^SLF4J\(' >&2) \
-    | grep -vE '^\[error\] ([Nn]onzero exit code returned from runner|\([^)]*[Rr]un\) [Nn]onzero exit code|Total time:)'
+    | grep -vE "$SBT_NOISE"
   local code="${PIPESTATUS[0]}"
   set -e
   exit "$code"
+}
+
+# ---------------------------------------------------------------------------------------------
+# deploy — design/cli.md records the ordering. The short version: `fly.toml` carries
+# `release_command = 'migrate --apply'`, so Fly runs the migrations in a one-off machine with the
+# NEW image before any machine is updated; a nonzero exit stops the deployment and the old version
+# keeps serving. Migration ordering correctness comes from the platform, not from this script.
+# ---------------------------------------------------------------------------------------------
+
+FLY=""
+
+need_fly() {
+  FLY="$(command -v fly || command -v flyctl || true)"
+  [ -n "$FLY" ] || {
+    cat >&2 <<'MSG'
+✗ eezo deploy needs the Fly CLI.
+
+Install it (https://fly.io/docs/flyctl/install/), then authenticate:
+
+    fly auth login
+MSG
+    exit 1
+  }
+  "$FLY" auth whoami > /dev/null 2>&1 || {
+    cat >&2 <<'MSG'
+✗ Fly authentication is not available.
+
+Run:
+
+    fly auth login
+
+In CI, provide a deploy token through the FLY_API_TOKEN environment variable instead.
+MSG
+    exit 1
+  }
+}
+
+toml_value() { # toml_value <key> — first `key = 'value'` in fly.toml, quotes stripped
+  sed -n "s/^$1[[:space:]]*=[[:space:]]*[\"']\\{0,1\\}\\([^\"']*\\).*/\\1/p" fly.toml | head -1
+}
+
+# The generated fly.toml is the user's file: committed, editable, never rewritten unless deleted.
+# It carries only eezo's happy path — the release command, the service on the scaffold's port, and
+# the framework health check. Never secrets: those live in `fly secrets`, nowhere else.
+write_fly_toml() {
+  local name="$1" region="$2"
+  {
+    echo "# Generated by eezo deploy. Yours to edit; eezo rewrites it only if you delete it."
+    echo "app = '$name'"
+    [ -n "$region" ] && echo "primary_region = '$region'"
+    cat <<'TOML'
+
+[deploy]
+  # Runs in a one-off machine with the NEW image, before any app machine is updated. A nonzero
+  # exit stops the deployment and the old version keeps serving — this is eezo's migration
+  # ordering: the schema converges before new code takes traffic.
+  release_command = 'migrate --apply'
+
+[http_service]
+  # Must match the app's `port` (EezoApp default: 8080).
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  min_machines_running = 0
+
+  [[http_service.checks]]
+    grace_period = '10s'
+    interval = '15s'
+    timeout = '5s'
+    method = 'GET'
+    path = '/eezo/health'
+TOML
+  } > fly.toml
+}
+
+deploy() {
+  local target="fly" app=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --fly) target="fly"; shift ;;
+      --target) target="$2"; shift 2 ;;
+      --target=*) target="${1#*=}"; shift ;;
+      --app) app="$2"; shift 2 ;;
+      --app=*) app="${1#*=}"; shift ;;
+      *) echo "eezo: unknown deploy option '$1'" >&2; exit 1 ;;
+    esac
+  done
+
+  if [ "$target" != "fly" ]; then
+    {
+      echo "✗ unsupported deployment target: $target"
+      echo
+      echo "supported targets:"
+      echo "    fly"
+    } >&2
+    exit 1
+  fi
+
+  need_sbt
+  need_fly
+
+  # First deploy: let `fly launch` create the app and pick the nearest region — that detection is
+  # Fly's, not something eezo should reimplement — then replace its generated config with eezo's.
+  if [ ! -f fly.toml ]; then
+    echo "→ first deploy: creating the Fly app"
+    if [ -n "$app" ]; then
+      "$FLY" launch --no-deploy --yes --name "$app"
+    elif [ -t 0 ]; then
+      "$FLY" launch --no-deploy --yes
+    else
+      echo "✗ first deploy in a non-interactive session needs --app <name>" >&2
+      exit 1
+    fi
+    [ -f fly.toml ] || { echo "✗ fly launch did not write fly.toml" >&2; exit 1; }
+    local name region
+    name="$(toml_value app)"
+    region="$(toml_value primary_region)"
+    [ -n "$name" ] || { echo "✗ could not read the app name from fly.toml" >&2; exit 1; }
+    write_fly_toml "$name" "$region"
+    echo "→ wrote fly.toml (app: $name${region:+, region: $region})"
+  fi
+
+  # The one reliable secret preflight: an app with migrations will run `migrate --apply` on
+  # deploy, which needs a database. Names only — secret values never reach this machine.
+  if [ -d db/migrations ] && [ -n "$(ls db/migrations 2> /dev/null)" ]; then
+    if ! "$FLY" secrets list 2> /dev/null | grep -qE '(DATABASE_URL|EEZO_DB_URL)'; then
+      cat >&2 <<'MSG'
+✗ deployment cannot continue: no database secret is set.
+
+This app has migrations, and `migrate --apply` runs during deploy. Set the
+database secret first:
+
+    fly secrets set DATABASE_URL=postgres://user:password@host/dbname
+
+(eezo also understands EEZO_DB_URL / EEZO_DB_USER / EEZO_DB_PASS.)
+MSG
+      exit 1
+    fi
+  fi
+
+  local staged=0
+  run_captured "staging the application" sbt_cmd eezoStage || staged=$?
+  replay_captured ''
+  [ "$staged" -eq 0 ] || {
+    echo "✗ build failed; deployment was not attempted" >&2
+    exit 1
+  }
+  [ -f target/eezo/stage/Dockerfile ] || {
+    echo "✗ staging produced no Dockerfile at target/eezo/stage" >&2
+    exit 1
+  }
+
+  # Fly's output is streamed on purpose: the release command's (migration) output is in it, and
+  # that is exactly what a failed deploy needs on screen.
+  echo "→ deploying to Fly (migrations run before the new version takes traffic)"
+  # --config as an absolute path: fly resolves a relative one against the working-directory
+  # argument (the stage dir), not against the shell's cwd — found the hard way on first contact.
+  "$FLY" deploy target/eezo/stage --config "$PWD/fly.toml" || {
+    {
+      echo
+      echo "✗ deployment failed; the previously deployed version, if any, is still serving."
+      echo "  A migration failure stops the deploy before traffic switches. See the output"
+      echo "  above, or: fly logs"
+    } >&2
+    exit 1
+  }
+
+  local url
+  url="https://$(toml_value app).fly.dev"
+  echo "→ waiting for health at $url/eezo/health"
+  for _ in $(seq 1 45); do
+    if curl -fsS -o /dev/null --max-time 5 "$url/eezo/health" 2> /dev/null; then
+      echo
+      echo "✓ deployed and healthy"
+      echo
+      echo "  $url"
+      return 0
+    fi
+    sleep 2
+  done
+  {
+    echo "✗ the app did not become healthy within 90 seconds."
+    echo "  Check: fly logs"
+  } >&2
+  exit 1
 }
 
 read_version_file() {
@@ -190,11 +458,24 @@ case "$cmd" in
     need_sbt
     exec sbt eezoDev
     ;;
-  # `dev` keeps sbt's normal output on purpose: the watch loop's compile lines *are* the dev
-  # console, and `-error` would hide the restart markers along with them.
-  routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help)
+  build)
     need_sbt
-    forward "run $*"
+    forward "staging the application" eezoStage
+    ;;
+  deploy)
+    shift
+    deploy "$@"
+    ;;
+  # `freeze` bypasses the spinner: it prompts on destructive changes, and a prompt behind a
+  # spinner is a hang with good intentions. `dev` (above) keeps sbt's normal output entirely: the
+  # watch loop's compile lines *are* the dev console.
+  freeze)
+    need_sbt
+    forward_live "run $*"
+    ;;
+  routes | status | sync | migrate | reset | drop | dump | ddl | help)
+    need_sbt
+    forward "eezo $cmd" "run $*"
     ;;
   *)
     echo "eezo: unknown command '$cmd'" >&2
