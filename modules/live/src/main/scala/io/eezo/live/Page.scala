@@ -45,6 +45,7 @@ private[live] final class Page[S](
   private enum Msg {
     case FromClient(event: Event, done: Promise[Unit])
     case FromTopic(transition: S => S)
+    case Rebase(prefix: String)
     case Resync
     case Stop
   }
@@ -60,6 +61,11 @@ private[live] final class Page[S](
   @volatile private var subscriptions: List[Subscription] = Nil
   @volatile private var worker: Thread | Null             = null
   @volatile private var closed                            = false
+
+  /** The mount prefix the client's DOM was rewritten with (design/live.md §2.6): "/" until the join
+    * reports otherwise. Owned by the loop thread, like the trees it rewrites.
+    */
+  private var prefix: String = "/"
 
   /** Runs `init`, renders and validates the first tree, starts the page thread, and returns the
     * tree for the mount to embed. A failing `init` or a non-canonical first render propagates to
@@ -104,6 +110,14 @@ private[live] final class Page[S](
       val _ = dropped.incrementAndGet()
     }
 
+  /** Tells the page which prefix the client's DOM was mounted under, learned from the join's
+    * `data-eezo-base` report. Blocking on a full mailbox rather than dropping, because a lost
+    * rebase is wrong links on every later patch, not a missed frame a resync heals; the caller is
+    * the socket thread, whose discipline is blocking anyway.
+    */
+  private[live] def rebase(prefix: String): Unit =
+    mailbox.put(Msg.Rebase(prefix))
+
   /** Asks the loop for one full-tree frame after whatever is already queued: the first thing a
     * connecting or reconnecting socket receives, which heals both the mount-to-join gap (topic
     * messages may have moved the state while no socket was attached to carry the frames) and a
@@ -144,10 +158,26 @@ private[live] final class Page[S](
           case Msg.Stop => running = false; false
           case _        => true
         }
-        val (resyncs, changes) = work.partition(_ == Msg.Resync)
-        if (changes.nonEmpty) step(changes)
+        // Rebase first: it moves the baseline the step diffs against and the tree the resync
+        // sends, and the join enqueued it before anything that could follow it.
+        work.foreach {
+          case Msg.Rebase(reported) => applyPrefix(reported)
+          case _                    => ()
+        }
+        val (resyncs, changes) =
+          work.filterNot(_.isInstanceOf[Msg.Rebase]).partition(_ == Msg.Resync)
+        val completions = if (changes.nonEmpty) step(changes) else Nil
         // After the changes, so the joining client gets the tree those changes produced.
         if (resyncs.nonEmpty) sendWholeTree()
+        // Blocked callers are released only after the whole batch's frames are out, resyncs
+        // included: "the work is finished" means everything enqueued before the event is on the
+        // wire when event() returns, which is also what makes tests deterministic.
+        completions.foreach { case (done, failure) =>
+          failure match {
+            case Some(error) => val _ = done.failure(error)
+            case None        => val _ = done.success(())
+          }
+        }
 
         val lost = dropped.getAndSet(0)
         if (lost > 0) {
@@ -167,15 +197,15 @@ private[live] final class Page[S](
   }
 
   /** One batch: fold the state through every message, render once, diff against the baseline, send,
-    * store, and only then release the blocked callers — "the work is finished" includes the patches
-    * being on their way.
+    * store. Returns each blocked caller's outcome for the loop to release once the batch's
+    * remaining frames are out too.
     */
-  private def step(work: List[Msg]): Unit = {
+  private def step(work: List[Msg]): List[(Promise[Unit], Option[Throwable])] = {
     val (nextState, waiters) = applied(work)
 
     val outcome: Option[Throwable] =
       try {
-        val tree    = Canonical.root(component.render(nextState))
+        val tree    = rebased(Canonical.root(component.render(nextState)))
         val patches = Differ.diff(lastTree, tree)
         if (patches.nonEmpty) send(patches)
         state = nextState
@@ -185,17 +215,12 @@ private[live] final class Page[S](
         case e: Exception =>
           // The render or the diff refused. The client's DOM still matches lastTree, so the
           // baseline stays; the state does not advance either, so the two cannot drift apart.
-          // The callers get the error, which in M3 is the socket's cue to close loudly.
+          // The callers get the error, which is the socket's cue to answer with an error frame.
           log.log(System.Logger.Level.ERROR, s"page $id failed to re-render", e)
           Some(e)
       }
 
-    waiters.foreach { case (done, failure) =>
-      failure.orElse(outcome) match {
-        case Some(error) => val _ = done.failure(error)
-        case None        => val _ = done.success(())
-      }
-    }
+    waiters.map { case (done, failure) => (done, failure.orElse(outcome)) }
   }
 
   /** The state folded through the batch, with each blocked caller's individual outcome: an event
@@ -214,7 +239,7 @@ private[live] final class Page[S](
             log.log(System.Logger.Level.WARNING, s"page $id dropped a failing topic transition", e)
             (s, acc)
         }
-      case ((s, acc), Msg.Resync | Msg.Stop) => (s, acc)
+      case ((s, acc), Msg.Rebase(_) | Msg.Resync | Msg.Stop) => (s, acc)
     } match {
       case (s, acc) => (s, acc.reverse)
     }
@@ -224,6 +249,34 @@ private[live] final class Page[S](
     */
   private def sendWholeTree(): Unit =
     send(List(Patch.SetChildren(Nil, None, Vector(lastTree))))
+
+  /** Adopts the prefix the client reported. Once: the baseline is rewritten a single time, when "/"
+    * becomes something else, because `Url.Mounted` survives `under` and a second application would
+    * prefix the prefix. A rejoin reporting the same prefix is a no-op, and a *different* prefix on
+    * a page that already has one is a client talking nonsense, logged and ignored.
+    */
+  private def applyPrefix(reported: String): Unit =
+    if (reported != prefix) {
+      if (prefix == "/") {
+        prefix = reported
+        lastTree = rebased(lastTree)
+      } else
+        log.log(
+          System.Logger.Level.WARNING,
+          s"page $id reported base '$reported' but is mounted under '$prefix'; ignored"
+        )
+    }
+
+  /** The tree as the client's DOM holds it: every `Url.Mounted` moved under the prefix, exactly the
+    * rewrite `Response.under` applied to the initial render on its way out.
+    */
+  private def rebased(tree: Html.Element): Html.Element =
+    if (prefix == "/") tree
+    else
+      tree.under(prefix) match {
+        case el: Html.Element => el
+        case other => throw new IllegalStateException(s"under() changed the root: $other")
+      }
 
   /** Whoever was still queued when the page closed must not wait forever. */
   private def drainPendingAsClosed(): Unit = {

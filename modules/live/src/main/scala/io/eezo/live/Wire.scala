@@ -34,6 +34,11 @@ object Wire {
 
     /** Keeps the connection under the server's idle timeout; answered with a pong. */
     case Ping
+
+    /** The applier refused patches (design/live.md §1.1, fail loud): the client reports rather than
+      * sitting on a wrong DOM, and the server answers with a full resync.
+      */
+    case PatchesFailed(reasons: List[String])
   }
 
   /** More entries than any real form; fewer than a hostile client would like. */
@@ -49,10 +54,18 @@ object Wire {
               case Some(Json.Str(base)) => Right(ClientMessage.Join(base))
               case _                    => Left("a join carries a string 'base'")
             }
-          case Some(Json.Str("event")) => event(map)
-          case Some(Json.Str("ping"))  => Right(ClientMessage.Ping)
-          case Some(Json.Str(other))   => Left(s"unknown kind '$other'")
-          case _                       => Left("a frame carries a string 'kind'")
+          case Some(Json.Str("event"))  => event(map)
+          case Some(Json.Str("ping"))   => Right(ClientMessage.Ping)
+          case Some(Json.Str("failed")) =>
+            map.get("reasons") match {
+              case Some(Json.Arr(items)) =>
+                // Capped and truncated: this is a diagnostic from untrusted input, not a payload.
+                val reasons = items.take(8).collect { case Json.Str(reason) => reason.take(500) }
+                Right(ClientMessage.PatchesFailed(reasons))
+              case _ => Left("a failed report carries a 'reasons' array")
+            }
+          case Some(Json.Str(other)) => Left(s"unknown kind '$other'")
+          case _                     => Left("a frame carries a string 'kind'")
         }
       case _ => Left("a frame is a JSON object")
     }

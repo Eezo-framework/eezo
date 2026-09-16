@@ -246,4 +246,50 @@ class PageSuite extends munit.FunSuite {
     intercept[NotCanonical](page.mount())
     assertEquals(topic.subscriberCount, 0)
   }
+
+  test("a rebase moves the baseline and every later patch under the prefix, exactly once") {
+    import io.eezo.core.html.{Attrs, Url}
+
+    final class Linked extends Component[Int] {
+      def init(ctx: Init[Int]): Int         = 0
+      def handle(event: Event, n: Int): Int = n + 1
+      def render(n: Int): Html              =
+        div(a(Attrs.href := Url.Mounted(s"/posts/$n"), "posts"), span(n))
+    }
+
+    val (frames, send) = collector()
+    val page           = new Page("p8", new Linked, send)
+    val initial        = page.mount()
+    assert(initial.render.contains("href=\"/posts/0\""))
+
+    page.rebase("/admin")
+    page.resync()
+    page.event(Event("fence"))
+
+    // The fence may batch with the resync, and the loop sends changes before resyncs, so the
+    // resync is found wherever it landed rather than assumed first.
+    import scala.jdk.CollectionConverters.*
+    val resync = frames.asScala.toList.flatten.collectFirst {
+      case Patch.SetChildren(Nil, None, children) => children.map(_.render).mkString
+    }
+    assert(resync.exists(_.contains("href=\"/admin/posts/")), resync)
+    assert(resync.exists(!_.contains("/admin/admin")), resync)
+
+    // The fence's own patch (the +1 above) carries the moved url too.
+    val attrValues = frames.asScala.toList.flatten.collect { case Patch.SetAttr(_, _, "href", v) =>
+      v
+    }
+    assert(attrValues.contains("/admin/posts/1"), attrValues)
+
+    // A rejoin reporting the same prefix must not prefix the prefix.
+    page.rebase("/admin")
+    page.resync()
+    page.event(Event("fence"))
+    val all = frames.asScala.toList.flatten.map {
+      case Patch.SetChildren(_, _, children) => children.map(_.render).mkString
+      case other                             => other.toString
+    }
+    assert(!all.exists(_.contains("/admin/admin")), all)
+    page.close()
+  }
 }

@@ -119,8 +119,17 @@
           attempts = 0;
           state("connected");
           var failures = window.EezoLive.applyPatches(anchor, frame.patches);
-          for (var i = 0; i < failures.length; i++) {
-            console.error("eezo live: refused patch: " + failures[i].reason);
+          if (failures.length > 0) {
+            // Fail loud, then heal: the console gets every reason, the server gets a report and
+            // answers with a full resync (design/live.md §1.1 on §4.3). Never a wrong DOM kept.
+            var reasons = [];
+            for (var i = 0; i < failures.length; i++) {
+              console.error("eezo live: refused patch: " + failures[i].reason);
+              if (reasons.length < 8) reasons.push(failures[i].reason);
+            }
+            if (socket && socket.readyState === 1) {
+              socket.send(JSON.stringify({ kind: "failed", reasons: reasons }));
+            }
           }
         } else if (frame.kind === "error") {
           console.error("eezo live: " + frame.message);

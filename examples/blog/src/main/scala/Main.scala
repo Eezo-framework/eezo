@@ -62,6 +62,10 @@ object Main extends EezoApp {
   override def routes: RouteTable = {
     val (derived, handwritten) =
       Routes.table().routes.partition(_.provenance == Provenance.Derived)
-    RouteTable(handwritten ++ Route.under("/admin")(derived))
+    // The board a second time, under the mount: /board and /admin/board serve the same live
+    // component, and its `Url.Mounted` self link reads differently in each place - the visible
+    // proof that live patches follow a mount (design/live.md §2.6).
+    val boardMounted = Route.under("/admin")(handwritten.filter(_.describe == "GET /board"))
+    RouteTable(handwritten ++ Route.under("/admin")(derived) ++ boardMounted)
   }
 }

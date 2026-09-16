@@ -168,9 +168,18 @@ object Live {
           case Left(problem) =>
             log.log(System.Logger.Level.WARNING, s"page $id sent a malformed frame: $problem")
             conn.send(Wire.error(problem))
-          case Right(Wire.ClientMessage.Join(_)) =>
-            // The base is M4's concern; the resync is this milestone's: the client starts from
-            // the tree the page holds now, whatever moved between mount and join.
+          case Right(Wire.ClientMessage.Join(base)) =>
+            // The reported base is the prefix the client's DOM was rewritten with; the resync
+            // that follows carries the tree rebased to match, and starts the client from
+            // whatever moved between mount and join (design/live.md §2.6).
+            mountPrefix(base) match {
+              case Some(prefix) => page.rebase(prefix)
+              case None         =>
+                log.log(
+                  System.Logger.Level.WARNING,
+                  s"page $id sent a dubious base '$base'; ignored"
+                )
+            }
             page.resync()
           case Right(Wire.ClientMessage.Emit(event)) =>
             try page.event(event)
@@ -179,7 +188,15 @@ object Live {
                 log.log(System.Logger.Level.ERROR, s"page $id event '${event.name}' failed", e)
                 conn.send(Wire.error(s"event '${event.name}' failed"))
             }
-          case Right(Wire.ClientMessage.Ping) => conn.send(Wire.pong)
+          case Right(Wire.ClientMessage.Ping)                   => conn.send(Wire.pong)
+          case Right(Wire.ClientMessage.PatchesFailed(reasons)) =>
+            // The correctness alarm (design/live.md §1.1 on §4.3): a patch the applier refused
+            // means the two sides disagreed about the DOM. Loud in the log, healed by a resync.
+            log.log(
+              System.Logger.Level.ERROR,
+              s"page $id refused ${reasons.size} patch(es): ${reasons.mkString("; ")} — resyncing"
+            )
+            page.resync()
         }
       }
 
@@ -199,6 +216,17 @@ object Live {
         sender.detach()
         registry.disconnect(page.id)
       }
+  }
+
+  /** The join's base report, validated down to a path this process would itself have written:
+    * `Response.under` only ever produces normalised absolute paths, so anything else is a client
+    * inventing things. `None` is "ignore it", never an error - the page then keeps "/".
+    */
+  private def mountPrefix(base: String): Option[String] =
+    Option.when(base.length <= 200 && base.matchesSafePrefix)(io.eezo.core.html.Url.normalise(base))
+
+  extension (base: String) {
+    private def matchesSafePrefix: Boolean = base.matches("/[A-Za-z0-9_./-]*")
   }
 
   /** A browser names where the page came from; a socket opened by another site is refused. No

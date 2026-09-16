@@ -28,10 +28,17 @@ private[http] object Reload {
       |  var lost = false;
       |  function connect() {
       |    var socket = new WebSocket(url);
+      |    // A connect attempt can hang in CONNECTING while the server restarts (port bound, JVM
+      |    // not yet serving): neither open nor close fires, and without this the loop stalls.
+      |    var watchdog = setTimeout(function () {
+      |      if (socket.readyState === 0) socket.close();
+      |    }, 3000);
       |    socket.onopen = function () {
+      |      clearTimeout(watchdog);
       |      if (lost) location.reload();
       |    };
       |    socket.onclose = function () {
+      |      clearTimeout(watchdog);
       |      lost = true;
       |      setTimeout(connect, 200);
       |    };

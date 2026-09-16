@@ -4,7 +4,7 @@ import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
-import io.eezo.core.html.Html
+import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
 import io.eezo.http.*
 import org.eclipse.jetty.server.ServerConnector
@@ -31,22 +31,37 @@ class LiveServerSuite extends munit.FunSuite {
       div(span(n), button(Live.onClick("inc"), "+"))
   }
 
-  /** Everything a test drives: one server with a counter page and the live framework routes, one
-    * HTTP client, one WS client.
+  /** A counter whose render carries a mounted link, for the prefix tests: the href must follow the
+    * mount in the initial response, in the join resync, and in every later patch.
     */
-  private def serving(body: Rig => Unit): Unit = {
-    val page = Route.Http(
+  private final class LinkCounter extends Component[Int] {
+    def init(ctx: Init[Int]): Int         = 0
+    def handle(event: Event, n: Int): Int = n + 1
+    def render(n: Int): Html              =
+      div(a(Attrs.href := Url.Mounted(s"/posts/$n"), "posts"), span(n))
+  }
+
+  /** A handwritten page route whose handler mounts per request, which is what a real handler does:
+    * `mounted` is by-name so every GET is a fresh page.
+    */
+  private def pageRoute(mounted: => Html, at: String = "/counter"): Route =
+    Route.Http(
       Method.GET,
-      PathPattern.parse("/counter"),
+      PathPattern.parse(at),
       _ =>
         Response.Ok(
           Html.doctype ++ html(
-            head(title("counter")),
-            io.eezo.core.html.Tags.body(Live.mount(new Counter))
+            head(title("t")),
+            io.eezo.core.html.Tags.body(mounted)
           )
         )
     )
-    val server = Eezo.start(port = 0, config = Config(RouteTable(page +: Live.routes)))
+
+  /** Everything a test drives: one server with the given user routes plus the live framework
+    * routes, one HTTP client, one WS client.
+    */
+  private def servingRoutes(user: Seq[Route])(body: Rig => Unit): Unit = {
+    val server = Eezo.start(port = 0, config = Config(RouteTable(user ++ Live.routes)))
     val ws     = new WebSocketClient()
     ws.start()
     try {
@@ -57,6 +72,9 @@ class LiveServerSuite extends munit.FunSuite {
       server.stop()
     }
   }
+
+  private def serving(body: Rig => Unit): Unit =
+    servingRoutes(Seq(pageRoute(Live.mount(new Counter))))(body)
 
   private final class Rig(val port: Int, ws: WebSocketClient) {
 
@@ -69,8 +87,8 @@ class LiveServerSuite extends munit.FunSuite {
       )
 
     /** Mounts a fresh page over HTTP and returns its id, read off the marker. */
-    def mountedPageId(): String = {
-      val html = get("/counter").body()
+    def mountedPageId(at: String = "/counter"): String = {
+      val html = get(at).body()
       "data-eezo-page=\"([0-9a-f]{32})\"".r
         .findFirstMatchIn(html)
         .map(_.group(1))
@@ -104,7 +122,7 @@ class LiveServerSuite extends munit.FunSuite {
 
     def send(text: String): Unit = session.sendText(text, Callback.NOOP)
 
-    def join(): Unit = send("""{"kind":"join","base":"/"}""")
+    def join(base: String = "/"): Unit = send(s"""{"kind":"join","base":"$base"}""")
 
     def event(name: String): Unit = send(s"""{"kind":"event","name":"$name","payload":{}}""")
 
@@ -113,6 +131,9 @@ class LiveServerSuite extends munit.FunSuite {
       assert(received != null, "no frame within 5s")
       received
     }
+
+    /** A frame if one arrives within the window, null otherwise: for drain-until-quiet loops. */
+    def poll(millis: Long): String | Null = listener.frames.poll(millis, TimeUnit.MILLISECONDS)
 
     def closeCode(): Int = {
       val code = listener.closes.poll(5, TimeUnit.SECONDS)
@@ -282,6 +303,78 @@ class LiveServerSuite extends munit.FunSuite {
       val resync = second.frame()
       assert(resync.contains("<span>1</span>"), resync)
       second.close()
+    }
+  }
+
+  test("a page mounted under a prefix: links right in the response, the resync and the patches") {
+    val mounted = Route.under("/admin")(Seq(pageRoute(Live.mount(new LinkCounter))))
+    servingRoutes(mounted) { rig =>
+      // The initial response was rewritten by the mount: the base and the link both moved.
+      val html = rig.get("/admin/counter").body()
+      assert(html.contains("data-eezo-base=\"/admin\""), html)
+      assert(html.contains("href=\"/admin/posts/0\""), html)
+
+      val wire = rig.connect(rig.mountedPageId("/admin/counter"))
+      wire.join(base = "/admin")
+      val resync = wire.frame()
+      assert(resync.contains("/admin/posts/0"), resync)
+      assert(!resync.contains("/admin/admin"), resync)
+
+      // The re-render's patch carries the moved url too: the seam design/live.md §2.6 exists for.
+      wire.event("inc")
+      val patch = wire.frame()
+      assert(patch.contains("\"setAttr\""), patch)
+      assert(patch.contains("/admin/posts/1"), patch)
+      wire.close()
+    }
+  }
+
+  test("a patch-failure report from the client is answered with a full resync") {
+    serving { rig =>
+      val wire = rig.connect(rig.mountedPageId())
+      wire.join()
+      val _ = wire.frame()
+
+      wire.send("""{"kind":"failed","reasons":["expected <div> at [0,1], found #text"]}""")
+      val resync = wire.frame()
+      assert(resync.contains("\"setChildren\""), resync)
+      assert(resync.contains("<span>0</span>"), resync)
+      wire.close()
+    }
+  }
+
+  test("a flood of publishes coalesces into bounded frames and the page stays responsive") {
+    val flood = new Topic[Unit]
+    final class FloodBoard extends Component[(Int, Int)] {
+      def init(ctx: Init[(Int, Int)]): (Int, Int) = {
+        ctx.subscribe(flood)((_, s) => (s._1 + 1, s._2))
+        (0, 0)
+      }
+      def handle(event: Event, s: (Int, Int)): (Int, Int) = (s._1, s._2 + 1)
+      def render(s: (Int, Int)): Html                     = div(span(s._1), em(s._2))
+    }
+
+    servingRoutes(Seq(pageRoute(Live.mount(new FloodBoard)))) { rig =>
+      val wire = rig.connect(rig.mountedPageId())
+      wire.join()
+      val _ = wire.frame()
+
+      val publishers = (1 to 4).map { _ =>
+        Thread.ofVirtual().start(() => (1 to 2500).foreach(_ => flood.publish(())))
+      }
+      publishers.foreach(_.join())
+
+      // Drain until quiet, counting: coalescing and drop-to-resync must keep this far under one
+      // frame per message.
+      var received = 0
+      while (wire.poll(300) != null) received += 1
+      assert(received < 1500, s"$received frames for 10000 messages is not coalescing")
+
+      // Still responsive: a click round-trips and its patch says clicks=1.
+      wire.event("click")
+      val patch = wire.frame()
+      assert(patch.contains("\"1\""), patch)
+      wire.close()
     }
   }
 }
