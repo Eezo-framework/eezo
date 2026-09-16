@@ -160,19 +160,65 @@
       if (socket && socket.readyState === 1) socket.send(JSON.stringify({ kind: "ping" }));
     }, 30000);
 
-    // One delegated listener at the document: bindings survive any patch that replaces their
-    // element, including a full resync.
-    document.addEventListener("click", function (e) {
-      var el = e.target && e.target.closest ? e.target.closest("[data-eezo-click]") : null;
-      if (!el || !anchor.contains(el)) return;
-      e.preventDefault();
+    function sendEvent(name, payload) {
       if (socket && socket.readyState === 1) {
-        socket.send(JSON.stringify({
-          kind: "event",
-          name: el.getAttribute("data-eezo-click"),
-          payload: {}
-        }));
+        socket.send(JSON.stringify({ kind: "event", name: name, payload: payload }));
       }
+    }
+
+    function bound(e, attr) {
+      var el = e.target && e.target.closest ? e.target.closest("[" + attr + "]") : null;
+      return el && anchor.contains(el) ? el : null;
+    }
+
+    /* A control's value as the server expects it: checkboxes and radios follow the form
+     * convention ("on" when ticked, "" when not), everything else sends its value. */
+    function valueOf(el) {
+      if (el.type === "checkbox" || el.type === "radio") return el.checked ? "on" : "";
+      return el.value == null ? "" : String(el.value);
+    }
+
+    // One delegated listener per event kind, at the document: bindings survive any patch that
+    // replaces their element, including a full resync.
+
+    document.addEventListener("click", function (e) {
+      var el = bound(e, "data-eezo-click");
+      if (!el) return;
+      e.preventDefault();
+      sendEvent(el.getAttribute("data-eezo-click"), {});
+    });
+
+    // Per-keystroke, debounced per element so one field's typing never flushes another's timer.
+    var inputTimers = new WeakMap();
+    document.addEventListener("input", function (e) {
+      var el = bound(e, "data-eezo-input");
+      if (!el) return;
+      var wait = parseInt(el.getAttribute("data-eezo-debounce") || "300", 10);
+      clearTimeout(inputTimers.get(el));
+      inputTimers.set(el, setTimeout(function () {
+        sendEvent(el.getAttribute("data-eezo-input"), { value: valueOf(el) });
+      }, wait));
+    });
+
+    // Committed changes go at once: a tick, a pick, a blur-committed edit is a decision.
+    document.addEventListener("change", function (e) {
+      var el = bound(e, "data-eezo-change");
+      if (!el) return;
+      sendEvent(el.getAttribute("data-eezo-change"), { value: valueOf(el) });
+    });
+
+    document.addEventListener("submit", function (e) {
+      var form = bound(e, "data-eezo-submit");
+      if (!form) return;
+      e.preventDefault();
+      /* FormData follows the browser's own rules: named fields only, ticked checkboxes as "on",
+       * the selected option's value. Files have no place on this wire and are skipped. */
+      var payload = {};
+      var data = new FormData(form);
+      data.forEach(function (value, name) {
+        if (typeof value === "string") payload[name] = value;
+      });
+      sendEvent(form.getAttribute("data-eezo-submit"), payload);
     });
 
     connect();

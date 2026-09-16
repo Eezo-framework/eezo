@@ -53,8 +53,15 @@
    * by the caller, so the DOM serializes correctly; this syncs the live property beside it. */
   function syncProperty(el, name, value, present) {
     if (!(name in el)) return;
-    if (name === "value") el.value = present ? value : "";
-    else if (name === "checked" || name === "selected" || name === "disabled") el[name] = present;
+    if (name === "value") {
+      /* The focused element's value property is the user's text, mid-keystroke: patch the
+       * attribute (serialization, future resets) but never the property, or the server's echo
+       * of keystroke N lands after keystroke N+2 and eats it (design/live.md M5, §4.6). */
+      if (el === el.ownerDocument.activeElement) return;
+      el.value = present ? value : "";
+    } else if (name === "checked" || name === "selected" || name === "disabled") {
+      el[name] = present;
+    }
   }
 
   /* Applies a patch list to the DOM under `anchor`. Returns an array of failures, empty on full
@@ -112,6 +119,24 @@
         case "appendChildren":
           target.append(parsed(target.ownerDocument, p.html));
           break;
+        case "insertChild": {
+          var before = target.childNodes[p.index] || null;
+          target.insertBefore(parsed(target.ownerDocument, p.html), before);
+          break;
+        }
+        case "moveChild": {
+          var moving = target.childNodes[p.from];
+          if (!moving) {
+            refuse(i, "moveChild: no child at " + p.from + " under " + at);
+            break;
+          }
+          /* Remove-then-insert, matching the differ's index semantics: `to` names the position
+           * in the shortened list. The node itself survives, keeping focus, scroll and playback
+           * state - the reason keyed lists move instead of re-rendering. */
+          target.removeChild(moving);
+          target.insertBefore(moving, target.childNodes[p.to] || null);
+          break;
+        }
         case "setChildren":
           if (target.nodeType !== 1) {
             refuse(i, "setChildren: target at " + at + " is not an element");

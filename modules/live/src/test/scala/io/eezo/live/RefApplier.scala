@@ -66,6 +66,18 @@ object RefApplier {
         Html.Element(el.name, el.attrs, el.key, el.children ++ children)
       }
 
+    case Patch.InsertChild(path, expect, index, node) =>
+      onElement(anchor, path, expect) { el =>
+        Html.Element(el.name, el.attrs, el.key, el.children.patch(index, Vector(node), 0))
+      }
+
+    case Patch.MoveChild(path, expect, from, to) =>
+      onElement(anchor, path, expect) { el =>
+        val moving  = el.children(from)
+        val without = el.children.patch(from, Vector.empty, 1)
+        Html.Element(el.name, el.attrs, el.key, without.patch(to, Vector(moving), 0))
+      }
+
     case Patch.SetChildren(Nil, _, children) => children
 
     case Patch.SetChildren(path, expect, children) =>

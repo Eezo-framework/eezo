@@ -128,6 +128,24 @@ object Wire {
     case Patch.RemoveNode(path, expect) =>
       obj("removeNode", path, "expect" -> Json.Str(expect))
 
+    case Patch.InsertChild(path, expect, index, node) =>
+      obj(
+        "insertChild",
+        path,
+        "expect" -> Json.Str(expect),
+        "index"  -> Json.Num(index.toLong),
+        "html"   -> Json.Str(node.render)
+      )
+
+    case Patch.MoveChild(path, expect, from, to) =>
+      obj(
+        "moveChild",
+        path,
+        "expect" -> Json.Str(expect),
+        "from"   -> Json.Num(from.toLong),
+        "to"     -> Json.Num(to.toLong)
+      )
+
     case Patch.AppendChildren(path, expect, children) =>
       obj(
         "appendChildren",

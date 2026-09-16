@@ -377,4 +377,52 @@ class LiveServerSuite extends munit.FunSuite {
       wire.close()
     }
   }
+
+  test("a live form: per-keystroke validation events and a whole-form submit") {
+    final class Signup extends Component[(String, Boolean)] {
+      def init(ctx: Init[(String, Boolean)]): (String, Boolean)         = ("", false)
+      def handle(event: Event, s: (String, Boolean)): (String, Boolean) = event.name match {
+        case "email-changed" => (event.payload.getOrElse("value", ""), s._2)
+        case "save"          => (event.payload.getOrElse("email", ""), true)
+      }
+      def render(s: (String, Boolean)): Html = {
+        val (email, saved) = s
+        form(
+          Live.onSubmit("save"),
+          input(
+            Attrs.tpe   := "text",
+            Attrs.name  := "email",
+            Attrs.value := email,
+            Live.onInput("email-changed")
+          ),
+          p(if (email.isEmpty) "required" else if (email.contains("@")) "ok" else "no @"),
+          p(if (saved) "saved" else "unsaved")
+        )
+      }
+    }
+
+    servingRoutes(Seq(pageRoute(Live.mount(new Signup)))) { rig =>
+      val html = rig.get("/counter").body()
+      assert(html.contains("data-eezo-input=\"email-changed\""), html)
+      assert(html.contains("data-eezo-debounce=\"300\""), html)
+      assert(html.contains("data-eezo-submit=\"save\""), html)
+
+      val wire = rig.connect(rig.mountedPageId())
+      wire.join()
+      val _ = wire.frame()
+
+      // A keystroke's worth of input: the validation text and the echoed value attribute move.
+      wire.send("""{"kind":"event","name":"email-changed","payload":{"value":"a"}}""")
+      val typed = wire.frame()
+      assert(typed.contains("no @"), typed)
+
+      wire.send("""{"kind":"event","name":"email-changed","payload":{"value":"a@b.c"}}""")
+      assert(wire.frame().contains("ok"))
+
+      // The submit arrives as one payload of named fields, the way FormData sends it.
+      wire.send("""{"kind":"event","name":"save","payload":{"email":"a@b.c"}}""")
+      assert(wire.frame().contains("saved"))
+      wire.close()
+    }
+  }
 }

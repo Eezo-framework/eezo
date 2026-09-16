@@ -94,11 +94,12 @@ class DiffSuite extends munit.FunSuite {
     )
   }
 
-  test("a key change travels as the attribute it renders as, until M5 makes keys identity") {
-    assertEquals(
-      Differ.diff(ul(li(Key("a"), "x")), ul(li(Key("b"), "x"))),
-      List(Patch.SetAttr(List(0, 0), "li", "data-eezo-key", "b"))
-    )
+  test("a key change is an identity change: the old row leaves, the new row arrives") {
+    Differ.diff(ul(li(Key("a"), "x")), ul(li(Key("b"), "x"))) match {
+      case List(Patch.RemoveNode(List(0, 0), "li"), Patch.InsertChild(List(0), "ul", 0, node)) =>
+        assertEquals(node.render, """<li data-eezo-key="b">x</li>""")
+      case other => fail(s"unexpected patches: $other")
+    }
   }
 
   test("updates precede structural changes in one child list") {
@@ -117,5 +118,75 @@ class DiffSuite extends munit.FunSuite {
       case List(Patch.ReplaceNode(List(0), "div", _)) => ()
       case other                                      => fail(s"unexpected patches: $other")
     }
+  }
+
+  // ---- keyed lists (M5) ----
+
+  private def keyedList(keys: String*): Html = ul(keys.map(k => li(Key(k), k)))
+
+  test("moving one row is one MoveChild, not a rewrite of every shifted sibling") {
+    assertEquals(
+      Differ.diff(keyedList("a", "b", "c", "d", "e"), keyedList("e", "a", "b", "c", "d")),
+      List(Patch.MoveChild(List(0), "ul", 4, 0))
+    )
+  }
+
+  test("a swap of two adjacent rows is one move") {
+    assertEquals(
+      Differ.diff(keyedList("a", "b", "c"), keyedList("a", "c", "b")).length,
+      1
+    )
+  }
+
+  test("prepending one row to a large list is one InsertChild: the O(1) promise") {
+    val big       = (1 to 1000).map(i => s"k$i")
+    val prepended = "fresh" +: big
+    Differ.diff(keyedList(big*), keyedList(prepended*)) match {
+      case List(Patch.InsertChild(List(0), "ul", 0, node)) =>
+        assertEquals(node.render, """<li data-eezo-key="fresh">fresh</li>""")
+      case other => fail(s"expected one insert, got ${other.length} patches: ${other.take(3)}")
+    }
+  }
+
+  test("removing a middle row is one RemoveNode at its old index") {
+    assertEquals(
+      Differ.diff(keyedList("a", "b", "c"), keyedList("a", "c")),
+      List(Patch.RemoveNode(List(0, 1), "li"))
+    )
+  }
+
+  test("structure comes before content, and content is addressed at final positions") {
+    val before  = ul(li(Key("a"), "a"), li(Key("b"), "old text"))
+    val after   = ul(li(Key("b"), "new text"), li(Key("a"), "a"))
+    val patches = Differ.diff(before, after)
+    assertEquals(
+      patches,
+      List(
+        Patch.MoveChild(List(0), "ul", 1, 0),
+        // b now sits at final index 0, and that is where its text edit points.
+        Patch.SetText(List(0, 0, 0), "new text")
+      )
+    )
+  }
+
+  test("remove, move, insert and edit compose in one frame and round trip") {
+    val before = keyedList("a", "b", "c", "d")
+    val after  = ul(li(Key("d"), "d"), li(Key("new"), "new"), li(Key("b"), "B!"), li(Key("a"), "a"))
+    val patches = Differ.diff(before, after)
+    val applied = RefApplier(Vector(Canonical.root(before)), patches)
+    assert(DomEqual.all(applied, Vector(after)), clues(patches, applied.map(_.render)))
+  }
+
+  // ---- data-eezo-ignore (M5) ----
+
+  test("children under an ignored element are never patched; its own attributes still are") {
+    def widget(cls: String, inner: String) =
+      div(section(Live.ignore, io.eezo.core.html.Attrs.cls := cls, p(inner)))
+
+    assertEquals(
+      Differ.diff(widget("a", "x"), widget("b", "COMPLETELY DIFFERENT")),
+      List(Patch.SetAttr(List(0, 0), "section", "class", "b"))
+    )
+    assertEquals(Differ.diff(widget("a", "x"), widget("a", "changed")), Nil)
   }
 }

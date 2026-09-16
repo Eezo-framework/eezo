@@ -20,9 +20,13 @@ import io.eezo.core.html.Html
   * so a walk of zero steps has nothing to verify.
   *
   * **Application order is part of the contract.** The applier applies a frame's patches in list
-  * order, and the differ guarantees each patch's path is valid *at its turn*: within one child list
-  * it emits in-place updates first (counts unchanged), then removals from the highest index down
-  * (so earlier indices stay true), then a single append. `DiffSuite` pins that order.
+  * order, and the differ guarantees each patch's path is valid *at its turn*: within one positional
+  * child list it emits in-place updates first (counts unchanged), then removals from the highest
+  * index down (so earlier indices stay true), then a single append. Within one *keyed* child list
+  * the order is: removals (highest index first), then moves (each `from`/`to` read against the list
+  * as the previous move left it), then inserts at ascending final positions, then content patches
+  * addressed at final positions — structural before content, so every content path is true by the
+  * time it applies. `DiffSuite` pins both orders.
   */
 enum Patch {
 
@@ -49,6 +53,19 @@ enum Patch {
 
   /** Appends `children` after the last child of the element at `path`. */
   case AppendChildren(path: List[Int], expect: String, children: Vector[Html])
+
+  /** Inserts `node` as child `index` of the element at `path`, shifting what follows: the keyed
+    * differ's "a new row appeared here", which is what keeps a prepend from re-rendering the list
+    * below it.
+    */
+  case InsertChild(path: List[Int], expect: String, index: Int, node: Html)
+
+  /** Moves child `from` of the element at `path` to sit at `to`. The two indices are read one at a
+    * time, the way the DOM applies them: the node is removed at `from`, and `to` names its position
+    * in the *shortened* list. Emitted only for keys off the longest stable subsequence, so a
+    * reorder costs the minimal number of moves, not one per shifted row.
+    */
+  case MoveChild(path: List[Int], expect: String, from: Int, to: Int)
 
   /** Replaces every child of the element at `path` (`None` = the anchor). The differ's fallback for
     * a child list holding raw markup — one `Raw` tree child can parse into any number of DOM nodes,

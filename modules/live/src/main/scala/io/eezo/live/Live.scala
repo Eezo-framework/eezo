@@ -37,15 +37,44 @@ object Live {
   private val registry = new PageRegistry()
   private val senders  = new ConcurrentHashMap[String, Sender]
 
-  private val PageAttr  = AttrName("data-eezo-page")
-  private val DeadAttr  = AttrName("data-eezo-dead")
-  private val ClickAttr = AttrName("data-eezo-click")
+  private val PageAttr     = AttrName("data-eezo-page")
+  private val DeadAttr     = AttrName("data-eezo-dead")
+  private val ClickAttr    = AttrName("data-eezo-click")
+  private val InputAttr    = AttrName("data-eezo-input")
+  private val ChangeAttr   = AttrName("data-eezo-change")
+  private val SubmitAttr   = AttrName("data-eezo-submit")
+  private val DebounceAttr = AttrName("data-eezo-debounce")
 
   /** Marks an element as a click binding: `button(Live.onClick("inc"), "+")` sends `Event("inc")`
     * to the component's `handle`. The client delegates one listener at the document, so the binding
-    * survives any patch that replaces the element.
+    * survives any patch that replaces the element — and so do all the bindings below.
     */
   def onClick(name: String): Attr = ClickAttr := name
+
+  /** A per-keystroke binding, debounced on the client: after `debounceMillis` of quiet the
+    * element's current value arrives as `Event(name, Map("value" -> …))`. The debounce is per
+    * element, so typing in one field does not flush another's timer.
+    */
+  def onInput(name: String, debounceMillis: Int = 300): Seq[Attr] =
+    Seq(InputAttr := name, DebounceAttr := debounceMillis)
+
+  /** A committed-change binding, sent at once: a checkbox or radio arrives as
+    * `Map("value" -> "on" | "")`, a select or text input as its value. The right binding for
+    * controls where every change is a decision rather than a keystroke.
+    */
+  def onChange(name: String): Attr = ChangeAttr := name
+
+  /** A form submission binding: the browser's submit is intercepted, and every named field in the
+    * form arrives as one payload, `Map(fieldName -> value)`. Checkboxes follow the form convention:
+    * present as "on" when ticked, absent otherwise.
+    */
+  def onSubmit(name: String): Attr = SubmitAttr := name
+
+  /** The opt-out for a subtree some other script owns (a chart, an embedded editor): eezo still
+    * patches the marked element's own attributes but never its children (design/live.md §1.1 on
+    * §4.6). The round-trip guarantee deliberately ends at this attribute.
+    */
+  val ignore: Attr = AttrName(Differ.IgnoreAttr) := ""
 
   /** Mounts `component` as a live page: the returned fragment goes wherever the handler's own
     * layout puts it. At the registry's cap the component is rendered once, statically, and the page
