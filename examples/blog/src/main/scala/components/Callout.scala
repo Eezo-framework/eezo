@@ -60,6 +60,12 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
         " ",
         button(Live.onClick("fetch-missing"), "fetch a missing route")
       ),
-      p(if (s.loading) em("calling…") else strong(s.outcome))
+      p(if (s.loading) em("calling…") else strong(s.outcome)),
+      p(
+        Attrs.style := "color: gray",
+        "The call happens on the server: this page's handle runs in the JVM, and async.get " +
+          "fetches /api over the loopback. The browser's network tab shows only the WebSocket " +
+          "frames - the event going up, the outcome patching down."
+      )
     )
 }

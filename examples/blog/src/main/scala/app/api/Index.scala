@@ -15,5 +15,11 @@ object Index {
         Seq("Content-Type" -> "text/plain; charset=utf-8"),
         Body.Bytes(s"the report, fetched at ${java.time.LocalTime.now().withNano(0)}".getBytes)
       )
-    else Response.status(401)
+    else
+      // A body, so a browser poking at /api sees the refusal instead of a blank page.
+      Response(
+        401,
+        Seq("Content-Type" -> "text/plain; charset=utf-8"),
+        Body.Bytes("401: this endpoint wants `Authorization: Bearer let-me-in`".getBytes)
+      )
 }
