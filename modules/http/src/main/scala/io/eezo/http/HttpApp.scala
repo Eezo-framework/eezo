@@ -36,6 +36,14 @@ trait HttpApp extends Dispatch {
   /** The request body cap, and the WebSocket text message cap with it. */
   def maxBodySize: Long = Config.DefaultMaxBodySize
 
+  /** The key the session cookie is signed with. `EEZO_SECRET` by default. The sbt plugin's dev loop
+    * sets it to one secret per sbt session, so a restart on edit keeps the developer signed in. A
+    * run outside that loop with nothing set gets a throwaway announced at WARNING, so that `hello`
+    * runs with no configuration and a deployment that forgot is told. Read once, when [[serve]]
+    * boots.
+    */
+  def secret: Secret = Secret.fromEnv()
+
   /** How the application's own failures are answered: a partial function from what a handler threw
     * to the problem the client sees. What it does not cover, the boundary answers as 500.
     */

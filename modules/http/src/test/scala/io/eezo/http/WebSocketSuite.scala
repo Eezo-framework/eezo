@@ -7,6 +7,7 @@ import java.util.concurrent.TimeUnit
 import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.websocket.api.Callback
 import org.eclipse.jetty.websocket.api.Session
+import org.eclipse.jetty.websocket.client.ClientUpgradeRequest
 import org.eclipse.jetty.websocket.client.WebSocketClient
 
 /** The WebSocket half of the single Jetty mapping: eezo matches the path itself, and an upgrade
@@ -25,10 +26,12 @@ class WebSocketSuite extends munit.FunSuite {
     override def onWebSocketOpen(session: Session): Unit = ()
   }
 
+  private val secret = Secret.parse("websocket secret, thirty two bytes")
+
   private def serving(routes: RouteTable, dev: Boolean = false)(
       body: (WebSocketClient, Int) => Unit
   ): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, dev = dev))
+    val server = Eezo.start(port = 0, config = Config(routes, dev = dev, secret = secret))
     val client = new WebSocketClient()
     client.start()
     try {
@@ -77,6 +80,63 @@ class WebSocketSuite extends munit.FunSuite {
       // arrives without the listener having asked for it.
       session.sendText("two", Callback.NOOP)
       assertEquals(events.poll(5, TimeUnit.SECONDS), "text:two")
+      session.close()
+    }
+  }
+
+  test("a WebSocket route reads the session the handshake's cookie carried") {
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/live"),
+          request =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = {
+                val _ = events.offer(s"user:${request.session.get("user").getOrElse("nobody")}")
+              }
+            }
+        )
+      )
+    )
+
+    serving(routes) { (client, port) =>
+      val cookie  = SessionCookie.encode(io.eezo.http.Session.empty.set("user", "42"), secret)
+      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
+      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
+      val session = client.connect(new ClientListener, upgrade).get()
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
+      session.close()
+    }
+  }
+
+  test("a WebSocket route reads entries the handshake's cookie carried, but not its flash") {
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/live"),
+          request =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = {
+                val user  = request.session.get("user").getOrElse("nobody")
+                val flash = request.session.flash("notice").getOrElse("none")
+                val _     = events.offer(s"user:$user flash:$flash")
+              }
+            }
+        )
+      )
+    )
+
+    serving(routes) { (client, port) =>
+      val cookie = SessionCookie.encode(
+        io.eezo.http.Session.empty.set("user", "42").flash("notice", "welcome"),
+        secret
+      )
+      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
+      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
+      val session = client.connect(new ClientListener, upgrade).get()
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42 flash:none")
       session.close()
     }
   }

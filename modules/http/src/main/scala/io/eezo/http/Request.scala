@@ -40,6 +40,12 @@ object FromPath {
   * exceeding the cap is a 413 rather than a stream nobody drains. What is deliberately absent is an
   * untyped `attachment: AnyRef` bag. A capability arrives through the handler's `using` list, where
   * its absence is a compile error rather than a `sys.error` on the first request that needs it.
+  *
+  * The session is read for the handler, before dispatch, out of the signed cookie: a request built
+  * by hand carries the empty one, and a test that wants a session says so with `copy`.
+  *
+  * `secure` is whether the browser reached the application over HTTPS, which is what decides a
+  * cookie's `Secure` attribute. A request built by hand is not.
   */
 final case class Request(
     method: Method,
@@ -47,15 +53,27 @@ final case class Request(
     query: Map[String, Seq[String]],
     headers: Map[String, Seq[String]],
     body: Array[Byte],
-    pathParams: Map[String, String]
+    pathParams: Map[String, String],
+    session: Session = Session.empty,
+    secure: Boolean = false
 ) {
 
   /** A header, case insensitively, first value wins. */
   def header(name: String): Option[String] =
-    headers.collectFirst { case (k, v) if k.equalsIgnoreCase(name) => v }.flatMap(_.headOption)
+    Request.headerValues(headers, name).headOption
 
   /** A query parameter, first value wins. */
   def queryParam(name: String): Option[String] = query.get(name).flatMap(_.headOption)
+
+  /** The `Cookie` header, split into pairs, decoded once and remembered. Every header of that name
+    * counts, and the first of a repeated name wins. What a handler reads for its own cookies; the
+    * session cookie is read for it, into [[session]], before dispatch.
+    */
+  lazy val cookies: Map[String, String] =
+    Cookie.parse(Request.headerValues(headers, "Cookie"))
+
+  /** One cookie by name. */
+  def cookie(name: String): Option[String] = cookies.get(name)
 
   /** The form encoded body, decoded once and remembered.
     *
@@ -96,6 +114,23 @@ final case class Request(
 
 object Request {
 
+  /** Whether the browser used HTTPS: the connection says so, or a proxy that terminated TLS does.
+    *
+    * `X-Forwarded-Proto` is trusted for this one question and nothing else. A client that forges it
+    * only puts `Secure` on its own cookies, and cannot take it off anyone's, since a TLS connection
+    * counts whatever the header says. A chain of proxies lists the schemes in order, and the first
+    * is the one the browser used.
+    */
+  private[http] def isSecure(tls: Boolean, headers: Map[String, Seq[String]]): Boolean =
+    tls || headerValues(headers, "X-Forwarded-Proto").headOption
+      .exists(_.split(',').head.trim.equalsIgnoreCase("https"))
+
+  /** Every value of a header, case insensitively, in order. Over the bare map rather than a
+    * [[Request]], because [[isSecure]] is asked before there is one.
+    */
+  private[http] def headerValues(headers: Map[String, Seq[String]], name: String): Seq[String] =
+    headers.iterator.collect { case (k, v) if k.equalsIgnoreCase(name) => v }.flatten.toSeq
+
   /** The field name a browser sends the verb it cannot issue under. */
   private[http] val MethodField = "_method"
 
@@ -131,7 +166,7 @@ object Request {
       }
 
   /** Decodes `a=1&b=2`, UTF-8, `+` as a space, percent decoded, keeping repeats in order. */
-  private def decodeForm(raw: String): Map[String, Seq[String]] =
+  private[http] def decodeForm(raw: String): Map[String, Seq[String]] =
     raw
       .split('&')
       .iterator
