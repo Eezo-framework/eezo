@@ -1,15 +1,12 @@
 package io.eezo.http
 
 import java.net.URI
-import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
 
 import io.eezo.core.html.Html
 import io.eezo.core.html.Tags.*
-import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.util.thread.VirtualThreadPool
 import org.eclipse.jetty.websocket.server.WebSocketUpgradeHandler
 
@@ -18,46 +15,7 @@ import org.eclipse.jetty.websocket.server.WebSocketUpgradeHandler
   * This is the suite that retires the risk `research/http-server.md` section 12 names: four
   * configuration knobs whose Jetty defaults the research calls defects.
   */
-class EezoServerSuite extends munit.FunSuite {
-
-  private val client = HttpClient.newHttpClient()
-
-  private val secret = Secret.parse("server secret, at least thirty two bytes")
-
-  /** Boots a server for one test and stops it afterwards. */
-  private def serving(routes: RouteTable, maxBodySize: Long = 1.MiB, dev: Boolean = false)(
-      body: (Server, Int) => Unit
-  ): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, maxBodySize, dev, secret = secret))
-    try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
-      body(server, port)
-    } finally server.stop()
-  }
-
-  private def get(port: Int, path: String): HttpResponse[String] =
-    client.send(
-      HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path")).GET().build(),
-      HttpResponse.BodyHandlers.ofString()
-    )
-
-  /** A form `POST` the way a browser that has seen the application makes it: the session cookie
-    * carrying the CSRF token, and the token returned in the body. The tables here mount no page to
-    * be handed the cookie on, so it is signed by hand with the server's secret.
-    */
-  private def post(port: Int, path: String, form: String): HttpResponse[String] = {
-    val token   = Csrf.Token.gen()
-    val session = SessionCookie.encode(Csrf.carrying(Session.empty, token), secret)
-    client.send(
-      HttpRequest
-        .newBuilder(URI.create(s"http://localhost:$port$path"))
-        .header("Content-Type", "application/x-www-form-urlencoded")
-        .header("Cookie", s"${SessionCookie.Name}=$session")
-        .POST(HttpRequest.BodyPublishers.ofString(s"$form&${Csrf.Field}=${token.value}"))
-        .build(),
-      HttpResponse.BodyHandlers.ofString()
-    )
-  }
+class EezoServerSuite extends munit.FunSuite with ServerFixtures {
 
   private val hello: RouteTable =
     RouteTable(
@@ -230,7 +188,7 @@ class EezoServerSuite extends munit.FunSuite {
       )
     )
     serving(routes) { (_, port) =>
-      val response = post(port, "/widgets/7?q=hi", "name=Tom+%26+Jerry")
+      val response = submit(port, "/widgets/7?q=hi", handed(), "name=Tom+%26+Jerry")
       assertEquals(response.body(), "7|hi|Tom &amp; Jerry")
     }
   }
@@ -296,7 +254,7 @@ class EezoServerSuite extends munit.FunSuite {
       )
     )
     serving(routes) { (_, port) =>
-      val response = post(port, "/widgets/7", "_method=DELETE")
+      val response = submit(port, "/widgets/7", handed(), "_method=DELETE")
       assertEquals(response.body(), "destroyed 7")
     }
   }

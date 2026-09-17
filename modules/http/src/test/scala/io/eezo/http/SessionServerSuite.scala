@@ -1,25 +1,13 @@
 package io.eezo.http
 
-import java.net.URI
-import java.net.http.HttpClient
-import java.net.http.HttpRequest
-import java.net.http.HttpResponse
-
-import scala.jdk.CollectionConverters.*
-
 import io.eezo.core.html.Tags.*
-import org.eclipse.jetty.server.ServerConnector
 
 /** The session over the wire: read out of the `Cookie` header before dispatch, written once as a
   * `Set-Cookie` after it, with the secret the server was booted with. Every `POST` here goes the
   * way a browser's does: a first visit is handed the session cookie carrying the CSRF token, and
   * the form returns that token under the cookie.
   */
-class SessionServerSuite extends munit.FunSuite {
-
-  private val client = HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()
-
-  private val secret = Secret.parse("server secret, at least thirty two bytes")
+class SessionServerSuite extends munit.FunSuite with ServerFixtures {
 
   private val routes: RouteTable = RouteTable(
     Seq(
@@ -49,77 +37,13 @@ class SessionServerSuite extends munit.FunSuite {
     )
   )
 
-  private def serving(body: Int => Unit): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, secret = secret))
-    try body(server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort)
-    finally server.stop()
-  }
-
-  private def send(
-      port: Int,
-      method: String,
-      path: String,
-      cookie: Option[String],
-      headers: Seq[(String, String)] = Nil,
-      form: Option[String] = None
-  ): HttpResponse[String] = {
-    val builder = HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path"))
-    cookie.foreach(value => builder.header("Cookie", s"eezo_session=$value"))
-    headers.foreach(builder.header(_, _))
-    form.foreach(_ => builder.header("Content-Type", "application/x-www-form-urlencoded"))
-    val request = method match {
-      case "GET" => builder.GET()
-      case other =>
-        builder.method(other, HttpRequest.BodyPublishers.ofString(form.getOrElse("")))
-    }
-    client.send(request.build(), HttpResponse.BodyHandlers.ofString())
-  }
-
-  /** What a browser holds after its first visit: the session cookie it was handed, and the token
-    * inside it. A later response may replace the cookie; the token stays.
-    */
-  private final case class Browser(cookie: String, token: Csrf.Token)
-
-  private def visit(port: Int): Browser = {
-    val cookie = sessionCookie(send(port, "GET", "/me", None))
-      .getOrElse(fail("the first visit was handed no session cookie"))
-    val token = Csrf
-      .read(SessionCookie.decode(cookie, secret))
-      .getOrElse(fail("the first visit's cookie carries no token"))
-    Browser(cookie, token)
-  }
-
-  /** A `POST` the way a form on a served page makes it: under the browser's session cookie,
-    * returning its token.
-    */
-  private def submit(
-      port: Int,
-      path: String,
-      browser: Browser,
-      headers: Seq[(String, String)] = Nil
-  ): HttpResponse[String] =
-    send(
-      port,
-      "POST",
-      path,
-      Some(browser.cookie),
-      headers,
-      form = Some(s"${Csrf.Field}=${browser.token.value}")
-    )
-
-  private def sessionCookie(response: HttpResponse[String]): Option[String] =
-    response.headers().allValues("Set-Cookie").asScala.collectFirst {
-      case header if header.startsWith("eezo_session=") =>
-        header.takeWhile(_ != ';').stripPrefix("eezo_session=")
-    }
-
   test(
     "a session set on one response is read on the next request, and the flash is delivered once"
   ) {
-    serving { port =>
+    serving(routes) { (_, port) =>
       val anonymous = send(port, "GET", "/me", None)
       assertEquals(anonymous.body(), "<p>user=nobody notice=-</p>")
-      val seen = visit(port)
+      val seen = visit(port, "/me")
       assertEquals(
         sessionCookie(send(port, "GET", "/me", Some(seen.cookie))),
         None,
@@ -149,8 +73,8 @@ class SessionServerSuite extends munit.FunSuite {
   }
 
   test("behind a proxy that terminated TLS, the session cookie is Secure") {
-    serving { port =>
-      val seen  = visit(port)
+    serving(routes) { (_, port) =>
+      val seen  = visit(port, "/me")
       val https = submit(port, "/login", seen, headers = Seq("X-Forwarded-Proto" -> "https"))
       assert(https.headers().firstValue("Set-Cookie").orElse("").contains("; Secure; "))
       // A chain of proxies lists the schemes in order, and the first is the one the browser used.
@@ -162,8 +86,8 @@ class SessionServerSuite extends munit.FunSuite {
   }
 
   test("a tampered cookie reads as no session and is replaced by a fresh one") {
-    serving { port =>
-      val cookie   = sessionCookie(submit(port, "/login", visit(port))).get
+    serving(routes) { (_, port) =>
+      val cookie   = sessionCookie(submit(port, "/login", visit(port, "/me"))).get
       val tampered = cookie.replaceFirst("\\.", "x.")
       val response = send(port, "GET", "/me", Some(tampered))
       assertEquals(response.body(), "<p>user=nobody notice=-</p>")
@@ -177,8 +101,8 @@ class SessionServerSuite extends munit.FunSuite {
   }
 
   test("logging out expires the cookie") {
-    serving { port =>
-      val seen     = visit(port)
+    serving(routes) { (_, port) =>
+      val seen     = visit(port, "/me")
       val cookie   = sessionCookie(submit(port, "/login", seen)).get
       val response = submit(port, "/logout", seen.copy(cookie = cookie))
       assertEquals(response.statusCode(), 303)
@@ -204,8 +128,8 @@ class SessionServerSuite extends munit.FunSuite {
   // The CSRF token over the wire
 
   test("a first visit is handed the session cookie carrying the token, and only the first") {
-    serving { port =>
-      val browser = visit(port)
+    serving(routes) { (_, port) =>
+      val browser = visit(port, "/me")
       assert(browser.token.value.nonEmpty)
       val again = send(port, "GET", "/me", Some(browser.cookie))
       assertEquals(sessionCookie(again), None, "the token is minted once")
@@ -219,8 +143,8 @@ class SessionServerSuite extends munit.FunSuite {
   }
 
   test("a POST that does not return the token is a 403, and writes no cookie") {
-    serving { port =>
-      val cookie = visit(port).cookie
+    serving(routes) { (_, port) =>
+      val cookie = visit(port, "/me").cookie
       val forged = send(port, "POST", "/login", Some(cookie))
       assertEquals(forged.statusCode(), 403)
       assert(forged.body().contains("missing or stale"), forged.body())
@@ -228,7 +152,7 @@ class SessionServerSuite extends munit.FunSuite {
       // A browser never seen before has no token to return either.
       assertEquals(send(port, "POST", "/login", None).statusCode(), 403)
       // A token from another browser's session is not this one's.
-      val other = visit(port)
+      val other = visit(port, "/me")
       assertEquals(submit(port, "/login", other.copy(cookie = cookie)).statusCode(), 403)
     }
   }
