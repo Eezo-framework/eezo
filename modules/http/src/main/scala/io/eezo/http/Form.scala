@@ -40,9 +40,9 @@ object FormErrors {
   * `Form` emits the **whole** `<form>` element rather than a bag of inputs, because it is the one
   * place that knows both the target verb and the encoding, and so it is the only place that can own
   * the `_method` override. A `Resource` hands it `Method.PUT` without knowing the override exists.
-  * The CSRF token is the other reserved input, and it is a required parameter of [[render]] rather
-  * than a default or a given: a form without a token is not expressible, which is the whole
-  * protection, and the caller already holds it as `request.csrf`.
+  * The CSRF token is the other reserved input for unsafe forms, and it is a required parameter of
+  * [[render]] rather than a default or a given: callers cannot accidentally omit it from a form
+  * that needs protection, and the caller already holds it as `request.csrf`.
   *
   * The key is never rendered. A form that carried its own key would either need a placeholder value
   * meaning "not set", which is a real value the server cannot tell from a real one, or a hidden
