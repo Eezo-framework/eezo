@@ -31,16 +31,37 @@ final case class Session private[http] (
   def get(name: String): Option[String] = entries.get(name)
 
   def set(name: String, value: String): Session = {
-    require(!name.startsWith("_"), s"session entry '$name' starts with '_', which eezo reserves")
+    require(
+      !name.startsWith(Session.Reserved),
+      s"session entry '$name' starts with '${Session.Reserved}', which eezo reserves"
+    )
     copy(entries = entries + (name -> value))
   }
 
   def remove(name: String): Session = copy(entries = entries - name)
 
-  /** Whether any entry is held. Flash does not count: a session that carries only a notice names
-    * nobody.
+  /** The entry under a reserved name, the door [[Csrf.read]] uses instead of reaching into
+    * `entries` itself.
     */
-  def isEmpty: Boolean = entries.isEmpty
+  private[http] def reserved(name: String): Option[String] = entries.get(name)
+
+  /** The session with `value` written under a reserved name, the door [[Csrf.carrying]] uses
+    * instead of reaching into `entries` and `copy` itself. The guard mirrors [[set]]'s, the other
+    * way round: a name that does not start with [[Session.Reserved]] does not belong here.
+    */
+  private[http] def withReserved(name: String, value: String): Session = {
+    require(
+      name.startsWith(Session.Reserved),
+      s"session entry '$name' does not start with '${Session.Reserved}', which withReserved requires"
+    )
+    copy(entries = entries + (name -> value))
+  }
+
+  /** Whether the application holds any entry. Flash does not count, and neither does what eezo
+    * keeps under its reserved names: a session that carries only a flash, or only the CSRF token
+    * dispatch minted into it, names nobody.
+    */
+  def isEmpty: Boolean = entries.keysIterator.forall(_.startsWith(Session.Reserved))
 
   /** A flash delivered by the request that carried this session, readable on this request alone. */
   def flash(name: String): Option[String] = delivered.get(name)
@@ -54,6 +75,11 @@ final case class Session private[http] (
 object Session {
 
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
+
+  /** The prefix of the names eezo keeps for itself, the flash and the CSRF token, which [[set]]
+    * refuses, [[withReserved]] requires and [[isEmpty]] looks past.
+    */
+  private[http] val Reserved: String = "_"
 }
 
 /** The session's cookie: the name, the wire format, and the one rule for when it is written.
@@ -61,7 +87,7 @@ object Session {
   * The value is `base64url(payload).base64url(HMAC-SHA256(base64url(payload)))`, unpadded, so it is
   * made of cookie octets with nothing to quote. The payload is the map form encoded, one line of
   * `URLEncoder` rather than a JSON reader eezo does not have. Signed, not encrypted: a user id and
-  * a notice are not secrets from the browser that holds them, and four of the five surveyed
+  * a flash are not secrets from the browser that holds them, and four of the five surveyed
   * frameworks that keep the session in the cookie sign only.
   *
   * Verification compares the tags with `MessageDigest.isEqual` and treats every failure the same
@@ -72,9 +98,10 @@ private[http] object SessionCookie {
   val Name: String = "eezo_session"
 
   /** The prefix under which a flash travels inside the payload, beside the `_csrf` entry the CSRF
-    * token reserves. Starts with the underscore `Session.set` refuses.
+    * token reserves. Built from [[Session.Reserved]], so it starts with the prefix `Session.set`
+    * refuses.
     */
-  val FlashPrefix: String = "_flash."
+  val FlashPrefix: String = Session.Reserved + "flash."
 
   /** The largest encoded session `encode` will hand back, a conservative margin under the roughly
     * 4096 bytes every major browser keeps of one cookie. A `Set-Cookie` past that limit is not
@@ -123,9 +150,11 @@ private[http] object SessionCookie {
 
   /** The response with the session cookie set, when it has to be: what the adapter does after
     * dispatch. The session that goes out is the one the response names, or else the one the request
-    * carried into the handler. Nothing is written when it matches what arrived; an emptied session,
-    * or a cookie that did not verify, is expired so the browser stops sending it; anything else is
-    * signed. `Secure` follows the scheme the browser used.
+    * carried into the handler, which dispatch has amended with a CSRF token when it had none.
+    * Nothing is written when it matches what arrived; an emptied session is expired so the browser
+    * stops sending it; anything else is signed. A cookie that did not verify read as empty, so on a
+    * served page it is replaced by a fresh signed one carrying only a minted token, and on an error
+    * page it is left alone like every cookie. `Secure` follows the scheme the browser used.
     */
   def write(request: Request, response: Response, secret: Secret): Response = {
     val incoming  = request.session

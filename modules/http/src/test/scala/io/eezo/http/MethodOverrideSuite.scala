@@ -49,8 +49,10 @@ class MethodOverrideSuite extends munit.FunSuite {
     )
   }
 
-  test("a POST is never downgraded to GET, whatever the field says") {
-    assertEquals(Request.withMethodOverride(post("_method=GET")).method, Method.POST)
+  test("a POST is never downgraded to a safe verb, whatever the field says") {
+    Seq(Method.GET, Method.HEAD, Method.OPTIONS).foreach { safe =>
+      assertEquals(Request.withMethodOverride(post(s"_method=$safe")).method, Method.POST, safe)
+    }
   }
 
   test("only a POST is overridden: a GET carrying the field stays a GET") {

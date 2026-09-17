@@ -32,6 +32,10 @@ class FormSuite extends munit.FunSuite {
 
   private val widget = Widget(theKey, "Bolt", 3, inStock = true, note = Some("hex"))
 
+  /** What a test that renders a form outside a request hands it; inside one it is `request.csrf`.
+    */
+  private val token = Csrf.Token.gen()
+
   private def data(pairs: (String, String)*): Map[String, Seq[String]] =
     pairs.groupMap(_._1)(_._2)
 
@@ -60,23 +64,43 @@ class FormSuite extends munit.FunSuite {
   // ---------------------------------------------------------------- render
 
   test("the key is never rendered") {
-    val html = Form[Widget].render("/widgets", Method.POST, Some(widget)).render
+    val html = Form[Widget].render("/widgets", Method.POST, Some(widget), token).render
     assert(!html.contains(theKey.toString), html)
     assert(!html.contains("""name="id""""), html)
   }
 
   test("a GET or POST form carries no _method, and anything else does") {
-    val post = Form[Widget].render("/widgets", Method.POST, None).render
+    val post = Form[Widget].render("/widgets", Method.POST, None, token).render
     assert(!post.contains("_method"), post)
     assert(post.contains("""method="post""""), post)
 
-    val put = Form[Widget].render("/widgets/1", Method.PUT, None).render
+    val put = Form[Widget].render("/widgets/1", Method.PUT, None, token).render
     assert(put.contains("""<input type="hidden" name="_method" value="PUT">"""), put)
     assert(put.contains("""method="post""""), put)
   }
 
+  test("every unsafe form carries the CSRF token as a hidden input, whatever its verb") {
+    val hidden = Csrf.hidden(token).render
+    Seq(Method.POST, Method.PUT, Method.PATCH, Method.DELETE).foreach { verb =>
+      val html = Form[Widget].render("/widgets/1", verb, None, token).render
+      assert(html.contains(hidden), html)
+    }
+    val put = Form[Widget].render("/widgets/1", Method.PUT, None, token).render
+    // Beside `_method`, and before the first field, so the two reserved inputs read as one block.
+    assert(
+      put.contains(s"""name="_method" value="PUT">$hidden<div>"""),
+      put
+    )
+  }
+
+  test("a GET form carries no token, since its fields go to the address bar") {
+    val get = Form[Widget].render("/widgets", Method.GET, None, token).render
+    assert(!get.contains("_csrf"), get)
+    assert(!get.contains(token.value), get)
+  }
+
   test("an existing value fills the inputs, and a checked box renders bare checked") {
-    val html = Form[Widget].render("/widgets", Method.POST, Some(widget)).render
+    val html = Form[Widget].render("/widgets", Method.POST, Some(widget), token).render
     assert(html.contains("""value="Bolt""""), html)
     assert(html.contains("""type="checkbox""""), html)
     assert(html.contains(" checked>"), html)
@@ -84,14 +108,14 @@ class FormSuite extends munit.FunSuite {
 
   test("a value is escaped by core's constructor, not by anything here") {
     val nasty = widget.copy(name = "<script>alert(1)</script>")
-    val html  = Form[Widget].render("/widgets", Method.POST, Some(nasty)).render
+    val html  = Form[Widget].render("/widgets", Method.POST, Some(nasty), token).render
     assert(!html.contains("<script>"), html)
     assert(html.contains("&lt;script&gt;"), html)
   }
 
   test("errors render beside their field") {
     val errs = FormErrors(Seq(FieldError("price", "is not a number")))
-    val html = Form[Widget].render("/widgets", Method.POST, None, errs).render
+    val html = Form[Widget].render("/widgets", Method.POST, None, token, errs).render
     assert(html.contains("is not a number"), html)
   }
 
@@ -110,7 +134,7 @@ class FormSuite extends munit.FunSuite {
 
   test("show and the edit form cannot disagree about one field's text") {
     val shown = Form[Widget].show(widget).collectFirst { case (f, v) if f.name == "name" => v }.get
-    val html  = Form[Widget].render("/widgets/1", Method.PUT, Some(widget)).render
+    val html  = Form[Widget].render("/widgets/1", Method.PUT, Some(widget), token).render
     assert(html.contains(s"""value="$shown""""), html)
   }
 
@@ -123,6 +147,7 @@ class FormSuite extends munit.FunSuite {
         "/widgets",
         Method.POST,
         None,
+        token,
         errs,
         raw = data("name" -> "Bolt", "price" -> "cheap")
       )
@@ -134,7 +159,7 @@ class FormSuite extends munit.FunSuite {
 
   test("raw wins field by field over value, and a field it omits keeps the value's text") {
     val html = Form[Widget]
-      .render("/widgets/1", Method.PUT, Some(widget), raw = data("name" -> "Nut"))
+      .render("/widgets/1", Method.PUT, Some(widget), token, raw = data("name" -> "Nut"))
       .render
     assert(html.contains("""value="Nut""""), html)
     assert(!html.contains("""value="Bolt""""), html)
@@ -143,14 +168,14 @@ class FormSuite extends munit.FunSuite {
 
   test("a box the rejected submission had checked comes back checked") {
     val html = Form[Widget]
-      .render("/widgets", Method.POST, None, raw = data("inStock" -> "on"))
+      .render("/widgets", Method.POST, None, token, raw = data("inStock" -> "on"))
       .render
     assert(html.contains(" checked>"), html)
   }
 
   test("a raw multi valued key takes the first value") {
     val html = Form[Widget]
-      .render("/widgets", Method.POST, None, raw = Map("name" -> Seq("Bolt", "Nut")))
+      .render("/widgets", Method.POST, None, token, raw = Map("name" -> Seq("Bolt", "Nut")))
       .render
     assert(html.contains("""value="Bolt""""), html)
   }
@@ -168,7 +193,7 @@ class FormSuite extends munit.FunSuite {
   test("a model keyed by Id derives, renders without its key, and parses one back") {
     val key    = Id.gen[Gadget]()
     val gadget = Gadget(key, "Sprocket")
-    val html   = Form[Gadget].render("/gadgets", Method.POST, Some(gadget)).render
+    val html   = Form[Gadget].render("/gadgets", Method.POST, Some(gadget), token).render
     assert(!html.contains(key.show), html)
     assertEquals(Form[Gadget].fields.map(_.name), Seq("name"))
     assertEquals(Form[Gadget].parse(data("name" -> "Sprocket"), Some(key.show)), Right(gadget))
@@ -275,7 +300,7 @@ class FormSuite extends munit.FunSuite {
   }
 
   test("Html is what the form is made of, so it composes with a layout") {
-    val node: Html = Form[Login].render("/login", Method.POST, None)
+    val node: Html = Form[Login].render("/login", Method.POST, None, token)
     assert(node.render.startsWith("<form"), node.render)
   }
 }

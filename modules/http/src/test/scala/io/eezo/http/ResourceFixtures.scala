@@ -17,8 +17,30 @@ case class Widget(id: Id[Widget], name: String, price: Int) derives Form, Resour
   */
 trait ResourceFixtures { self: munit.FunSuite =>
 
-  /** A request with a form encoded body, which is the only body shape the derived routes read. */
+  /** The token the browser these fixtures stand in for was handed on its first visit: in its
+    * session on every request, and returned by every unsafe one, the way a real form does.
+    */
+  val token: Csrf.Token = Csrf.Token.gen()
+
+  /** A request the way a browser that has seen the application sends it: the session carries the
+    * token, and a `POST`, `PUT` or `DELETE` returns it in its form encoded body, which is the only
+    * body shape the derived routes read.
+    */
   def request(method: Method, path: String, form: (String, String)*): Request = {
+    val returned = if (method.safe) form else form :+ (Csrf.Field -> token.value)
+    forged(method, path, returned*)
+  }
+
+  /** A request from a page eezo did not serve: the browser has a session, so the token is there to
+    * compare against, and the body does not return it.
+    */
+  def forged(method: Method, path: String, form: (String, String)*): Request =
+    anonymous(method, path, form*).copy(session = Csrf.carrying(Session.empty, token))
+
+  /** A request from a browser never seen before: no session, so no token anywhere, and a form
+    * encoded body when there are fields.
+    */
+  def anonymous(method: Method, path: String, form: (String, String)*): Request = {
     val body = form
       .map { case (k, v) =>
         s"${URLEncoder.encode(k, StandardCharsets.UTF_8)}=${URLEncoder.encode(v, StandardCharsets.UTF_8)}"

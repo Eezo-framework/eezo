@@ -226,6 +226,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val page = markup(routes.dispatch(request(Method.GET, s"/widgets/${saved.head.id.show}")))
     assert(page.contains(s"""href="/widgets/${saved.head.id.show}/edit""""), page)
     assert(page.contains("""<input type="hidden" name="_method" value="DELETE">"""), page)
+    assert(page.contains(Csrf.hidden(token).render), page)
 
     val store = InMemoryStore[Note]()
     val note  = Note(Id.gen[Note](), "read me")
@@ -234,6 +235,7 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
       markup(table[Note](store).dispatch(request(Method.GET, s"/notes/${note.id.show}")))
     assert(!readOnly.contains("/edit"), readOnly)
     assert(!readOnly.contains("_method"), readOnly)
+    assert(!readOnly.contains("_csrf"), readOnly)
   }
 
   // ---------------------------------------------------------------- edit and update
@@ -294,6 +296,37 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     assertEquals(response.status, 303)
     assertEquals(location(response), "/widgets")
     assertEquals(store.all(), Seq.empty[Widget])
+  }
+
+  // ---------------------------------------------------------------- the CSRF token
+
+  test(
+    "new and edit render forms carrying the request's token, and a rejected one carries it back"
+  ) {
+    val (_, routes, saved) = widgets("Bolt" -> 3)
+    val hidden             = Csrf.hidden(token).render
+    assert(markup(routes.dispatch(request(Method.GET, "/widgets/new"))).contains(hidden))
+    assert(
+      markup(routes.dispatch(request(Method.GET, s"/widgets/${saved.head.id.show}/edit")))
+        .contains(hidden)
+    )
+    val rejected =
+      routes.dispatch(request(Method.POST, "/widgets", "name" -> "Bolt", "price" -> "cheap"))
+    assertEquals(rejected.status, 422)
+    assert(markup(rejected).contains(hidden), markup(rejected))
+  }
+
+  test("create, update and destroy refuse a submission that does not return the token") {
+    val (store, routes, saved) = widgets("Bolt" -> 3)
+    val key                    = saved.head.id.show
+    intercept[Forbidden](
+      routes.dispatch(forged(Method.POST, "/widgets", "name" -> "Nut", "price" -> "1"))
+    )
+    intercept[Forbidden](
+      routes.dispatch(forged(Method.PUT, s"/widgets/$key", "name" -> "Nut", "price" -> "1"))
+    )
+    intercept[Forbidden](routes.dispatch(forged(Method.DELETE, s"/widgets/$key")))
+    assertEquals(store.all().map(_.name), Seq("Bolt"), "nothing was written")
   }
 
   test("destroy on a missing row is a 404") {

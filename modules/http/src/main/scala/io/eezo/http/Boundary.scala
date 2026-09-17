@@ -35,6 +35,7 @@ private[http] object Boundary {
     case e: EezoException =>
       e match {
         case BadRequest(detail)        => Resolution(Problem(400, detail, path))
+        case Forbidden(detail)         => Resolution(Problem(403, detail, path))
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>
           Resolution(Problem(405, e.getMessage, path), Seq("Allow" -> allowed.mkString(", ")))

@@ -7,7 +7,7 @@ import io.eezo.db.Schema
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.migrate.Decision
 import io.eezo.db.schema.Change
-import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteTable}
+import io.eezo.http.{Csrf, Eezo, Handler, Method, PathPattern, Response, Route, RouteTable}
 
 import scala.util.control.NonFatal
 
@@ -42,8 +42,11 @@ import scala.util.control.NonFatal
   * over tables the app never declared would block every app with no schema that happens to share a
   * Postgres with something else.
   *
-  * No CSRF token on the forms, deliberately: this server exists only while refusing to route in
-  * development, and its actions are the ones the developer's own terminal already offers.
+  * The forms carry the CSRF token like every form eezo serves, and the two actions are verified at
+  * dispatch like every unsafe request. Not an exemption for the reserved prefix: the buttons apply
+  * destructive changes to the dev database, and a localhost dev server is a classic drive by
+  * target, since any open tab can `POST` to it and the browser sends it. The terminal offers the
+  * same actions, but the terminal is not reachable from a web page.
   */
 private[eezo] object DriftGate {
 
@@ -90,16 +93,39 @@ private[eezo] object DriftGate {
   /** The refusal table: the page on every GET, and the two actions it posts to. */
   private def driftTable(schema: Schema, databaseSchema: String): RouteTable = {
 
-    val page: Handler = _ => {
+    val page: Handler = request => {
       val drift = currentDrift(schema, databaseSchema)
-      if (blockers(drift).isEmpty) resolved(drift) else refusal(drift, error = None)
+      if (blockers(drift).isEmpty) resolved(drift)
+      else refusal(drift, error = None, token = request.csrf)
     }
+
+    // Runs one page action; a failure renders the refusal again with the database's own words on
+    // it.
+    //
+    // This is not decoration: the first live run of this page hit exactly it: a `[risky]`
+    // `set not null` that Postgres refused over existing rows. That failure is the `risky` flag
+    // doing its job, and it belongs on the page the user is looking at, not in a stack trace
+    // behind a 500. The transaction has already rolled back by the time it is caught, so
+    // rendering again over a half applied state is not a possibility.
+    def attempt(token: Csrf.Token)(action: => Unit): Response =
+      try {
+        action
+        Response.Redirect("/")
+      } catch {
+        case NonFatal(e) =>
+          System.err.println(s"[eezo] drift page action failed: ${e.getMessage}")
+          refusal(
+            currentDrift(schema, databaseSchema),
+            error = Some(s"that did not work: ${e.getMessage}"),
+            token = token
+          )
+      }
 
     // The prototyping path: the terminal's `sync --apply --force`, one button. Force, because
     // this page only exists when the drift is destructive or risky; an unforced sync would
     // refuse by construction, and the button *is* the review.
-    val syncAction: Handler = _ =>
-      attempt(schema, databaseSchema) {
+    val syncAction: Handler = request =>
+      attempt(request.csrf) {
         transact { Commands.sync(schema, apply = true, force = true, databaseSchema) }: Unit
         println("[eezo] drift applied to the dev database from the drift page")
       }
@@ -109,9 +135,13 @@ private[eezo] object DriftGate {
     val freezeAction: Handler = request => {
       request.form.get("name").flatMap(_.headOption).map(_.trim).filter(_.nonEmpty) match {
         case None =>
-          refusal(currentDrift(schema, databaseSchema), error = Some("the migration needs a name"))
+          refusal(
+            currentDrift(schema, databaseSchema),
+            error = Some("the migration needs a name"),
+            token = request.csrf
+          )
         case Some(name) =>
-          attempt(schema, databaseSchema) {
+          attempt(request.csrf) {
             freezeAndMigrate(schema, databaseSchema, name, request)
           }
       }
@@ -126,27 +156,6 @@ private[eezo] object DriftGate {
       )
     )
   }
-
-  /** Runs one page action; a failure renders the refusal again with the database's own words on it.
-    *
-    * This is not decoration: the first live run of this page hit exactly it: a `[risky]`
-    * `set not null` that Postgres refused over existing rows. That failure is the `risky` flag
-    * doing its job, and it belongs on the page the user is looking at, not in a stack trace behind
-    * a 500. The transaction has already rolled back by the time it is caught, so rendering again
-    * over a half applied state is not a possibility.
-    */
-  private def attempt(schema: Schema, databaseSchema: String)(action: => Unit): Response =
-    try {
-      action
-      Response.Redirect("/")
-    } catch {
-      case NonFatal(e) =>
-        System.err.println(s"[eezo] drift page action failed: ${e.getMessage}")
-        refusal(
-          currentDrift(schema, databaseSchema),
-          error = Some(s"that did not work: ${e.getMessage}")
-        )
-    }
 
   private def freezeAndMigrate(
       schema: Schema,
@@ -193,9 +202,13 @@ private[eezo] object DriftGate {
     )
 
   /** 503 rather than 200, so an agent polling the app sees "not serving" instead of mistaking this
-    * page for content.
+    * page for content. `token` is the request's, and both forms return it.
     */
-  private def refusal(drift: List[Change], error: Option[String]): Response = {
+  private[eezo] def refusal(
+      drift: List[Change],
+      error: Option[String],
+      token: Csrf.Token
+  ): Response = {
     val decisions = drift.filter(_.destructive).map { change =>
       p(
         code(change.describe),
@@ -223,12 +236,14 @@ private[eezo] object DriftGate {
       form(
         Attrs.method := "post",
         Attrs.action := SyncPath,
+        Csrf.hidden(token),
         button("apply to the dev database"),
         small(" — no migration written; dev only")
       ),
       form(
         Attrs.method := "post",
         Attrs.action := FreezePath,
+        Csrf.hidden(token),
         if (decisions.isEmpty) Seq.empty[Html]
         else Seq(fieldset(legend("destructive changes — decide each one"), decisions)),
         p(
