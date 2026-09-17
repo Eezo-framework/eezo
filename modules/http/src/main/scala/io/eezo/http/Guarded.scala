@@ -37,11 +37,12 @@ import scala.annotation.implicitNotFound
   * routes a model mounts means all seven, which is a safe silence. Saying nothing about who may
   * reach them is not: a default of `public` would make an unguarded route the thing a user gets by
   * forgetting, and a default of guarded would make every application need a guard. Silence is a
-  * compile error instead, and only in an application that has a guard at all, which is the rule the
-  * sbt plugin's generator enforces.
+  * compile error instead, in an application whose build declares `eezo-auth`, and means public
+  * anywhere else. A declaration that exists is used either way, which is the rule the sbt plugin's
+  * generator enforces.
   */
 @implicitNotFound(
-  "No Guarded instance for ${A}, and this application has eezo-auth on its classpath, so every " +
+  "No Guarded instance for ${A}, and this build declares eezo-auth, so every " +
     "route has to say who may reach it.\n" +
     "In its companion, one of:\n" +
     "  given Guarded[${A}] = User.guard.required          // every route needs a signed in user\n" +

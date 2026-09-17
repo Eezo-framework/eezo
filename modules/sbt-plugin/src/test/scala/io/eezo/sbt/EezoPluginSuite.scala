@@ -45,20 +45,23 @@ class EezoPluginSuite extends munit.FunSuite {
       "object Routes {\n" +
       "\n" +
       "  /** Routes written by hand under src/main/scala/app/. */\n" +
-      "  private val handwritten: Seq[io.eezo.http.Route] = Seq(\n" +
+      "  private val handwritten: Seq[io.eezo.http.Route] =\n" +
       "    // from src/main/scala/app/eezoWitness/New.scala\n" +
-      "    io.eezo.http.Route.Http(\n" +
-      "      io.eezo.http.Method.GET,\n" +
-      "      io.eezo.http.PathPattern.parse(\"/eezoWitness/new\"),\n" +
-      "      req => app.eezoWitness.New.`new`(req)\n" +
-      "    ),\n" +
+      "    guardFor[app.eezoWitness.New.type].mounting(\n" +
+      "      io.eezo.http.Route.Http(\n" +
+      "        io.eezo.http.Method.GET,\n" +
+      "        io.eezo.http.PathPattern.parse(\"/eezoWitness/new\"),\n" +
+      "        req => app.eezoWitness.New.`new`(req)\n" +
+      "      )\n" +
+      "    ) ++\n" +
       "    // from src/main/scala/app/eezoWitness/_id/Show.scala\n" +
-      "    io.eezo.http.Route.Http(\n" +
-      "      io.eezo.http.Method.GET,\n" +
-      "      io.eezo.http.PathPattern.parse(\"/eezoWitness/:id\"),\n" +
-      "      req => app.eezoWitness._id.Show.show(req)\n" +
+      "    guardFor[app.eezoWitness._id.Show.type].mounting(\n" +
+      "      io.eezo.http.Route.Http(\n" +
+      "        io.eezo.http.Method.GET,\n" +
+      "        io.eezo.http.PathPattern.parse(\"/eezoWitness/:id\"),\n" +
+      "        req => app.eezoWitness._id.Show.show(req)\n" +
+      "      )\n" +
       "    )\n" +
-      "  )\n" +
       "\n" +
       "  /** The store each derived model gets. Nothing on this application's classpath persists a\n" +
       "    * model, so every one of them lives in memory for as long as the process does.\n" +
@@ -66,14 +69,24 @@ class EezoPluginSuite extends munit.FunSuite {
       "  private inline def storeFor[A]: io.eezo.core.Store[A] =\n" +
       "    io.eezo.http.InMemoryStore[A]()\n" +
       "\n" +
+      "  /** Who may reach this route. A `given Guarded` beside the model or the page is what the\n" +
+      "    * table mounts it behind; this application's build declares no eezo-auth, so saying\n" +
+      "    * nothing means anyone may reach it.\n" +
+      "    */\n" +
+      "  private inline def guardFor[A]: io.eezo.http.Guarded[A] =\n" +
+      "    scala.compiletime.summonFrom {\n" +
+      "      case g: io.eezo.http.Guarded[A] => g\n" +
+      "      case _                          => io.eezo.http.Guarded.public[A]\n" +
+      "    }\n" +
+      "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
       "    * not the generator, decides which of them has a `Resource` and mounts the seven.\n" +
       "    */\n" +
       "  def table(): io.eezo.http.RouteTable = {\n" +
       "    io.eezo.http.RouteTable(\n" +
-      "      handwritten ++\n" +
+      "      (handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model])\n" +
+      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct\n" +
       "    )\n" +
       "  }\n" +
       "}\n"
@@ -98,25 +111,32 @@ class EezoPluginSuite extends munit.FunSuite {
     assertNotEquals(EezoPlugin.witness(true), EezoPlugin.witness(false))
   }
 
-  test("adding eezo-auth to a project changes the witness too, for the same reason") {
+  test("declaring eezo-auth changes the witness too, for the same reason") {
     // Adding the dependency is the whole of the change: no source under `src/main/scala` moves,
     // and the file that has to be regenerated is the one the user cannot edit. Without the flag in
-    // the fingerprint the cache hits and the application keeps a table whose routes never say who
-    // may reach them, which is a guard that silently guards nothing.
+    // the fingerprint the cache hits and the application keeps a table whose `guardFor` still
+    // answers silence with `Guarded.public`, so the completeness check the build just asked for is
+    // absent from every route until some unrelated source happens to change.
     assertNotEquals(
-      EezoPlugin.witness(dbOnClasspath = true, authOnClasspath = true),
-      EezoPlugin.witness(dbOnClasspath = true, authOnClasspath = false)
+      EezoPlugin.witness(dbOnClasspath = true, authDeclared = true),
+      EezoPlugin.witness(dbOnClasspath = true, authDeclared = false)
     )
     assertNotEquals(
-      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = true),
-      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = false)
+      EezoPlugin.witness(dbOnClasspath = false, authDeclared = true),
+      EezoPlugin.witness(dbOnClasspath = false, authDeclared = false)
     )
   }
 
-  test("without eezo-auth the witness is exactly what it was before guards existed") {
-    assertEquals(
-      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = false),
-      expectedWitness
+  test("the witness carries the guard lookup in both readings, so neither can change unseen") {
+    // The lookup is emitted whether or not the build declares `eezo-auth`, so the fingerprint has
+    // to hold it in both readings. The flag off half is the one that used to hold no guard at all.
+    assert(
+      clue(EezoPlugin.witness(dbOnClasspath = false, authDeclared = false))
+        .contains("private inline def guardFor[A]: io.eezo.http.Guarded[A]")
+    )
+    assert(
+      clue(EezoPlugin.witness(dbOnClasspath = false, authDeclared = true))
+        .contains("private inline def guardFor[A](inline name: String)")
     )
   }
 }

@@ -12,8 +12,7 @@ import scala.util.matching.Regex
   *   the fully qualified `object.def` the row calls
   * @param source
   *   the file it came from, which the emitted row carries as a comment
-  */
-/** @param owner
+  * @param owner
   *   the object the `def` lives on, `app.widgets.Index` for `app/widgets/Index.scala`. Carried
   *   rather than recomputed from [[target]], because a target can end in a backticked name such as
   *   `` app.widgets.New.`new` `` and dropping "the last dotted segment" off one of those is a
@@ -394,12 +393,15 @@ object RouteGenerator {
     * @param dbOnClasspath
     *   whether `eezo-db` resolves for the project being generated into, and so whether the emitted
     *   `storeFor` may name `io.eezo.db` at all
+    * @param authDeclared
+    *   whether the build being generated into named `eezo-auth` among its own dependencies, and so
+    *   whether a route that declares no `Guarded` is a compile error rather than a public route
     */
   def render(
       routes: Seq[HandwrittenRoute],
       models: Seq[ModelCandidate],
       dbOnClasspath: Boolean,
-      authOnClasspath: Boolean = false
+      authDeclared: Boolean = false
   ): String = {
     def built(route: HandwrittenRoute, indent: String): String =
       s"""io.eezo.http.Route.Http(
@@ -408,28 +410,33 @@ object RouteGenerator {
          |$indent  req => ${route.target}(req)
          |$indent)""".stripMargin
 
-    // Without a guard the rows are elements of one `Seq(...)`, exactly as they have always been.
-    // With one, each row is itself a `Seq`, because `mounting` answers with the guard's own pages
-    // beside the route it wrapped, so the rows are concatenated instead of listed.
+    // The name a helper is called with, which only the strict helper takes: it is the one thing
+    // that has to reach `compiletime.error`, and the lenient helper has no error to raise. An
+    // argument nothing reads would be the `unused explicit parameter` that `-Wunused:all` reports
+    // in the application's own build.
+    def named(fqn: String): String = if (authDeclared) s"""("$fqn")""" else ""
+
+    // Every row goes through the guard lookup, whatever the flag says. `Guarded` lives in `http`,
+    // so it resolves wherever a route is mounted at all, and a declaration that was written is
+    // therefore always the one the table uses. The flag decides what *silence* means, and that
+    // decision lives in the helper's own fallback arm rather than out here.
+    //
+    // Each row is a `Seq` rather than one route, because `mounting` answers with the guard's own
+    // pages beside the route it wrapped, so the rows are concatenated instead of listed.
     val handwritten =
       if (routes.isEmpty) "    // no files under src/main/scala/app/"
-      else if (!authOnClasspath)
-        sortRoutes(routes)
-          .map(route => s"""    // from ${route.source}
-                           |    ${built(route, "    ")}""".stripMargin)
-          .mkString(",\n")
       else
         sortRoutes(routes)
           .map { route =>
             s"""    // from ${route.source}
-               |    guardFor[${route.owner}.type]("${route.owner}").mounting(
+               |    guardFor[${route.owner}.type]${named(route.owner)}.mounting(
                |      ${built(route, "      ")}
                |    )""".stripMargin
           }
           .mkString(" ++\n")
 
     val handwrittenBlock =
-      if (!authOnClasspath || routes.isEmpty)
+      if (routes.isEmpty)
         s"""  private val handwritten: Seq[io.eezo.http.Route] = Seq(
            |$handwritten
            |  )""".stripMargin
@@ -437,29 +444,37 @@ object RouteGenerator {
         s"""  private val handwritten: Seq[io.eezo.http.Route] =
            |$handwritten""".stripMargin
 
+    // A model's lookup goes through `guardForModel` only where silence is an error, because that
+    // helper exists to spare a model mounting no route from the error. Where silence is public the
+    // two helpers would have the same body, so the rows call `guardFor` directly.
+    def modelGuard(fqn: String): String =
+      if (authDeclared) s"""guardForModel[$fqn]("$fqn")""" else s"guardFor[$fqn]"
+
     val body =
       if (models.isEmpty)
-        if (authOnClasspath) "    io.eezo.http.RouteTable(handwritten.distinct)"
-        else "    io.eezo.http.RouteTable(handwritten)"
+        if (routes.isEmpty) "    io.eezo.http.RouteTable(handwritten)"
+        else "    io.eezo.http.RouteTable(handwritten.distinct)"
       else {
         val derived = models
           .sortBy(_.fqn)
           .map { model =>
-            val declaration =
-              if (authOnClasspath) s""", guardForModel[${model.fqn}]("${model.fqn}")"""
-              else ""
             s"""      // from ${model.source}
-               |      io.eezo.http.Resource.routesOf[${model.fqn}](storeFor[${model.fqn}]$declaration)""".stripMargin
+               |      io.eezo.http.Resource.routesOf[${model.fqn}](storeFor[${model.fqn}], ${modelGuard(
+                model.fqn
+              )})""".stripMargin
           }
           .mkString(" ++\n")
 
-        // `distinct` only in the guarded arm, and it is not a tidy-up. Every declaration one guard
+        // `distinct` wherever there is a row, and it is not a tidy-up. Every declaration one guard
         // makes carries that guard's login and logout routes, so a table with two guarded things
         // holds them twice, and `RouteTable` throws on the same method and path twice rather than
-        // picking a winner. Without a guard nothing is ever carried and the line would be noise.
+        // picking a winner. It is unconditional because a guard can now be declared in an
+        // application whose build never named `eezo-auth`, and an application that carries nothing
+        // loses nothing to it: `Guarded.public` carries no route, and two separately built routes
+        // are never equal, so `distinct` removes nothing that was not the same instance twice.
         val rows = s"handwritten ++\n$derived"
         s"""    io.eezo.http.RouteTable(
-           |      ${if (authOnClasspath) s"($rows).distinct" else rows}
+           |      ($rows).distinct
            |    )""".stripMargin
       }
 
@@ -468,14 +483,14 @@ object RouteGenerator {
     // Each helper follows the rows that call it, for the reason `storeFor` does: an uncalled
     // `private inline def` is what `-Wunused:all` reports, and a generated file has to compile
     // clean under the strictest options a user is entitled to turn on. `guardFor` is called by a
-    // handwritten row directly and by `guardForModel`'s body, so a model-only application still
-    // uses it; `guardForModel` is called by derived rows alone.
+    // handwritten row directly, and by a derived row either directly or through `guardForModel`,
+    // so any row at all is enough to emit it; `guardForModel` needs a derived row and the strict
+    // reading both.
     val guardHelpers =
-      if (!authOnClasspath) ""
+      if (routes.isEmpty && models.isEmpty) ""
       else {
-        val strict   = if (routes.isEmpty && models.isEmpty) "" else guardFor + "\n"
-        val perModel = if (models.isEmpty) "" else guardForModel + "\n"
-        strict + perModel
+        val perModel = if (authDeclared && models.nonEmpty) guardForModel + "\n" else ""
+        guardFor(authDeclared) + "\n" + perModel
       }
 
     val helper = storeHelper + guardHelpers
@@ -532,38 +547,67 @@ object RouteGenerator {
         |    io.eezo.http.InMemoryStore[A]()
         |""".stripMargin
 
-  /** The declaration a mounted thing has to carry once `eezo-auth` reaches the application.
+  /** The lookup every mounted route goes through, in both readings of silence.
     *
-    * Strict: no `Guarded` in scope is a compile error naming the type, which is the rule "in an
-    * application that has a guard, every route mounted has said whether it is guarded; silence is
-    * an error". `scala.compiletime.error` rather than letting implicit search fail on its own,
-    * because the message has to name the file the user edits, and the type's own name is the only
-    * thing in the emitted file that points there.
+    * The first arm is the same in both, and it is the whole point of emitting this unconditionally:
+    * a `given Guarded[A]` that an application wrote is the declaration the table uses, whether or
+    * not that application's build named `eezo-auth`. The alternative, reading the flag out here and
+    * mounting the route bare when it is off, made `given Guarded[Post] = User.guard.required`
+    * silently do nothing in every application that reaches auth through the umbrella or through a
+    * `dependsOn` module, which is an admin page served to the public with nothing to say so.
+    *
+    * The fallback arm is the flag's only job. Strict: no `Guarded` in scope is a compile error
+    * naming the type, which is the rule "in an application that has a guard, every route mounted
+    * has said whether it is guarded; silence is an error". `scala.compiletime.error` rather than
+    * letting implicit search fail on its own, because the message has to name the file the user
+    * edits, and the type's own name is the only thing in the emitted file that points there.
+    * Lenient: silence is [[io.eezo.http.Guarded.public]], which is what an application with nobody
+    * to sign in has always been served.
     *
     * The name arrives as an `inline` parameter rather than being read off `A`, because
     * `compiletime.error` takes a constant and an inline `String` argument folds into one where a
     * type name would need a macro. It is the fully qualified name the generator already wrote into
-    * the row above it, so the two cannot disagree.
+    * the row above it, so the two cannot disagree. Only the strict helper takes it: a parameter the
+    * lenient body never reads is the `unused explicit parameter` that `-Wunused:all` reports, in a
+    * file the application's author cannot edit.
+    *
+    * `private[sbt]` for the reason `EezoPlugin.witness` is: `RouteGeneratorSuite` pins this text
+    * against the copy the umbrella's `GeneratedGuardForSuite` compiles, and nothing a consuming
+    * build sees can reach it.
     */
-  private val guardFor: String =
-    """  /** Who may reach this route. Every mounted route has to say, because this application has
-      |    * eezo-auth on its classpath and so has a way of signing in.
-      |    */
-      |  private inline def guardFor[A](inline name: String): io.eezo.http.Guarded[A] =
-      |    scala.compiletime.summonFrom {
-      |      case g: io.eezo.http.Guarded[A] => g
-      |      case _                          =>
-      |        scala.compiletime.error(
-      |          "no Guarded given for " + name + ", and this application has eezo-auth on its " +
-      |            "classpath, so every mounted route has to say who may reach it. In its " +
-      |            "companion, one of:\n" +
-      |            "  given io.eezo.http.Guarded[T] = <yourGuard>.required\n" +
-      |            "  given io.eezo.http.Guarded[T] = io.eezo.http.Guarded.public"
-      |        )
-      |    }
-      |""".stripMargin
+  private[sbt] def guardFor(authDeclared: Boolean): String =
+    if (authDeclared)
+      """  /** Who may reach this route. Every mounted route has to say, because this application's
+        |    * build declares eezo-auth and so the application has a way of signing in.
+        |    */
+        |  private inline def guardFor[A](inline name: String): io.eezo.http.Guarded[A] =
+        |    scala.compiletime.summonFrom {
+        |      case g: io.eezo.http.Guarded[A] => g
+        |      case _                          =>
+        |        scala.compiletime.error(
+        |          "no Guarded given for " + name + ", and this application's build declares " +
+        |            "eezo-auth, so every mounted route has to say who may reach it. In its " +
+        |            "companion, one of:\n" +
+        |            "  given io.eezo.http.Guarded[T] = <yourGuard>.required\n" +
+        |            "  given io.eezo.http.Guarded[T] = io.eezo.http.Guarded.public"
+        |        )
+        |    }
+        |""".stripMargin
+    else
+      """  /** Who may reach this route. A `given Guarded` beside the model or the page is what the
+        |    * table mounts it behind; this application's build declares no eezo-auth, so saying
+        |    * nothing means anyone may reach it.
+        |    */
+        |  private inline def guardFor[A]: io.eezo.http.Guarded[A] =
+        |    scala.compiletime.summonFrom {
+        |      case g: io.eezo.http.Guarded[A] => g
+        |      case _                          => io.eezo.http.Guarded.public[A]
+        |    }
+        |""".stripMargin
 
-  /** The same declaration for a candidate model, which differs in one way that matters.
+  /** The same lookup for a candidate model under the strict reading, which differs in one way that
+    * matters. Under the lenient reading there is nothing to spare a model from, so the rows call
+    * `guardFor` directly and this is not emitted at all.
     *
     * A candidate is any `case class` with a `derives` clause, and most of them mount nothing:
     * `examples/blog`'s `User` derives `Table` alone, so `Resource.routesOf` answers `Nil` for it.
@@ -576,7 +620,7 @@ object RouteGenerator {
     * `guardFor` would raise its error while `routesOf` was still deciding to throw the value away.
     * Asking the same question one level earlier, here, is what makes the answer reach the error.
     */
-  private val guardForModel: String =
+  private[sbt] val guardForModel: String =
     """  /** Who may reach a derived model's routes. A model with no `Resource` mounts nothing, so it
       |    * is not asked to declare anything.
       |    */

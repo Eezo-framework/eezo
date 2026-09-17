@@ -222,13 +222,15 @@ object EezoPlugin extends AutoPlugin {
     * once that project's own `app/` sources change, because those sources are the other half of the
     * hashed input set below.
     *
-    * `dbOnClasspath` is folded in rather than left to the emitted text alone, and it is the one
-    * input that no source file carries. Adding `eezo-db` to an existing application changes its
-    * `libraryDependencies` and nothing under `src/main/scala`, so without the flag here every
-    * hashed input would be byte identical, the cache would hit, and the application would keep a
-    * `Routes.scala` whose `storeFor` only ever mints an in memory store. Every model deriving
-    * `Table` would then go on losing its rows at shutdown, with no error anywhere to say why. The
-    * flag being part of the fingerprint is what turns adding the dependency into a cache miss.
+    * `dbOnClasspath` and `authDeclared` are folded in rather than left to the emitted text alone,
+    * and they are the two inputs that no source file carries. Adding `eezo-db` to an existing
+    * application changes its `libraryDependencies` and nothing under `src/main/scala`, so without
+    * the flag here every hashed input would be byte identical, the cache would hit, and the
+    * application would keep a `Routes.scala` whose `storeFor` only ever mints an in memory store.
+    * Every model deriving `Table` would then go on losing its rows at shutdown, with no error
+    * anywhere to say why. The flag being part of the fingerprint is what turns adding the
+    * dependency into a cache miss. `authDeclared` is there for the same reason and reads the same
+    * way: it changes what the emitted `guardFor` does with silence, and nothing else moves.
     *
     * `private[sbt]` reads as a reference to the sbt library, and is not one. A qualifier inside an
     * access modifier is a single identifier, never a dotted path, so `private[io.eezo.sbt]` does
@@ -237,11 +239,11 @@ object EezoPlugin extends AutoPlugin {
     * not the root `sbt` that `import sbt._` brings in: visible to `EezoPluginSuite` in the same
     * package, and to nothing a consuming build sees.
     */
-  private[sbt] def witness(dbOnClasspath: Boolean, authOnClasspath: Boolean = false): String = {
+  private[sbt] def witness(dbOnClasspath: Boolean, authDeclared: Boolean = false): String = {
     val samples = WitnessSources.flatMap(RouteGenerator.routeFor)
     val models  = RouteGenerator.modelsIn(WitnessModelSource, WitnessModel)
-    RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath, authOnClasspath) +
-      RouteGenerator.render(samples, models, dbOnClasspath, authOnClasspath)
+    RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath, authDeclared) +
+      RouteGenerator.render(samples, models, dbOnClasspath, authDeclared)
   }
 
   /** Two files below `app/`, chosen so that `witness` covers more of the generator than `render`'s
@@ -347,12 +349,20 @@ object EezoPlugin extends AutoPlugin {
         )
       )
 
-    // Whether this application asked for `eezo-auth`, which decides whether every route it mounts
-    // has to declare who may reach it.
+    // Whether this application's build named `eezo-auth` among its own dependencies. The name says
+    // what is read: the declared list, not the classpath.
     //
-    // Read off the **declared** dependencies, and that is the one place this deliberately differs
-    // from `dbOnClasspath` above. The two flags answer different questions, and reading them the
-    // same way would be wrong for one of them.
+    // What this flag decides is one thing only, and it is narrower than it used to be. Every route
+    // the generator mounts goes through the emitted `guardFor` whatever this says, because
+    // `Guarded` lives in `http` and so resolves wherever a route is mounted at all: a
+    // `given Guarded[Post]` an application wrote is always the declaration its table uses. This
+    // flag decides what *silence* means in that lookup. Declared: no `Guarded` in scope is a
+    // compile error naming the type, which is the completeness check. Not declared: no `Guarded` in
+    // scope is `Guarded.public`, which is what an application with nobody to sign in has always
+    // been served.
+    //
+    // Reading the declared list rather than the resolution report is the one place this
+    // deliberately differs from `dbOnClasspath` above. The two flags answer different questions.
     //
     // `dbOnClasspath` asks "does `io.eezo.db.Table` resolve here", which is a fact about the
     // compiler's classpath, so the resolution report is the only honest source: an `eezo-db` that
@@ -367,20 +377,20 @@ object EezoPlugin extends AutoPlugin {
     // and is the reason this is checked here and not there. The rule exists to make silence an
     // error where a guard exists, not to put a login page in front of every project.
     //
-    // The cost is the mirror case: `eezo-auth` reaching this project through a shared internal
-    // module it `dependsOn` is not named here, so that project's routes are not asked to declare.
-    // That failure is quiet but small — the guard still guards what it is given, and what is lost
-    // is the completeness check — where the failure of the other reading is an application that
-    // cannot be compiled at all.
+    // The cost is the mirror case: `eezo-auth` reaching this project through the umbrella or
+    // through a shared internal module it `dependsOn` is not named here, so that project's routes
+    // are not asked to declare. What is lost there is the completeness check alone. A guard that
+    // was written is still honoured, because the lookup is emitted either way; the failure is that
+    // a page nobody thought about stays public without the build saying so.
     //
     // The bare name is matched, not a cross-versioned one: this is the list as the build wrote it,
     // before `%%` has appended a Scala suffix to anything.
-    val authOnClasspath = libraryDependencies.value.exists(module =>
+    val authDeclared = libraryDependencies.value.exists(module =>
       module.organization == "io.eezo" && module.name == "eezo-auth"
     )
 
     val stamp = streams.value.cacheDirectory / "eezo-routes.version"
-    IO.write(stamp, witness(dbOnClasspath, authOnClasspath))
+    IO.write(stamp, witness(dbOnClasspath, authDeclared))
     val inputs = appInputs ++ modelInputs + stamp
 
     val cached = FileFunction.cached(
@@ -409,7 +419,7 @@ object EezoPlugin extends AutoPlugin {
 
       writeIfChanged(
         destination,
-        RouteGenerator.render(routes, models, dbOnClasspath, authOnClasspath)
+        RouteGenerator.render(routes, models, dbOnClasspath, authDeclared)
       )
       Set(destination)
     }
