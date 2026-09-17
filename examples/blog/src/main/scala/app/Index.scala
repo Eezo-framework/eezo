@@ -4,6 +4,7 @@ import io.eezo.core.html.*
 import io.eezo.http.Guarded
 import io.eezo.http.Request
 import io.eezo.http.Response
+import models.User
 
 /** `app/Index.scala` mounts `GET /`, calling `def index`.
   *
@@ -34,9 +35,19 @@ object Index {
     */
   given Guarded[Index.type] = Guarded.public
 
-  def index(request: Request): Response = {
-    val _ = request
-
+  /** The one page in the blog that can offer a way out.
+    *
+    * The editing screens behind the guard are all derived, and a derived page renders a plain
+    * envelope with nothing to hang a control on, so the sign out form goes on the page the
+    * application wrote. It shows only to a browser that is signed in: `logoutForm` answers nothing
+    * at all for a visitor, so this page says nothing about who is there either way.
+    *
+    * The address is written out here for the reason the link above is: this route is outside the
+    * mount, so the `Url.Mounted("/logout")` the guard would use by default finds nothing to rewrite
+    * it. `Url.Absolute` is the finished address, and the page that points into a mount from outside
+    * is the one that knows where the mount is.
+    */
+  def index(request: Request): Response =
     Response.Ok(
       Html.doctype ++ html(
         head(
@@ -46,9 +57,9 @@ object Index {
         body(
           h1("eezo blog"),
           p("Seven routes, derived from one case class."),
-          p(a(Attrs.href := "/admin/posts", "All posts"))
+          p(a(Attrs.href := "/admin/posts", "All posts")),
+          User.guard.logoutForm(request, Url.Absolute("/admin/logout"))
         )
       )
     )
-  }
 }

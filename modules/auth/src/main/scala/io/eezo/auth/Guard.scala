@@ -1,5 +1,8 @@
 package io.eezo.auth
 
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
 import io.eezo.core.Id
 import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
@@ -64,6 +67,31 @@ final class Guard[U] private (
       )
     )
 
+  /** The sign out form, for a page with somewhere to put one, and nothing at all when the browser
+    * is not signed in.
+    *
+    * A form rather than a link, because signing out changes something and `Csrf.protect` verifies
+    * every unsafe verb: the hidden token is the field whose absence is a 403, and it is rendered
+    * here so that no application hand builds the one input the logout route will not run without.
+    * The empty answer is the other half, and it is why this is a `Html` rather than a pair of
+    * methods: a page splices the result and never asks who is there, which keeps [[current]]'s rule
+    * intact, that asking who is behind a request is for a handler the guard let through.
+    *
+    * `action` defaults to the guard's own logout route, a [[Url.Mounted]] that travels with the
+    * routes, so a page inside the mount takes the default and names no prefix. A page outside the
+    * mount, which is where `examples/blog` has one to show, points in with a [[Url.Absolute]], the
+    * same way every other link from outside a mount does.
+    */
+  def logoutForm(request: Request, action: Url = logout): Html =
+    who(request.session).fold(Html.empty) { _ =>
+      form(
+        Attrs.action := action,
+        Attrs.method := "post",
+        Csrf.hidden(request.csrf),
+        button(Attrs.tpe := "submit", "Sign out")
+      )
+    }
+
   /** Every route of the thing this declares needs a signed in user. */
   def required[A]: Guarded[A] = declaring(Action.values.toSet)
 
@@ -82,7 +110,7 @@ final class Guard[U] private (
     * route nobody wrote twice.
     */
   private val carries: Seq[Route] = Seq(
-    Route.derived(Method.GET, login.path, form(None)),
+    Route.derived(Method.GET, login.path, loginPage(None)),
     Route.derived(Method.POST, login.path, submitted),
     Route.derived(Method.POST, logout.path, signedOut)
   )
@@ -127,32 +155,52 @@ final class Guard[U] private (
 
   /** The 303 an anonymous or stale browser gets.
     *
-    * The refused path is remembered in the session rather than in the query string, because a query
-    * string survives being copied out of the address bar and pasted into a chat window, and because
-    * a value only this application can sign is one an attacker cannot choose. The stale entry is
-    * dropped on the way out, so a browser whose user was deleted does not arrive stale forever.
+    * The refused address is remembered in the session rather than in the query string, because a
+    * query string survives being copied out of the address bar and pasted into a chat window, and
+    * because a value only this application can sign is one an attacker cannot choose. What is worth
+    * remembering is [[Guard.remembered]]'s question. The stale entry is dropped on the way out, so
+    * a browser whose user was deleted does not arrive stale forever.
+    *
+    * A refusal that remembers nothing leaves whatever an earlier one remembered where it is, rather
+    * than clearing it: the page a refused submission came from is the page the person is looking
+    * at, and sending them back to it is less surprising than sending them to `home` because the
+    * last thing they did was press a button.
     *
     * The session written here is the request's, amended, not a fresh one. It therefore still
     * carries the token dispatch minted, which is what keeps `Csrf.protect` from reading this
     * response as a logout and sending the browser to the login page with no token to submit with.
     */
-  private def refuse(request: Request): Response =
+  private def refuse(request: Request): Response = {
+    val cleared = request.session.withoutReserved(Guard.UserEntry)
     Response
       .Redirect(login)
       .withSession(
-        request.session
-          .withoutReserved(Guard.UserEntry)
-          .withReserved(Guard.ReturnEntry, request.path)
+        Guard.remembered(request).fold(cleared)(cleared.withReserved(Guard.ReturnEntry, _))
       )
+  }
 
-  private def form(errors: Option[String]): Handler = request =>
-    Response.Ok(Guard.page(Form[Login].render(login, Method.POST, None, request.csrf), errors))
+  /** The GET behind the login page. Named for the page rather than for the tag it renders, because
+    * `form` is the tag [[logoutForm]] builds with and a member of this class would shadow it.
+    *
+    * `raw` is the submission to render the inputs from, empty for the GET and the rejected body for
+    * [[rejected]], which is the parameter `Form.render` has for exactly this and the one a rejected
+    * `Resource` submission passes `request.form` to.
+    */
+  private def loginPage(
+      errors: Option[String],
+      raw: Map[String, Seq[String]] = Map.empty
+  ): Handler = request =>
+    Response.Ok(
+      Guard.page(Form[Login].render(login, Method.POST, None, request.csrf, raw = raw), errors)
+    )
 
   /** The POST behind the login form.
     *
     * A failure is a 422 carrying the form again rather than a redirect, matching what a rejected
     * `Resource` submission does, and it says one thing for a wrong password and for an unknown
-    * email. Which of the two it was is exactly what an attacker is asking.
+    * email. Which of the two it was is exactly what an attacker is asking. Both failures, the body
+    * that will not decode and the one that decodes and is refused, go through [[rejected]], which
+    * is where what comes back in the inputs is settled.
     *
     * `authenticate` answers an unknown email without hashing anything, so the two cases take
     * measurably different times. That is user enumeration by timing, and it is knowingly accepted
@@ -163,7 +211,7 @@ final class Guard[U] private (
     request
       .as[Login]
       .toOption
-      .flatMap(credentials => authenticate(credentials.email, credentials.password))
+      .flatMap(attempt => authenticate(attempt.email, attempt.password))
       .fold(rejected(request)) { key =>
         Response
           .Redirect(Guard.back(request.session, home))
@@ -172,8 +220,21 @@ final class Guard[U] private (
           .withSession(Csrf.rotated(Session.empty.withReserved(Guard.UserEntry, key.show)))
       }
 
+  /** The 422 a refused sign in comes back as: the same page, the one message, and the body that was
+    * submitted rendered back into the inputs.
+    *
+    * The whole body goes in, both when it failed to decode as a [[Login]] and when it decoded and
+    * `authenticate` refused, so the email is there to be typed over rather than typed again. The
+    * password travels in that map too and still never reaches the page: `Form.render` suppresses
+    * every field that renders as a password box, which is where that rule belongs, since it holds
+    * for a rejected `Resource` submission just as much as for this one.
+    *
+    * The message stays on the page rather than becoming a [[FormErrors]] against `email` or
+    * `password`, because an error beside one input says which of the two was wrong.
+    */
   private def rejected(request: Request): Response =
-    form(Some("that email and password do not match"))(request).copy(status = 422)
+    loginPage(Some("that email and password do not match"), request.form)(request)
+      .copy(status = 422)
 
   /** The POST behind the logout button.
     *
@@ -196,10 +257,20 @@ object Guard {
     */
   private[eezo] val UserEntry: String = Session.Reserved + "user"
 
-  /** The session entry the refused path travels under, so that signing in lands where the browser
-    * was going rather than at a page it did not ask for.
+  /** The session entry the refused address travels under, so that signing in lands where the
+    * browser was going rather than at a page it did not ask for.
     */
   private[eezo] val ReturnEntry: String = Session.Reserved + "return"
+
+  /** The longest remembered address, past which a refusal remembers nothing.
+    *
+    * The session is one signed cookie, and `SessionCookie.encode` refuses to build one past the
+    * roughly 4000 bytes a browser keeps rather than let the browser drop it in silence. An
+    * outlandish query string would therefore turn a refusal, which is a redirect somebody sees,
+    * into a 500 nobody asked for. Forgetting the address instead lands the login on `home`, which
+    * is a page, and this is generous enough that no address a person is looking at reaches it.
+    */
+  private[auth] val MaxReturn: Int = 1024
 
   /** A guard over `U`.
     *
@@ -222,13 +293,44 @@ object Guard {
   ): Guard[U] = new Guard[U](find, authenticate, login, home)
 
   /** The key out of the session text. A session eezo signed can only hold what eezo wrote, so a
-    * value that is not a UUID means the signing key changed under a live browser rather than that
-    * anyone tampered; either way there is no user, and answering `None` sends them to log in again.
+    * value that is not a UUID means the secret changed under a live browser rather than that anyone
+    * tampered; either way there is no user, and answering `None` sends them to log in again.
     */
   private[auth] def parse[U](text: String): Option[Id[U]] = summon[FromPath[Id[U]]].apply(text)
 
-  /** Where a successful login goes: the path the guard refused, when the session remembers one that
-    * is safe to use, and the guard's configured `home` otherwise.
+  /** What a refusal is worth remembering, when it is worth anything.
+    *
+    * A `GET` and nothing else. Signing in ends in a redirect, which the browser follows with a
+    * `GET`, so a remembered `POST`, `PUT`, `PATCH` or `DELETE` address comes back under a verb that
+    * address may not answer: a 404 or a 405 on the first page somebody sees after signing in.
+    * `HEAD` goes with them rather than with `GET`, since it asks for the headers of a page nobody
+    * is looking at.
+    *
+    * The query string travels with the path, or a refused `/posts?page=3` comes back as page one.
+    * It is rebuilt from the parameters the request decoded rather than kept verbatim, because that
+    * is what a [[Request]] carries, with the names sorted so one address has one spelling. Every
+    * name and value is encoded on the way, which is also why nothing a query carries can spell the
+    * backslash or the control character [[relative]] refuses.
+    */
+  private[auth] def remembered(request: Request): Option[String] =
+    Option
+      .when(request.method == Method.GET)(request.path + queryString(request.query))
+      .filter(_.length <= MaxReturn)
+
+  /** `?a=1&b=2`, or nothing at all when there are no parameters. */
+  private def queryString(query: Map[String, Seq[String]]): String =
+    if (query.isEmpty) ""
+    else
+      query.toSeq
+        .sortBy(_._1)
+        .flatMap { case (name, values) => values.map(value => s"${encode(name)}=${encode(value)}") }
+        .mkString("?", "&", "")
+
+  private def encode(value: String): String = URLEncoder.encode(value, StandardCharsets.UTF_8)
+
+  /** Where a successful login goes: the address the guard refused, path and query string together,
+    * when the session remembers one that is safe to use, and the guard's configured `home`
+    * otherwise.
     *
     * [[Url.Absolute]] rather than [[Url.Mounted]] for the remembered branch, and that is not a
     * detail. The remembered path is what the guard's wrapper saw, which is already the mounted
@@ -240,7 +342,13 @@ object Guard {
   private[auth] def back(session: Session, home: Url): Url =
     session.reserved(ReturnEntry).filter(relative).map(Url.Absolute.apply).getOrElse(home)
 
-  /** Whether a remembered path is this application's own.
+  /** Whether a remembered address is this application's own.
+    *
+    * The whole of it is checked, query string included, which is safe in the one direction that
+    * matters: a query can only make an address that would pass refused, never the other way round.
+    * `?next=//evil.example.com` is a value some page reads and not an address anything redirects
+    * to, so it passes; a path that itself begins `//` names another host, and is refused whether a
+    * query follows it or not.
     *
     * An open redirect is the failure this exists to prevent, and it has more spellings than it
     * looks. A leading `//` or `/\` is protocol relative and names another host; a backslash

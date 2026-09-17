@@ -123,20 +123,20 @@ class FormSuite extends munit.FunSuite {
   case class Passphrase(text: String)
 
   object Passphrase {
-    given Field[Passphrase] = Field.of[Passphrase]("password")(_.text)(text =>
+    given Field[Passphrase] = Field.of[Passphrase](Field.PasswordInput)(_.text)(text =>
       if (text.length < 8) Left("is too short") else Right(Passphrase(text))
     )
   }
 
-  case class Credentials(user: String, secret: Passphrase) derives Form
+  case class SignIn(user: String, secret: Passphrase) derives Form
 
   test("a password input never carries a value, neither from a record nor from a submission") {
-    val record = Credentials("ann", Passphrase("correct horse"))
-    val filled = Form[Credentials].render("/login", Method.POST, Some(record), token).render
+    val record = SignIn("ann", Passphrase("correct horse"))
+    val filled = Form[SignIn].render("/login", Method.POST, Some(record), token).render
     assert(filled.contains("""type="password""""), filled)
     assert(!filled.contains("correct horse"), filled)
 
-    val echoed = Form[Credentials]
+    val echoed = Form[SignIn]
       .render("/login", Method.POST, None, token, FormErrors.empty, data("secret" -> "typed here"))
       .render
     assert(!echoed.contains("typed here"), echoed)
@@ -144,10 +144,10 @@ class FormSuite extends munit.FunSuite {
 
   test("a rejected password comes back as an empty box with its message beside it") {
     val submitted = data("user" -> "ann", "secret" -> "short")
-    val rejected  = Form[Credentials].parse(submitted, None)
+    val rejected  = Form[SignIn].parse(submitted, None)
     assertEquals(rejected, Left(FormErrors(Seq(FieldError("secret", "is too short")))))
 
-    val html = Form[Credentials]
+    val html = Form[SignIn]
       .render("/login", Method.POST, None, token, rejected.left.toOption.get, submitted)
       .render
     assert(html.contains("is too short"), html)

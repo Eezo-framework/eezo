@@ -17,9 +17,9 @@ import models.User
   * be reachable from the one that serves the internet. It is also what lets `Main.scala` stay
   * exactly as it was.
   *
-  * The credentials arrive in the environment rather than as arguments. A command line is visible to
-  * every process on the machine through `ps` and is written to the shell's history file, and a
-  * password that has been in either of those is a password that has to be changed.
+  * The email and password arrive in the environment rather than as arguments. A command line is
+  * visible to every process on the machine through `ps` and is written to the shell's history
+  * file, and a password that has been in either of those is a password that has to be changed.
   *
   * The connection settings below repeat `Main`'s. That duplication is real and is the cost of
   * leaving `Main.scala` untouched: `withDatabase` is `protected`, so a tool cannot borrow the
