@@ -79,6 +79,9 @@ final case class Request(
     * `Csrf.hidden`. Dispatch mints one into the session before any handler runs, so inside a route
     * this cannot fail; a request built by hand and never dispatched has none, and asking is a bug
     * in the caller rather than a bad request.
+    *
+    * @throws IllegalStateException
+    *   on a request dispatch has never seen, which has no token to hand out.
     */
   def csrf: Csrf.Token =
     Csrf
@@ -162,10 +165,12 @@ object Request {
     * rewrite its verb, and an API client that never asked for this convention would be dispatching
     * `DELETE` from a link somebody appended a query parameter to.
     *
-    * It never downgrades to `GET`: turning a `POST` into a `GET` loses the body and makes the
-    * request repeatable, which is not something a form should be able to ask for. An unrecognised
-    * name is left alone rather than raising, because a request eezo does not understand is one it
-    * has no reason to reject on this field's behalf.
+    * It never downgrades to a safe verb: turning a `POST` into a `GET` loses the body and makes the
+    * request repeatable, which is not something a form should be able to ask for. `HEAD` and
+    * `OPTIONS` are refused with it because `Csrf.verify` skips the safe methods, so a forged
+    * submission that named one of them would reach a handler unchecked. An unrecognised name is
+    * left alone rather than raising, because a request eezo does not understand is one it has no
+    * reason to reject on this field's behalf.
     */
   private[http] def withMethodOverride(request: Request): Request =
     if (request.method != Method.POST || !request.isFormEncoded) request
@@ -175,7 +180,7 @@ object Request {
         .flatMap(_.headOption)
         .orElse(request.queryParam(MethodField))
         .flatMap(Method.parse)
-        .filter(_ != Method.GET) match {
+        .filter(!_.safe) match {
         case Some(method) => request.copy(method = method)
         case None         => request
       }

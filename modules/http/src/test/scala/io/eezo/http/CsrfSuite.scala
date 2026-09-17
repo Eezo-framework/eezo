@@ -127,6 +127,22 @@ class CsrfSuite extends munit.FunSuite with ResourceFixtures {
     assertEquals(routes.dispatch(anonymous(Method.GET, "/things")).status, 200)
   }
 
+  test("a forged POST cannot reach a safe verb through _method and skip the check") {
+    Seq(Method.HEAD, Method.OPTIONS).foreach { safe =>
+      var ran     = false
+      val handler = (_: Request) => { ran = true; Response.Ok(Html.text("ok")) }
+      // Both verbs are mounted, so the refusal is the check's and not a 405 in disguise.
+      val routes = table(route(safe, "/things", handler), route(Method.POST, "/things", handler))
+      // Through the same door the server uses: the override is applied before dispatch.
+      val overridden = Request.withMethodOverride(
+        forged(Method.POST, "/things", Request.MethodField -> safe.toString)
+      )
+      val failure = intercept[Forbidden](routes.dispatch(overridden))
+      assert(failure.getMessage.contains("missing or stale"), failure.getMessage)
+      assert(!ran, safe.toString)
+    }
+  }
+
   test("the check runs after the route match, so a 404 and a 405 stay what they are") {
     val routes = table(route(Method.GET, "/things"))
     intercept[NotFound](routes.dispatch(anonymous(Method.POST, "/nowhere", "a" -> "b")))
