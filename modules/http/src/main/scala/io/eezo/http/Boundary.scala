@@ -34,7 +34,12 @@ private[http] object Boundary {
   def resolve(failure: Throwable, path: String, config: Config): Resolution = failure match {
     case e: EezoException =>
       e match {
-        case BadRequest(detail)        => Resolution(Problem(400, detail, path))
+        case BadRequest(detail) => Resolution(Problem(400, detail, path))
+        // No `WWW-Authenticate`, which RFC 9110 makes mandatory on a 401 for the schemes it defines.
+        // eezo authenticates with a form and a session cookie, which is not one of those schemes,
+        // and the header would make a browser open its own credential dialog over the page. Every
+        // form based framework answers a 401 without it for that reason.
+        case Unauthorized(detail)      => Resolution(Problem(401, detail, path))
         case Forbidden(detail)         => Resolution(Problem(403, detail, path))
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>

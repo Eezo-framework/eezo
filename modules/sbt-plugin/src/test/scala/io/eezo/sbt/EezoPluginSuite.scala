@@ -97,4 +97,26 @@ class EezoPluginSuite extends munit.FunSuite {
     // `Table` would silently keep losing its rows at shutdown.
     assertNotEquals(EezoPlugin.witness(true), EezoPlugin.witness(false))
   }
+
+  test("adding eezo-auth to a project changes the witness too, for the same reason") {
+    // Adding the dependency is the whole of the change: no source under `src/main/scala` moves,
+    // and the file that has to be regenerated is the one the user cannot edit. Without the flag in
+    // the fingerprint the cache hits and the application keeps a table whose routes never say who
+    // may reach them, which is a guard that silently guards nothing.
+    assertNotEquals(
+      EezoPlugin.witness(dbOnClasspath = true, authOnClasspath = true),
+      EezoPlugin.witness(dbOnClasspath = true, authOnClasspath = false)
+    )
+    assertNotEquals(
+      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = true),
+      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = false)
+    )
+  }
+
+  test("without eezo-auth the witness is exactly what it was before guards existed") {
+    assertEquals(
+      EezoPlugin.witness(dbOnClasspath = false, authOnClasspath = false),
+      expectedWitness
+    )
+  }
 }

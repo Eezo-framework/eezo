@@ -336,6 +336,76 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
   }
 
+  // ------------------------------------------------------- which routes have to say who may reach them
+
+  private val helloRouteAndModel = (Seq(route("widgets/Index.scala")), widget)
+
+  test("without eezo-auth nothing says Guarded, and the file is what it was before guards") {
+    val (routes, models) = helloRouteAndModel
+    val emitted          =
+      RouteGenerator.render(routes, models, dbOnClasspath = true, authOnClasspath = false)
+    assert(!clue(emitted).contains("Guarded"))
+    assert(!clue(emitted).contains("guardFor"))
+    // Byte for byte what the generator emitted before this ticket existed.
+    assertNoDiff(emitted, RouteGenerator.render(routes, models, dbOnClasspath = true))
+  }
+
+  test("with eezo-auth every handwritten route goes through guardFor on its own object") {
+    val emitted = RouteGenerator.render(
+      Seq(route("widgets/Index.scala")),
+      Seq.empty,
+      dbOnClasspath = false,
+      authOnClasspath = true
+    )
+    assert(
+      clue(emitted).contains(
+        """guardFor[app.widgets.Index.type]("app.widgets.Index").mounting("""
+      )
+    )
+    assert(clue(emitted).contains("io.eezo.http.Route.Http("))
+  }
+
+  test("with eezo-auth every derived model's routesOf is handed a declaration") {
+    val emitted =
+      RouteGenerator.render(Seq.empty, widget, dbOnClasspath = true, authOnClasspath = true)
+    assert(
+      clue(emitted).contains(
+        """io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], """ +
+          """guardForModel[models.Widget]("models.Widget"))"""
+      )
+    )
+  }
+
+  test("the strict helper errors by name, and the model helper waits for a Resource") {
+    val emitted =
+      RouteGenerator.render(Seq.empty, widget, dbOnClasspath = false, authOnClasspath = true)
+    assert(clue(emitted).contains("private inline def guardFor[A](inline name: String)"))
+    assert(clue(emitted).contains("scala.compiletime.error("))
+    // A model with a `derives` clause but no `Resource`, such as the blog's `User`, mounts nothing
+    // and must not be asked to declare anything.
+    assert(clue(emitted).contains("private inline def guardForModel[A](inline name: String)"))
+    assert(clue(emitted).contains("case _: io.eezo.http.Resource[A] => guardFor[A](name)"))
+    assert(clue(emitted).contains("=> io.eezo.http.Guarded.public[A]"))
+  }
+
+  test("the guard helpers follow the rows that call them, like storeFor does") {
+    // No handwritten routes and no models: nothing calls either helper, and an uncalled
+    // `private inline def` is a `-Wunused:all` failure in the application's own build.
+    val bare =
+      RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath = false, authOnClasspath = true)
+    assert(!clue(bare).contains("guardFor"))
+
+    // Handwritten routes but no models: the strict helper is called, the model one is not.
+    val routesOnly = RouteGenerator.render(
+      Seq(route("widgets/Index.scala")),
+      Seq.empty,
+      dbOnClasspath = false,
+      authOnClasspath = true
+    )
+    assert(clue(routesOnly).contains("def guardFor[A]"))
+    assert(!clue(routesOnly).contains("def guardForModel[A]"))
+  }
+
   test("with no candidates neither arm emits storeFor, because nothing would call it") {
     // A `private inline def` nobody calls is a `-Wunused:all` failure in any application that
     // compiles with `-Werror`, so the helper is tied to the derived rows that use it.

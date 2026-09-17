@@ -17,6 +17,8 @@ class BoundarySuite extends munit.FunSuite {
 
   test("each member of the sealed set maps to its status") {
     assertEquals(problem(BadRequest("bad")).status, 400)
+    assertEquals(problem(Unauthorized("no one is signed in")).status, 401)
+    assertEquals(problem(Forbidden("nope")).status, 403)
     assertEquals(problem(NotFound("/x")).status, 404)
     assertEquals(problem(MethodNotAllowed(Seq(Method.GET))).status, 405)
     assertEquals(problem(PayloadTooLarge(1024)).status, 413)

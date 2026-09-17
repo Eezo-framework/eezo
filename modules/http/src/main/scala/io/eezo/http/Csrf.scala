@@ -64,12 +64,39 @@ object Csrf {
   def hidden(token: Token): Html =
     input(Attrs.tpe := "hidden", Attrs.name := Field, Attrs.value := token)
 
-  /** The token a session holds, if dispatch has minted one into it. */
-  private[http] def read(session: Session): Option[Token] = session.reserved(Entry)
+  /** The token a session holds, if dispatch has minted one into it.
+    *
+    * `private[eezo]`, like [[carrying]] below and the `Session` doors both stand on: a module that
+    * drives routes without a server, which is what `auth`'s and `testkit`'s suites do, has to be
+    * able to build the session a browser would have arrived with and to read back the one that went
+    * out. Still closed to an application, which gets its token through `Request.csrf`.
+    */
+  private[eezo] def read(session: Session): Option[Token] = session.reserved(Entry)
 
   /** The session with `token` in its reserved entry. */
-  private[http] def carrying(session: Session, token: Token): Session =
+  private[eezo] def carrying(session: Session, token: Token): Session =
     session.withReserved(Entry, token)
+
+  /** The session with a token of its own, minted now, replacing whatever it held.
+    *
+    * The one named operation for what happens to the token when a handler rebuilds the session,
+    * which in practice means signing in. Published here, rather than left for each login handler to
+    * remember, because it is a decision about the application and not about one page: a second
+    * login route that forgot to call it would be a session fixation hole nobody would see in a
+    * review of the line that was missing.
+    *
+    * The decision is to rotate. Signing in rebuilds the session precisely so that nothing an
+    * attacker could have planted in the old one survives the privilege change, and the CSRF token
+    * is part of the old one. Carrying it across, which is what [[protect]] does for an ordinary
+    * rebuild, would leave the post-login session holding a value that was minted before eezo knew
+    * who this was. The cost is real and small: a form opened in a second tab before signing in
+    * carries the old token, and submitting it after signing in is refused once, with the message
+    * that says to reload.
+    *
+    * [[protect]] leaves the result alone, because a session that already holds a token of its own
+    * is exactly what its second arm is for.
+    */
+  def rotated(session: Session): Session = carrying(session, Token.gen())
 
   /** The handler with the token around it, which is how `RouteTable.dispatch` runs the route it
     * matched: [[ensure]] first, [[verify]] on what it produced, and the session the handler saw,
@@ -84,6 +111,12 @@ object Csrf {
     * the ready request's token carried into it, because a page rendered on that same response
     * embeds that token in its form and the next submission has to find it in the cookie that
     * follows.
+    *
+    * Carrying forward is the right answer for an ordinary rebuild and the wrong one at a privilege
+    * change, so a login handler says which it means by calling [[rotated]]. The result already
+    * holds a token of its own and so takes the arm above, untouched. This is deliberately not
+    * decided here: this method cannot tell a session rebuilt at login from one rebuilt for any
+    * other reason, and guessing would either rotate every rebuild or none.
     */
   private[http] def protect(handler: Handler): Handler = request => {
     val ready = ensure(request)

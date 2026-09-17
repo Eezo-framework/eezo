@@ -108,7 +108,15 @@ lazy val db = module("db")
 lazy val live = module("live").dependsOn(core, http)
 
 // Sessions, email and password, CSRF, route gating.
-lazy val auth = module("auth").dependsOn(core, http, db)
+//
+// `db` is deliberately absent. A guard reads the session and calls back into functions the
+// application supplies, so nothing here opens a connection or knows a table exists; the one place
+// `Password` meets storage is the `Column[Password]` an application writes beside its own model,
+// where both modules are already visible. Depending on `db` would put a driver on the classpath of
+// every application that has a login page and no database.
+lazy val auth = module("auth")
+  .dependsOn(core, http)
+  .settings(libraryDependencies += springCrypto)
 
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)

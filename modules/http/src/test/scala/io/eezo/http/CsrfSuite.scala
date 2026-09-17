@@ -101,6 +101,36 @@ class CsrfSuite extends munit.FunSuite with ResourceFixtures {
     assertEquals(Csrf.read(session), seen)
   }
 
+  test("rotating mints a token that is not the one the session arrived with") {
+    val arrived = Csrf.carrying(Session.empty, Csrf.Token.gen())
+    val rotated = Csrf.rotated(arrived)
+    assert(Csrf.read(rotated).isDefined, "a rotated session has a token")
+    assertNotEquals(Csrf.read(rotated), Csrf.read(arrived))
+  }
+
+  test("a session rebuilt through rotating keeps the token it was given, not the request's") {
+    var seen: Option[Csrf.Token] = None
+    val routes                   = table(
+      route(
+        Method.GET,
+        "/login",
+        request => {
+          seen = Some(request.csrf)
+          Response
+            .Ok(Html.text("ok"))
+            .withSession(Csrf.rotated(Session.empty.set("user", "42")))
+        }
+      )
+    )
+    val response = routes.dispatch(forged(Method.GET, "/login"))
+    val session  = response.session.getOrElse(fail("no session on the response"))
+    assert(seen.isDefined, "the handler never ran")
+    // The decision this ticket records: signing in rebuilds the session, and rebuilding it while
+    // keeping the token the request arrived with is half a rebuild.
+    assertNotEquals(Csrf.read(session), seen)
+    assert(Csrf.read(session).isDefined, "the rebuilt session still has a token of its own")
+  }
+
   test("an explicitly empty session is left empty, as logout") {
     val routes =
       table(route(Method.GET, "/", _ => Response.Ok(Html.text("ok")).withSession(Session.empty)))

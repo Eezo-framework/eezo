@@ -42,14 +42,21 @@ final case class Session private[http] (
 
   /** The entry under a reserved name, the door [[Csrf.read]] uses instead of reaching into
     * `entries` itself.
+    *
+    * `private[eezo]` rather than `private[http]` because `modules/auth` keeps the signed in user's
+    * key and the path a guard refused under reserved names too, and `io.eezo.auth` is a different
+    * package. The alternative was an ordinary entry, which an application could read, overwrite or
+    * delete through [[set]] and [[remove]]: writing somebody else's key into `_user` would be a
+    * privilege escalation spelled with the public API. The prefix is what makes that impossible, so
+    * the door has to open as wide as the modules that need the prefix and no wider.
     */
-  private[http] def reserved(name: String): Option[String] = entries.get(name)
+  private[eezo] def reserved(name: String): Option[String] = entries.get(name)
 
   /** The session with `value` written under a reserved name, the door [[Csrf.carrying]] uses
     * instead of reaching into `entries` and `copy` itself. The guard mirrors [[set]]'s, the other
     * way round: a name that does not start with [[Session.Reserved]] does not belong here.
     */
-  private[http] def withReserved(name: String, value: String): Session = {
+  private[eezo] def withReserved(name: String, value: String): Session = {
     require(
       name.startsWith(Session.Reserved),
       s"session entry '$name' does not start with '${Session.Reserved}', which withReserved requires"
@@ -57,9 +64,28 @@ final case class Session private[http] (
     copy(entries = entries + (name -> value))
   }
 
-  /** Whether the application holds any entry. Flash does not count, and neither does what eezo
-    * keeps under its reserved names: a session that carries only a flash, or only the CSRF token
-    * dispatch minted into it, names nobody.
+  /** The session without a reserved entry. The other half of [[withReserved]], and the shape a
+    * guard needs on the way out: a session naming a row that is no longer there has to lose that
+    * name on the response, or the next request arrives stale in exactly the same way and nothing
+    * ever clears it.
+    */
+  private[eezo] def withoutReserved(name: String): Session = {
+    require(
+      name.startsWith(Session.Reserved),
+      s"session entry '$name' does not start with '${Session.Reserved}', which withoutReserved requires"
+    )
+    copy(entries = entries - name)
+  }
+
+  /** Whether the application holds any entry of its own. Flash does not count, and neither does
+    * what eezo keeps under its reserved names: a session that carries only a flash, or only the
+    * CSRF token dispatch minted into it, holds nothing the application put there.
+    *
+    * Deliberately not "nobody is signed in". The signed in user's key is a reserved entry too, so a
+    * session naming a user still answers `true` here. The one caller that matters,
+    * [[Csrf.protect]], is asking whether a handler emptied the session on purpose, and it asks
+    * about the token in the same breath, so a login response, which carries a freshly minted one,
+    * never reaches that arm.
     */
   def isEmpty: Boolean = entries.keysIterator.forall(_.startsWith(Session.Reserved))
 
@@ -76,10 +102,14 @@ object Session {
 
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
 
-  /** The prefix of the names eezo keeps for itself, the flash and the CSRF token, which [[set]]
-    * refuses, [[withReserved]] requires and [[isEmpty]] looks past.
+  /** The prefix of the names eezo keeps for itself, the flash, the CSRF token and the guard's two,
+    * which [[set]] refuses, [[withReserved]] requires and [[isEmpty]] looks past.
+    *
+    * `private[eezo]` for the reason [[reserved]] gives: `modules/auth` builds its own names from it
+    * rather than writing `"_user"` out, so a module that reserves a name cannot spell the prefix
+    * differently from the module that enforces it.
     */
-  private[http] val Reserved: String = "_"
+  private[eezo] val Reserved: String = "_"
 }
 
 /** The session's cookie: the name, the wire format, and the one rule for when it is written.

@@ -78,4 +78,4 @@ jobs:
       - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample
-          cd examples && sbt -batch compile
+          cd examples && sbt -batch test

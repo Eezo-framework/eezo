@@ -156,6 +156,20 @@ object Form {
     */
   private val KeyName = "id"
 
+  /** The one input type whose value never reaches the page.
+    *
+    * Matched on the input type rather than on the Scala type, because `http` cannot see
+    * `io.eezo.auth.Password` and should not: any field that renders as a password box wants the
+    * same treatment, whoever wrote it.
+    *
+    * Both sources are suppressed, not just one. `show` is the obvious half, and for
+    * `Field[Password]` it is empty anyway; `raw` is the half that matters, because it is the
+    * rejected submission, and echoing it puts the text the user just typed into the HTML of the
+    * page that told them it was wrong. Losing the typing is the point here rather than a cost: a
+    * password box is retyped, and every browser's password manager refills it.
+    */
+  private val Password = "password"
+
   private def make[A](
       modelName: String,
       labels: List[String],
@@ -207,7 +221,7 @@ object Form {
                 Attrs.tpe   := f.inputType,
                 Attrs.id    := f.name,
                 Attrs.name  := f.name,
-                Attrs.value := current.getOrElse("")
+                Attrs.value := (if (f.inputType == Password) "" else current.getOrElse(""))
               )
 
           div(

@@ -1,0 +1,384 @@
+package io.eezo.auth
+
+import java.net.URLEncoder
+import java.nio.charset.StandardCharsets
+
+import io.eezo.core.Id
+import io.eezo.core.html.Html
+import io.eezo.core.html.Url
+import io.eezo.http.*
+
+/** The password guard: who it says is behind a request, what it does to a route, and the three
+  * routes it carries.
+  *
+  * Every user here is seeded with [[GuardSuite.cheap]], a precomputed strength 4 hash, rather than
+  * through `Password.hash`. Hashing at the shipped strength 12 costs a quarter of a second, and a
+  * suite that pays it per user is a suite somebody later marks as ignored.
+  */
+class GuardSuite extends munit.FunSuite {
+
+  import GuardSuite.*
+
+  case class User(id: Id[User], email: String, password: Password)
+
+  private val ann  = User(Id.gen(), "ann@example.com", cheap)
+  private val rows = Map(ann.id -> ann)
+
+  private def guard: Guard[User] =
+    Guard[User](
+      find = id => rows.get(id),
+      authenticate = (email, plain) =>
+        rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id)
+    )
+
+  /** A page behind the guard, so a test can tell "the handler ran" from "the wrapper answered". */
+  private def page(method: Method = Method.GET, path: String = "/posts"): Route =
+    Route.Http(method, PathPattern.parse(path), _ => Response.Ok(Html.text("the posts")))
+
+  /** The whole application a guard implies: its three routes, and one guarded page. */
+  private def app(guarded: Guarded[Any], behind: Route = page()): RouteTable =
+    RouteTable((guarded.carries :+ guarded.through(behind)).distinct)
+
+  /** A browser whose session names `who`, with a token so an unsafe request can return one. */
+  private def signedIn(who: Id[User], method: Method = Method.GET, path: String = "/posts") =
+    browser(method, path).copy(
+      session = Session.empty.withReserved(Guard.UserEntry, who.show)
+    )
+
+  private def whom(session: Session): Option[String] = session.reserved(Guard.UserEntry)
+
+  // ------------------------------------------------------------ the current user
+
+  test("the current user is the row the session names") {
+    assertEquals(guard.current(signedIn(ann.id)).email, "ann@example.com")
+  }
+
+  test("asking who is there when nobody is, is an error rather than a redirect") {
+    intercept[Unauthorized](guard.current(browser(Method.GET, "/posts")))
+    intercept[Unauthorized](guard.current(signedIn(Id.gen[User]())))
+  }
+
+  // ------------------------------------------------------------ refusing
+
+  test("an anonymous browser is sent to the login page and the handler never runs") {
+    var ran     = false
+    val watched = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      _ => { ran = true; Response.Ok(Html.text("the posts")) }
+    )
+    val response = RouteTable(Seq(guard.required[Any].through(watched)))
+      .dispatch(browser(Method.GET, "/posts"))
+    assertEquals(response.status, 303)
+    assertEquals(response.header("Location"), Some("/login"))
+    assert(!ran, "the handler behind the guard ran anyway")
+  }
+
+  test("a session naming a row that is gone is refused, and loses that entry on the way out") {
+    val response =
+      RouteTable(Seq(guard.required[Any].through(page()))).dispatch(signedIn(Id.gen[User]()))
+    assertEquals(response.status, 303)
+    val session = response.session.getOrElse(fail("no session on the refusal"))
+    assertEquals(whom(session), None, "the stale entry survived the refusal")
+  }
+
+  test("a signed in browser reaches the page") {
+    val response =
+      RouteTable(Seq(guard.required[Any].through(page()))).dispatch(signedIn(ann.id))
+    assertEquals(response.status, 200)
+  }
+
+  test("a WebSocket route refuses rather than redirecting, having no page to send anyone to") {
+    val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
+    guard.required[Any].through(ws) match {
+      case Route.Ws(_, endpoint, _) =>
+        intercept[Unauthorized](endpoint(browser(Method.GET, "/live")))
+      case other => fail(s"a Ws route came back as $other")
+    }
+  }
+
+  // ------------------------------------------------------------ what it carries
+
+  test("a guard carries a GET login, a POST login and a POST logout, all derived") {
+    val carried = guard.required[Any].carries
+    assertEquals(carried.map(_.describe).toSet, Set("GET /login", "POST /login", "POST /logout"))
+    assert(carried.forall(_.provenance == Provenance.Derived))
+  }
+
+  test("every declaration one guard makes carries the same instances, so distinct takes one") {
+    val g   = guard
+    val one = g.required[Any].carries
+    val two = g.only[Any](Action.Create).carries
+    assertEquals(one.size, 3)
+    // Identity, not equality: two equal but separate instances would mount the login page twice,
+    // and `RouteTable`'s duplicate check throws on that rather than failing a unit test.
+    one.zip(two).foreach { case (a, b) =>
+      assert(a eq b, s"${a.describe} is not the same instance")
+    }
+    // What a route table does with two guarded models: concatenate, then distinct. Without the
+    // shared instances this throws, because `RouteTable` refuses the same method and path twice.
+    assertEquals(RouteTable((one ++ two).distinct).httpRoutes.size, 3)
+  }
+
+  test("a declaration names the actions it was asked for, and no more") {
+    val g = guard
+    assertEquals(g.required[Any].actions, Action.values.toSet)
+    assertEquals(
+      g.only[Any](Action.Create, Action.Update).actions,
+      Set(Action.Create, Action.Update)
+    )
+    assertEquals(g.except[Any](Action.Index).actions, Action.values.toSet - Action.Index)
+  }
+
+  test("the login page renders an email box and a password box") {
+    val g    = guard
+    val html = app(g.required[Any]).dispatch(browser(Method.GET, "/login")).body match {
+      case Body.Html(node) => node.render
+      case other           => fail(s"the login page came back as $other")
+    }
+    assert(html.contains("""name="email""""), html)
+    assert(html.contains("""type="password""""), html)
+    assert(html.contains("""name="password""""), html)
+    assert(html.contains(Csrf.Field), html)
+  }
+
+  // ------------------------------------------------------------ the round trip
+
+  test("login, then the guarded page; a wrong password never reaches it") {
+    val g = guard
+    val t = app(g.required[Any])
+
+    val form = t.dispatch(browser(Method.GET, "/login"))
+    assertEquals(form.status, 200)
+    val token = tokenOf(form)
+    // The page's own printed value, not the session read a second way: a login form that embeds a
+    // token the session does not hold would still pass every other assertion here, because both
+    // `submits` and `tokenOf` reach past the page into the session for their own copy of it.
+    assertEquals(
+      tokenValueInPage(form),
+      token.value,
+      "the login page embeds a token other than the one its own session actually needs"
+    )
+
+    val wrong = t.dispatch(submits("/login", token, "email" -> ann.email, "password" -> "not it"))
+    assertEquals(wrong.status, 422, "a wrong password was accepted")
+    assertEquals(wrong.session.flatMap(whom), None, "a wrong password named somebody")
+
+    val ok = t.dispatch(submits("/login", token, "email" -> ann.email, "password" -> "secret"))
+    assertEquals(ok.status, 303)
+    val after = ok.session.getOrElse(fail("login named no session"))
+    assertEquals(whom(after), Some(ann.id.show))
+
+    val served = t.dispatch(browser(Method.GET, "/posts").copy(session = after))
+    assertEquals(served.status, 200)
+  }
+
+  test("an unknown email is refused the same way a wrong password is") {
+    val g  = guard
+    val t  = app(g.required[Any])
+    val ok = t.dispatch(
+      submits("/login", Csrf.Token.gen(), "email" -> "nobody@example.com", "password" -> "secret")
+    )
+    assertEquals(ok.status, 422)
+  }
+
+  test("the refused path comes back after login") {
+    val g = guard
+    val t = app(g.required[Any])
+
+    val refused = t.dispatch(browser(Method.GET, "/posts"))
+    val marked  = refused.session.getOrElse(fail("the refusal named no session"))
+    val token   = Csrf.read(marked).getOrElse(fail("the refusal kept no token"))
+
+    val ok = t.dispatch(
+      submits("/login", token, "email" -> ann.email, "password" -> "secret").copy(session = marked)
+    )
+    assertEquals(ok.header("Location"), Some("/posts"))
+  }
+
+  test("a refused path that is not relative is ignored, and login lands at the mount root") {
+    val g = guard
+    val t = app(g.required[Any])
+
+    List(
+      "https://evil.example.com/",
+      "//evil.example.com/",
+      "/\\evil.example.com",
+      "\\\\evil.example.com",
+      "evil.example.com",
+      "/ok\nLocation: https://evil.example.com"
+    ).foreach { hostile =>
+      val token   = Csrf.Token.gen()
+      val planted = Csrf.carrying(Session.empty.withReserved(Guard.ReturnEntry, hostile), token)
+      val ok      = t.dispatch(
+        submits("/login", token, "email" -> ann.email, "password" -> "secret")
+          .copy(session = planted)
+      )
+      assertEquals(ok.status, 303, hostile)
+      assertEquals(ok.header("Location"), Some("/"), hostile)
+    }
+  }
+
+  test("login rotates the token, so nothing minted before eezo knew who this was survives") {
+    val g      = guard
+    val t      = app(g.required[Any])
+    val before = tokenOf(t.dispatch(browser(Method.GET, "/login")))
+    val ok     = t.dispatch(submits("/login", before, "email" -> ann.email, "password" -> "secret"))
+    val session = ok.session.getOrElse(fail("login named no session"))
+    assert(Csrf.read(session).isDefined, "the rebuilt session has no token of its own")
+    assertNotEquals(Csrf.read(session).map(_.value), Some(before.value))
+  }
+
+  // ------------------------------------------------------------ logout
+
+  test("logout empties the session, and the next guarded request is refused again") {
+    val g     = guard
+    val t     = app(g.required[Any])
+    val token = Csrf.Token.gen()
+    val out   = t.dispatch(
+      submits("/logout", token).copy(
+        session = Csrf.carrying(Session.empty.withReserved(Guard.UserEntry, ann.id.show), token)
+      )
+    )
+    assertEquals(out.status, 303)
+    val after = out.session.getOrElse(fail("logout named no session"))
+    assert(after.isEmpty, "the session survived logout")
+    assertEquals(whom(after), None)
+    assertEquals(Csrf.read(after), None, "logout kept a token")
+
+    val next = t.dispatch(browser(Method.GET, "/posts").copy(session = after))
+    assertEquals(next.status, 303)
+    assertEquals(next.header("Location"), Some("/login"))
+    assert(next.session.flatMap(Csrf.read).isDefined, "the request after logout got no fresh token")
+  }
+
+  // ------------------------------------------------------------ CSRF comes first
+
+  test("a forged POST to a guarded route is Forbidden, never redirected to login") {
+    val g = guard
+    val t = RouteTable(Seq(g.required[Any].through(page(Method.POST, "/posts"))))
+    // A browser with a session and a token, submitting a body that does not return it.
+    val forged = browser(Method.POST, "/posts", "title" -> "hi")
+      .copy(session = Csrf.carrying(Session.empty, Csrf.Token.gen()))
+    intercept[Forbidden](t.dispatch(forged))
+  }
+
+  // ------------------------------------------------------------ mounting
+
+  test("the login page a mounted guard redirects to is inside the mount") {
+    val g       = guard
+    val mounted = RouteTable(
+      Route.under("/admin")((g.required[Any].carries :+ g.required[Any].through(page())).distinct)
+    )
+    val refused = mounted.dispatch(browser(Method.GET, "/admin/posts"))
+    assertEquals(refused.header("Location"), Some("/admin/login"))
+
+    val form = mounted.dispatch(browser(Method.GET, "/admin/login"))
+    assertEquals(form.status, 200)
+
+    // The path the guard remembered is already the mounted one, so the redirect after login must
+    // not take the prefix a second time.
+    val marked = refused.session.getOrElse(fail("the refusal named no session"))
+    val token  = Csrf.read(marked).getOrElse(fail("the refusal kept no token"))
+    val ok     = mounted.dispatch(
+      submits("/admin/login", token, "email" -> ann.email, "password" -> "secret")
+        .copy(session = marked)
+    )
+    assertEquals(ok.header("Location"), Some("/admin/posts"))
+  }
+
+  test(
+    "a sign in with nothing remembered lands at the guard's home, not the mount root, once mounted"
+  ) {
+    val g = Guard[User](
+      find = id => rows.get(id),
+      authenticate = (email, plain) =>
+        rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id),
+      home = Url.Mounted("/posts")
+    )
+    val mounted = RouteTable(
+      Route.under("/admin")((g.required[Any].carries :+ g.required[Any].through(page())).distinct)
+    )
+
+    // No prior refusal here: this is signing in straight from `/admin/login`, which is the path
+    // `CreateUser`'s printed instructions send the operator down. Without `home`, the guard falls
+    // back to the mount root, `/admin`, a path nothing answers.
+    val token = Csrf.Token.gen()
+    val ok    = mounted.dispatch(
+      submits("/admin/login", token, "email" -> ann.email, "password" -> "secret")
+        .copy(session = Csrf.carrying(Session.empty, token))
+    )
+    assertEquals(ok.header("Location"), Some("/admin/posts"))
+  }
+
+  test("constructing a guard reads nothing, so a boot that never serves opens no connection") {
+    var asked = 0
+    val g     = Guard[User](
+      find = id => { asked += 1; rows.get(id) },
+      authenticate = (_, _) => { asked += 1; None }
+    )
+    val _ = g.required[Any]
+    assertEquals(asked, 0)
+  }
+}
+
+object GuardSuite {
+
+  /** `secret`, hashed at strength 4. Precomputed, so no test but `PasswordSuite` pays for a hash.
+    */
+  val cheap: Password =
+    Password.stored("$2b$04$6oCIgC4QzztRP0Q1ZTYV2.rK6diTucKojirfE2pCcbTXpbuFq6hju")
+
+  def browser(method: Method, path: String, form: (String, String)*): Request = {
+    val body = form
+      .map { case (k, v) =>
+        s"${URLEncoder.encode(k, StandardCharsets.UTF_8)}=${URLEncoder.encode(v, StandardCharsets.UTF_8)}"
+      }
+      .mkString("&")
+    Request(
+      method = method,
+      path = path,
+      query = Map.empty,
+      headers =
+        if (form.isEmpty) Map.empty
+        else Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
+      body = body.getBytes(StandardCharsets.UTF_8),
+      pathParams = Map.empty
+    )
+  }
+
+  /** A submission that returns the token, the way a page eezo served makes a browser do. */
+  def submits(path: String, token: Csrf.Token, form: (String, String)*): Request =
+    browser(Method.POST, path, (form :+ (Csrf.Field -> token.value))*)
+      .copy(session = Csrf.carrying(Session.empty, token))
+
+  /** The session's own token, for a test to submit back.
+    *
+    * Fails rather than minting one, because a response that carries no token is not this helper's
+    * business to paper over: a caller asking for the session's token when there is none has a wrong
+    * assumption about the response, and inventing a fresh value would make that assumption look
+    * right instead of failing the test that held it.
+    */
+  def tokenOf(response: Response): Csrf.Token =
+    response.session
+      .flatMap(Csrf.read)
+      .getOrElse(throw new NoSuchElementException("the response carries no CSRF token"))
+
+  /** The token value the rendered page itself prints, read out of the hidden field's `value`
+    * attribute rather than out of the session, so a test can tell "the page embeds the right token"
+    * from "the session happens to hold one".
+    */
+  def tokenValueInPage(response: Response): String = {
+    val html = response.body match {
+      case Body.Html(node) => node.render
+      case other           => throw new NoSuchElementException(s"expected an html body, got $other")
+    }
+    val pattern = s"""name="${Csrf.Field}"\\s+value="([^"]*)"""".r
+    pattern
+      .findFirstMatchIn(html)
+      .map(_.group(1))
+      .getOrElse(
+        throw new NoSuchElementException(s"no ${Csrf.Field} field found in the page:\n$html")
+      )
+  }
+}

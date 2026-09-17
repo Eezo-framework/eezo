@@ -237,11 +237,11 @@ object EezoPlugin extends AutoPlugin {
     * not the root `sbt` that `import sbt._` brings in: visible to `EezoPluginSuite` in the same
     * package, and to nothing a consuming build sees.
     */
-  private[sbt] def witness(dbOnClasspath: Boolean): String = {
+  private[sbt] def witness(dbOnClasspath: Boolean, authOnClasspath: Boolean = false): String = {
     val samples = WitnessSources.flatMap(RouteGenerator.routeFor)
     val models  = RouteGenerator.modelsIn(WitnessModelSource, WitnessModel)
-    RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath) +
-      RouteGenerator.render(samples, models, dbOnClasspath)
+    RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath, authOnClasspath) +
+      RouteGenerator.render(samples, models, dbOnClasspath, authOnClasspath)
   }
 
   /** Two files below `app/`, chosen so that `witness` covers more of the generator than `render`'s
@@ -347,8 +347,40 @@ object EezoPlugin extends AutoPlugin {
         )
       )
 
+    // Whether this application asked for `eezo-auth`, which decides whether every route it mounts
+    // has to declare who may reach it.
+    //
+    // Read off the **declared** dependencies, and that is the one place this deliberately differs
+    // from `dbOnClasspath` above. The two flags answer different questions, and reading them the
+    // same way would be wrong for one of them.
+    //
+    // `dbOnClasspath` asks "does `io.eezo.db.Table` resolve here", which is a fact about the
+    // compiler's classpath, so the resolution report is the only honest source: an `eezo-db` that
+    // arrives transitively is just as real to the compiler as one that was named, and missing it
+    // loses rows in silence.
+    //
+    // This one asks "did the author of this application choose to have users", and only a declared
+    // dependency says so. The umbrella `eezo` depends on `auth`, and the umbrella is what an
+    // ordinary application depends on, so reading the resolved classpath would make every eezo
+    // application that has any route at all fail to compile until it wrote a `Guarded` beside every
+    // page, including the ones with nobody to sign in. `examples/todo` is exactly that application
+    // and is the reason this is checked here and not there. The rule exists to make silence an
+    // error where a guard exists, not to put a login page in front of every project.
+    //
+    // The cost is the mirror case: `eezo-auth` reaching this project through a shared internal
+    // module it `dependsOn` is not named here, so that project's routes are not asked to declare.
+    // That failure is quiet but small — the guard still guards what it is given, and what is lost
+    // is the completeness check — where the failure of the other reading is an application that
+    // cannot be compiled at all.
+    //
+    // The bare name is matched, not a cross-versioned one: this is the list as the build wrote it,
+    // before `%%` has appended a Scala suffix to anything.
+    val authOnClasspath = libraryDependencies.value.exists(module =>
+      module.organization == "io.eezo" && module.name == "eezo-auth"
+    )
+
     val stamp = streams.value.cacheDirectory / "eezo-routes.version"
-    IO.write(stamp, witness(dbOnClasspath))
+    IO.write(stamp, witness(dbOnClasspath, authOnClasspath))
     val inputs = appInputs ++ modelInputs + stamp
 
     val cached = FileFunction.cached(
@@ -375,7 +407,10 @@ object EezoPlugin extends AutoPlugin {
         }
       }
 
-      writeIfChanged(destination, RouteGenerator.render(routes, models, dbOnClasspath))
+      writeIfChanged(
+        destination,
+        RouteGenerator.render(routes, models, dbOnClasspath, authOnClasspath)
+      )
       Set(destination)
     }
 

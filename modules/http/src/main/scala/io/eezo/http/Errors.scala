@@ -31,6 +31,20 @@ final case class MethodNotAllowed(allowed: Seq[Method])
   */
 final case class Forbidden(detail: String) extends EezoException(detail)
 
+/** Nobody is signed in, on a route that needs somebody.
+  *
+  * Distinct from [[Forbidden]], which is a known user refused, and the distinction is load bearing
+  * rather than pedantic: `Forbidden` is already what a stale CSRF token earns and what ownership
+  * will earn, so reusing it here would make "your form is stale", "this row is not yours" and "who
+  * are you?" one value that no handler above could tell apart.
+  *
+  * This is the answer for a caller a redirect cannot help: `Guard.current` asked outside a guarded
+  * route, and a WebSocket upgrade, which has no page to send a browser to. A guarded HTML route
+  * answers an anonymous browser with a 303 to the login page instead, because that is a `Response`
+  * and never a failure.
+  */
+final case class Unauthorized(detail: String) extends EezoException(detail)
+
 /** The request body exceeded `HttpApp.maxBodySize`. */
 final case class PayloadTooLarge(limit: Long)
     extends EezoException(s"request body exceeds the $limit byte limit")

@@ -1,6 +1,7 @@
 package app
 
 import io.eezo.core.html.*
+import io.eezo.http.Guarded
 import io.eezo.http.Request
 import io.eezo.http.Response
 
@@ -23,6 +24,15 @@ import io.eezo.http.Response
   * wants to say so in the type.
   */
 object Index {
+
+  /** Anyone may read the blog's front page.
+    *
+    * Saying so is not optional. This application has a guard, so every route it mounts has to
+    * declare who may reach it, and a route that says nothing is a compile error rather than a page
+    * that quietly turns out to be public. The declaration is about this object because a
+    * handwritten route has no model behind it: the page itself is the thing being declared about.
+    */
+  given Guarded[Index.type] = Guarded.public
 
   def index(request: Request): Response = {
     val _ = request
