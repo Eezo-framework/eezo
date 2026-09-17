@@ -261,7 +261,7 @@ object Resource {
             form(
               Attrs.action := member(key),
               Attrs.method := "post",
-              Form.hidden(Method.DELETE, request.csrf),
+              Form.reserved(Method.DELETE, request.csrf),
               button(Attrs.tpe := "submit", "Delete")
             )
           ),

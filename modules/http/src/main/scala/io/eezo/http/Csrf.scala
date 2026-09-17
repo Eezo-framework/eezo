@@ -53,10 +53,10 @@ object Csrf {
   /** The form field the token travels under, beside `_method`. */
   val Field: String = "_csrf"
 
-  /** The session entry the token is kept under. Starts with the underscore `Session.set` refuses,
-    * so an application cannot overwrite it.
+  /** The session entry the token is kept under, built from [[Session.Reserved]] so it starts with
+    * the prefix `Session.set` refuses, which is what keeps an application from overwriting it.
     */
-  private[http] val Entry: String = "_csrf"
+  private[http] val Entry: String = Session.Reserved + "csrf"
 
   /** The one hidden input, for `Form.render`, the derived show page's delete button and a
     * handwritten form alike.
@@ -65,11 +65,11 @@ object Csrf {
     input(Attrs.tpe := "hidden", Attrs.name := Field, Attrs.value := token)
 
   /** The token a session holds, if dispatch has minted one into it. */
-  private[http] def read(session: Session): Option[Token] = session.entries.get(Entry)
+  private[http] def read(session: Session): Option[Token] = session.reserved(Entry)
 
   /** The session with `token` in its reserved entry. */
   private[http] def carrying(session: Session, token: Token): Session =
-    session.copy(entries = session.entries + (Entry -> token))
+    session.withReserved(Entry, token)
 
   /** The handler with the token around it, which is how `RouteTable.dispatch` runs the route it
     * matched: [[ensure]] first, [[verify]] on what it produced, and the session the handler saw,

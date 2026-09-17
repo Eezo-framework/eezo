@@ -40,6 +40,23 @@ final case class Session private[http] (
 
   def remove(name: String): Session = copy(entries = entries - name)
 
+  /** The entry under a reserved name, the door [[Csrf.read]] uses instead of reaching into
+    * `entries` itself.
+    */
+  private[http] def reserved(name: String): Option[String] = entries.get(name)
+
+  /** The session with `value` written under a reserved name, the door [[Csrf.carrying]] uses
+    * instead of reaching into `entries` and `copy` itself. The guard mirrors [[set]]'s, the other
+    * way round: a name that does not start with [[Session.Reserved]] does not belong here.
+    */
+  private[http] def withReserved(name: String, value: String): Session = {
+    require(
+      name.startsWith(Session.Reserved),
+      s"session entry '$name' does not start with '${Session.Reserved}', which withReserved requires"
+    )
+    copy(entries = entries + (name -> value))
+  }
+
   /** Whether the application holds any entry. Flash does not count, and neither does what eezo
     * keeps under its reserved names: a session that carries only a notice, or only the CSRF token
     * dispatch minted into it, names nobody.
@@ -81,9 +98,10 @@ private[http] object SessionCookie {
   val Name: String = "eezo_session"
 
   /** The prefix under which a flash travels inside the payload, beside the `_csrf` entry the CSRF
-    * token reserves. Starts with the underscore `Session.set` refuses.
+    * token reserves. Built from [[Session.Reserved]], so it starts with the prefix `Session.set`
+    * refuses.
     */
-  val FlashPrefix: String = "_flash."
+  val FlashPrefix: String = Session.Reserved + "flash."
 
   /** The largest encoded session `encode` will hand back, a conservative margin under the roughly
     * 4096 bytes every major browser keeps of one cookie. A `Set-Cookie` past that limit is not

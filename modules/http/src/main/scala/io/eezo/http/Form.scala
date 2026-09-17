@@ -123,7 +123,7 @@ object Form {
     * in three files and each copy would be pinned by its own test, which is how two of them agree
     * and the third drifts.
     */
-  private[http] def hidden(method: Method, token: Csrf.Token): Seq[Html] = method match {
+  private[http] def reserved(method: Method, token: Csrf.Token): Seq[Html] = method match {
     case verb if verb.safe => Nil
     case Method.POST       => Seq(Csrf.hidden(token))
     case other             =>
@@ -188,7 +188,7 @@ object Form {
           errors: FormErrors,
           raw: Map[String, Seq[String]]
       ): Html = {
-        val reserved = Form.hidden(method, token)
+        val reserved = Form.reserved(method, token)
 
         val rows = visible.map { case (f, i) =>
           val current  = raw.get(f.name).flatMap(_.headOption).orElse(value.map(text(_, i)))
