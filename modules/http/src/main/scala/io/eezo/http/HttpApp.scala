@@ -68,7 +68,7 @@ trait HttpApp extends Dispatch {
     * stops. `dev` turns the listing and the reload client on.
     */
   protected final def serve(table: RouteTable, dev: Boolean = false): Unit =
-    Eezo.run(port, table ++ RouteTable(frameworkRoutes), maxBodySize, dev, problems)
+    Eezo.run(port, Config(table ++ RouteTable(frameworkRoutes)), maxBodySize, dev, problems)
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift
     * page when the check blocks.
