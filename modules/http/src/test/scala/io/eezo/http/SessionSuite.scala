@@ -50,7 +50,9 @@ class SessionSuite extends munit.FunSuite {
     intercept[IllegalArgumentException](Session.empty.set("_flash.notice", "x"))
   }
 
-  test("withReserved refuses a name that does not start with Session.Reserved, and reserved reads") {
+  test(
+    "withReserved refuses a name that does not start with Session.Reserved, and reserved reads"
+  ) {
     intercept[IllegalArgumentException](Session.empty.withReserved("user", "x"))
     val session = Session.empty.withReserved(Session.Reserved + "widget", "42")
     assertEquals(session.reserved(Session.Reserved + "widget"), Some("42"))

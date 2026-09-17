@@ -83,7 +83,7 @@ trait ServerFixtures { self: munit.FunSuite =>
       .getOrElse(fail(s"the first visit to $path was handed no session cookie"))
     val token = Csrf
       .read(SessionCookie.decode(cookie, secret))
-      .getOrElse(fail(s"the first visit to $path's cookie carries no token"))
+      .getOrElse(fail(s"the cookie from the first visit to $path carries no token"))
     Browser(cookie, token)
   }
 

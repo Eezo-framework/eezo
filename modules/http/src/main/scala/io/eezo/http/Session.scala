@@ -77,7 +77,7 @@ object Session {
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
 
   /** The prefix of the names eezo keeps for itself, the flash and the CSRF token, which [[set]]
-    * refuses and [[isEmpty]] looks past.
+    * refuses, [[withReserved]] requires and [[isEmpty]] looks past.
     */
   private[http] val Reserved: String = "_"
 }
