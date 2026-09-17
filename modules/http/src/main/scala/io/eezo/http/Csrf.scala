@@ -76,12 +76,25 @@ object Csrf {
     * minted token included, going out on the response when the handler named none. That last step
     * is what lets the adapter write the mint once, since it compares against the session it read
     * from the cookie, not the one dispatch amended.
+    *
+    * A handler that names a session built from `Session.empty` is common at login, where session
+    * fixation is defended against by starting over rather than amending what arrived. `isEmpty`
+    * still means logout: an explicitly empty session carries the token nowhere and none is added.
+    * But a rebuilt session that is not empty, and does not already hold a token of its own, gets
+    * the ready request's token carried into it, because a page rendered on that same response
+    * embeds that token in its form and the next submission has to find it in the cookie that
+    * follows.
     */
   private[http] def protect(handler: Handler): Handler = request => {
     val ready = ensure(request)
     verify(ready)
     val response = handler(ready)
-    if (response.session.isDefined) response else response.withSession(ready.session)
+    response.session match {
+      case None => response.withSession(ready.session)
+      case Some(named) if named.isEmpty || read(named).isDefined => response
+      case Some(named)                                           =>
+        read(ready.session).fold(response)(t => response.withSession(carrying(named, t)))
+    }
   }
 
   /** The request with a token in its session, minted now if it had none. The cost of the mint is

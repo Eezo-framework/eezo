@@ -80,6 +80,36 @@ class CsrfSuite extends munit.FunSuite with ResourceFixtures {
     assert(Csrf.read(session).isDefined)
   }
 
+  test("a session rebuilt from Session.empty and named non empty inherits the minted token") {
+    var seen   = Option.empty[Csrf.Token]
+    val routes = table(
+      route(
+        Method.GET,
+        "/",
+        request => {
+          seen = Some(request.csrf)
+          Response
+            .Ok(Html.text("ok"))
+            .withSession(Session.empty.set("user", "42"))
+        }
+      )
+    )
+    val response = routes.dispatch(anonymous(Method.GET, "/"))
+    val session  = response.session.getOrElse(fail("no session on the response"))
+    assertEquals(session.get("user"), Some("42"))
+    assert(seen.isDefined, "the handler never ran")
+    assertEquals(Csrf.read(session), seen)
+  }
+
+  test("an explicitly empty session is left empty, as logout") {
+    val routes =
+      table(route(Method.GET, "/", _ => Response.Ok(Html.text("ok")).withSession(Session.empty)))
+    val response = routes.dispatch(forged(Method.GET, "/"))
+    val session  = response.session.getOrElse(fail("no session on the response"))
+    assert(session.isEmpty)
+    assertEquals(Csrf.read(session), None)
+  }
+
   // ---------------------------------------------------------------- verifying at dispatch
 
   test("a POST that returns the session's token runs") {
