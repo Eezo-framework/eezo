@@ -299,8 +299,10 @@ object Eezo {
     *
     * The session cookie is written here, once, on the success path: the session the response names,
     * or else the one the request carried into the handler, and only when it differs from what
-    * arrived. A failure that reached the boundary writes no cookie, so an error page leaves the
-    * browser's session, flash included, exactly as it was.
+    * arrived. Dispatch mints a CSRF token into a session that has none, so a first visit differs
+    * and writes one `Set-Cookie` even when the handler names no session. A failure that reached the
+    * boundary writes no cookie, so an error page leaves the browser's session, flash included,
+    * exactly as it was.
     */
   private final class EezoHandler(config: Config) extends JettyHandler.Abstract {
 

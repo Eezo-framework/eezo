@@ -106,7 +106,7 @@ object Csrf {
         MessageDigest.isEqual(bytes(expected), bytes(submitted))
       }
       if (!matches)
-        throw Forbidden("the form's token is missing or stale; reload the page and try again")
+        throw Forbidden("the CSRF token is missing or stale; reload the page and try again")
     }
 
   private def bytes(text: String): Array[Byte] = text.getBytes(StandardCharsets.UTF_8)

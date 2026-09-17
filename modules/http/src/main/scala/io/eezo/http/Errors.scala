@@ -25,8 +25,8 @@ final case class NotFound(path: String) extends EezoException(s"no route matches
 final case class MethodNotAllowed(allowed: Seq[Method])
     extends EezoException(s"allowed: ${allowed.mkString(", ")}")
 
-/** A request the application understood and refuses: a form whose CSRF token is missing or stale,
-  * or later a write to a row the current user does not own. Constraint 5 of the auth map: no status
+/** A request the application understood and refuses: a form whose CSRF token is missing or stale
+  * (#170), or later a write to a row the current user does not own. #166's constraint: no status
   * here, and a redirect to login is a `Response`, never an error.
   */
 final case class Forbidden(detail: String) extends EezoException(detail)

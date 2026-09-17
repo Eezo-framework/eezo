@@ -79,17 +79,24 @@ class FormSuite extends munit.FunSuite {
     assert(put.contains("""method="post""""), put)
   }
 
-  test("every form carries the CSRF token as a hidden input, whatever its verb") {
+  test("every unsafe form carries the CSRF token as a hidden input, whatever its verb") {
     val hidden = Csrf.hidden(token).render
-    val post   = Form[Widget].render("/widgets", Method.POST, None, token).render
-    assert(post.contains(hidden), post)
+    Seq(Method.POST, Method.PUT, Method.PATCH, Method.DELETE).foreach { verb =>
+      val html = Form[Widget].render("/widgets/1", verb, None, token).render
+      assert(html.contains(hidden), html)
+    }
     val put = Form[Widget].render("/widgets/1", Method.PUT, None, token).render
-    assert(put.contains(hidden), put)
     // Beside `_method`, and before the first field, so the two reserved inputs read as one block.
     assert(
       put.contains(s"""name="_method" value="PUT">$hidden<div>"""),
       put
     )
+  }
+
+  test("a GET form carries no token, since its fields go to the address bar") {
+    val get = Form[Widget].render("/widgets", Method.GET, None, token).render
+    assert(!get.contains("_csrf"), get)
+    assert(!get.contains(token.value), get)
   }
 
   test("an existing value fills the inputs, and a checked box renders bare checked") {

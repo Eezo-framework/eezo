@@ -58,7 +58,7 @@ final case class Session private[http] (
   }
 
   /** Whether the application holds any entry. Flash does not count, and neither does what eezo
-    * keeps under its reserved names: a session that carries only a notice, or only the CSRF token
+    * keeps under its reserved names: a session that carries only a flash, or only the CSRF token
     * dispatch minted into it, names nobody.
     */
   def isEmpty: Boolean = entries.keysIterator.forall(_.startsWith(Session.Reserved))
@@ -87,7 +87,7 @@ object Session {
   * The value is `base64url(payload).base64url(HMAC-SHA256(base64url(payload)))`, unpadded, so it is
   * made of cookie octets with nothing to quote. The payload is the map form encoded, one line of
   * `URLEncoder` rather than a JSON reader eezo does not have. Signed, not encrypted: a user id and
-  * a notice are not secrets from the browser that holds them, and four of the five surveyed
+  * a flash are not secrets from the browser that holds them, and four of the five surveyed
   * frameworks that keep the session in the cookie sign only.
   *
   * Verification compares the tags with `MessageDigest.isEqual` and treats every failure the same
