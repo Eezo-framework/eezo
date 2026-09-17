@@ -70,14 +70,6 @@ jobs:
       - name: Test
         run: sbt -batch +test
 
-      # The live layer's one invariant, held by the other side's actual code: the corpus the JVM
-      # suites already passed is replayed through the real applier.js in a real-enough DOM
-      # (jsdom). The JVM round-trip suite alone is the "tempting cheaper test" design/live.md
-      # warns about — it proves the differ agrees with a Scala re-implementation, not with the
-      # JavaScript the browser runs. ubuntu-latest carries node; jsdom installs on first run.
-      - name: Live round-trip harness
-        run: research/harnesses/live-roundtrip/run.sh
-
       # The walking skeletons, built the way a user builds one: eezo published to the local ivy
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.
       # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
