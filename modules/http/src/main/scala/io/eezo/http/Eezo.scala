@@ -246,7 +246,10 @@ object Eezo {
     *
     * Jetty documents that a creator returning `null` "is responsible for completing the Callback
     * and sending a response", so an upgrade request matching no `Route.Ws` is answered here with a
-    * 404 rather than falling through to the HTTP handler.
+    * 404 rather than falling through to the HTTP handler. An endpoint that throws while being
+    * built, a guard refusing with `Unauthorized` for one, is answered through the boundary the same
+    * way, since this creator runs outside `EezoHandler` and Jetty's own 500 page would name the
+    * exception.
     *
     * The endpoint's request carries the session the handshake's cookie did, read the way the HTTP
     * handler reads it, but with its flash stripped: see [[readHandshake]] for why. Nothing is
@@ -258,23 +261,27 @@ object Eezo {
 
       // The reload endpoint is asked first, before the user's table, so no route can shadow it, no
       // mount rewrites it, and it never appears in the boot listing. `Reload` owns the dev gate.
-      Reload
-        .listenerFor(path, config)
-        .orElse {
-          config.routes.dispatchWs(path).map { (route, params) =>
-            route.endpoint(
-              readHandshake(
-                requestOf(request, Method.GET, path, Array.emptyByteArray, params),
-                config.secret
+      def refuse(failure: Throwable): Null = {
+        write(response, Boundary.errorResponse(failure, path, config), callback)
+        null
+      }
+
+      try
+        Reload
+          .listenerFor(path, config)
+          .orElse {
+            config.routes.dispatchWs(path).map { (route, params) =>
+              route.endpoint(
+                readHandshake(
+                  requestOf(request, Method.GET, path, Array.emptyByteArray, params),
+                  config.secret
+                )
               )
-            )
+            }
           }
-        }
-        .map(new JettyListener(_))
-        .getOrElse {
-          write(response, Boundary.errorResponse(NotFound(path), path, config), callback)
-          null
-        }
+          .map(new JettyListener(_))
+          .getOrElse(refuse(NotFound(path)))
+      catch { case failure: Throwable => refuse(failure) }
     }
 
   /** The handshake's request with its session read, minus the flash.
