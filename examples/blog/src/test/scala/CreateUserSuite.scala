@@ -11,26 +11,26 @@ class CreateUserSuite extends munit.FunSuite {
   test("a password over the 72 byte cap refuses with the field's message, not spring's") {
     val tooLong = "e" * 73
     val thrown  = intercept[IllegalStateException] {
-      CreateUser.hashPassword("EEZO_BLOG_PASSWORD", tooLong)
+      CreateUser.hashPassword(tooLong)
     }
     assertEquals(thrown.getMessage, "EEZO_BLOG_PASSWORD is longer than the 72 bytes bcrypt reads")
   }
 
   test("a password of exactly 72 UTF-8 bytes hashes rather than refuses") {
     val seventyTwo = "e" * 72
-    val stored      = CreateUser.hashPassword("EEZO_BLOG_PASSWORD", seventyTwo)
+    val stored      = CreateUser.hashPassword(seventyTwo)
     assert(stored.verify(Password.Plain(seventyTwo)))
   }
 
   test("an empty password is required, not hashed as an empty string") {
     val thrown = intercept[IllegalStateException] {
-      CreateUser.hashPassword("EEZO_BLOG_PASSWORD", "")
+      CreateUser.hashPassword("")
     }
     assertEquals(thrown.getMessage, "EEZO_BLOG_PASSWORD is required")
   }
 
   test("a password within the cap hashes to a value the field's own read would have produced") {
-    val stored = CreateUser.hashPassword("EEZO_BLOG_PASSWORD", "correct horse battery staple")
+    val stored = CreateUser.hashPassword("correct horse battery staple")
     assert(stored.verify(Password.Plain("correct horse battery staple")))
     assert(!stored.verify(Password.Plain("wrong")))
   }

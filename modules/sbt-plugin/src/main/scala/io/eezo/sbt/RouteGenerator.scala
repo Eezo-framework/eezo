@@ -429,11 +429,7 @@ object RouteGenerator {
           .mkString(" ++\n")
 
     val handwrittenBlock =
-      if (!authOnClasspath)
-        s"""  private val handwritten: Seq[io.eezo.http.Route] = Seq(
-           |$handwritten
-           |  )""".stripMargin
-      else if (routes.isEmpty)
+      if (!authOnClasspath || routes.isEmpty)
         s"""  private val handwritten: Seq[io.eezo.http.Route] = Seq(
            |$handwritten
            |  )""".stripMargin
@@ -461,16 +457,10 @@ object RouteGenerator {
         // makes carries that guard's login and logout routes, so a table with two guarded things
         // holds them twice, and `RouteTable` throws on the same method and path twice rather than
         // picking a winner. Without a guard nothing is ever carried and the line would be noise.
-        if (authOnClasspath)
-          s"""    io.eezo.http.RouteTable(
-             |      (handwritten ++
-             |$derived).distinct
-             |    )""".stripMargin
-        else
-          s"""    io.eezo.http.RouteTable(
-             |      handwritten ++
-             |$derived
-             |    )""".stripMargin
+        val rows = s"handwritten ++\n$derived"
+        s"""    io.eezo.http.RouteTable(
+           |      ${if (authOnClasspath) s"($rows).distinct" else rows}
+           |    )""".stripMargin
       }
 
     val storeHelper = if (models.isEmpty) "" else storeFor(dbOnClasspath) + "\n"

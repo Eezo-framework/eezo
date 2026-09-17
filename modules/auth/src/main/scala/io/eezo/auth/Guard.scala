@@ -82,15 +82,12 @@ final class Guard[U] private (
     * route nobody wrote twice.
     */
   private val carries: Seq[Route] = Seq(
-    derived(Method.GET, login, form(None)),
-    derived(Method.POST, login, submitted),
-    derived(Method.POST, logout, signedOut)
+    Route.derived(Method.GET, login.path, form(None)),
+    Route.derived(Method.POST, login.path, submitted),
+    Route.derived(Method.POST, logout.path, signedOut)
   )
 
   private def declaring[A](actions: Set[Action]): Guarded[A] = Guarded(actions, through, carries)
-
-  private def derived(method: Method, at: Url, handler: Handler): Route =
-    Route.Http(method, PathPattern.parse(at.path), handler, Provenance.Derived)
 
   /** The wrapper every guarded route goes through.
     *
@@ -102,33 +99,30 @@ final class Guard[U] private (
     * ordering guarantee: `Csrf.protect` sits outside this, so a forged `POST` to a guarded route is
     * refused as forged instead of being redirected to a login page an attacker can read.
     */
-  private def through: Route => Route = {
-    case Route.Http(method, pattern, handler, provenance) =>
-      Route.Http(
-        method,
-        pattern,
-        request => who(request.session).fold(refuse(request))(_ => handler(request)),
-        provenance
+  private val through: Route => Route = {
+    case route: Route.Http =>
+      route.copy(handler =
+        request => if (signedIn(request)) route.handler(request) else refuse(request)
       )
-    case Route.Ws(pattern, endpoint, provenance) =>
-      Route.Ws(
-        pattern,
+    case route: Route.Ws =>
+      route.copy(endpoint =
         request =>
-          if (who(request.session).isDefined) endpoint(request)
+          if (signedIn(request)) route.endpoint(request)
           else
             throw Unauthorized(
               "this WebSocket route is guarded and no user is signed in; a socket has no page to " +
                 "be redirected to, so it is refused instead"
-            ),
-        provenance
+            )
       )
   }
+
+  private def signedIn(request: Request): Boolean = who(request.session).isDefined
 
   /** The user the session names, if it names one that is still there. */
   private def who(session: Session): Option[U] =
     session
       .reserved(Guard.UserEntry)
-      .flatMap(text => Guard.parse[U](text))
+      .flatMap(Guard.parse[U])
       .flatMap(find)
 
   /** The 303 an anonymous or stale browser gets.
@@ -166,21 +160,17 @@ final class Guard[U] private (
     * maintained and is silently lost the first time the query changes.
     */
   private def submitted: Handler = request =>
-    request.as[Login] match {
-      case Left(_)            => rejected(request)
-      case Right(credentials) =>
-        authenticate(credentials.email, credentials.password) match {
-          case None      => rejected(request)
-          case Some(key) =>
-            Response
-              .Redirect(Guard.back(request.session, home))
-              // Rebuilt from empty, so nothing an attacker could have planted in the old session
-              // survives the privilege change, and rotated, so the token does not either.
-              .withSession(
-                Csrf.rotated(Session.empty.withReserved(Guard.UserEntry, key.show))
-              )
-        }
-    }
+    request
+      .as[Login]
+      .toOption
+      .flatMap(credentials => authenticate(credentials.email, credentials.password))
+      .fold(rejected(request)) { key =>
+        Response
+          .Redirect(Guard.back(request.session, home))
+          // Rebuilt from empty, so nothing an attacker could have planted in the old session
+          // survives the privilege change, and rotated, so the token does not either.
+          .withSession(Csrf.rotated(Session.empty.withReserved(Guard.UserEntry, key.show)))
+      }
 
   private def rejected(request: Request): Response =
     form(Some("that email and password do not match"))(request).copy(status = 422)
@@ -235,9 +225,7 @@ object Guard {
     * value that is not a UUID means the signing key changed under a live browser rather than that
     * anyone tampered; either way there is no user, and answering `None` sends them to log in again.
     */
-  private[auth] def parse[U](text: String): Option[Id[U]] =
-    try Some(Id[U](java.util.UUID.fromString(text)))
-    catch { case _: IllegalArgumentException => None }
+  private[auth] def parse[U](text: String): Option[Id[U]] = summon[FromPath[Id[U]]].apply(text)
 
   /** Where a successful login goes: the path the guard refused, when the session remembers one that
     * is safe to use, and the guard's configured `home` otherwise.

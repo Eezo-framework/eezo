@@ -41,7 +41,7 @@ object CreateUser extends DbApp {
 
   override def boot(): Unit = {
     val email    = required("EEZO_BLOG_EMAIL")
-    val password = required("EEZO_BLOG_PASSWORD")
+    val password = required(PasswordVariable)
 
     // Hashed here, once, at the strength `Password.hash` fixes, and only through `Field[Password]`,
     // the same door a login form's own submission goes through. That is what makes the 72 byte
@@ -49,7 +49,7 @@ object CreateUser extends DbApp {
     // than the `IllegalArgumentException` spring-security-crypto throws three calls deeper. This is
     // the only place in the blog that ever holds the text, and it holds it for as long as one
     // bcrypt call takes.
-    val hashed = hashPassword("EEZO_BLOG_PASSWORD", password)
+    val hashed = hashPassword(password)
 
     transact {
       val users = Table[User]
@@ -59,12 +59,14 @@ object CreateUser extends DbApp {
     println(s"created $email; sign in at /admin/login")
   }
 
+  private inline val PasswordVariable = "EEZO_BLOG_PASSWORD"
+
   /** A missing variable stops the tool rather than creating a user nobody can sign in as. */
   private def required(name: String): String =
     sys.env.getOrElse(
       name,
       throw new IllegalStateException(
-        s"$name is not set. Run: EEZO_BLOG_EMAIL=you@example.com EEZO_BLOG_PASSWORD=... " +
+        s"$name is not set. Run: EEZO_BLOG_EMAIL=you@example.com $PasswordVariable=... " +
           "sbt \"blog/runMain CreateUser\""
       )
     )
@@ -78,9 +80,9 @@ object CreateUser extends DbApp {
     * `EEZO_BLOG_PASSWORD` on a running JVM, so it has to reach this door directly rather than
     * through [[boot]].
     */
-  def hashPassword(name: String, text: String): Password =
+  def hashPassword(text: String): Password =
     Field[Password].read(text).fold(
-      message => throw new IllegalStateException(s"$name $message"),
+      message => throw new IllegalStateException(s"$PasswordVariable $message"),
       identity
     )
 }

@@ -168,7 +168,7 @@ object Form {
     * page that told them it was wrong. Losing the typing is the point here rather than a cost: a
     * password box is retyped, and every browser's password manager refills it.
     */
-  private val Password = "password"
+  private val Password = Field.PasswordInput
 
   private def make[A](
       modelName: String,

@@ -45,10 +45,10 @@ final case class Session private[http] (
     *
     * `private[eezo]` rather than `private[http]` because `modules/auth` keeps the signed in user's
     * key and the path a guard refused under reserved names too, and `io.eezo.auth` is a different
-    * package. The alternative was an ordinary entry, which an application could read, overwrite or
-    * delete through [[set]] and [[remove]]: writing somebody else's key into `_user` would be a
-    * privilege escalation spelled with the public API. The prefix is what makes that impossible, so
-    * the door has to open as wide as the modules that need the prefix and no wider.
+    * package. The alternative was an ordinary entry, which an application could overwrite through
+    * [[set]]: writing somebody else's key into `_user` would be a privilege escalation spelled with
+    * the public API. The prefix is what makes that impossible, so the door has to open as wide as
+    * the modules that need the prefix and no wider.
     */
   private[eezo] def reserved(name: String): Option[String] = entries.get(name)
 
@@ -57,10 +57,7 @@ final case class Session private[http] (
     * way round: a name that does not start with [[Session.Reserved]] does not belong here.
     */
   private[eezo] def withReserved(name: String, value: String): Session = {
-    require(
-      name.startsWith(Session.Reserved),
-      s"session entry '$name' does not start with '${Session.Reserved}', which withReserved requires"
-    )
+    requireReserved(name, "withReserved")
     copy(entries = entries + (name -> value))
   }
 
@@ -70,12 +67,15 @@ final case class Session private[http] (
     * ever clears it.
     */
   private[eezo] def withoutReserved(name: String): Session = {
-    require(
-      name.startsWith(Session.Reserved),
-      s"session entry '$name' does not start with '${Session.Reserved}', which withoutReserved requires"
-    )
+    requireReserved(name, "withoutReserved")
     copy(entries = entries - name)
   }
+
+  private def requireReserved(name: String, door: String): Unit =
+    require(
+      name.startsWith(Session.Reserved),
+      s"session entry '$name' does not start with '${Session.Reserved}', which $door requires"
+    )
 
   /** Whether the application holds any entry of its own. Flash does not count, and neither does
     * what eezo keeps under its reserved names: a session that carries only a flash, or only the

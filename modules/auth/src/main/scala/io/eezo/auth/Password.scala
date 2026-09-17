@@ -87,19 +87,14 @@ object Password {
       * here says so, where letting it through would answer "wrong password" to a user whose
       * password is right and merely long.
       */
-    given Field[Plain] = new Field[Plain] {
-      def inputType: String = InputType
-
-      def show(x: Plain): String = ""
-
-      def read(text: String): Either[String, Plain] = check(text).map(Plain.apply)
-    }
+    given Field[Plain] = field(Plain.apply)
   }
 
-  /** The `<input type>` both fields render as, so a browser never paints the characters and a
-    * password manager recognises the box.
+  /** What both fields share: a password box, so a browser never paints the characters and a
+    * password manager recognises it, a `show` that is empty for every value, and [[check]].
     */
-  private val InputType: String = "password"
+  private def field[A](make: String => A): Field[A] =
+    Field.of[A](Field.PasswordInput)(_ => "")(check(_).map(make))
 
   /** The one refusal both fields share, so that a length the storage side rejects and a length the
     * login side accepts cannot drift apart.
@@ -149,11 +144,5 @@ object Password {
     * was rendered into. `read` hashes, which is what puts the hashing between the browser and the
     * case class rather than in a handler somebody has to remember to write.
     */
-  given Field[Password] = new Field[Password] {
-    def inputType: String = InputType
-
-    def show(x: Password): String = ""
-
-    def read(text: String): Either[String, Password] = check(text).map(t => hash(Plain(t)))
-  }
+  given Field[Password] = field(text => hash(Plain(text)))
 }

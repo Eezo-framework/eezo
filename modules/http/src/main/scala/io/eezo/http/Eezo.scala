@@ -242,6 +242,19 @@ object Eezo {
     }
   }
 
+  /** What a failure is answered with, on the HTTP path and on a refused upgrade alike, so that a
+    * 500 out of an endpoint is logged exactly as one out of a handler is.
+    *
+    * Resolved once: the log decision and the response both read off this single value, rather than
+    * each re-matching the failure to ask its own question of it.
+    */
+  private def answer(failure: Throwable, path: String, config: Config): Response = {
+    val resolution = Boundary.resolve(failure, path, config)
+    if (Boundary.logsStackTrace(resolution.problem.status))
+      log.log(System.Logger.Level.ERROR, s"${resolution.problem.status} on $path", failure)
+    Boundary.toResponse(resolution)
+  }
+
   /** The single WebSocket creator.
     *
     * Jetty documents that a creator returning `null` "is responsible for completing the Callback
@@ -262,7 +275,7 @@ object Eezo {
       // The reload endpoint is asked first, before the user's table, so no route can shadow it, no
       // mount rewrites it, and it never appears in the boot listing. `Reload` owns the dev gate.
       def refuse(failure: Throwable): Null = {
-        write(response, Boundary.errorResponse(failure, path, config), callback)
+        write(response, answer(failure, path, config), callback)
         null
       }
 
@@ -331,13 +344,7 @@ object Eezo {
             SessionCookie.write(read, config.routes.dispatch(read), config.secret)
           }
         } catch {
-          case failure: Throwable =>
-            // Resolved once: the log decision and the response both read off this single value,
-            // rather than each re-matching the failure to ask its own question of it.
-            val resolution = Boundary.resolve(failure, path, config)
-            if (Boundary.logsStackTrace(resolution.problem.status))
-              log.log(System.Logger.Level.ERROR, s"${resolution.problem.status} on $path", failure)
-            Boundary.toResponse(resolution)
+          case failure: Throwable => answer(failure, path, config)
         }
 
       // Every HTTP response passes here, success or failure, so this is where the dev server adds
