@@ -12,7 +12,7 @@ class DriftGateSuite extends munit.FunSuite {
   private val drift = List(Change.DropColumn("posts", "body"))
 
   private def markup(token: Csrf.Token): String =
-    DriftGate.refusal(drift, error = None, token).body match {
+    DriftGate.refusal(drift, error = None, token = token).body match {
       case Body.Html(node) => node.render
       case other           => fail(s"expected an HTML body, got $other")
     }

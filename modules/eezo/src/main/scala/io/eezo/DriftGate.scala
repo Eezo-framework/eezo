@@ -96,14 +96,36 @@ private[eezo] object DriftGate {
     val page: Handler = request => {
       val drift = currentDrift(schema, databaseSchema)
       if (blockers(drift).isEmpty) resolved(drift)
-      else refusal(drift, error = None, request.csrf)
+      else refusal(drift, error = None, token = request.csrf)
     }
+
+    // Runs one page action; a failure renders the refusal again with the database's own words on
+    // it.
+    //
+    // This is not decoration: the first live run of this page hit exactly it: a `[risky]`
+    // `set not null` that Postgres refused over existing rows. That failure is the `risky` flag
+    // doing its job, and it belongs on the page the user is looking at, not in a stack trace
+    // behind a 500. The transaction has already rolled back by the time it is caught, so
+    // rendering again over a half applied state is not a possibility.
+    def attempt(token: Csrf.Token)(action: => Unit): Response =
+      try {
+        action
+        Response.Redirect("/")
+      } catch {
+        case NonFatal(e) =>
+          System.err.println(s"[eezo] drift page action failed: ${e.getMessage}")
+          refusal(
+            currentDrift(schema, databaseSchema),
+            error = Some(s"that did not work: ${e.getMessage}"),
+            token = token
+          )
+      }
 
     // The prototyping path: the terminal's `sync --apply --force`, one button. Force, because
     // this page only exists when the drift is destructive or risky; an unforced sync would
     // refuse by construction, and the button *is* the review.
     val syncAction: Handler = request =>
-      attempt(schema, databaseSchema, request.csrf) {
+      attempt(request.csrf) {
         transact { Commands.sync(schema, apply = true, force = true, databaseSchema) }: Unit
         println("[eezo] drift applied to the dev database from the drift page")
       }
@@ -116,10 +138,10 @@ private[eezo] object DriftGate {
           refusal(
             currentDrift(schema, databaseSchema),
             error = Some("the migration needs a name"),
-            request.csrf
+            token = request.csrf
           )
         case Some(name) =>
-          attempt(schema, databaseSchema, request.csrf) {
+          attempt(request.csrf) {
             freezeAndMigrate(schema, databaseSchema, name, request)
           }
       }
@@ -134,30 +156,6 @@ private[eezo] object DriftGate {
       )
     )
   }
-
-  /** Runs one page action; a failure renders the refusal again with the database's own words on it.
-    *
-    * This is not decoration: the first live run of this page hit exactly it: a `[risky]`
-    * `set not null` that Postgres refused over existing rows. That failure is the `risky` flag
-    * doing its job, and it belongs on the page the user is looking at, not in a stack trace behind
-    * a 500. The transaction has already rolled back by the time it is caught, so rendering again
-    * over a half applied state is not a possibility.
-    */
-  private def attempt(schema: Schema, databaseSchema: String, token: Csrf.Token)(
-      action: => Unit
-  ): Response =
-    try {
-      action
-      Response.Redirect("/")
-    } catch {
-      case NonFatal(e) =>
-        System.err.println(s"[eezo] drift page action failed: ${e.getMessage}")
-        refusal(
-          currentDrift(schema, databaseSchema),
-          error = Some(s"that did not work: ${e.getMessage}"),
-          token
-        )
-    }
 
   private def freezeAndMigrate(
       schema: Schema,
