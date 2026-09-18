@@ -80,3 +80,12 @@ object Moments extends Schema { val moments = table[Moment] }
 
 case class Money(id: Id[Money], amount: Option[BigDecimal]) derives Table
 object Monies extends Schema { val monies = table[Money] }
+
+/** A model whose rows belong to somebody, for the owner seam.
+  *
+  * The owner is a plain `String` rather than an `Id[User]` because `db` has no user model and needs
+  * none: what it binds is whatever `Column[V]` the caller brought, and a `String` keeps this suite
+  * and the in-memory one scoped by the same type.
+  */
+case class Memo(id: Id[Memo], owner: String, text: String) derives Table
+object Memos extends Schema { val memos = table[Memo] }

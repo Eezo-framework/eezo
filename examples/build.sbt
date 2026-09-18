@@ -89,7 +89,12 @@ lazy val blog = (project in file("blog"))
       edge("eezo"),
       edge("eezo-auth"),
       jettyLogging,
-      "org.scalameta" %% "munit" % "1.3.4" % Test
+      "org.scalameta" %% "munit" % "1.3.4" % Test,
+      // `PostOwnershipSuite` drives the real route table over real rows, so it needs a real
+      // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
+      // in-memory substitute is the half `modules/http` already tests. Test scope, so nothing the
+      // blog runs with carries it.
+      "org.testcontainers" % "postgresql" % "1.21.3" % Test
     ),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir

@@ -310,14 +310,39 @@ class RouteGeneratorSuite extends munit.FunSuite {
     // has no database on its classpath, so a branch naming it would fail that application's own
     // compile, which is the whole reason the flag exists.
     assert(!clue(emitted).contains("io.eezo.db"))
-    // The in-memory arm is one line with nothing to decide. Asserted on the body rather than on
-    // the whole file, because the guard lookup beside it summons for its own reasons.
+    // The whole body, asserted rather than the file, because the guard lookup beside it summons
+    // for its own reasons. Two arms even with no database, because ownership is `http`'s and
+    // resolves wherever a route is mounted at all.
     assert(
       clue(emitted).contains(
         "  private inline def storeFor[A]: io.eezo.core.Store[A] =\n" +
-          "    io.eezo.http.InMemoryStore[A]()"
+          "    scala.compiletime.summonFrom {\n" +
+          "      case o: io.eezo.http.Owned[A, ?] => io.eezo.http.InMemoryStore.scoped(o.ownerOf)\n" +
+          "      case _                           => io.eezo.http.InMemoryStore[A]()\n" +
+          "    }"
       )
     )
+  }
+
+  test("an owned model cannot land on an unscoped store, because its arm comes first") {
+    Seq(true, false).foreach { withDb =>
+      val emitted = RouteGenerator.render(Seq.empty, widget, dbOnClasspath = withDb)
+      val owned   = clue(emitted).indexOf("case o: io.eezo.http.Owned[A, ?]")
+      assert(owned >= 0, emitted)
+      // Every other arm of the lookup is behind it, so a model that declared ownership is scoped
+      // before anything has the chance to hand it the whole table.
+      assert(owned < clue(emitted).indexOf("case _"), emitted)
+      if (withDb) assert(owned < clue(emitted).indexOf("case t: io.eezo.db.Table[A]"), emitted)
+    }
+  }
+
+  test("an owned model with a Table is scoped through db's own owner aware half") {
+    val emitted = RouteGenerator.render(Seq.empty, widget, dbOnClasspath = true)
+    assert(clue(emitted).contains("io.eezo.db.JdbcStore.owned(o.ownerOf)(using t, summon)"))
+    assert(clue(emitted).contains("io.eezo.http.Scoped("))
+    // An owned model with no `Table` is scoped in memory, the same per-model decision the
+    // unscoped arm below it makes.
+    assert(clue(emitted).contains("case _ => io.eezo.http.InMemoryStore.scoped(o.ownerOf)"))
   }
 
   test("with eezo-db on the classpath the compiler picks per model, off the model's Table") {
@@ -470,11 +495,16 @@ class RouteGeneratorSuite extends munit.FunSuite {
   }
 
   test("the helpers GeneratedGuardForSuite compiles are the ones the generator emits") {
+    // The store lookup is pinned here for the reason the guard lookup is, and for one more: its
+    // owned arm has to resolve `Column[Id[U]]` without naming `U`, and only a compiler can say
+    // whether it does.
     val compiled = sourceOf(compiledCopy)
     Seq(
       RouteGenerator.guardFor(authDeclared = true),
       RouteGenerator.guardFor(authDeclared = false),
-      RouteGenerator.guardForModel
+      RouteGenerator.guardForModel,
+      RouteGenerator.storeFor(dbOnClasspath = true),
+      RouteGenerator.storeFor(dbOnClasspath = false)
     ).foreach { helper =>
       assert(
         compiled.contains(helper),

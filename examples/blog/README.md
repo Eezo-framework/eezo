@@ -50,12 +50,42 @@ without it the first sign in fails on a table that is not there.
 
 ## Signing in and out
 
-`/admin` is guarded. `models/Post.scala` says so in one line, `given Guarded[Post] =
-User.guard.required`, and that line is also what mounts `/admin/login` and `/admin/logout`: a
-declaration carries the guard's own routes with it, so the page a refusal redirects to cannot be
-forgotten. `app/Index.scala` says the opposite in the same shape, `given Guarded[Index.type] =
+`/admin` is guarded, and each post belongs to whoever wrote it. `models/Post.scala` says both in
+one line, `given Owned[Post, User] = User.guard.required[Post].owning(_.author).except(Action.Index,
+Action.Show)`, and that line is also what mounts `/admin/login` and `/admin/logout`: a declaration
+carries the guard's own routes with it, so the page a refusal redirects to cannot be forgotten.
+`app/Index.scala` says the opposite in the same shape, `given Guarded[Index.type] =
 Guarded.public`, because this application has a guard and so every route it mounts has to say who
 may reach it. Leaving one out is a compile error naming the type, in the generated table.
+
+## Each author edits their own posts
+
+`required` is who has to be signed in; `except(Index, Show)` is whose rows each route reads. Every
+signed in author sees the whole blog on `/admin/posts` and can open anybody's post, and the five
+remaining routes read and write that author's rows alone. Opening somebody else's post shows its
+fields and offers neither an Edit link nor a Delete button; asking for `/admin/posts/<id>/edit` on
+one answers 403, and a `PUT` or `DELETE` at a hand-typed address answers the same. An id that names
+no post at all answers 404, so the two are told apart.
+
+`author` is a field of `Post` like any other, and it is on no page: the derived form emits no input
+for it, the index heads no column with it and the show page prints no row. The handler fills it from
+who is signed in, on `create` and on `update` both, so a hand-crafted `POST` carrying
+`author=<somebody else>` writes a post attributed to whoever sent it.
+
+Adding `author` is drift against a blog database that predates it, and on one already holding posts
+`sync --apply` alone is not enough: `author` is `not null` with no default, and Postgres refuses to
+add such a column to a table that already has rows. On a database with nothing worth keeping, `sbt
+"blog/run reset"` drops every table and recreates them from the model in one pass, at the price of
+every `user` row too, so create the first user again afterward. To keep the existing posts, add the
+column nullable first and give each one an owner by hand, then let sync narrow it: `alter table
+blog."post" add column "author" uuid;` then `update blog."post" set "author" = (select "id" from
+blog."user" limit 1);` then `sbt "blog/run sync --apply --force"`. The update hands every existing
+post to one user, whichever the database returns first, and it needs a user to be there: on an empty
+`user` table it writes null into every row and the forced sync then fails on the nulls, so create
+the first user before running it. `--force` is what lets the `not null` through, since narrowing a
+column is a change sync blocks on purpose, but it is not selective: it applies every change sync
+was blocking, dropped tables and columns included, so read what `sbt "blog/run sync"` lists before
+forcing it. Either way, a second user is what it takes to see the effect.
 
 Visiting `/admin/posts` while signed out answers a 303 to `/admin/login` and remembers where you
 were going, so signing in lands on the page you asked for.

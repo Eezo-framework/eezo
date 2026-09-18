@@ -92,14 +92,21 @@ final class Guard[U] private (
       )
     }
 
-  /** Every route of the thing this declares needs a signed in user. */
-  def required[A]: Guarded[A] = declaring(Action.values.toSet)
+  /** Every route of the thing this declares needs a signed in user.
+    *
+    * A [[GuardedBy]] rather than a bare [[Guarded]], which is a subtype and so changes nothing a
+    * caller wrote: it is what lets `.owning` be chained on, because ownership needs the one thing a
+    * `Guarded` deliberately does not carry, a way back to who is signed in. The model type has to
+    * be written when the chain continues, `required[Post].owning(_.author)`, because a selector's
+    * parameter type cannot be inferred from a chain the expected type reaches only at its end.
+    */
+  def required[A]: GuardedBy[A, U] = declaring(Action.values.toSet)
 
   /** Exactly these routes need one; the rest are open. */
-  def only[A](actions: Action*): Guarded[A] = declaring(actions.toSet)
+  def only[A](actions: Action*): GuardedBy[A, U] = declaring(actions.toSet)
 
   /** Everything but these needs one. */
-  def except[A](actions: Action*): Guarded[A] = declaring(Action.values.toSet -- actions)
+  def except[A](actions: Action*): GuardedBy[A, U] = declaring(Action.values.toSet -- actions)
 
   /** The guard's own three routes, built once per guard.
     *
@@ -115,7 +122,27 @@ final class Guard[U] private (
     Route.derived(Method.POST, logout.path, signedOut)
   )
 
-  private def declaring[A](actions: Set[Action]): Guarded[A] = Guarded(actions, through, carries)
+  private def declaring[A](actions: Set[Action]): GuardedBy[A, U] =
+    new GuardedBy[A, U](actions, through, carries, currentUserKey)
+
+  /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
+    * a declaration that goes on to scope rows by it.
+    *
+    * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's column
+    * holds is the key, and reading the row back to take its key off again would be a lookup per
+    * request for a value the session already spells. It throws for the same reason [[current]]
+    * does, and the message says the same thing: asking for the current user is something a handler
+    * the guard let through does, so nobody being there is a route table that forgot to guard a
+    * covered route.
+    */
+  private val currentUserKey: Request => Id[U] = request =>
+    key(request.session)
+      .getOrElse(
+        throw Unauthorized(
+          "no user is signed in for this request, so there is nobody for an owned route to scope " +
+            "to; a covered action has to be a guarded one"
+        )
+      )
 
   /** The wrapper every guarded route goes through.
     *
@@ -147,11 +174,11 @@ final class Guard[U] private (
   private def signedIn(request: Request): Boolean = who(request.session).isDefined
 
   /** The user the session names, if it names one that is still there. */
-  private def who(session: Session): Option[U] =
-    session
-      .reserved(Guard.UserEntry)
-      .flatMap(Guard.parse[U])
-      .flatMap(find)
+  private def who(session: Session): Option[U] = key(session).flatMap(find)
+
+  /** The key the session names, whether or not its user is still there. */
+  private def key(session: Session): Option[Id[U]] =
+    session.reserved(Guard.UserEntry).flatMap(Guard.parse[U])
 
   /** The 303 an anonymous or stale browser gets.
     *

@@ -64,10 +64,14 @@ class EezoPluginSuite extends munit.FunSuite {
       "    )\n" +
       "\n" +
       "  /** The store each derived model gets. Nothing on this application's classpath persists a\n" +
-      "    * model, so every one of them lives in memory for as long as the process does.\n" +
+      "    * model, so a model that declares an `Owned` gets one that can narrow to the user who\n" +
+      "    * owns a row, and every model lives in memory for as long as the process does.\n" +
       "    */\n" +
       "  private inline def storeFor[A]: io.eezo.core.Store[A] =\n" +
-      "    io.eezo.http.InMemoryStore[A]()\n" +
+      "    scala.compiletime.summonFrom {\n" +
+      "      case o: io.eezo.http.Owned[A, ?] => io.eezo.http.InMemoryStore.scoped(o.ownerOf)\n" +
+      "      case _                           => io.eezo.http.InMemoryStore[A]()\n" +
+      "    }\n" +
       "\n" +
       "  /** Who may reach this route. A `given Guarded` beside the model or the page is what the\n" +
       "    * table mounts it behind; this application's build declares no eezo-auth, so saying\n" +
