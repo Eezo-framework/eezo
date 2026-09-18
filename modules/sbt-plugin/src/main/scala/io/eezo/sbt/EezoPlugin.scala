@@ -285,12 +285,12 @@ object EezoPlugin extends AutoPlugin {
     * `libraryDependencies` carries every configuration at once, so
     * `"io.eezo" %% "eezo-auth" % Test`, written only to exercise `Password` or `Guard` from this
     * project's own tests, is an element of that list too. Left unfiltered, that declaration would
-    * turn on the strict, completeness checking `guardFor` for every production route, none of
-    * which can satisfy it, since auth is not on the production compile classpath. This is the same
+    * turn on the strict, completeness checking `guardFor` for every production route, none of which
+    * can satisfy it, since auth is not on the production compile classpath. This is the same
     * distinction `dbOnClasspath` draws when it narrows to `compile-internal`.
     *
-    * `configurations` is `None` for an ordinary unscoped declaration, which counts. Otherwise it
-    * is an Ivy mapping such as `test`, `compile->default(compile)` or `test->test;compile->compile`,
+    * `configurations` is `None` for an ordinary unscoped declaration, which counts. Otherwise it is
+    * an Ivy mapping such as `test`, `compile->default(compile)` or `test->test;compile->compile`,
     * and only the left side of each arrow names a configuration of this project. The declaration
     * counts when any of those is `compile`, `provided` or `optional`, the three that reach the
     * compiler. Everything else reads false: `test`, `runtime`, and any custom configuration, whose
