@@ -84,11 +84,27 @@ class OwningSuite extends munit.FunSuite {
       )
     assert(computed.contains("has to be a field of the model"), computed)
   }
+
+  test("a member the model computes is not a field, however much it is spelled like one") {
+    val aDef =
+      compileErrors("OwningSuite.aGuard.required[OwningSuite.Draft].owning(_.writer)")
+    assert(aDef.contains("has to be a field of the model"), aDef)
+
+    val aVal =
+      compileErrors("OwningSuite.aGuard.required[OwningSuite.Draft].owning(_.alias)")
+    assert(aVal.contains("has to be a field of the model"), aVal)
+  }
 }
 
 object OwningSuite {
   case class User(id: Id[User], email: String)
   case class Post(id: Id[Post], author: Id[User], title: String)
+
+  /** A model whose body has members shaped like the owner field: neither is a column. */
+  case class Draft(id: Id[Draft], author: Id[User]) {
+    def writer: Id[User] = author
+    val alias: Id[User]  = author
+  }
 
   /** Named, so the compile-error check can reach a guard from inside a string. */
   val aGuard: Guard[User] = Guard[User](find = _ => None, authenticate = (_, _) => None)

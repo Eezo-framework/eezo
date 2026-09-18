@@ -12,7 +12,10 @@ import scala.quoted.*
   *
   * Anything but a plain field is refused rather than approximated. A selector that computes
   * something has no field name to be read off it, and inventing one from the last `Select` in the
-  * tree would produce a name that compiles, looks right, and scopes by the wrong column.
+  * tree would produce a name that compiles, looks right, and scopes by the wrong column. A member
+  * the model's body computes is refused for the same reason, though it is spelled exactly like a
+  * field: only a constructor field has a column, and the name of anything else is one the
+  * application would find missing when it starts rather than when it compiles.
   *
   * The one rule it enforces belongs to `auth` rather than to `core` because `auth` is the only
   * module that turns a selector into an [[io.eezo.core.OwnerOf]]; `core` holds the result and never
@@ -46,8 +49,10 @@ private[auth] object Selector {
     bare(selector.asTerm) match {
       case Block(List(DefDef(_, List(TermParamClause(List(param))), _, Some(body))), _) =>
         bare(body) match {
-          case Select(Ident(from), field) if from == param.name => Expr(field)
-          case _                                                => refused
+          case field @ Select(Ident(from), name)
+              if from == param.name && field.symbol.flags.is(Flags.CaseAccessor) =>
+            Expr(name)
+          case _ => refused
         }
       case _ => refused
     }
