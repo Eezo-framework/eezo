@@ -60,6 +60,13 @@ enum Route {
 
 object Route {
 
+  /** A route eezo made rather than one the user wrote, which is what lets a handwritten route at
+    * the same method and path win: the table drops the derived twin rather than refusing to boot.
+    * The one spelling of that, for `Resource`'s seven and a guard's three.
+    */
+  private[eezo] def derived(method: Method, path: String, handler: Handler): Route =
+    Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+
   /** Mounts a set of routes under a prefix: the paths they answer on, and the URLs they emit.
     *
     * Moving the pattern alone is half a mount. A page whose links were built before the prefix

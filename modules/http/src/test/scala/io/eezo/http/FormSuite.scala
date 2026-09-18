@@ -113,6 +113,49 @@ class FormSuite extends munit.FunSuite {
     assert(html.contains("&lt;script&gt;"), html)
   }
 
+  /** A stand-in for `io.eezo.auth.Password`, which `http` cannot see: all `render` knows about a
+    * password is the input type, so the branch is pinned by the input type and nothing else.
+    *
+    * Its `show` deliberately returns the text rather than the empty string `Field[Password]` uses.
+    * That is what makes the test prove `render` suppresses the value, instead of proving that a
+    * field which shows nothing renders nothing.
+    */
+  case class Passphrase(text: String)
+
+  object Passphrase {
+    given Field[Passphrase] = Field.of[Passphrase](Field.PasswordInput)(_.text)(text =>
+      if (text.length < 8) Left("is too short") else Right(Passphrase(text))
+    )
+  }
+
+  case class SignIn(user: String, secret: Passphrase) derives Form
+
+  test("a password input never carries a value, neither from a record nor from a submission") {
+    val record = SignIn("ann", Passphrase("correct horse"))
+    val filled = Form[SignIn].render("/login", Method.POST, Some(record), token).render
+    assert(filled.contains("""type="password""""), filled)
+    assert(!filled.contains("correct horse"), filled)
+
+    val echoed = Form[SignIn]
+      .render("/login", Method.POST, None, token, FormErrors.empty, data("secret" -> "typed here"))
+      .render
+    assert(!echoed.contains("typed here"), echoed)
+  }
+
+  test("a rejected password comes back as an empty box with its message beside it") {
+    val submitted = data("user" -> "ann", "secret" -> "short")
+    val rejected  = Form[SignIn].parse(submitted, None)
+    assertEquals(rejected, Left(FormErrors(Seq(FieldError("secret", "is too short")))))
+
+    val html = Form[SignIn]
+      .render("/login", Method.POST, None, token, rejected.left.toOption.get, submitted)
+      .render
+    assert(html.contains("is too short"), html)
+    assert(!html.contains("short\""), html)
+    // The other field keeps its typing; only the password box is emptied.
+    assert(html.contains("""value="ann""""), html)
+  }
+
   test("errors render beside their field") {
     val errs = FormErrors(Seq(FieldError("price", "is not a number")))
     val html = Form[Widget].render("/widgets", Method.POST, None, token, errs).render

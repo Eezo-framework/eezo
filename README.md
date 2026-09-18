@@ -17,7 +17,7 @@ README shows the derivation of the missing edge failing:
 |---|---|---|---|
 | `examples/hello` | `eezo-http` | `HttpApp` | http |
 | `examples/reminders` | `eezo-db` | `DbApp` | database |
-| `examples/blog` | `eezo` | `EezoApp` | both |
+| `examples/blog` | `eezo` and `eezo-auth` | `EezoApp` | both |
 | `examples/todo` | `eezo` | `EezoApp` | both |
 
 eezo is not released yet, so the examples resolve it from the local ivy cache:
@@ -39,17 +39,20 @@ application names as its `routes`.
 rows: deliver what is due, mark it sent. No server, no plugin; `sbt run` runs the job once with a
 database installed, and the schema commands manage its table.
 
-`examples/blog` is one case class deriving all three. `models/Post.scala` carries `derives Table,
-Form, Resource`, and that mounts seven CRUD routes — list, new, create, show, edit, update, delete —
-served in a browser over rows in Postgres, because a model with a `Table` gets a `JdbcStore` from
-the generated table. Its `app/Index.scala` is a handwritten route beside them, listed first, because
-a handwritten route wins a path a derived one would also match.
+`examples/blog` is two case classes, one of them deriving all three. `models/Post.scala` carries
+`derives Table, Form, Resource`, and that mounts seven CRUD routes — list, new, create, show, edit,
+update, delete — served in a browser over rows in Postgres, because a model with a `Table` gets a
+`JdbcStore` from the generated table. Its `app/Index.scala` is a handwritten route beside them,
+listed first, because a handwritten route wins a path a derived one would also match.
 
 Half of that table is then served under a prefix: `Main.scala` splits the routes on where they came
 from and wraps only the derived ones in `Route.under("/admin")`. The handwritten index keeps
 answering `GET /`, so the blog root is still http://localhost:8080 and its posts are at
 `/admin/posts`. That is the shape most applications end up with, a public page at the root and the
-screens that edit the data behind a prefix a deployment can guard on its own.
+screens that edit the data behind a prefix only a signed in user reaches. The blog names `eezo-auth`
+beside the umbrella and `models/User.scala` is its second case class, so one line on `Post` guards
+`/admin` and carries the login and the sign out with it. `CreateUser.scala` makes the first user,
+since there is no sign up page.
 
 A mount moves the routes and the URLs the pages emit together, so the seven derived pages link to
 each other without ever naming `/admin`. `app/Index.scala` is the page that has to name it: it

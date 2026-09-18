@@ -46,10 +46,10 @@ class WebSocketSuite extends munit.FunSuite {
   private def connect(client: WebSocketClient, port: Int, path: String): Session =
     client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
 
-  /** The upgrade at `path` is answered with a 404 rather than left hanging. */
-  private def refused(client: WebSocketClient, port: Int, path: String): Unit = {
+  /** The upgrade at `path` is answered with `status` rather than left hanging. */
+  private def refused(client: WebSocketClient, port: Int, path: String, status: Int = 404): Unit = {
     val failure = intercept[java.util.concurrent.ExecutionException](connect(client, port, path))
-    assert(clue(failure.getCause.toString).contains("404"))
+    assert(clue(failure.getCause.toString).contains(status.toString))
   }
 
   test("a WebSocket route receives the open event and every message, with its path parameters") {
@@ -144,6 +144,14 @@ class WebSocketSuite extends munit.FunSuite {
   test("an upgrade matching no WebSocket route is refused, not left hanging") {
     serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
       (client, port) => refused(client, port, "/nope")
+    }
+  }
+
+  test("an endpoint that throws answers the upgrade through the boundary, as a handler would") {
+    val refusing =
+      Route.Ws(PathPattern.parse("/live"), _ => throw Unauthorized("nobody is signed in"))
+    serving(RouteTable(Seq(refusing))) { (client, port) =>
+      refused(client, port, "/live", status = 401)
     }
   }
 

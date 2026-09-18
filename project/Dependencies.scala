@@ -12,6 +12,12 @@ object Dependencies {
     val postgresql     = "42.7.1"
     val testcontainers = "1.21.3"
 
+    /** spring-security-crypto. Picked because it is the one bcrypt implementation on the JVM that
+      * ships as a jar with no transitive dependency of its own, so `eezo-auth` costs an application
+      * one jar rather than a framework.
+      */
+    val springCrypto = "7.1.1"
+
     /** Jetty. 12.1.11 is what `research/http-server.md` measured and recommends, and it is the
       * first 12.1 clear of both 2026 advisories that section 9 lists: CVE-2026-6790 (patched in
       * 12.1.9) and CVE-2026-10051, the cross-request trailer leak on keep-alive connections that
@@ -47,4 +53,13 @@ object Dependencies {
     * across suites with a schema per suite, and that is a dozen lines either way.
     */
   val testcontainersPg = "org.testcontainers" % "postgresql" % V.testcontainers % Test
+
+  /** bcrypt, `modules/auth` only.
+    *
+    * Hashing a password is the one thing in eezo that must not be written here: the cost of getting
+    * it subtly wrong is silent and permanent, and every review of a hand rolled implementation
+    * starts by asking why it exists. This artifact is the crypto half of Spring Security on its
+    * own, with no Spring context, no servlet and no transitive dependency behind it.
+    */
+  val springCrypto = "org.springframework.security" % "spring-security-crypto" % V.springCrypto
 }

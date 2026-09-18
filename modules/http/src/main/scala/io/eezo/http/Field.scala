@@ -47,6 +47,11 @@ object Field {
 
   def apply[X](using f: Field[X]): Field[X] = f
 
+  /** The `<input type>` of a password box. `Form.render` never echoes a field that renders as one,
+    * so whoever writes such a field names this rather than a literal of their own that can drift.
+    */
+  private[eezo] val PasswordInput: String = "password"
+
   /** Builds an instance from the three members that always differ. */
   def of[X](tpe: String)(write: X => String)(parse: String => Either[String, X]): Field[X] =
     new Field[X] {

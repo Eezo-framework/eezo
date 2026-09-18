@@ -70,12 +70,28 @@ lazy val reminders = (project in file("reminders"))
 
 // Both edges: one model deriving `Table, Form, Resource`, seven CRUD routes in a browser over rows
 // in Postgres, and the derived half of the table mounted under `/admin`.
+// `eezo-auth` is named here even though the umbrella already carries it, and naming it is what
+// turns the completeness check on: the generated route table only *demands* a `Guarded` of every
+// route in an application that asked for a way of signing in. `examples/todo` depends on the same
+// umbrella and does not name this, so its routes are not asked to declare anything and every one
+// of them is public. What naming it does not decide is whether a declaration is read: the table
+// looks a `Guarded` up for every route it mounts either way, so a guard `todo` chose to write
+// would guard, and only the silence of a route nobody thought about goes unreported there.
+//
+// `CreateUser` is a second `DbApp` in this project, for making the first user, so the main class
+// `run` means has to be stated: without this, `sbt "blog/run sync --apply"` would ask which one.
 lazy val blog = (project in file("blog"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
   .settings(
     name := "blog",
-    libraryDependencies ++= Seq(edge("eezo"), jettyLogging),
+    libraryDependencies ++= Seq(
+      edge("eezo"),
+      edge("eezo-auth"),
+      jettyLogging,
+      "org.scalameta" %% "munit" % "1.3.4" % Test
+    ),
+    Compile / run / mainClass := Some("Main"),
     runInProjectDir
   )
 

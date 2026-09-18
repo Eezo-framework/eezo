@@ -43,8 +43,15 @@ private[eezo] final case class Orphan(
 )
 trait Resource[A] {
 
-  /** The routes, in dispatch order. */
-  def routes(store: Store[A]): Seq[Route]
+  /** The routes, in dispatch order.
+    *
+    * `guarded` defaults to [[Guarded.public]] so that every call site written before guards existed
+    * still compiles and still mounts seven open routes. It is a parameter rather than a summoned
+    * given for the same reason the store is one: what a route table decides about a model is
+    * decided where the table is written, and an unresolved declaration should report at that line
+    * rather than inside a derivation.
+    */
+  def routes(store: Store[A], guarded: Guarded[A] = Guarded.public): Seq[Route]
 }
 
 object Resource {
@@ -80,9 +87,19 @@ object Resource {
     * decides which models mount rather than a text scan guessing from a `derives` clause. It sees
     * through a type alias and finds a hand-written `given Resource[A]`, neither of which a regex
     * can, and a model with no instance yields `Nil` instead of failing to compile.
+    *
+    * What the declaration carries comes out in front of the model's own routes, so that guarding a
+    * model is also what mounts the page its refusals redirect to. `Guarded.public` carries nothing,
+    * which is why an application with no guard emits exactly the table it always did. A guard hands
+    * the same route instances to every declaration it makes, so a table with two guarded models
+    * holds the login page twice and `distinct` takes one; the generator emits that `distinct`,
+    * because `RouteTable` refuses the same method and path twice rather than picking a winner.
     */
-  inline def routesOf[A](store: Store[A]): Seq[Route] = summonFrom {
-    case r: Resource[A] => r.routes(store)
+  inline def routesOf[A](
+      store: Store[A],
+      guarded: Guarded[A] = Guarded.public[A]
+  ): Seq[Route] = summonFrom {
+    case r: Resource[A] => guarded.carries ++ r.routes(store, guarded)
     case _              => Seq.empty
   }
 
@@ -320,25 +337,32 @@ object Resource {
 
     new Resource[A] {
 
-      /** Every route here is marked [[Provenance.Derived]], and this is the only place in eezo that
-        * marks one. That is what lets a user mount `GET /$plural` by hand and keep the other six
-        * pages: the table drops the derived twin rather than refusing to boot.
+      /** Every route here is [[Route.derived]]. That is what lets a user mount `GET /$plural` by
+        * hand and keep the other six pages: the table drops the derived twin rather than refusing
+        * to boot.
         */
-      def routes(store: Store[A]): Seq[Route] = {
-        def route(method: Method, path: String, handler: Handler): Route =
-          Route.Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+      def routes(store: Store[A], guarded: Guarded[A]): Seq[Route] = {
+        import Route.derived as route
 
-        Action.values.toSeq.filter(actions.has).map {
-          case Action.Index => route(Method.GET, collection.path, index(store))
-          case Action.New   =>
-            route(Method.GET, s"${collection.path}/${NewPage.segment}", blank)
-          case Action.Show => route(Method.GET, s"${collection.path}/:id", show(store))
-          case Action.Edit =>
-            route(Method.GET, s"${collection.path}/:id/${EditPage.segment}", edit(store))
-          case Action.Create => route(NewPage.targetMethod, collection.path, create(store))
-          case Action.Update =>
-            route(EditPage.targetMethod, s"${collection.path}/:id", update(store))
-          case Action.Destroy => route(Method.DELETE, s"${collection.path}/:id", destroy(store))
+        Action.values.toSeq.filter(actions.has).map { action =>
+          val built = action match {
+            case Action.Index => route(Method.GET, collection.path, index(store))
+            case Action.New   =>
+              route(Method.GET, s"${collection.path}/${NewPage.segment}", blank)
+            case Action.Show => route(Method.GET, s"${collection.path}/:id", show(store))
+            case Action.Edit =>
+              route(Method.GET, s"${collection.path}/:id/${EditPage.segment}", edit(store))
+            case Action.Create => route(NewPage.targetMethod, collection.path, create(store))
+            case Action.Update =>
+              route(EditPage.targetMethod, s"${collection.path}/:id", update(store))
+            case Action.Destroy => route(Method.DELETE, s"${collection.path}/:id", destroy(store))
+          }
+
+          // The declaration reaches a route only when it names that route's role, so a model can
+          // guard its writes and leave its index open. Applied once, here, where the [[Action]]
+          // that earned it is still in hand: one step later, a `Seq[Route]` has only methods and
+          // paths, and the mapping back would be this table written a second time.
+          if (guarded.actions.contains(action)) guarded.through(built) else built
         }
       }
     }

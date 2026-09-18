@@ -242,7 +242,8 @@ class RouteGeneratorSuite extends munit.FunSuite {
     assert(clue(emitted).contains("// from src/main/scala/models/Widget.scala"))
     assert(
       clue(emitted).contains(
-        "io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget])"
+        "io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], " +
+          "guardFor[models.Widget])"
       )
     )
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
@@ -309,7 +310,14 @@ class RouteGeneratorSuite extends munit.FunSuite {
     // has no database on its classpath, so a branch naming it would fail that application's own
     // compile, which is the whole reason the flag exists.
     assert(!clue(emitted).contains("io.eezo.db"))
-    assert(!clue(emitted).contains("summonFrom"))
+    // The in-memory arm is one line with nothing to decide. Asserted on the body rather than on
+    // the whole file, because the guard lookup beside it summons for its own reasons.
+    assert(
+      clue(emitted).contains(
+        "  private inline def storeFor[A]: io.eezo.core.Store[A] =\n" +
+          "    io.eezo.http.InMemoryStore[A]()"
+      )
+    )
   }
 
   test("with eezo-db on the classpath the compiler picks per model, off the model's Table") {
@@ -334,6 +342,145 @@ class RouteGeneratorSuite extends munit.FunSuite {
       !clue(RouteGenerator.render(Seq.empty, widget, dbOnClasspath = false))
         .contains("import io.eezo.db")
     )
+  }
+
+  // ------------------------------------------------------- which routes have to say who may reach them
+
+  private val helloRouteAndModel = (Seq(route("widgets/Index.scala")), widget)
+
+  test("every mounted route goes through the lookup, whether or not the build declares auth") {
+    // The defect this covers: the lookup used to be emitted only where the build named
+    // `eezo-auth`, so an application on the umbrella, or one reaching auth through a `dependsOn`
+    // module, mounted every route bare and read nobody's `given Guarded`. `Guarded` lives in
+    // `http`, so the lookup resolves wherever a route is mounted at all and is emitted always.
+    val (routes, models) = helloRouteAndModel
+
+    val lenient = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = false)
+    assert(clue(lenient).contains("guardFor[app.widgets.Index.type].mounting("))
+    assert(
+      clue(lenient).contains(
+        "io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], " +
+          "guardFor[models.Widget])"
+      )
+    )
+
+    val strict = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = true)
+    assert(
+      clue(strict).contains("""guardFor[app.widgets.Index.type]("app.widgets.Index").mounting(""")
+    )
+    assert(
+      clue(strict).contains(
+        """io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], """ +
+          """guardForModel[models.Widget]("models.Widget"))"""
+      )
+    )
+  }
+
+  test("silence is public where the build declares no auth, and an error where it declares it") {
+    val (routes, models) = helloRouteAndModel
+
+    val lenient = RouteGenerator.render(routes, models, dbOnClasspath = false, authDeclared = false)
+    assert(clue(lenient).contains("private inline def guardFor[A]: io.eezo.http.Guarded[A] ="))
+    assert(clue(lenient).contains("case g: io.eezo.http.Guarded[A] => g"))
+    assert(clue(lenient).contains("=> io.eezo.http.Guarded.public[A]"))
+    assert(!clue(lenient).contains("scala.compiletime.error("))
+    // No name reaches the lenient helper, because it has no error to name anything in, and a
+    // parameter its body never reads is the `unused explicit parameter` that `-Wunused:all`
+    // reports in the application's own build.
+    assert(!clue(lenient).contains("\"app.widgets.Index\""))
+    // Nor a second helper: with no error to spare a model from, `guardForModel` would be a second
+    // spelling of the one above it.
+    assert(!clue(lenient).contains("guardForModel"))
+
+    val strict = RouteGenerator.render(routes, models, dbOnClasspath = false, authDeclared = true)
+    assert(clue(strict).contains("private inline def guardFor[A](inline name: String)"))
+    assert(clue(strict).contains("scala.compiletime.error("))
+    // A model with a `derives` clause but no `Resource`, such as the blog's `User`, mounts nothing
+    // and must not be asked to declare anything.
+    assert(clue(strict).contains("private inline def guardForModel[A](inline name: String)"))
+    assert(clue(strict).contains("case _: io.eezo.http.Resource[A] => guardFor[A](name)"))
+    assert(clue(strict).contains("=> io.eezo.http.Guarded.public[A]"))
+  }
+
+  test("the table takes distinct in both readings, because a guard carries its own pages") {
+    // A guard's login and logout routes travel inside every declaration it made, so a table with
+    // two guarded things holds them twice and `RouteTable` refuses to boot. The declaration can
+    // now exist in an application whose build never named `eezo-auth`, so the line cannot be tied
+    // to the flag any more.
+    val (routes, models) = helloRouteAndModel
+    assert(
+      clue(RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = false))
+        .contains(").distinct")
+    )
+    assert(
+      clue(RouteGenerator.render(routes, Seq.empty, dbOnClasspath = true, authDeclared = false))
+        .contains("io.eezo.http.RouteTable(handwritten.distinct)")
+    )
+  }
+
+  test("the guard helpers follow the rows that call them, like storeFor does") {
+    // No handwritten routes and no models: nothing calls either helper, and an uncalled
+    // `private inline def` is a `-Wunused:all` failure in the application's own build. Nothing is
+    // taken `distinct` either, because there is no row to hold twice.
+    Seq(true, false).foreach { declared =>
+      val bare =
+        RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath = false, authDeclared = declared)
+      assert(!clue(bare).contains("guardFor"))
+      assert(clue(bare).contains("io.eezo.http.RouteTable(handwritten)"))
+    }
+
+    // Handwritten routes but no models: the route helper is called, the model one is not.
+    val routesOnly = RouteGenerator.render(
+      Seq(route("widgets/Index.scala")),
+      Seq.empty,
+      dbOnClasspath = false,
+      authDeclared = true
+    )
+    assert(clue(routesOnly).contains("def guardFor[A]"))
+    assert(!clue(routesOnly).contains("def guardForModel[A]"))
+  }
+
+  // ------------------------------------------------------- the helpers a compiler sees for real
+
+  /** Where the one compiled copy of the emitted guard helpers lives.
+    *
+    * ADR 0002 cross builds this plugin for sbt 1 on Scala 2.12, so no Scala 3 module can depend on
+    * it and compile what `render` returns. `modules/eezo`'s `GeneratedGuardForSuite` therefore
+    * holds a copy and compiles that, which is a drift waiting to happen. Reading the file here and
+    * demanding the emitted text verbatim is the whole pin: a helper that changes without its copy
+    * changing is a failure in this suite, on both axes, with no shared artifact to publish.
+    */
+  private val compiledCopy = "modules/eezo/src/test/scala/io/eezo/GeneratedGuardForSuite.scala"
+
+  /** The file, found from the working directory sbt runs a suite in and from its parents, so that
+    * this passes whether the suite was started at the build root or inside the module.
+    */
+  private def sourceOf(path: String): String = {
+    def upwards(from: java.io.File, left: Int): Option[java.io.File] = {
+      val candidate = new java.io.File(from, path)
+      if (candidate.isFile) Some(candidate)
+      else if (left == 0 || from.getParentFile == null) None
+      else upwards(from.getParentFile, left - 1)
+    }
+    val here   = new java.io.File(".").getCanonicalFile
+    val found  = upwards(here, 4).getOrElse(fail(s"$path not found from $here"))
+    val source = scala.io.Source.fromFile(found, "UTF-8")
+    try source.mkString
+    finally source.close()
+  }
+
+  test("the helpers GeneratedGuardForSuite compiles are the ones the generator emits") {
+    val compiled = sourceOf(compiledCopy)
+    Seq(
+      RouteGenerator.guardFor(authDeclared = true),
+      RouteGenerator.guardFor(authDeclared = false),
+      RouteGenerator.guardForModel
+    ).foreach { helper =>
+      assert(
+        compiled.contains(helper),
+        s"$compiledCopy no longer holds this helper verbatim:\n$helper"
+      )
+    }
   }
 
   test("with no candidates neither arm emits storeFor, because nothing would call it") {

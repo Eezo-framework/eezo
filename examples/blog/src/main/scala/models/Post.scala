@@ -3,6 +3,7 @@ package models
 import io.eezo.core.Id
 import io.eezo.db.Table
 import io.eezo.http.Form
+import io.eezo.http.Guarded
 import io.eezo.http.Resource
 
 /** The whole of the blog's application code, beside its entry point.
@@ -27,3 +28,19 @@ case class Post(
 ) derives Table,
       Form,
       Resource
+
+object Post {
+
+  /** All seven routes need a signed in user, reading included.
+    *
+    * `required` rather than `only(Create, Update, Destroy)`, because this half of the blog is the
+    * editing screens: `Main.scala` mounts the derived routes under `/admin` and leaves the public
+    * page at `/`, so there is no reader here to keep out of the way of. A blog whose posts are read
+    * through the derived index would say `only` instead, and the declaration is the one line that
+    * changes.
+    *
+    * This is also what mounts `/admin/login`: the declaration carries the guard's own routes, and
+    * they travel into the table with it.
+    */
+  given Guarded[Post] = User.guard.required
+}
