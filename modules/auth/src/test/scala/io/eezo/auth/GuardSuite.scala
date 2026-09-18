@@ -2,6 +2,7 @@ package io.eezo.auth
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.{Clock, Duration, Instant, ZoneOffset}
 
 import io.eezo.core.Id
 import io.eezo.core.html.Html
@@ -24,11 +25,23 @@ class GuardSuite extends munit.FunSuite {
   private val ann  = User(Id.gen(), "ann@example.com", cheap)
   private val rows = Map(ann.id -> ann)
 
-  private def guard: Guard[User] =
+  /** The one moment every guard in this suite is fixed at, so a test that moves time moves it in
+    * the session's stamp rather than in the clock. A fixed clock is what keeps the suite free of
+    * order dependence: no guard here holds a reading another test can have already advanced.
+    */
+  private val now: Instant = Instant.parse("2026-09-18T12:00:00Z")
+
+  private def guard: Guard[User] = guardWith()
+
+  private def guardWith(
+      lifetime: Duration = Guard.DefaultLifetime
+  ): Guard[User] =
     Guard[User](
       find = id => rows.get(id),
       authenticate = (email, plain) =>
-        rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id)
+        rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id),
+      lifetime = lifetime,
+      clock = Clock.fixed(now, ZoneOffset.UTC)
     )
 
   /** A page behind the guard, so a test can tell "the handler ran" from "the wrapper answered". */
@@ -39,8 +52,25 @@ class GuardSuite extends munit.FunSuite {
   private def app(guarded: Guarded[Any], behind: Route = page()): RouteTable =
     RouteTable((guarded.carries :+ guarded.through(behind)).distinct)
 
-  /** A browser whose session names `who`, with a token so an unsafe request can return one. */
-  private def signedIn(who: Id[User], method: Method = Method.GET, path: String = "/posts") =
+  /** A browser whose session names `who`, signed in at `since`, which defaults to the reading every
+    * guard here is fixed at, so a test with nothing to say about time reads as signed in just now.
+    */
+  private def signedIn(
+      who: Id[User],
+      method: Method = Method.GET,
+      path: String = "/posts",
+      since: Instant = now
+  ) =
+    browser(method, path).copy(
+      session = Session.empty
+        .withReserved(Guard.UserEntry, who.show)
+        .withReserved(Guard.StampEntry, Guard.stamped(since))
+    )
+
+  /** A browser whose session names `who` and carries no stamp beside it: the shape every cookie
+    * signed before the lifetime shipped has, and the one a forged escalation would most like.
+    */
+  private def stampless(who: Id[User], method: Method = Method.GET, path: String = "/posts") =
     browser(method, path).copy(
       session = Session.empty.withReserved(Guard.UserEntry, who.show)
     )
@@ -106,6 +136,210 @@ class GuardSuite extends munit.FunSuite {
         intercept[Unauthorized](endpoint(browser(Method.GET, "/live")))
       case other => fail(s"a Ws route came back as $other")
     }
+  }
+
+  // ------------------------------------------------------------ how long a sign in lasts
+
+  /** A moment just past the default lifetime, and one just inside it. */
+  private val stale: Instant  = now.minus(Guard.DefaultLifetime).minusSeconds(1)
+  private val recent: Instant = now.minus(Guard.DefaultLifetime).plusSeconds(1)
+
+  test("a sign in younger than the lifetime reaches the guarded handler") {
+    var ran     = false
+    val watched = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      _ => { ran = true; Response.Ok(Html.text("the posts")) }
+    )
+    val response = RouteTable(Seq(guard.required[Any].through(watched)))
+      .dispatch(signedIn(ann.id, since = recent))
+    assertEquals(response.status, 200)
+    assert(ran, "a sign in still inside the lifetime never reached the handler")
+    // A guarded read that ever rewrote the stamp would turn the absolute lifetime into a sliding
+    // one, and every page merely reading the session would start costing a `Set-Cookie`.
+    assertEquals(
+      response.session.flatMap(_.reserved(Guard.StampEntry)),
+      Some(Guard.stamped(recent)),
+      "a guarded request that let the handler run touched the stamp on the way through"
+    )
+  }
+
+  test("a stamp ahead of the clock is honoured, not refused as though it were stale") {
+    val response = RouteTable(Seq(guard.required[Any].through(page())))
+      .dispatch(signedIn(ann.id, since = now.plusSeconds(60)))
+    assertEquals(response.status, 200)
+  }
+
+  test("a sign in older than the lifetime is refused, and the handler never runs") {
+    var ran     = false
+    val watched = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      _ => { ran = true; Response.Ok(Html.text("the posts")) }
+    )
+    val response = RouteTable(Seq(guard.required[Any].through(watched)))
+      .dispatch(signedIn(ann.id, since = stale))
+    assertEquals(response.status, 303)
+    assertEquals(response.header("Location"), Some("/login"))
+    assert(!ran, "an expired sign in reached the handler behind the guard")
+  }
+
+  test("a sign in exactly the lifetime old still counts; a millisecond older does not") {
+    val t = RouteTable(Seq(guard.required[Any].through(page())))
+    assertEquals(t.dispatch(signedIn(ann.id, since = now.minus(Guard.DefaultLifetime))).status, 200)
+    assertEquals(
+      t.dispatch(signedIn(ann.id, since = now.minus(Guard.DefaultLifetime).minusMillis(1))).status,
+      303
+    )
+  }
+
+  test("the lifetime is the one the application named, not the default") {
+    val g = guardWith(lifetime = Duration.ofMinutes(30))
+    val t = RouteTable(Seq(g.required[Any].through(page())))
+    assertEquals(t.dispatch(signedIn(ann.id, since = now.minusSeconds(29 * 60))).status, 200)
+    assertEquals(t.dispatch(signedIn(ann.id, since = now.minusSeconds(31 * 60))).status, 303)
+  }
+
+  test("a guard built naming no lifetime at all still lasts a fortnight, not some other span") {
+    // `guardWith` always forwards `Guard.DefaultLifetime` explicitly, so it can never exercise
+    // `Guard.apply`'s own default; this test omits the argument and spells the fortnight as a
+    // literal, so a change to the real default rather than to this suite's plumbing shows up here.
+    val g = Guard[User](
+      find = id => rows.get(id),
+      authenticate = (email, plain) =>
+        rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id),
+      clock = Clock.fixed(now, ZoneOffset.UTC)
+    )
+    val t = RouteTable(Seq(g.required[Any].through(page())))
+    assertEquals(t.dispatch(signedIn(ann.id, since = now.minus(Duration.ofDays(14)))).status, 200)
+    assertEquals(
+      t.dispatch(signedIn(ann.id, since = now.minus(Duration.ofDays(14)).minusMillis(1))).status,
+      303
+    )
+  }
+
+  test("an expired sign in is remembered the way an anonymous one is, path and query together") {
+    val g       = guard
+    val t       = app(g.required[Any])
+    val refused = t.dispatch(
+      signedIn(ann.id, since = stale).copy(query = Map("page" -> Seq("3")))
+    )
+    assertEquals(refused.status, 303)
+    val marked = refused.session.getOrElse(fail("the refusal named no session"))
+    assertEquals(marked.reserved(Guard.ReturnEntry), Some("/posts?page=3"))
+  }
+
+  test("a refusal takes the stamp out along with the user, leaving nothing stale behind") {
+    val t = RouteTable(Seq(guard.required[Any].through(page())))
+
+    val lapsed = t
+      .dispatch(signedIn(ann.id, since = stale))
+      .session
+      .getOrElse(fail("the refusal named no session"))
+    assertEquals(whom(lapsed), None, "the expired user entry survived the refusal")
+    assertEquals(lapsed.reserved(Guard.StampEntry), None, "the expired stamp survived the refusal")
+
+    val gone = t
+      .dispatch(signedIn(Id.gen[User]()))
+      .session
+      .getOrElse(fail("the refusal named no session"))
+    assertEquals(whom(gone), None)
+    assertEquals(gone.reserved(Guard.StampEntry), None, "the stamp of a vanished user survived")
+  }
+
+  test("the current user of a request whose sign in has expired is an error, not a stale row") {
+    intercept[Unauthorized](guard.current(signedIn(ann.id, since = stale)))
+  }
+
+  test("a session naming nobody is anonymous whatever its stamp says, and never an error") {
+    val t = RouteTable(Seq(guard.required[Any].through(page())))
+    List(Instant.EPOCH, stale, recent, now, now.plusSeconds(60)).foreach { since =>
+      val orphan = browser(Method.GET, "/posts").copy(
+        session = Session.empty.withReserved(Guard.StampEntry, Guard.stamped(since))
+      )
+      assertEquals(t.dispatch(orphan).status, 303, since.toString)
+      assertEquals(t.dispatch(orphan).header("Location"), Some("/login"), since.toString)
+      intercept[Unauthorized](guard.current(orphan))
+    }
+  }
+
+  test("a stamp that will not read as a moment is no sign in rather than an error page") {
+    val t = RouteTable(Seq(guard.required[Any].through(page())))
+    List("", " ", "yesterday", "12.5", "99999999999999999999", "  17  ", "17ms").foreach {
+      corrupt =>
+        val request = browser(Method.GET, "/posts").copy(
+          session = Session.empty
+            .withReserved(Guard.UserEntry, ann.id.show)
+            .withReserved(Guard.StampEntry, corrupt)
+        )
+        assertEquals(t.dispatch(request).status, 303, corrupt)
+        assertEquals(t.dispatch(request).header("Location"), Some("/login"), corrupt)
+        intercept[Unauthorized](guard.current(request))
+    }
+  }
+
+  test("signing in stamps the session with the clock's own reading, beside the user and a token") {
+    val g     = guard
+    val t     = app(g.required[Any])
+    val token = tokenOf(t.dispatch(browser(Method.GET, "/login")))
+
+    val ok = t.dispatch(submits("/login", token, "email" -> ann.email, "password" -> "secret"))
+    assertEquals(ok.status, 303)
+    val after = ok.session.getOrElse(fail("login named no session"))
+    assertEquals(whom(after), Some(ann.id.show))
+    assertEquals(after.reserved(Guard.StampEntry), Some(Guard.stamped(now)))
+    assertNotEquals(
+      Csrf.read(after).map(_.value),
+      Some(token.value),
+      "the stamped session kept the token minted before eezo knew who this was"
+    )
+  }
+
+  test("signing in again through an expired session starts the lifetime over") {
+    val g = guard
+    val t = app(g.required[Any])
+
+    val refused = t.dispatch(signedIn(ann.id, since = stale))
+    val marked  = refused.session.getOrElse(fail("the refusal named no session"))
+    val token   = Csrf.read(marked).getOrElse(fail("the refusal kept no token"))
+
+    val ok = t.dispatch(
+      submits("/login", token, "email" -> ann.email, "password" -> "secret").copy(session = marked)
+    )
+    assertEquals(ok.status, 303)
+    val after = ok.session.getOrElse(fail("login named no session"))
+    assertEquals(after.reserved(Guard.StampEntry), Some(Guard.stamped(now)))
+    assertEquals(t.dispatch(browser(Method.GET, "/posts").copy(session = after)).status, 200)
+  }
+
+  test("a guarded WebSocket refuses an expired sign in, having no page to send anyone to") {
+    val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
+    guard.required[Any].through(ws) match {
+      case Route.Ws(_, endpoint, _) =>
+        intercept[Unauthorized](endpoint(signedIn(ann.id, since = stale, path = "/live")))
+      case other => fail(s"a Ws route came back as $other")
+    }
+  }
+
+  test("a session naming a user with no stamp beside it is anonymous everywhere") {
+    var ran     = false
+    val watched = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      _ => { ran = true; Response.Ok(Html.text("the posts")) }
+    )
+    val response = RouteTable(Seq(guard.required[Any].through(watched)))
+      .dispatch(stampless(ann.id))
+    assertEquals(response.status, 303)
+    assertEquals(response.header("Location"), Some("/login"))
+    assert(!ran, "an unstamped session reached the handler behind the guard")
+
+    intercept[Unauthorized](guard.current(stampless(ann.id)))
+    assertEquals(
+      htmlOf(RouteTable(Seq(frontPage(guard))).dispatch(stampless(ann.id, path = "/"))),
+      "the blog",
+      "an unstamped session was offered a way out"
+    )
   }
 
   // ------------------------------------------------------------ what it carries

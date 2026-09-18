@@ -2,6 +2,7 @@ package io.eezo.auth
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.time.{Clock, Duration, Instant}
 
 import io.eezo.core.Id
 import io.eezo.core.html.{Attrs, Html, Url}
@@ -20,12 +21,12 @@ case class Login(email: String, password: Password.Plain) derives Form
 
 /** What identifies the user behind a request, for one way of signing in: a password.
   *
-  * Built from two functions and a URL, and nothing else. `find` turns the key in the session into
-  * the application's own user, and `authenticate` turns an email and a typed password into a key.
-  * Both are the application's, which is what keeps `modules/auth` off `modules/db`: the guard never
-  * learns that a table exists, and `examples/blog` supplies two one-line closures over its own
-  * `read`. Constructing one therefore touches nothing, so a boot that never serves opens no
-  * connection.
+  * Built from two functions, a URL and how long a sign in should last, and nothing else. `find`
+  * turns the key in the session into the application's own user, and `authenticate` turns an email
+  * and a typed password into a key. Both are the application's, which is what keeps `modules/auth`
+  * off `modules/db`: the guard never learns that a table exists, and `examples/blog` supplies two
+  * one-line closures over its own `read`. Constructing one therefore touches nothing, so a boot
+  * that never serves opens no connection.
   *
   * One guard per user model. `required`, `only` and `except` are how it becomes a [[Guarded]], and
   * every declaration it makes carries [[carries]], the same three route instances, so an
@@ -35,7 +36,9 @@ final class Guard[U] private (
     find: Id[U] => Option[U],
     authenticate: (String, Password.Plain) => Option[Id[U]],
     login: Url,
-    home: Url
+    home: Url,
+    lifetime: Duration,
+    clock: Clock
 ) {
 
   /** Where the logout button posts.
@@ -176,9 +179,41 @@ final class Guard[U] private (
   /** The user the session names, if it names one that is still there. */
   private def who(session: Session): Option[U] = key(session).flatMap(find)
 
-  /** The key the session names, whether or not its user is still there. */
+  /** The key the session names, whether or not its user is still there, and only while the sign in
+    * that wrote it is still inside [[lifetime]].
+    *
+    * The age check belongs here and nowhere else. [[who]], [[signedIn]], [[current]] and
+    * [[currentUserKey]] all read the session through this one method, so a guarded page, a
+    * WebSocket, the sign out form and an ownership scope all expire together; a second check beside
+    * any of them would be a second thing to keep in step.
+    *
+    * A `_user` with no stamp beside it reads as nobody rather than as a sign in of unknown age.
+    * Every cookie signed before the lifetime existed has that shape, and reading it as valid would
+    * mean the one browser the rule was written for, the copied cookie, is the one browser it never
+    * applies to. Signing everyone out once is the cost, and it is paid once.
+    */
   private def key(session: Session): Option[Id[U]] =
-    session.reserved(Guard.UserEntry).flatMap(Guard.parse[U])
+    for {
+      named <- session.reserved(Guard.UserEntry)
+      since <- session.reserved(Guard.StampEntry).flatMap(Guard.stamp)
+      if !expired(since)
+      id <- Guard.parse[U](named)
+    } yield id
+
+  /** Whether a sign in made at `since` has outlived [[lifetime]].
+    *
+    * Measured from the stamp to now rather than by adding the lifetime to the stamp, so no arrival
+    * can push an instant past what `Instant` can hold and turn a login redirect into a 500. Exactly
+    * `lifetime` old is still a sign in: what is refused is a stamp older than the lifetime, and a
+    * boundary somebody can reach only by arriving on the nanosecond is not worth a second spelling.
+    *
+    * A reading ahead of the clock is not refused. The stamp is eezo's own signed value, so nobody
+    * but eezo chose it, and a stamp in the future means this server's clock moved backwards rather
+    * than that anything is wrong with the browser; signing every live browser out over a correction
+    * of a few seconds would be the larger surprise.
+    */
+  private def expired(since: Instant): Boolean =
+    Duration.between(since, clock.instant()).compareTo(lifetime) > 0
 
   /** The 303 an anonymous or stale browser gets.
     *
@@ -198,7 +233,8 @@ final class Guard[U] private (
     * response as a logout and sending the browser to the login page with no token to submit with.
     */
   private def refuse(request: Request): Response = {
-    val cleared = request.session.withoutReserved(Guard.UserEntry)
+    val cleared =
+      request.session.withoutReserved(Guard.UserEntry).withoutReserved(Guard.StampEntry)
     Response
       .Redirect(login)
       .withSession(
@@ -243,8 +279,17 @@ final class Guard[U] private (
         Response
           .Redirect(Guard.back(request.session, home))
           // Rebuilt from empty, so nothing an attacker could have planted in the old session
-          // survives the privilege change, and rotated, so the token does not either.
-          .withSession(Csrf.rotated(Session.empty.withReserved(Guard.UserEntry, key.show)))
+          // survives the privilege change, and rotated, so the token does not either. This is the
+          // one place a stamp is ever written: the lifetime runs from the sign in, so refreshing it
+          // anywhere a session is merely read would make it a sliding one and would cost a
+          // `Set-Cookie` on every page that only looks at the session.
+          .withSession(
+            Csrf.rotated(
+              Session.empty
+                .withReserved(Guard.UserEntry, key.show)
+                .withReserved(Guard.StampEntry, Guard.stamped(clock.instant()))
+            )
+          )
       }
 
   /** The 422 a refused sign in comes back as: the same page, the one message, and the body that was
@@ -289,6 +334,24 @@ object Guard {
     */
   private[eezo] val ReturnEntry: String = Session.Reserved + "return"
 
+  /** The session entry the moment of signing in travels under, reserved for [[UserEntry]]'s own
+    * reason: a stamp an application could write through `Session.set` is a lifetime an application
+    * could set to whenever it liked, which is the same escalation one line long.
+    *
+    * Epoch milliseconds as plain digits, which is the encoding that cannot fail on the way back in.
+    * `Instant.ofEpochMilli` accepts every `Long` there is, where `ofEpochSecond` throws for the
+    * large ones and ISO text has a parser with opinions, and [[stamp]] sits on the path of every
+    * guarded request: a value that throws there is an error page where a login redirect belongs.
+    */
+  private[eezo] val StampEntry: String = Session.Reserved + "since"
+
+  /** How long a sign in lasts when an application says nothing.
+    *
+    * Two weeks is long enough that a person using an application most days is never asked again,
+    * and short enough that a laptop left in a taxi stops being a way in within a fortnight.
+    */
+  val DefaultLifetime: Duration = Duration.ofDays(14)
+
   /** The longest remembered address, measured on the form the session actually carries rather than
     * on the address itself, past which a refusal remembers nothing.
     *
@@ -320,19 +383,44 @@ object Guard {
     * signed in user wants. An application that mounts nothing at its root, which is the ordinary
     * shape once anything is guarded, sets `home` to the page it does mount, the same way `Post`'s
     * declaration is the only place that names `/posts`.
+    *
+    * `lifetime` is how long a sign in lasts, counted from the moment it was made and not refreshed
+    * by use. A parameter with a default rather than an `HttpApp` override or an environment
+    * variable, because how long a sign in should last is a property of the thing being guarded: an
+    * admin area and a blog want different answers, and an application with two guards would have no
+    * way to say so through one setting.
+    *
+    * `clock` exists so that a suite can ask what happens after a fortnight without waiting one. It
+    * is read only where a sign in is stamped and where its age is measured, so passing one changes
+    * nothing else, and the default is the system clock in UTC.
     */
   def apply[U](
       find: Id[U] => Option[U],
       authenticate: (String, Password.Plain) => Option[Id[U]],
       login: Url = Url.Mounted("/login"),
-      home: Url = Url.Mounted("/")
-  ): Guard[U] = new Guard[U](find, authenticate, login, home)
+      home: Url = Url.Mounted("/"),
+      lifetime: Duration = DefaultLifetime,
+      clock: Clock = Clock.systemUTC()
+  ): Guard[U] = new Guard[U](find, authenticate, login, home, lifetime, clock)
 
   /** The key out of the session text. A session eezo signed can only hold what eezo wrote, so a
     * value that is not a UUID means the secret changed under a live browser rather than that anyone
     * tampered; either way there is no user, and answering `None` sends them to log in again.
     */
   private[auth] def parse[U](text: String): Option[Id[U]] = summon[FromPath[Id[U]]].apply(text)
+
+  /** The moment of a sign in, as the session carries it. */
+  private[auth] def stamped(at: Instant): String = at.toEpochMilli.toString
+
+  /** The moment back out of the session text, and `None` for anything that is not one.
+    *
+    * `parse`'s precedent, for `parse`'s reason: a session eezo signed can only hold what eezo
+    * wrote, so a value that will not read means the secret changed under a live browser rather than
+    * that anyone tampered. Either way there is no sign in, and answering `None` sends the browser
+    * to log in again instead of turning every guarded page into a 500.
+    */
+  private[auth] def stamp(text: String): Option[Instant] =
+    text.toLongOption.map(Instant.ofEpochMilli)
 
   /** What a refusal is worth remembering, when it is worth anything.
     *
