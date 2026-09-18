@@ -72,8 +72,16 @@ for it, the index heads no column with it and the show page prints no row. The h
 who is signed in, on `create` and on `update` both, so a hand-crafted `POST` carrying
 `author=<somebody else>` writes a post attributed to whoever sent it.
 
-Adding `author` is drift against a blog database that predates it, so `sync --apply` again before
-serving, and seed two users to see the effect.
+Adding `author` is drift against a blog database that predates it, and on one already holding posts
+`sync --apply` alone is not enough: `author` is `not null` with no default, and Postgres refuses to
+add such a column to a table that already has rows. On a database with nothing worth keeping, `sbt
+"blog/run reset"` drops every table and recreates them from the model in one pass, at the price of
+every `user` row too, so create the first user again afterward. To keep the existing posts, add the
+column nullable first and give each one an owner by hand, then let sync narrow it: `alter table
+blog."post" add column "author" uuid;` then `update blog."post" set "author" = (select "id" from
+blog."user" limit 1);` then `sbt "blog/run sync --apply --force"`, where `--force` is what lets the
+`not null` through, since narrowing a column is a change sync blocks on purpose. Either way, seed
+two users afterward to see the effect.
 
 Visiting `/admin/posts` while signed out answers a 303 to `/admin/login` and remembers where you
 were going, so signing in lands on the page you asked for.

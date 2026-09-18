@@ -272,6 +272,14 @@ object Resource {
         * covered route the guard leaves open answers `Unauthorized` for every request that reaches
         * it: not a page anyone can use, and not a defect a browser would report as one.
         *
+        * `Create` belongs beside `covers` here even when `covers` itself does not name it. [[body]]
+        * fills the owner field from `currentUser` on every create, since there is no earlier row
+        * for an uncovered write to keep the way [[keeping]] lets an uncovered `update` do, so a
+        * mounted create needs a signed in user whatever the declaration says it covers. Left out of
+        * this check, a declaration that guards only `Destroy` would mount a create it calls public
+        * that answers `Unauthorized` for every request that reaches it, the same failure this check
+        * exists to catch.
+        *
         * Read against the actions that are actually **mounted**, since covering a role the model
         * subtracted names no route, and refusing a declaration over a page that does not exist
         * would be this check inventing a mismatch. Refused at the same boot as the two above, for
@@ -279,13 +287,16 @@ object Resource {
         * table, and the table is built once.
         */
       owned.foreach { o =>
-        val open = (o.covers.filter(actions.has) -- o.actions).toSeq.sortBy(_.ordinal)
+        val needsUser = (o.covers + Action.Create).filter(actions.has)
+        val open      = (needsUser -- o.actions).toSeq.sortBy(_.ordinal)
         if (open.nonEmpty)
           throw new IllegalStateException(
-            s"""$modelName declares Owned covering ${open.mkString(", ")}, which its guard does not
-               |require a signed in user for. A covered route reads who is signed in, so those
-               |routes would refuse every request. Guard those actions as well, or leave them out
-               |of what ownership covers.""".stripMargin.replace("\n", " ")
+            s"""$modelName declares Owned that needs a signed in user for ${open.mkString(", ")},
+               |which its guard does not require one for. A covered route reads who is signed in,
+               |and a create fills the owner field from who is signed in whether or not it is
+               |covered, so those routes would refuse every request. Guard those actions as well,
+               |or leave a covered one out of what ownership covers.""".stripMargin
+              .replace("\n", " ")
           )
       }
 
