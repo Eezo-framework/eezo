@@ -55,13 +55,14 @@ class DslSuite extends munit.FunSuite {
     )
   }
 
-  test("a fragment child is spliced, so tree child index equals DOM child index") {
+  test("a fragment child is spliced and its text merged, so tree children count as DOM children") {
     val node     = div(span("a"), Html.text("x") ++ Html.text("y"), span("z"))
     val children = node match {
       case Html.Element(_, _, _, cs) => cs
       case other                     => fail(s"expected an element, got $other")
     }
-    assertEquals(children.size, 4)
+    // Three, not four: the browser parses `xy` as one text node, and so does the tree.
+    assertEquals(children.size, 3)
     assert(!children.exists(_.isInstanceOf[Html.Fragment]))
     assertEquals(node.render, "<div><span>a</span>xy<span>z</span></div>")
   }
@@ -105,6 +106,26 @@ class DslSuite extends munit.FunSuite {
       form(Attrs.action := "/posts", img(Attrs.src := "/a.png")).render,
       """<form action="/posts"><img src="/a.png"></form>"""
     )
+  }
+
+  test("adjacent text children merge into one, the way the parser reads them") {
+    // Structural equality, not just rendered equality: the tree itself must hold one Text child,
+    // or a differ counting childNodes runs one index ahead of the DOM from here on.
+    assertEquals(div("a", "b"), div("ab"))
+    assertEquals(div("a", 4, "b"), div("a4b"))
+  }
+
+  test("text merges across a spliced fragment boundary") {
+    assertEquals(div(span("s"), Html.text("x") ++ Html.text("y"), "z"), div(span("s"), "xyz"))
+  }
+
+  test("empty text children are dropped") {
+    assertEquals(div("", span("s"), ""), div(span("s")))
+    assertEquals(div(""), div())
+  }
+
+  test("merged text is escaped exactly as its pieces were") {
+    assertEquals(div("a<b", "&c").render, "<div>a&lt;b&amp;c</div>")
   }
 
   test("escaped text cannot be forged from outside the html package") {

@@ -105,7 +105,10 @@ lazy val db = module("db")
 
 // The diff and patch protocol, the client runtime, PubSub. The node tree and the HTML DSL are
 // `core`'s, and `live` adds structural diffing on top of them.
-lazy val live = module("live").dependsOn(core, http)
+lazy val live = module("live")
+  .dependsOn(core, http)
+  // Jetty's WebSocket client, for the integration suite that drives the live socket for real.
+  .settings(libraryDependencies += jettyWsClient)
 
 // Sessions, email and password, CSRF, route gating.
 //

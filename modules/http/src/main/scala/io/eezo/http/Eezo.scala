@@ -32,7 +32,7 @@ extension (n: Int) {
   * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` take one
   * value instead of five, and a new setting is a field here rather than a parameter at every hop.
   */
-private[http] final case class Config(
+private[eezo] final case class Config(
     routes: RouteTable,
     maxBodySize: Long = Config.DefaultMaxBodySize,
     dev: Boolean = Config.DefaultDev,
@@ -40,7 +40,7 @@ private[http] final case class Config(
     secret: Secret = Config.DefaultSecret
 )
 
-private[http] object Config {
+private[eezo] object Config {
 
   /** The one place each setting's default is stated: the case class's parameter defaults read off
     * these, and so do `HttpApp`'s `maxBodySize` and `problems`. The secret is a `def`: a fresh
@@ -147,7 +147,7 @@ object Eezo {
   /** Boots the server and returns it, still running: [[build]] and then `start`, for a suite that
     * holds the handle itself.
     */
-  private[http] def start(port: Int, config: Config): Server = {
+  private[eezo] def start(port: Int, config: Config): Server = {
     val server = build(port, config)
     server.start()
     server

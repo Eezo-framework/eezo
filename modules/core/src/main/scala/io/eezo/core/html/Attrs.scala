@@ -21,13 +21,21 @@ object Attrs {
   // Links and media
   val href: UrlAttrName = UrlAttrName("href")
   val src: UrlAttrName  = UrlAttrName("src")
-  val alt: AttrName     = AttrName("alt")
-  val rel: AttrName     = AttrName("rel")
-  val target: AttrName  = AttrName("target")
-  val width: AttrName   = AttrName("width")
-  val height: AttrName  = AttrName("height")
-  val charset: AttrName = AttrName("charset")
-  val content: AttrName = AttrName("content")
+
+  /** The live mount's base marker, `private[eezo]` because it is the framework's own: it carries
+    * `Url.Mounted("/")` so that `Route.under` moves it with the page, and the live client reports
+    * the moved value at join — which is how re-renders on the server learn the prefix the DOM was
+    * rewritten with (design/live.md §2.6). A fourth url bearing name, minted in the one place
+    * allowed to mint them.
+    */
+  private[eezo] val eezoBase: UrlAttrName = UrlAttrName("data-eezo-base")
+  val alt: AttrName                       = AttrName("alt")
+  val rel: AttrName                       = AttrName("rel")
+  val target: AttrName                    = AttrName("target")
+  val width: AttrName                     = AttrName("width")
+  val height: AttrName                    = AttrName("height")
+  val charset: AttrName                   = AttrName("charset")
+  val content: AttrName                   = AttrName("content")
 
   // Forms
   val action: UrlAttrName   = UrlAttrName("action")

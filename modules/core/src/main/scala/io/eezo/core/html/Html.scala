@@ -41,14 +41,16 @@ enum Html {
     *
     * A `Fragment` renders its children and nothing of its own, so one tree child can become several
     * DOM nodes, and every index after it would run ahead of the tree if the fragment were left in
-    * place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` holds four children,
-    * not three, and renders `<div><span>a</span>xy<span>z</span></div>`; left unspliced, the two
-    * text nodes would sit behind one tree child. [[Tag.apply]] is the guard: it splices a
-    * `Fragment` child into its parent's children, so an `Element` built through a tag never
-    * contains one and tree child index equals DOM child index. That guard is `Tag.apply`'s alone;
-    * building an `Element` by hand with a `Fragment` among its children, or nesting one `Fragment`
-    * inside another before it reaches a tag, sits outside it. The case survives as a root level
-    * value, where there is no parent to index into.
+    * place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` renders
+    * `<div><span>a</span>xy<span>z</span></div>`, which a browser parses as three DOM children;
+    * left unspliced, the two text nodes would sit behind one tree child. [[Tag.apply]] is the
+    * guard: it splices a `Fragment` child into its parent's children, then merges adjacent `Text`
+    * children and drops empty ones, because the parser knows no boundary between `x` and `y`
+    * either, so an `Element` built through a tag holds exactly three children here and tree child
+    * index equals DOM child index. That guard is `Tag.apply`'s alone; building an `Element` by hand
+    * with a `Fragment` among its children, or nesting one `Fragment` inside another before it
+    * reaches a tag, sits outside it. The case survives as a root level value, where there is no
+    * parent to index into.
     */
   case Fragment(children: Vector[Html])
 
@@ -199,6 +201,23 @@ object Html {
     * once, and a context sensitive split is a rule that eventually gets applied to the wrong
     * context.
     */
+  /** The inverse of [[escape]], for the one reader of escaped text outside rendering: the differ in
+    * `modules/live` ships a text change as the *unescaped* value, because the client applies it
+    * with `data`, which is literal, not parsed. It lives here beside [[escape]] because the five
+    * entities are this file's choice, and an inverse maintained elsewhere is the pair drifting
+    * apart. `&amp;` is decoded last for the reason it is encoded first: every other entity's
+    * ampersand must not be re-read.
+    */
+  private[eezo] def unescape(escaped: String): String =
+    if (!escaped.contains('&')) escaped
+    else
+      escaped
+        .replace("&lt;", "<")
+        .replace("&gt;", ">")
+        .replace("&quot;", "\"")
+        .replace("&#39;", "'")
+        .replace("&amp;", "&")
+
   private[html] def escape(value: String): String = {
     val sb = new StringBuilder(value.length)
     value.foreach {
