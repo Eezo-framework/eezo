@@ -295,7 +295,8 @@ object Resource {
                |which its guard does not require one for. A covered route reads who is signed in,
                |and a create fills the owner field from who is signed in whether or not it is
                |covered, so those routes would refuse every request. Guard those actions as well,
-               |or leave a covered one out of what ownership covers.""".stripMargin
+               |or leave a covered one out of what ownership covers; a create ownership does not
+               |cover can only be guarded or left unmounted.""".stripMargin
               .replace("\n", " ")
           )
       }
