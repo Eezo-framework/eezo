@@ -277,6 +277,25 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(ok.header("Location"), Some("/posts?next=%2F%2Fevil.example.com"))
   }
 
+  test("a refusal remembers nothing when the address would not fit the session once encoded") {
+    val g = guard
+    val t = app(g.required[Any], page(path = "/posts/:id"))
+    // 1017 commas make a path of exactly 1024 characters, the cap MaxReturn used to check the raw
+    // address against. Each comma encodes to `%2C` in the value the session actually carries, so
+    // the encoded address is far past what the cookie has room for.
+    val long = "/posts/" + ("," * 1017)
+
+    val refused = t.dispatch(browser(Method.GET, long))
+    val marked  = refused.session.getOrElse(fail("the refusal named no session"))
+    assertEquals(marked.reserved(Guard.ReturnEntry), None, "an oversized address was remembered")
+
+    val token = Csrf.read(marked).getOrElse(fail("the refusal kept no token"))
+    val ok    = t.dispatch(
+      submits("/login", token, "email" -> ann.email, "password" -> "secret").copy(session = marked)
+    )
+    assertEquals(ok.header("Location"), Some("/"))
+  }
+
   test("a refused POST remembers nothing, because the browser comes back with a GET") {
     val g     = guard
     val t     = app(g.required[Any], page(Method.POST, "/posts"))

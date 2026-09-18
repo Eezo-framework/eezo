@@ -148,12 +148,10 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   test("an endpoint that throws answers the upgrade through the boundary, as a handler would") {
-    // `Forbidden` rather than `Unauthorized`: Jetty's client reports a 401 carrying no
-    // `WWW-Authenticate` as a protocol violation and hides the status this asserts on.
     val refusing =
-      Route.Ws(PathPattern.parse("/live"), _ => throw Forbidden("not for this browser"))
+      Route.Ws(PathPattern.parse("/live"), _ => throw Unauthorized("nobody is signed in"))
     serving(RouteTable(Seq(refusing))) { (client, port) =>
-      refused(client, port, "/live", status = 403)
+      refused(client, port, "/live", status = 401)
     }
   }
 

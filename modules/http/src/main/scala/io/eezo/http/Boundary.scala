@@ -35,11 +35,14 @@ private[http] object Boundary {
     case e: EezoException =>
       e match {
         case BadRequest(detail) => Resolution(Problem(400, detail, path))
-        // No `WWW-Authenticate`, which RFC 9110 makes mandatory on a 401 for the schemes it defines.
-        // eezo authenticates with a form and a session cookie, which is not one of those schemes,
-        // and the header would make a browser open its own credential dialog over the page. Every
-        // form based framework answers a 401 without it for that reason.
-        case Unauthorized(detail)      => Resolution(Problem(401, detail, path))
+        // RFC 9110 section 15.5.2 requires at least one `WWW-Authenticate` challenge on every 401,
+        // not only for Basic or Digest. "Session" is a scheme token no browser implements, so it
+        // satisfies that requirement without a browser opening its own credential dialog over the
+        // page, while a programmatic client, such as a WebSocket upgrade, still gets a 401 it can
+        // read: Jetty's client treats a 401 carrying no challenge as a protocol violation and hides
+        // the status from the caller entirely.
+        case Unauthorized(detail) =>
+          Resolution(Problem(401, detail, path), Seq("WWW-Authenticate" -> "Session"))
         case Forbidden(detail)         => Resolution(Problem(403, detail, path))
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>

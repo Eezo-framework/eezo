@@ -262,15 +262,24 @@ object Guard {
     */
   private[eezo] val ReturnEntry: String = Session.Reserved + "return"
 
-  /** The longest remembered address, past which a refusal remembers nothing.
+  /** The longest remembered address, measured on the form the session actually carries rather than
+    * on the address itself, past which a refusal remembers nothing.
     *
     * The session is one signed cookie, and `SessionCookie.encode` refuses to build one past the
     * roughly 4000 bytes a browser keeps rather than let the browser drop it in silence. An
     * outlandish query string would therefore turn a refusal, which is a redirect somebody sees,
     * into a 500 nobody asked for. Forgetting the address instead lands the login on `home`, which
-    * is a page, and this is generous enough that no address a person is looking at reaches it.
+    * is a page.
+    *
+    * The measurement has to be [[encode]]'s own output. One raw character can become three, six or
+    * even twelve encoded ones before the cookie's own base64 step adds a further third on top, so a
+    * cap read against the raw address has no bounded relationship to what the cookie can actually
+    * hold; a cap read against the encoded form does, because that form is what `_return` carries
+    * into `SessionCookie.form`. 2048 measured that way leaves comfortable room under the roughly
+    * 2800 bytes the rest of a session, the CSRF token among them, leaves free, while still being
+    * generous enough that no address a person is looking at reaches it.
     */
-  private[auth] val MaxReturn: Int = 1024
+  private[auth] val MaxReturn: Int = 2048
 
   /** A guard over `U`.
     *
@@ -311,11 +320,15 @@ object Guard {
     * is what a [[Request]] carries, with the names sorted so one address has one spelling. Every
     * name and value is encoded on the way, which is also why nothing a query carries can spell the
     * backslash or the control character [[relative]] refuses.
+    *
+    * The length filter reads [[MaxReturn]] against `encode(address)`, not against the address
+    * itself. What the session actually stores this string as is that encoded form, so a cap on the
+    * raw address bounds nothing about the cookie the guard is trying to protect.
     */
   private[auth] def remembered(request: Request): Option[String] =
     Option
       .when(request.method == Method.GET)(request.path + queryString(request.query))
-      .filter(_.length <= MaxReturn)
+      .filter(address => encode(address).length <= MaxReturn)
 
   /** `?a=1&b=2`, or nothing at all when there are no parameters. */
   private def queryString(query: Map[String, Seq[String]]): String =

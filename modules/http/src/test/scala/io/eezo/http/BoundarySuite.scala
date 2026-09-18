@@ -85,6 +85,17 @@ class BoundarySuite extends munit.FunSuite {
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))
   }
 
+  test("a 401 response carries a WWW-Authenticate challenge, which RFC 9110 requires") {
+    val response =
+      Boundary.errorResponse(
+        Unauthorized("no one is signed in"),
+        "/widgets/7",
+        Config(RouteTable.empty)
+      )
+    assertEquals(response.status, 401)
+    assertEquals(response.headers.toMap.get("WWW-Authenticate"), Some("Session"))
+  }
+
   test("a stack trace is logged for 500 and above, and never for a client mistake") {
     assert(!Boundary.logsStackTrace(404))
     assert(!Boundary.logsStackTrace(409))

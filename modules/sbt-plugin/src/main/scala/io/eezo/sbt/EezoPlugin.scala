@@ -385,8 +385,21 @@ object EezoPlugin extends AutoPlugin {
     //
     // The bare name is matched, not a cross-versioned one: this is the list as the build wrote it,
     // before `%%` has appended a Scala suffix to anything.
+    //
+    // The declaration also has to be one the compiler sees, which is the same distinction
+    // `dbOnClasspath` above draws when it narrows to `compile-internal`. `libraryDependencies`
+    // carries every configuration at once, so `"io.eezo" %% "eezo-auth" % Test`, written only to
+    // exercise `Password` or `Guard` from this project's own tests, is an element of that list too.
+    // Left unfiltered, that declaration would read true and turn on the strict, completeness
+    // checking `guardFor` for every production route, none of which can satisfy it, since auth is
+    // not actually on the production compile classpath. `configurations` is `None` for an ordinary
+    // unscoped declaration and reaches the compiler under `Provided` and `Optional` as well as
+    // unscoped, so those three are what stay true; `Test` and `Runtime` do not.
     val authDeclared = libraryDependencies.value.exists(module =>
-      module.organization == "io.eezo" && module.name == "eezo-auth"
+      module.organization == "io.eezo" && module.name == "eezo-auth" &&
+        module.configurations.forall(configuration =>
+          configuration == "compile" || configuration == "provided" || configuration == "optional"
+        )
     )
 
     val stamp = streams.value.cacheDirectory / "eezo-routes.version"

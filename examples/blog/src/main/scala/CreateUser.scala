@@ -10,16 +10,20 @@ import models.User
 
 /** How the blog gets its first user, with no registration page anywhere.
   *
-  *   EEZO_BLOG_EMAIL=you@example.com EEZO_BLOG_PASSWORD=... sbt "blog/runMain CreateUser"
+  *   printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; export EEZO_BLOG_PASSWORD
+  *   EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
+  *   unset EEZO_BLOG_PASSWORD
   *
   * A second `DbApp` rather than a command on `Main`, because `Main` is the application and this is
   * an operator's tool: the two have different lifetimes, and the one that inserts a user should not
   * be reachable from the one that serves the internet. It is also what lets `Main.scala` stay
   * exactly as it was.
   *
-  * The email and password arrive in the environment rather than as arguments. A command line is
-  * visible to every process on the machine through `ps` and is written to the shell's history
-  * file, and a password that has been in either of those is a password that has to be changed.
+  * The email and password arrive in the environment rather than as arguments, which keeps the
+  * secret out of the argument list that `ps` shows to every other process on the machine. The
+  * password itself comes from a prompt that does not echo, not from a literal in the command, since
+  * a shell appends the whole command line, secret included, to its history file; a password that
+  * has been in either place is a password that has to be changed.
   *
   * The connection settings below repeat `Main`'s. That duplication is real and is the cost of
   * leaving `Main.scala` untouched: `withDatabase` is `protected`, so a tool cannot borrow the
@@ -66,8 +70,10 @@ object CreateUser extends DbApp {
     sys.env.getOrElse(
       name,
       throw new IllegalStateException(
-        s"$name is not set. Run: EEZO_BLOG_EMAIL=you@example.com $PasswordVariable=... " +
-          "sbt \"blog/runMain CreateUser\""
+        s"$name is not set. Run:\n" +
+          s"  printf 'password: '; IFS= read -rs $PasswordVariable; export $PasswordVariable\n" +
+          "  EEZO_BLOG_EMAIL=you@example.com sbt \"blog/runMain CreateUser\"\n" +
+          s"  unset $PasswordVariable"
       )
     )
 

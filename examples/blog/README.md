@@ -27,8 +27,8 @@ docker run -d --name eezo-pg -p 5442:5432 \
 sbt publishLocalForExample      # once, at the repository root
 cd examples
 sbt "blog/run sync --apply"     # the two tables have to exist before the first request
-EEZO_BLOG_EMAIL=you@example.com EEZO_BLOG_PASSWORD='a long one' \
-  sbt "blog/runMain CreateUser" # the first user; there is no sign up page
+read -rs EEZO_BLOG_PASSWORD && export EEZO_BLOG_PASSWORD   # not echoed, not in the history file
+EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser" # the first user; there is no sign up page
 sbt blog/run                    # http://localhost:8080, posts at /admin/posts
 sbt "blog/run routes"           # 11 routes: GET /, the three the guard carries, and the seven
 sbt "blog/run status"           # in sync ✓
