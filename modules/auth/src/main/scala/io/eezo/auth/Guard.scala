@@ -414,10 +414,9 @@ object Guard {
 
   /** The moment back out of the session text, and `None` for anything that is not one.
     *
-    * `parse`'s precedent, for `parse`'s reason: a session eezo signed can only hold what eezo
-    * wrote, so a value that will not read means the secret changed under a live browser rather than
-    * that anyone tampered. Either way there is no sign in, and answering `None` sends the browser
-    * to log in again instead of turning every guarded page into a 500.
+    * [[parse]]'s precedent, for [[parse]]'s reason: a value that will not read is no sign in, and
+    * answering `None` sends the browser to log in again instead of turning every guarded page into
+    * a 500.
     */
   private[auth] def stamp(text: String): Option[Instant] =
     text.toLongOption.map(Instant.ofEpochMilli)
