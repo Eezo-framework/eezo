@@ -2,7 +2,7 @@ package app.counter
 
 import io.eezo.core.html.*
 import io.eezo.core.html.Tags.*
-import io.eezo.http.{Request, Response}
+import io.eezo.http.{Guarded, Request, Response}
 import io.eezo.live.Live
 
 import components.Counter
@@ -14,6 +14,9 @@ import components.Counter
   * envelope rule (design/live.md §2.3): the framework injects only the mount, never the page.
   */
 object Index {
+
+  /** A demo page anyone may open; the blog has a guard, so saying so is not optional. */
+  given Guarded[Index.type] = Guarded.public
 
   def index(request: Request): Response = {
     val _ = request
