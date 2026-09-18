@@ -61,9 +61,9 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
 
-  /** Only `Destroy` is covered: everyone signed in may edit a vault, only its author may delete
-    * it. `Create` and `Update` are deliberately left uncovered, which is what the reassignment
-    * defect needs to happen at all.
+  /** Only `Destroy` is covered: everyone signed in may edit a vault, only its author may delete it.
+    * `Create` and `Update` are deliberately left uncovered, which is what the reassignment defect
+    * needs to happen at all.
     */
   private def vaultsOwnedByOnlyDestroy(who: Id[Person]): Owned[Vault, Person] =
     Owned[Vault, Person](
@@ -350,7 +350,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("a mistyped owner name refuses to mount rather than leaving the field editable") {
-    val bogus = OwnerOf[Note, Id[Person]]("auth0r", _.author)
+    val bogus    = OwnerOf[Note, Id[Person]]("auth0r", _.author)
     val declared = Owned[Note, Person](
       bogus,
       _ => ada,

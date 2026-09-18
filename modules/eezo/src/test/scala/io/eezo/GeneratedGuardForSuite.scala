@@ -99,8 +99,8 @@ class GeneratedGuardForSuite extends munit.FunSuite {
     * and `io.eezo.db.JdbcStore.owned`, the `Column[Id[Owner]]` resolution and the column lookup by
     * name are compiled but never executed anywhere in the suite. A model that derives a `Table` as
     * well as declaring an `Owned` is what makes the db arm run: a wrong `OwnerOf` name would throw
-    * `IllegalStateException` right here, at store construction, rather than only when the blog boots
-    * in a browser.
+    * `IllegalStateException` right here, at store construction, rather than only when the blog
+    * boots in a browser.
     */
   test("a model with a Table and an Owned lands on JdbcStore.owned, not the in-memory fallback") {
     DbStores.forModel[OwnedTableRow] match {

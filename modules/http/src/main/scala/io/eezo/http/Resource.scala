@@ -317,21 +317,22 @@ object Resource {
       /** The submission, with the owner field overwritten by who is signed in, but only for an
         * action `covers` actually names.
         *
-        * Overwritten rather than read on a covered action, which is the difference between an
-        * owner and a form field: a body carrying `author=<somebody else>` is not refused, it is
-        * ignored, so a hand-crafted POST creates a row attributed to the person who sent it. A
-        * covered `update` supplies the same value, which is also what preserves the owner there:
-        * only the owner reaches a covered `update` at all, so the value the row had and the value
-        * being written are the same one, and no read is needed to keep it.
+        * Overwritten rather than read on a covered action, which is the difference between an owner
+        * and a form field: a body carrying `author=<somebody else>` is not refused, it is ignored,
+        * so a hand-crafted POST creates a row attributed to the person who sent it. A covered
+        * `update` supplies the same value, which is also what preserves the owner there: only the
+        * owner reaches a covered `update` at all, so the value the row had and the value being
+        * written are the same one, and no read is needed to keep it.
         *
         * An action `covers` does not name is a different question, because nobody has vouched for
         * the requester as this row's owner: filling the field from them the same way would silently
-        * hand an uncovered write the power to reassign a row it was never scoped to touch. `existing`
-        * is what stands in for that missing vouching instead: the row the action already read on
-        * the store it reads and writes through, so a title changed on an uncovered `update` leaves
-        * the owner exactly where it was. A `create` has no earlier row to read, covered or not, and
-        * an uncovered one falls back to the requester for the same reason a covered one always
-        * does: a brand new row needs some first owner, and nothing else on the request names one.
+        * hand an uncovered write the power to reassign a row it was never scoped to touch.
+        * `existing` is what stands in for that missing vouching instead: the row the action already
+        * read on the store it reads and writes through, so a title changed on an uncovered `update`
+        * leaves the owner exactly where it was. A `create` has no earlier row to read, covered or
+        * not, and an uncovered one falls back to the requester for the same reason a covered one
+        * always does: a brand new row needs some first owner, and nothing else on the request names
+        * one.
         */
       def body(request: Request, action: Action, existing: Option[A]): Map[String, Seq[String]] =
         owned match {
@@ -499,11 +500,11 @@ object Resource {
       def update: Handler = request => {
         val key = request.param[Id[A]]("id")
 
-        /** Read only when ownership does not cover `Update`. A covered write is already narrowed
-          * to the requester's own rows, so `submit`'s `persist` is the only lookup it needs and
-          * this would be the second query on every covered write issue 171 ruled out; an uncovered
-          * write has no such narrowing, and the row on the whole table it is about to replace is
-          * the one place its current owner can come from without letting the request choose it.
+        /** Read only when ownership does not cover `Update`. A covered write is already narrowed to
+          * the requester's own rows, so `submit`'s `persist` is the only lookup it needs and this
+          * would be the second query on every covered write issue 171 ruled out; an uncovered write
+          * has no such narrowing, and the row on the whole table it is about to replace is the one
+          * place its current owner can come from without letting the request choose it.
           */
         val existing =
           if (owned.exists(o => !o.covers.contains(Action.Update)))
