@@ -27,8 +27,19 @@ docker run -d --name eezo-pg -p 5442:5432 \
 sbt publishLocalForExample      # once, at the repository root
 cd examples
 sbt "blog/run sync --apply"     # the two tables have to exist before the first request
-read -rs EEZO_BLOG_PASSWORD && export EEZO_BLOG_PASSWORD   # not echoed, not in the history file
-EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser" # the first user; there is no sign up page
+```
+
+The first user comes next, since there is no sign up page. Run this line on its own and type the
+password at the prompt. It is a separate block on purpose: pasted together with the lines after it,
+`read` would take the next line as the password.
+
+```bash
+printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; echo; export EEZO_BLOG_PASSWORD
+```
+
+```bash
+EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
+unset EEZO_BLOG_PASSWORD        # the server below has no use for it
 sbt blog/run                    # http://localhost:8080, posts at /admin/posts
 sbt "blog/run routes"           # 11 routes: GET /, the three the guard carries, and the seven
 sbt "blog/run status"           # in sync ✓
@@ -65,9 +76,11 @@ same reason the "All posts" link on that page names `/admin` by hand; a page ins
 
 There is no registration: `User` derives `Table` alone, with no `Form` and no `Resource`, so nothing
 mounts a page that writes one. `CreateUser.scala` is the operator's tool instead, a second `DbApp`
-in the same project, and the command above is the whole of it. It reads the email and password from
-the environment rather than from arguments, because a command line is visible to every process on
-the machine through `ps` and is written to the shell's history file.
+in the same project, and the commands above are the whole of it. It reads the email and password
+from the environment rather than from arguments, because an argument list is visible to every
+process on the machine through `ps`. The environment alone does not keep a secret out of the
+shell's history file, which records the whole command line, so the password is typed at a prompt
+that does not echo instead of being written into the command.
 
 It hashes through `Password.hash`, which is the only door: `User.password` is a `Password`, and the
 only way to make one from text is to hash it.

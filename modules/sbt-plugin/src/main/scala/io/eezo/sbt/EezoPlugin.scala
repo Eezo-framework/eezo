@@ -280,6 +280,39 @@ object EezoPlugin extends AutoPlugin {
     * content hash rather than existence, so a hand edited or truncated Routes.scala is repaired on
     * the next run, not only a deleted one.
     */
+  /** Whether the build names `eezo-auth` in a configuration the production compiler sees.
+    *
+    * `libraryDependencies` carries every configuration at once, so
+    * `"io.eezo" %% "eezo-auth" % Test`, written only to exercise `Password` or `Guard` from this
+    * project's own tests, is an element of that list too. Left unfiltered, that declaration would
+    * turn on the strict, completeness checking `guardFor` for every production route, none of
+    * which can satisfy it, since auth is not on the production compile classpath. This is the same
+    * distinction `dbOnClasspath` draws when it narrows to `compile-internal`.
+    *
+    * `configurations` is `None` for an ordinary unscoped declaration, which counts. Otherwise it
+    * is an Ivy mapping such as `test`, `compile->default(compile)` or `test->test;compile->compile`,
+    * and only the left side of each arrow names a configuration of this project. The declaration
+    * counts when any of those is `compile`, `provided` or `optional`, the three that reach the
+    * compiler. Everything else reads false: `test`, `runtime`, and any custom configuration, whose
+    * relation to `Compile` this list cannot say. Reading false costs the completeness check alone,
+    * never a guard that was written.
+    *
+    * Pulled out of `generate` for the reason `witness` is: the task needs a live build to run, and
+    * this table is worth pinning without one.
+    */
+  private[sbt] def authDeclared(modules: Seq[ModuleID]): Boolean =
+    modules.exists(module =>
+      module.organization == "io.eezo" && module.name == "eezo-auth" &&
+        module.configurations.forall(reachesCompiler)
+    )
+
+  private def reachesCompiler(configurations: String): Boolean =
+    configurations
+      .split(';')
+      .flatMap(_.split("->").head.split(','))
+      .map(_.trim)
+      .exists(Set("compile", "provided", "optional"))
+
   private def generate: Def.Initialize[Task[Seq[File]]] = Def.task {
     val log         = streams.value.log
     val sourceRoot  = (Compile / scalaSource).value
@@ -386,21 +419,8 @@ object EezoPlugin extends AutoPlugin {
     // The bare name is matched, not a cross-versioned one: this is the list as the build wrote it,
     // before `%%` has appended a Scala suffix to anything.
     //
-    // The declaration also has to be one the compiler sees, which is the same distinction
-    // `dbOnClasspath` above draws when it narrows to `compile-internal`. `libraryDependencies`
-    // carries every configuration at once, so `"io.eezo" %% "eezo-auth" % Test`, written only to
-    // exercise `Password` or `Guard` from this project's own tests, is an element of that list too.
-    // Left unfiltered, that declaration would read true and turn on the strict, completeness
-    // checking `guardFor` for every production route, none of which can satisfy it, since auth is
-    // not actually on the production compile classpath. `configurations` is `None` for an ordinary
-    // unscoped declaration and reaches the compiler under `Provided` and `Optional` as well as
-    // unscoped, so those three are what stay true; `Test` and `Runtime` do not.
-    val authDeclared = libraryDependencies.value.exists(module =>
-      module.organization == "io.eezo" && module.name == "eezo-auth" &&
-        module.configurations.forall(configuration =>
-          configuration == "compile" || configuration == "provided" || configuration == "optional"
-        )
-    )
+    // The declaration also has to be one the compiler sees; `authDeclared` below says which are.
+    val authDeclared = EezoPlugin.authDeclared(libraryDependencies.value)
 
     val stamp = streams.value.cacheDirectory / "eezo-routes.version"
     IO.write(stamp, witness(dbOnClasspath, authDeclared))

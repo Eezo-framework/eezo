@@ -139,4 +139,35 @@ class EezoPluginSuite extends munit.FunSuite {
         .contains("private inline def guardFor[A](inline name: String)")
     )
   }
+
+  private def auth(configurations: Option[String]) =
+    sbt.ModuleID("io.eezo", "eezo-auth", "1.0").withConfigurations(configurations)
+
+  test("eezo-auth is declared only where the declaration reaches the production compiler") {
+    // The flag turns on the strict `guardFor` in a Compile source, so it may only read true when
+    // auth's `Guard` is something a production route could actually name. A `% Test` declaration
+    // that read true would fail `Compile / compile` in a file its author cannot edit.
+    assert(EezoPlugin.authDeclared(Seq(auth(None))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("compile")))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("provided")))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("optional")))))
+    assert(!EezoPlugin.authDeclared(Seq(auth(Some("test")))))
+    assert(!EezoPlugin.authDeclared(Seq(auth(Some("runtime")))))
+    assert(!EezoPlugin.authDeclared(Seq(auth(Some("it,test")))))
+  }
+
+  test("an Ivy mapping is read by its left side, so a spelled out compile scope still counts") {
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("compile->default(compile)")))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("provided->default")))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("test->test;compile->compile")))))
+    assert(EezoPlugin.authDeclared(Seq(auth(Some("compile, runtime")))))
+    assert(!EezoPlugin.authDeclared(Seq(auth(Some("test->compile")))))
+  }
+
+  test("only eezo-auth itself counts as the declaration") {
+    val db = sbt.ModuleID("io.eezo", "eezo-db", "1.0")
+    assert(!EezoPlugin.authDeclared(Seq(db)))
+    assert(!EezoPlugin.authDeclared(Seq(sbt.ModuleID("com.example", "eezo-auth", "1.0"))))
+    assert(EezoPlugin.authDeclared(Seq(db, auth(Some("test")), auth(None))))
+  }
 }
