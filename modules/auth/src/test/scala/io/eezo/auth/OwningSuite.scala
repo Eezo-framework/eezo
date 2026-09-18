@@ -1,5 +1,7 @@
 package io.eezo.auth
 
+import java.time.Instant
+
 import io.eezo.core.Id
 import io.eezo.http.*
 
@@ -14,13 +16,18 @@ import io.eezo.http.*
 class OwningSuite extends munit.FunSuite {
 
   import OwningSuite.*
+  import SignInFixtures.*
 
   private val ann = User(Id.gen(), "ann@example.com")
 
   private def guard: Guard[User] =
-    Guard[User](find = id => Option.when(id == ann.id)(ann), authenticate = (_, _) => None)
+    Guard[User](
+      find = id => Option.when(id == ann.id)(ann),
+      authenticate = (_, _) => None,
+      clock = clock
+    )
 
-  private def signedIn(who: Id[User]): Request =
+  private def signedIn(who: Id[User], since: Instant = now): Request =
     Request(
       method = Method.GET,
       path = "/posts",
@@ -28,7 +35,7 @@ class OwningSuite extends munit.FunSuite {
       headers = Map.empty,
       body = Array.emptyByteArray,
       pathParams = Map.empty,
-      session = Session.empty.withReserved(Guard.UserEntry, who.show)
+      session = signedInSession(who, since)
     )
 
   test("the blog's declaration types as an Owned and names the model's own field") {
@@ -75,6 +82,16 @@ class OwningSuite extends munit.FunSuite {
   test("asking for the current user of a request nobody signed is an error rather than a guess") {
     val declared = guard.required[Post].owning(_.author).all
     intercept[Unauthorized](declared.currentUser(signedIn(ann.id).copy(session = Session.empty)))
+  }
+
+  test("a sign in past its lifetime scopes nothing: the key is an error, not a stale owner") {
+    val declared = guard.required[Post].owning(_.author).all
+    intercept[Unauthorized](declared.currentUser(signedIn(ann.id, since = stale)))
+    // The shape every session signed before the lifetime shipped has. Reading it as an owner would
+    // hand a copied session the rows of whoever it names, which is the whole reason for the stamp.
+    intercept[Unauthorized](
+      declared.currentUser(signedIn(ann.id).copy(session = stamplessSession(ann.id)))
+    )
   }
 
   test("a selector that is not a plain field of the model does not compile") {

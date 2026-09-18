@@ -30,6 +30,7 @@ class ClientSuite extends munit.FunSuite {
           Thread.sleep(2_000)
           text(200, "eventually")
         },
+        route(Method.GET, "/token")(request => text(200, request.csrf.value)),
         route(Method.POST, "/echo") { request =>
           text(200, s"${request.header("Content-Type").getOrElse("?")}:${new String(request.body)}")
         }
@@ -110,8 +111,20 @@ class ClientSuite extends munit.FunSuite {
 
   test("post carries its body and content type") {
     serving { base =>
-      Http.post(s"$base/echo", body = """{"n":1}""") match {
-        case Reply.Ok(r) => assertEquals(r.text, """application/json:{"n":1}""")
+      // Dispatch refuses an unsafe request without the session's token, so the post returns one
+      // the way a browser would: the cookie a first GET set, and the token in the form.
+      val (cookie, token) = Http.get(s"$base/token") match {
+        case Reply.Ok(r) => (r.header("set-cookie").get.takeWhile(_ != ';'), r.text)
+        case other       => fail(s"expected Ok, got $other")
+      }
+      val form = s"${Csrf.Field}=$token&n=1"
+      Http.post(
+        s"$base/echo",
+        form,
+        "application/x-www-form-urlencoded",
+        "Cookie" -> cookie
+      ) match {
+        case Reply.Ok(r) => assertEquals(r.text, s"application/x-www-form-urlencoded:$form")
         case other       => fail(s"expected Ok, got $other")
       }
     }
