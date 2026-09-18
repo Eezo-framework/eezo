@@ -273,15 +273,17 @@ object Resource {
         */
       val shape: Form[A] = owned.fold(declared)(o => declared.without(o.ownerOf.name))
 
+      /** The declaration, when ownership covers this action. The one place that question is asked,
+        * so every handler below reads the same answer.
+        */
+      def covering(action: Action): Option[Owned[A, Any]] = owned.filter(_.covers.contains(action))
+
       /** The store one action reads and writes through: this owner's rows when ownership covers it,
         * and the whole table when it does not. A blog's index and show are the whole table, which
         * is what makes two users read each other's posts.
         */
       def storeFor(request: Request, action: Action): Store[A] =
-        (owned, scope) match {
-          case (Some(o), Some(s)) if o.covers.contains(action) => s.by(o.owner(request))
-          case _                                               => store
-        }
+        covering(action).zip(scope).fold(store) { case (o, s) => s.by(o.owner(request)) }
 
       /** What a covered action answers when the narrowed store has no such row.
         *
@@ -301,10 +303,10 @@ object Resource {
         * would be the leak itself.
         */
       def missing(request: Request, key: Id[A], action: Action): Nothing =
-        owned match {
+        covering(action) match {
           case Some(o)
-              if o.covers.contains(action) && !o.covers.contains(Action.Show) &&
-                actions.has(Action.Show) && store.find(key).isDefined =>
+              if !o.covers.contains(Action.Show) && actions.has(Action.Show) &&
+                store.find(key).isDefined =>
             throw Forbidden(s"this $modelName belongs to another user")
           case _ => throw NotFound(request.path)
         }
@@ -333,15 +335,14 @@ object Resource {
         * not, and an uncovered one falls back to the requester for the same reason a covered one
         * always does: a brand new row needs some first owner, and nothing else on the request names
         * one.
+        *
+        * So the action itself is not asked about here: `existing` is only ever handed over by an
+        * uncovered `update`, and every other write, covered or not, takes the requester.
         */
-      def body(request: Request, action: Action, existing: Option[A]): Map[String, Seq[String]] =
-        owned match {
-          case Some(o) if o.covers.contains(action) =>
-            request.form.updated(o.ownerOf.name, Seq(o.owner(request).show))
-          case Some(o) =>
-            val current = existing.map(o.ownerOf.get).getOrElse(o.owner(request))
-            request.form.updated(o.ownerOf.name, Seq(current.show))
-          case None => request.form
+      def body(request: Request, existing: Option[A]): Map[String, Seq[String]] =
+        owned.fold(request.form) { o =>
+          val who = existing.map(o.ownerOf.get).getOrElse(o.owner(request))
+          request.form.updated(o.ownerOf.name, Seq(who.show))
         }
 
       /** A control on a show page that only the owner of the row may take. Rendered when the model
@@ -350,21 +351,27 @@ object Resource {
         *
         * The page this control sits on is not necessarily guarded itself: a blog's `Show` is open
         * to anyone, and `Edit` being covered says who may reach `Edit`, not who may reach `Show`.
-        * So `o.owner(request)` is read speculatively here, for a request nothing has vouched for,
-        * and `Guard.owning` throws `Unauthorized` for exactly that request, nobody signed in. That
-        * is not a mistake in the route table the way it is inside a covered handler; it is an
-        * anonymous browser looking at a public page, and the honest reading of "who owns this
-        * request" for them is nobody, so the control is simply absent, the same as on a foreign
-        * row.
+        * So `o.owner(request)` is read speculatively by [[asker]], for a request nothing has
+        * vouched for, and `Guard.owning` throws `Unauthorized` for exactly that request, nobody
+        * signed in. That is not a mistake in the route table the way it is inside a covered
+        * handler; it is an anonymous browser looking at a public page, and the honest reading of
+        * "who owns this request" for them is nobody, so the control is simply absent, the same as
+        * on a foreign row.
+        *
+        * `asked` is by name so that a page resolves it at most once for all its controls, and not
+        * at all when no control is covered.
         */
-      def whenOwn(action: Action, record: A, request: Request)(content: => Html): Seq[Html] =
-        owned match {
-          case Some(o) if o.covers.contains(action) =>
-            val asked =
-              try Some(o.owner(request))
-              catch { case Unauthorized(_) => None }
-            if (asked.contains(o.ownerOf.get(record))) when(action)(content) else Nil
-          case _ => when(action)(content)
+      def whenOwn(action: Action, record: A, asked: => Option[Any])(content: => Html): Seq[Html] =
+        covering(action) match {
+          case Some(o) if !asked.contains(o.ownerOf.get(record)) => Nil
+          case _                                                 => when(action)(content)
+        }
+
+      /** Who is asking, or nobody when the request is anonymous. See [[whenOwn]]. */
+      def asker(request: Request): Option[Any] =
+        owned.flatMap { o =>
+          try Some(o.owner(request))
+          catch { case Unauthorized(_) => None }
         }
 
       def index: Handler = request => {
@@ -442,7 +449,7 @@ object Resource {
           verb: Method,
           existing: Option[A] = None
       )(persist: A => Boolean): Response =
-        shape.parse(body(request, action, existing), Some(key.show)) match {
+        shape.parse(body(request, existing), Some(key.show)) match {
           case Left(errors) =>
             rejected(heading, shape.render(target, verb, None, request.csrf, errors, request.form))
           case Right(record) =>
@@ -460,6 +467,7 @@ object Resource {
 
       def show: Handler = request => {
         val (key, record) = row(request, Action.Show)
+        lazy val asked    = asker(request)
 
         Response.Ok(
           page(
@@ -468,10 +476,10 @@ object Resource {
             dl(
               shape.show(record).flatMap { case (field, value) => Seq(dt(field.label), dd(value)) }
             ),
-            whenOwn(Action.Edit, record, request)(
+            whenOwn(Action.Edit, record, asked)(
               p(a(Attrs.href := member(key) / EditPage.segment, "Edit"))
             ),
-            whenOwn(Action.Destroy, record, request)(
+            whenOwn(Action.Destroy, record, asked)(
               form(
                 Attrs.action := member(key),
                 Attrs.method := "post",
@@ -506,10 +514,9 @@ object Resource {
           * has no such narrowing, and the row on the whole table it is about to replace is the one
           * place its current owner can come from without letting the request choose it.
           */
+        val target   = storeFor(request, Action.Update)
         val existing =
-          if (owned.exists(o => !o.covers.contains(Action.Update)))
-            storeFor(request, Action.Update).find(key)
-          else None
+          if (owned.isDefined && covering(Action.Update).isEmpty) target.find(key) else None
 
         submit(
           request,
@@ -520,7 +527,7 @@ object Resource {
           Method.PUT,
           existing
         ) { record =>
-          storeFor(request, Action.Update).update(key, record)
+          target.update(key, record)
         }
       }
 

@@ -25,9 +25,6 @@ class OwnedJdbcStoreSuite extends DbSuite with OwnedStoreContract[Memo, String] 
     (JdbcStore[Memo](), owner => owned.by(owner))
   }
 
-  def keyAt(nth: Int): Id[Memo] =
-    Id.apply[Memo](java.util.UUID.fromString(f"$nth%08x-0000-4000-8000-000000000000"))
-
   def rowOf(key: Id[Memo], owner: String, label: String): Memo = Memo(key, owner, label)
 
   def labelOf(row: Memo): String = row.text

@@ -135,9 +135,7 @@ final class Guard[U] private (
     * covered route.
     */
   private val owning: Request => Id[U] = request =>
-    request.session
-      .reserved(Guard.UserEntry)
-      .flatMap(Guard.parse[U])
+    key(request.session)
       .getOrElse(
         throw Unauthorized(
           "no user is signed in for this request, so there is nobody for an owned route to scope " +
@@ -175,11 +173,11 @@ final class Guard[U] private (
   private def signedIn(request: Request): Boolean = who(request.session).isDefined
 
   /** The user the session names, if it names one that is still there. */
-  private def who(session: Session): Option[U] =
-    session
-      .reserved(Guard.UserEntry)
-      .flatMap(Guard.parse[U])
-      .flatMap(find)
+  private def who(session: Session): Option[U] = key(session).flatMap(find)
+
+  /** The key the session names, whether or not its user is still there. */
+  private def key(session: Session): Option[Id[U]] =
+    session.reserved(Guard.UserEntry).flatMap(Guard.parse[U])
 
   /** The 303 an anonymous or stale browser gets.
     *

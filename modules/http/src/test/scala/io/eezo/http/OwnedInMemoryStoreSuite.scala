@@ -23,9 +23,6 @@ class OwnedInMemoryStoreSuite
     (scoped, owner => scoped.by(owner))
   }
 
-  def keyAt(nth: Int): Id[Widget] =
-    Id.apply[Widget](java.util.UUID.fromString(f"$nth%08x-0000-4000-8000-000000000000"))
-
   def rowOf(key: Id[Widget], owner: String, label: String): Widget = Widget(key, owner, label)
 
   def labelOf(row: Widget): String = row.name

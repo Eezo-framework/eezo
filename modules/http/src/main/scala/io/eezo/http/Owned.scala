@@ -38,24 +38,11 @@ final class Owned[A, U](
 
     /** Which of the seven read and write through the owner's rows alone. */
     val covers: Set[Action],
-    actions: Set[Action],
-    through: Route => Route,
-    carries: Seq[Route]
-) extends Guarded[A](actions, through, carries)
 
-object Owned {
-
-  /** An ownership declaration refining one that already says who has to be signed in.
-    *
-    * The three inherited fields are taken from `guarded` rather than restated, so the guard that
-    * produced it is still the one wrapping the routes and still the one whose login page travels
-    * with them. A declaration built any other way would mount a login page nobody redirects to.
-    */
-  def apply[A, U](
-      ownerOf: OwnerOf[A, Id[U]],
-      owner: Request => Id[U],
-      covers: Set[Action],
-      guarded: Guarded[A]
-  ): Owned[A, U] =
-    new Owned[A, U](ownerOf, owner, covers, guarded.actions, guarded.through, guarded.carries)
-}
+    /** The declaration this one refines, which already says who has to be signed in. Its three
+      * fields are taken rather than restated, so the guard that produced it is still the one
+      * wrapping the routes and still the one whose login page travels with them. There is no way to
+      * build an `Owned` that mounts a login page nobody redirects to.
+      */
+    guarded: Guarded[A]
+) extends Guarded[A](guarded.actions, guarded.through, guarded.carries)

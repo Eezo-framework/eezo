@@ -59,6 +59,10 @@ object JdbcStore {
     new OwnedImpl[A, V](t, column, c)
   }
 
+  /** Every row of a result set, decoded. Shared by the whole table's `all` and one owner's. */
+  private def rowsOf[A](t: Table[A])(rs: java.sql.ResultSet): Vector[A] =
+    Iterator.continually(rs).takeWhile(_.next()).map(t.decode(_, 1)).toVector
+
   /** One scope per operation, and so one scope per request: each of the derived seven makes exactly
     * one store call, so a transaction spanning two of them would have nothing to span. That is why
     * the trait needs no `atomically`, and why a handler that wants two writes under one commit is a
@@ -76,9 +80,7 @@ object JdbcStore {
       */
     def all(): Seq[A] =
       read {
-        Query.reading(summon[DB].connection, t.selectAllOrderedByIdSql, Nil) { rs =>
-          Iterator.continually(rs).takeWhile(_.next()).map(t.decode(_, 1)).toVector
-        }
+        Query.reading(summon[DB].connection, t.selectAllOrderedByIdSql, Nil)(rowsOf(t))
       }
 
     def find(key: Id[A]): Option[A] = read(t.findById(key))
@@ -136,9 +138,7 @@ object JdbcStore {
 
       def all(): Seq[A] =
         read {
-          Query.reading(summon[DB].connection, allSql, List(bindOwner)) { rs =>
-            Iterator.continually(rs).takeWhile(_.next()).map(t.decode(_, 1)).toVector
-          }
+          Query.reading(summon[DB].connection, allSql, List(bindOwner))(rowsOf(t))
         }
 
       def find(key: Id[A]): Option[A] =

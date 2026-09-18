@@ -260,13 +260,9 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     val table = RouteTable(Resource[Basket].routes(scoped, basketsOwnedBy(ada)))
     counted.reset()
 
-    def code(request: Request): Int =
-      try table.dispatch(request).status
-      catch { case NotFound(_) => 404; case Forbidden(_) => 403 }
-
-    assertEquals(code(request(Method.GET, s"/baskets/${his.show}/edit")), 404)
-    assertEquals(code(request(Method.PUT, s"/baskets/${his.show}", "label" -> "x")), 404)
-    assertEquals(code(request(Method.DELETE, s"/baskets/${his.show}")), 404)
+    assertEquals(status(table, request(Method.GET, s"/baskets/${his.show}/edit")), 404)
+    assertEquals(status(table, request(Method.PUT, s"/baskets/${his.show}", "label" -> "x")), 404)
+    assertEquals(status(table, request(Method.DELETE, s"/baskets/${his.show}")), 404)
     assertEquals(counted.finds, 0)
   }
 
@@ -276,13 +272,9 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     store.insert(his, Vault(his, grace, "His secret"))
     val table = RouteTable(Resource[Vault].routes(store, vaultsOwnedBy(ada)))
 
-    def code(request: Request): Int =
-      try table.dispatch(request).status
-      catch { case NotFound(_) => 404; case Forbidden(_) => 403 }
-
-    assertEquals(code(request(Method.GET, s"/vaults/${his.show}/edit")), 404)
-    assertEquals(code(request(Method.PUT, s"/vaults/${his.show}", "secret" -> "x")), 404)
-    assertEquals(code(request(Method.DELETE, s"/vaults/${his.show}")), 404)
+    assertEquals(status(table, request(Method.GET, s"/vaults/${his.show}/edit")), 404)
+    assertEquals(status(table, request(Method.PUT, s"/vaults/${his.show}", "secret" -> "x")), 404)
+    assertEquals(status(table, request(Method.DELETE, s"/vaults/${his.show}")), 404)
     assertEquals(store.find(his).map(_.secret), Some("His secret"))
   }
 

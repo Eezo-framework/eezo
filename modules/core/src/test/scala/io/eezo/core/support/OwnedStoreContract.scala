@@ -35,7 +35,8 @@ trait OwnedStoreContract[A, V] { self: munit.FunSuite =>
   /** A key whose text sorts where the caller says, so the order assertion states an expected order
     * rather than discovering one.
     */
-  def keyAt(nth: Int): Id[A]
+  def keyAt(nth: Int): Id[A] =
+    Id.apply[A](java.util.UUID.fromString(f"$nth%08x-0000-4000-8000-000000000000"))
 
   def rowOf(key: Id[A], owner: V, label: String): A
 
