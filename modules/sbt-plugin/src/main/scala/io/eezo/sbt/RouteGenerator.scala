@@ -526,25 +526,48 @@ object RouteGenerator {
     * `Table` type resolves, never that any one model derives an instance of it, so an application
     * with a database still mounts its `Table`-less models in memory. That is the same per-model
     * decision the generator could not make, made by the only party that can.
+    *
+    * The `Owned` arm comes first in both bodies, and the order is the whole of the guarantee: a
+    * model that declares ownership cannot fall through to a store that serves every row, because
+    * the arm that would have given it one is behind the arm that narrows. The owner's own type
+    * never appears, which is what lets one monomorphic helper serve every model: `Owned[A, ?]` is
+    * enough to reach `ownerOf`, `JdbcStore.owned` infers the rest, and `Column[Id[U]]` resolves
+    * from db's own generic given without the model's user type being named here. `io.eezo.http` is
+    * always resolvable wherever a route is mounted, so, unlike the db names beside it, the arm
+    * costs the no-database arm nothing.
     */
-  private def storeFor(dbOnClasspath: Boolean): String =
+  private[sbt] def storeFor(dbOnClasspath: Boolean): String =
     if (dbOnClasspath)
-      """  /** The store each derived model gets, picked by the compiler: a model whose companion
+      """  /** The store each derived model gets, picked by the compiler: a model that declares an
+        |    * `Owned` gets one that can narrow to the user who owns a row, a model whose companion
         |    * carries a `Table` is persisted through it, and every other one lives in memory for as
         |    * long as the process does.
         |    */
         |  private inline def storeFor[A]: io.eezo.core.Store[A] =
         |    scala.compiletime.summonFrom {
+        |      case o: io.eezo.http.Owned[A, ?] =>
+        |        scala.compiletime.summonFrom {
+        |          case t: io.eezo.db.Table[A] =>
+        |            io.eezo.http.Scoped(
+        |              io.eezo.db.JdbcStore[A]()(using t),
+        |              io.eezo.db.JdbcStore.owned(o.ownerOf)(using t, summon)
+        |            )
+        |          case _ => io.eezo.http.InMemoryStore.scoped(o.ownerOf)
+        |        }
         |      case t: io.eezo.db.Table[A] => io.eezo.db.JdbcStore[A]()(using t)
         |      case _                      => io.eezo.http.InMemoryStore[A]()
         |    }
         |""".stripMargin
     else
       """  /** The store each derived model gets. Nothing on this application's classpath persists a
-        |    * model, so every one of them lives in memory for as long as the process does.
+        |    * model, so a model that declares an `Owned` gets one that can narrow to the user who
+        |    * owns a row, and every model lives in memory for as long as the process does.
         |    */
         |  private inline def storeFor[A]: io.eezo.core.Store[A] =
-        |    io.eezo.http.InMemoryStore[A]()
+        |    scala.compiletime.summonFrom {
+        |      case o: io.eezo.http.Owned[A, ?] => io.eezo.http.InMemoryStore.scoped(o.ownerOf)
+        |      case _                           => io.eezo.http.InMemoryStore[A]()
+        |    }
         |""".stripMargin
 
   /** The lookup every mounted route goes through, in both readings of silence.

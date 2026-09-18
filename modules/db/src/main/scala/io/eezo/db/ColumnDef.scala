@@ -70,6 +70,33 @@ final case class TableDef(name: String, columns: List[ColumnDef]) {
 
   def deleteById: String = s"delete from $quoted where ${idColumn.quoted} = ?"
 
+  /** The four statements above, narrowed to the rows one owner has.
+    *
+    * They are rendered here rather than assembled where they are used, for the reason every other
+    * statement on this type is: a `where` composed at the call site is the one that is written four
+    * times and forgotten on the fourth, and a narrowed `delete` that forgot its owner deletes
+    * somebody else's row. Reading these five lines is how that is checked.
+    *
+    * The owner arrives as the `ColumnDef` the caller already resolved rather than as a name,
+    * because a name would have to be quoted here and looked up somewhere else, and the lookup is
+    * what turns a wrong owner field into a failure at boot instead of a wrong query at runtime.
+    *
+    * The owner comes **after** the key in the three keyed statements, so a caller binds the key
+    * where it always bound it and the owner last. For the update that means after every column the
+    * `set` clause writes, the key, and then the owner.
+    */
+  def selectAllOrderedByIdOwnedBy(owner: ColumnDef): String =
+    s"${selectWhere(s"${owner.quoted} = ?")} order by ${idColumn.quoted}"
+
+  def selectByIdOwnedBy(owner: ColumnDef): String =
+    selectWhere(s"${idColumn.quoted} = ? and ${owner.quoted} = ?")
+
+  def updateByIdOwnedBy(owner: ColumnDef): String =
+    s"$updateById and ${owner.quoted} = ?"
+
+  def deleteByIdOwnedBy(owner: ColumnDef): String =
+    s"$deleteById and ${owner.quoted} = ?"
+
   /** Built on `selectAll`, deliberately: the column list is rendered in exactly one place, so the
     * select list and `decode`'s offsets cannot drift apart (BACKLOG §4, DESIGN §9.4).
     */

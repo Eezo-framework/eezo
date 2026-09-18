@@ -33,6 +33,13 @@ import scala.annotation.implicitNotFound
   * concatenates them and takes `distinct`; two equal but separate instances would mount the login
   * page twice and `RouteTable`'s duplicate check would refuse to boot.
   *
+  * Not `final`, and that is the one concession this type makes to [[Owned]]. Ownership is a
+  * refinement of being guarded rather than a second kind of declaration beside it, so an owned
+  * model declares one thing and the route table's lookup, its `mounting` and every call site that
+  * takes a `Guarded[A]` stay exactly as they were. The alternative, a separate type, would mean
+  * every one of those places learning a second one and an owned model writing two lines that have
+  * to agree.
+  *
   * There is deliberately no default given. `Actions` has one, because saying nothing about which
   * routes a model mounts means all seven, which is a safe silence. Saying nothing about who may
   * reach them is not: a default of `public` would make an unguarded route the thing a user gets by
@@ -49,7 +56,7 @@ import scala.annotation.implicitNotFound
     "  given Guarded[${A}] = User.guard.only(Action.Create, Action.Update, Action.Destroy)\n" +
     "  given Guarded[${A}] = Guarded.public               // anyone may reach it"
 )
-final case class Guarded[A](
+case class Guarded[A](
     actions: Set[Action],
     through: Route => Route,
     carries: Seq[Route]

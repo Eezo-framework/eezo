@@ -106,6 +106,22 @@ trait Form[A] {
     *   bad input, so it is not a `FormErrors`.
     */
   def parse(data: Map[String, Seq[String]], key: Option[String]): Either[FormErrors, A]
+
+  /** The same form with one named field gone from everything a page shows, and still read by
+    * [[parse]].
+    *
+    * That split is the whole of it. An owned model's owner field is filled by the handler from who
+    * is signed in, so it must not be an input the browser can edit, a heading on an index or a row
+    * on a show page; but the record still has to be built, and building it is `parse`'s job, from a
+    * value the caller puts into `data` under this same name. Suppressing it from `parse` too would
+    * leave the field with nothing to hold.
+    *
+    * By name rather than by index, because the caller holds an [[io.eezo.core.OwnerOf]], whose
+    * `name` is the model's own field label. A name that names no field changes nothing, which is
+    * what a `Form` derived from a `Mirror` can honestly promise: it has no way to know whether the
+    * caller meant a field of another model.
+    */
+  def without(name: String): Form[A]
 }
 
 object Form {
@@ -174,17 +190,21 @@ object Form {
       modelName: String,
       labels: List[String],
       instances: List[Field[Any]],
-      build: Array[Any] => A
+      build: Array[Any] => A,
+      hidden: Set[String] = Set.empty
   ): Form[A] = {
     val keyIndex = labels.indexOf(KeyName)
 
     val visible: Seq[(FormField, Int)] =
       labels.zip(instances).zipWithIndex.collect {
-        case ((name, field), i) if i != keyIndex =>
+        case ((name, field), i) if i != keyIndex && !hidden(name) =>
           FormField(name, humanise(name), field.inputType) -> i
       }
 
     new Form[A] {
+
+      def without(name: String): Form[A] =
+        make(modelName, labels, instances, build, hidden + name)
 
       val fields: Seq[FormField] = visible.map(_._1)
 
