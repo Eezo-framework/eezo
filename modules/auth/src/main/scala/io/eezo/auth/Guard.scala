@@ -123,18 +123,19 @@ final class Guard[U] private (
   )
 
   private def declaring[A](actions: Set[Action]): GuardedBy[A, U] =
-    new GuardedBy[A, U](actions, through, carries, owning)
+    new GuardedBy[A, U](actions, through, carries, currentUserKey)
 
-  /** Whose rows a request reaches, for a declaration that goes on to scope by an owner.
+  /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
+    * a declaration that goes on to scope rows by it.
     *
     * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's column
     * holds is the key, and reading the row back to take its key off again would be a lookup per
     * request for a value the session already spells. It throws for the same reason [[current]]
-    * does, and the message says the same thing: a handler that asks who owns this request is a
-    * handler the guard let through, so nobody being there is a route table that forgot to guard a
+    * does, and the message says the same thing: asking for the current user is something a handler
+    * the guard let through does, so nobody being there is a route table that forgot to guard a
     * covered route.
     */
-  private val owning: Request => Id[U] = request =>
+  private val currentUserKey: Request => Id[U] = request =>
     key(request.session)
       .getOrElse(
         throw Unauthorized(

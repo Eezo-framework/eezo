@@ -112,7 +112,7 @@ object JdbcStore {
   /** One owner's rows, as the four owner aware statements address them.
     *
     * Every statement carries the owner condition, which is what makes a foreign row absent rather
-    * than refused: `find` answers `None`, `update` and `delete` answer `false`, and [[Resource]]
+    * than refused: `find` answers `None`, `update` and `delete` answer `false`, and `Resource`
     * turns those into the status its declaration asked for without db learning what a status is.
     *
     * Binding `update` and `delete` by key **and** owner is what keeps that promise on a write with

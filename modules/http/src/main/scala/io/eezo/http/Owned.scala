@@ -31,12 +31,14 @@ final class Owned[A, U](
       */
     val ownerOf: OwnerOf[A, Id[U]],
 
-    /** Who is asking. Supplied by the guard that made this declaration, and read on every covered
-      * request rather than once, because a process serves many browsers.
+    /** The current user, as the key a row's owner field holds: who the guard says is behind this
+      * request, and never the owner of any particular row. Supplied by the guard that made this
+      * declaration, and read on every covered request rather than once, because a process serves
+      * many browsers.
       */
-    val owner: Request => Id[U],
+    val currentUser: Request => Id[U],
 
-    /** Which of the seven read and write through the owner's rows alone. */
+    /** Which of the seven read and write through the current user's own rows alone. */
     val covers: Set[Action],
 
     /** The declaration this one refines, which already says who has to be signed in. Its three

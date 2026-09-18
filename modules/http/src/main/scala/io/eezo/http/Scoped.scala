@@ -11,9 +11,9 @@ import io.eezo.core.{Id, OwnedStore, Store}
   * The owner's type is gone from the signature on purpose, and this is the one place in eezo where
   * it is. It is `Id[U]` for every caller, `U` is known only where the model's own declaration is
   * written, and nothing between that declaration and here needs to know it: the value that reaches
-  * [[by]] is the one [[Owned.owner]] read out of the request, and the function that consumes it is
-  * the one [[Scoped.apply]] closed over the matching [[io.eezo.core.OwnedStore]]. The two are built
-  * from the same declaration, so the cast inside `apply` cannot see a value of another type.
+  * [[by]] is the one [[Owned.currentUser]] read out of the request, and the function that consumes
+  * it is the one [[Scoped.apply]] closed over the matching [[io.eezo.core.OwnedStore]]. The two are
+  * built from the same declaration, so the cast inside `apply` cannot see a value of another type.
   *
   * Public only because the generated route table has to name it, the same way [[InMemoryStore]] is.
   * No user writes one.

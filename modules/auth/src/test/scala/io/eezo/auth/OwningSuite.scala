@@ -67,14 +67,14 @@ class OwningSuite extends munit.FunSuite {
     assertEquals(guard.required[Post].owning(_.author).all.ownerOf.get(post), ann.id)
   }
 
-  test("the owner of a request is who the session says is signed in") {
+  test("the current user of a request is who the session says is signed in") {
     val declared = guard.required[Post].owning(_.author).all
-    assertEquals(declared.owner(signedIn(ann.id)), ann.id)
+    assertEquals(declared.currentUser(signedIn(ann.id)), ann.id)
   }
 
-  test("asking who owns a request nobody signed is an error rather than a guess") {
+  test("asking for the current user of a request nobody signed is an error rather than a guess") {
     val declared = guard.required[Post].owning(_.author).all
-    intercept[Unauthorized](declared.owner(signedIn(ann.id).copy(session = Session.empty)))
+    intercept[Unauthorized](declared.currentUser(signedIn(ann.id).copy(session = Session.empty)))
   }
 
   test("a selector that is not a plain field of the model does not compile") {

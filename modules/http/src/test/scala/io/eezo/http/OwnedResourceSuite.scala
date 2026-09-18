@@ -117,6 +117,17 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     assertEquals(Resource.routesOf[Note](notes(), declared).count(_ == login), 1)
   }
 
+  test("an Owned is not the bare Guarded it refines, nor another Owned covering more") {
+    val bare     = Guarded[Note](Action.values.toSet, identity, Seq.empty)
+    val declared = Owned[Note, Person](noteOwner, _ => ada, Set(Action.Create), bare)
+
+    // The three inherited fields are the same three, so a declaration compared by them alone
+    // would lose the half that makes it owned: the refinement has to be a different value from
+    // what it refines, and from a declaration that covers other actions.
+    assertNotEquals(declared: Guarded[Note], bare)
+    assertNotEquals(declared, Owned[Note, Person](noteOwner, _ => ada, Action.values.toSet, bare))
+  }
+
   test("the new and edit pages emit no input named for the owner field") {
     val store = notes()
     val key   = Id.gen[Note]()
@@ -318,8 +329,9 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     store.insert(key, note(key, grace, "Hers"))
 
     // The shape `only` allows: Show is neither guarded nor covered, so an anonymous browser
-    // reaches the handler directly, but Edit is both, and `owner` here stands in for
-    // `Guard.owning`, which throws Unauthorized rather than answering when nobody is signed in.
+    // reaches the handler directly, but Edit is both, and `currentUser` here stands in for the
+    // guard's own reading of it, which throws Unauthorized rather than answering when nobody is
+    // signed in.
     val declared = Owned[Note, Person](
       noteOwner,
       _ => throw Unauthorized("nobody is signed in for this request"),
@@ -339,6 +351,63 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
       Resource[Note].routes(InMemoryStore[Note](), notesOwnedBy(ada))
     }
     assert(thrown.getMessage.contains("Note"), thrown.getMessage)
+  }
+
+  test("a declaration covering a route its guard leaves open refuses to mount") {
+    // Owned implies guarded: a covered handler reads who is signed in, so a covered route nobody
+    // has to be signed in for answers 401 for every request rather than serving anyone.
+    val declared = Owned[Note, Person](
+      noteOwner,
+      _ => ada,
+      Action.values.toSet,
+      Guarded(Set(Action.Index), identity, Seq.empty)
+    )
+
+    val thrown = intercept[IllegalStateException] {
+      Resource[Note].routes(notes(), declared)
+    }
+    assert(thrown.getMessage.contains("Note"), thrown.getMessage)
+    assert(thrown.getMessage.contains("Create"), thrown.getMessage)
+    assert(thrown.getMessage.contains("Destroy"), thrown.getMessage)
+    assert(!thrown.getMessage.contains("Index"), thrown.getMessage)
+  }
+
+  test("the blog's own shape, guarded everywhere and covering five of the seven, mounts") {
+    assertEquals(Resource[Note].routes(notes(), notesOwnedBy(ada)).size, Action.values.length)
+  }
+
+  test("a covered action the model does not mount is not a route to refuse the declaration over") {
+    // Vault subtracts Show, so covering it names no route at all and the guard has nothing to
+    // cover; only what is actually mounted can be the mismatch this refusal is about.
+    val declared = Owned[Vault, Person](
+      vaultOwner,
+      _ => ada,
+      Set(Action.Show, Action.Destroy),
+      Guarded(Set(Action.Destroy), identity, Seq.empty)
+    )
+
+    assertEquals(
+      Resource[Vault].routes(InMemoryStore.scoped(vaultOwner), declared).size,
+      Action.values.length - 1
+    )
+  }
+
+  test("an uncovered update with no such row answers 404 rather than asking who is signed in") {
+    val store = InMemoryStore.scoped(vaultOwner)
+    // Destroy alone is covered, and alone is guarded: an anonymous browser reaches `update`
+    // directly, so the row it reads to keep the owner of is the only thing standing between it and
+    // a `currentUser` that has nobody to answer with. A key naming no row is a 404 everywhere
+    // else, and it is one here.
+    val declared = Owned[Vault, Person](
+      vaultOwner,
+      _ => throw Unauthorized("nobody is signed in for this request"),
+      Set(Action.Destroy),
+      Guarded(Set(Action.Destroy), identity, Seq.empty)
+    )
+    val table   = RouteTable(Resource[Vault].routes(store, declared))
+    val nowhere = Id.gen[Vault]().show
+
+    assertEquals(status(table, request(Method.PUT, s"/vaults/$nowhere", "secret" -> "x")), 404)
   }
 
   test("a mistyped owner name refuses to mount rather than leaving the field editable") {

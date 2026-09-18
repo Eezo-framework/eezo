@@ -9,10 +9,10 @@ import io.eezo.http.{Action, Guarded, Owned, Request, Route}
   * A [[io.eezo.http.Guarded]] and nothing more as far as every existing call site can tell, which
   * is why `given Guarded[Post] = User.guard.required` still says exactly what it said. The one
   * thing it adds is [[owning]], and it can add it only because it still knows who the guard says is
-  * behind a request: a plain `Guarded` has a `Route => Route` and no way back to the user, so
-  * ownership could not be chained onto one.
+  * behind a request, its [[currentUser]]: a plain `Guarded` has a `Route => Route` and no way back
+  * to the user, so ownership could not be chained onto one.
   *
-  * @param owner
+  * @param currentUser
   *   who is signed in, as the key that a row's owner field holds. Read out of the session rather
   *   than through the guard's `find`, because a covered route is a guarded route and the wrapper
   *   already looked the user up before the handler ran; a second lookup per request would buy
@@ -22,7 +22,7 @@ final class GuardedBy[A, U] private[auth] (
     actions: Set[Action],
     through: Route => Route,
     carries: Seq[Route],
-    val owner: Request => Id[U]
+    val currentUser: Request => Id[U]
 ) extends Guarded[A](actions, through, carries) {
 
   /** Which field of the model records its owner, written as a selector so the compiler checks it.
@@ -45,7 +45,7 @@ final class GuardedBy[A, U] private[auth] (
     * is the thing [[owning]] exists to make unnecessary.
     */
   def owningField(name: String, get: A => Id[U]): Owning[A, U] =
-    new Owning[A, U](OwnerOf(name, get), owner, this)
+    new Owning[A, U](OwnerOf(name, get), currentUser, this)
 }
 
 /** An ownership declaration waiting to be told which routes it covers.
@@ -63,7 +63,7 @@ final class GuardedBy[A, U] private[auth] (
   */
 final class Owning[A, U] private[auth] (
     ownerOf: OwnerOf[A, Id[U]],
-    owner: Request => Id[U],
+    currentUser: Request => Id[U],
     guarded: Guarded[A]
 ) {
 
@@ -79,5 +79,5 @@ final class Owning[A, U] private[auth] (
   def except(actions: Action*): Owned[A, U] = covering(Action.values.toSet -- actions)
 
   private def covering(covers: Set[Action]): Owned[A, U] =
-    Owned(ownerOf, owner, covers, guarded)
+    Owned(ownerOf, currentUser, covers, guarded)
 }

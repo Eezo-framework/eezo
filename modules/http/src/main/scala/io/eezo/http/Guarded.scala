@@ -40,6 +40,14 @@ import scala.annotation.implicitNotFound
   * every one of those places learning a second one and an owned model writing two lines that have
   * to agree.
   *
+  * Being open is also why it is a plain class with three `val`s rather than a `case class`. A case
+  * class that something extends lies about all three of the things `case` generates: an [[Owned]]
+  * would equal a bare `Guarded` carrying the same three fields, two `Owned` differing only in what
+  * they cover or whose field records the owner would equal each other, and `copy` on an `Owned`
+  * would hand back a plain `Guarded` with the ownership silently gone. A declaration is read for
+  * its fields and never copied or compared, so nothing here wants those; what it wants is that a
+  * refinement of it stays one.
+  *
   * There is deliberately no default given. `Actions` has one, because saying nothing about which
   * routes a model mounts means all seven, which is a safe silence. Saying nothing about who may
   * reach them is not: a default of `public` would make an unguarded route the thing a user gets by
@@ -56,10 +64,10 @@ import scala.annotation.implicitNotFound
     "  given Guarded[${A}] = User.guard.only(Action.Create, Action.Update, Action.Destroy)\n" +
     "  given Guarded[${A}] = Guarded.public               // anyone may reach it"
 )
-case class Guarded[A](
-    actions: Set[Action],
-    through: Route => Route,
-    carries: Seq[Route]
+class Guarded[A](
+    val actions: Set[Action],
+    val through: Route => Route,
+    val carries: Seq[Route]
 ) {
 
   /** What one handwritten route becomes in the table: the guard's own pages, and that route

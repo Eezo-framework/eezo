@@ -225,7 +225,7 @@ object Resource {
         * lookup finds one declaration and hands it over, and this is where its extra half is read.
         * The owner's own type is gone by then, which is what [[Scoped]] exists to absorb; `Any` is
         * as much as this side can say and as much as it needs, since the only value that ever
-        * reaches `Scoped.by` is the one `owner` produced.
+        * reaches `Scoped.by` is the one `currentUser` produced.
         */
       val owned: Option[Owned[A, Any]] = guarded match {
         case o: Owned[?, ?] => Some(o.asInstanceOf[Owned[A, Any]])
@@ -266,6 +266,29 @@ object Resource {
           )
       }
 
+      /** Owned implies guarded, and a declaration that says otherwise is a table that cannot work
+        * rather than one that works oddly. A covered handler reads who is signed in, and the only
+        * thing that puts somebody there is the guard having refused everyone else first, so a
+        * covered route the guard leaves open answers `Unauthorized` for every request that reaches
+        * it: not a page anyone can use, and not a defect a browser would report as one.
+        *
+        * Read against the actions that are actually **mounted**, since covering a role the model
+        * subtracted names no route, and refusing a declaration over a page that does not exist
+        * would be this check inventing a mismatch. Refused at the same boot as the two above, for
+        * the same reason: a declaration and what it is mounted over disagreeing is a mistake in the
+        * table, and the table is built once.
+        */
+      owned.foreach { o =>
+        val open = (o.covers.filter(actions.has) -- o.actions).toSeq.sortBy(_.ordinal)
+        if (open.nonEmpty)
+          throw new IllegalStateException(
+            s"""$modelName declares Owned covering ${open.mkString(", ")}, which its guard does not
+               |require a signed in user for. A covered route reads who is signed in, so those
+               |routes would refuse every request. Guard those actions as well, or leave them out
+               |of what ownership covers.""".stripMargin.replace("\n", " ")
+          )
+      }
+
       /** The owner field is not a field of any page. It is filled from who is signed in, so a
         * browser must not be shown an input for it, an index must not head a column with it, and a
         * show page must not print a raw key. It is still parsed, out of the value `body` puts
@@ -278,12 +301,12 @@ object Resource {
         */
       def covering(action: Action): Option[Owned[A, Any]] = owned.filter(_.covers.contains(action))
 
-      /** The store one action reads and writes through: this owner's rows when ownership covers it,
-        * and the whole table when it does not. A blog's index and show are the whole table, which
-        * is what makes two users read each other's posts.
+      /** The store one action reads and writes through: the current user's own rows when ownership
+        * covers it, and the whole table when it does not. A blog's index and show are the whole
+        * table, which is what makes two users read each other's posts.
         */
       def storeFor(request: Request, action: Action): Store[A] =
-        covering(action).zip(scope).fold(store) { case (o, s) => s.by(o.owner(request)) }
+        covering(action).zip(scope).fold(store) { case (o, s) => s.by(o.currentUser(request)) }
 
       /** What a covered action answers when the narrowed store has no such row.
         *
@@ -341,36 +364,60 @@ object Resource {
         */
       def body(request: Request, existing: Option[A]): Map[String, Seq[String]] =
         owned.fold(request.form) { o =>
-          val who = existing.map(o.ownerOf.get).getOrElse(o.owner(request))
+          val who = existing.map(o.ownerOf.get).getOrElse(o.currentUser(request))
           request.form.updated(o.ownerOf.name, Seq(who.show))
         }
 
+      /** The row whose owner an uncovered `update` has to keep, and nothing at all when there is no
+        * such row to read: an unowned model, or one whose ownership covers `Update`.
+        *
+        * Asked here rather than in the handler, so that `update` is the handler it always was and
+        * the question "is this model owned" is answered once, beside [[covering]] and [[body]], the
+        * way every other half of the declaration is.
+        *
+        * A covered write is already narrowed to the requester's own rows, so `submit`'s `persist`
+        * is the only lookup it needs and this would be the second query on every covered write
+        * issue 171 ruled out. An uncovered write has no such narrowing, and the row on the store it
+        * is about to replace is the one place its current owner can come from without letting the
+        * request choose it.
+        *
+        * A key naming no row ends here as the 404 a missing row is everywhere else, before [[body]]
+        * is built. The alternative is worse than a wrong status: an uncovered action may also be an
+        * unguarded one, and `body`'s fallback would then ask `currentUser` about an anonymous
+        * request and answer 401, which says "sign in" about a row that was never there.
+        */
+      def keeping(request: Request, key: Id[A], target: Store[A]): Option[A] =
+        if (covering(Action.Update).isDefined) None
+        else owned.map(_ => target.find(key).getOrElse(missing(request, key, Action.Update)))
+
       /** A control on a show page that only the owner of the row may take. Rendered when the model
-        * is not owned, when ownership does not cover the control's own route, and when the row is
-        * the asker's; absent otherwise, so a foreign row shows its fields and offers nothing.
+        * is not owned, when ownership does not cover the control's own route, and when the current
+        * user owns the row; absent otherwise, so a foreign row shows its fields and offers nothing.
         *
         * The page this control sits on is not necessarily guarded itself: a blog's `Show` is open
         * to anyone, and `Edit` being covered says who may reach `Edit`, not who may reach `Show`.
-        * So `o.owner(request)` is read speculatively by [[asker]], for a request nothing has
-        * vouched for, and `Guard.owning` throws `Unauthorized` for exactly that request, nobody
-        * signed in. That is not a mistake in the route table the way it is inside a covered
-        * handler; it is an anonymous browser looking at a public page, and the honest reading of
-        * "who owns this request" for them is nobody, so the control is simply absent, the same as
-        * on a foreign row.
+        * So `o.currentUser(request)` is read speculatively by [[currentUserOf]], for a request
+        * nothing has vouched for, and the guard's own reading of the current user throws
+        * `Unauthorized` for exactly that request, nobody signed in. That is not a mistake in the
+        * route table the way it is inside a covered handler; it is an anonymous browser looking at
+        * a public page, and the honest reading of "who is the current user" for them is nobody, so
+        * the control is simply absent, the same as on a foreign row.
         *
-        * `asked` is by name so that a page resolves it at most once for all its controls, and not
-        * at all when no control is covered.
+        * `currentUser` is by name so that a page resolves it at most once for all its controls, and
+        * not at all when no control is covered.
         */
-      def whenOwn(action: Action, record: A, asked: => Option[Any])(content: => Html): Seq[Html] =
+      def whenOwn(action: Action, record: A, currentUser: => Option[Any])(
+          content: => Html
+      ): Seq[Html] =
         covering(action) match {
-          case Some(o) if !asked.contains(o.ownerOf.get(record)) => Nil
-          case _                                                 => when(action)(content)
+          case Some(o) if !currentUser.contains(o.ownerOf.get(record)) => Nil
+          case _                                                       => when(action)(content)
         }
 
-      /** Who is asking, or nobody when the request is anonymous. See [[whenOwn]]. */
-      def asker(request: Request): Option[Any] =
+      /** The current user, or nobody when the request is anonymous. See [[whenOwn]]. */
+      def currentUserOf(request: Request): Option[Any] =
         owned.flatMap { o =>
-          try Some(o.owner(request))
+          try Some(o.currentUser(request))
           catch { case Unauthorized(_) => None }
         }
 
@@ -431,9 +478,9 @@ object Resource {
         * `existing` is unrelated to that question and answers a different one: what the owner field
         * of an **uncovered** write should hold, since nothing about that write vouches for the
         * requester as the row's owner the way a covered one does. `create` never has an earlier row
-        * and leaves it at the default; `update` reads it only when ownership does not cover
-        * `Update`, which is not the read `persist` above is about and not one a covered write ever
-        * pays for.
+        * and leaves it at the default; `update` takes [[keeping]]'s answer, which reads a row only
+        * when ownership does not cover `Update`, which is not the read `persist` above is about and
+        * not one a covered write ever pays for.
         *
         * What is parsed is [[body]] and not the submission itself, so an owned model's owner field
         * holds who is signed in on a covered write, or what the row already had on one that is not,
@@ -466,8 +513,8 @@ object Resource {
       }
 
       def show: Handler = request => {
-        val (key, record) = row(request, Action.Show)
-        lazy val asked    = asker(request)
+        val (key, record)    = row(request, Action.Show)
+        lazy val currentUser = currentUserOf(request)
 
         Response.Ok(
           page(
@@ -476,10 +523,10 @@ object Resource {
             dl(
               shape.show(record).flatMap { case (field, value) => Seq(dt(field.label), dd(value)) }
             ),
-            whenOwn(Action.Edit, record, asked)(
+            whenOwn(Action.Edit, record, currentUser)(
               p(a(Attrs.href := member(key) / EditPage.segment, "Edit"))
             ),
-            whenOwn(Action.Destroy, record, asked)(
+            whenOwn(Action.Destroy, record, currentUser)(
               form(
                 Attrs.action := member(key),
                 Attrs.method := "post",
@@ -506,17 +553,8 @@ object Resource {
       }
 
       def update: Handler = request => {
-        val key = request.param[Id[A]]("id")
-
-        /** Read only when ownership does not cover `Update`. A covered write is already narrowed to
-          * the requester's own rows, so `submit`'s `persist` is the only lookup it needs and this
-          * would be the second query on every covered write issue 171 ruled out; an uncovered write
-          * has no such narrowing, and the row on the whole table it is about to replace is the one
-          * place its current owner can come from without letting the request choose it.
-          */
-        val target   = storeFor(request, Action.Update)
-        val existing =
-          if (owned.isDefined && covering(Action.Update).isEmpty) target.find(key) else None
+        val key    = request.param[Id[A]]("id")
+        val target = storeFor(request, Action.Update)
 
         submit(
           request,
@@ -525,7 +563,7 @@ object Resource {
           s"Edit $modelName",
           member(key),
           Method.PUT,
-          existing
+          keeping(request, key, target)
         ) { record =>
           target.update(key, record)
         }
