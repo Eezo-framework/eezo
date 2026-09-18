@@ -188,14 +188,14 @@ final class Guard[U] private (
     * any of them would be a second thing to keep in step.
     *
     * A `_user` with no stamp beside it reads as nobody rather than as a sign in of unknown age.
-    * Every cookie signed before the lifetime existed has that shape, and reading it as valid would
-    * mean the one browser the rule was written for, the copied cookie, is the one browser it never
+    * Every session signed before the lifetime existed has that shape, and reading it as valid would
+    * mean the one browser the rule was written for, the copied session, is the one browser it never
     * applies to. Signing everyone out once is the cost, and it is paid once.
     */
   private def key(session: Session): Option[Id[U]] =
     for {
       named <- session.reserved(Guard.UserEntry)
-      since <- session.reserved(Guard.StampEntry).flatMap(Guard.stamp)
+      since <- session.reserved(Guard.StampEntry).flatMap(Guard.readStamp)
       if !expired(since)
       id <- Guard.parse[U](named)
     } yield id
@@ -340,8 +340,9 @@ object Guard {
     *
     * Epoch milliseconds as plain digits, which is the encoding that cannot fail on the way back in.
     * `Instant.ofEpochMilli` accepts every `Long` there is, where `ofEpochSecond` throws for the
-    * large ones and ISO text has a parser with opinions, and [[stamp]] sits on the path of every
-    * guarded request: a value that throws there is an error page where a login redirect belongs.
+    * large ones and ISO text has a parser with opinions, and [[readStamp]] sits on the path of
+    * every guarded request: a value that throws there is an error page where a login redirect
+    * belongs.
     */
   private[eezo] val StampEntry: String = Session.Reserved + "since"
 
@@ -409,16 +410,17 @@ object Guard {
     */
   private[auth] def parse[U](text: String): Option[Id[U]] = summon[FromPath[Id[U]]].apply(text)
 
-  /** The moment of a sign in, as the session carries it. */
+  /** The moment of a sign in, as the session carries it. [[readStamp]] reads it back. */
   private[auth] def stamped(at: Instant): String = at.toEpochMilli.toString
 
-  /** The moment back out of the session text, and `None` for anything that is not one.
+  /** The moment [[stamped]] wrote, back out of the session text, and `None` for anything that is
+    * not one.
     *
     * [[parse]]'s precedent, for [[parse]]'s reason: a value that will not read is no sign in, and
     * answering `None` sends the browser to log in again instead of turning every guarded page into
     * a 500.
     */
-  private[auth] def stamp(text: String): Option[Instant] =
+  private[auth] def readStamp(text: String): Option[Instant] =
     text.toLongOption.map(Instant.ofEpochMilli)
 
   /** What a refusal is worth remembering, when it is worth anything.

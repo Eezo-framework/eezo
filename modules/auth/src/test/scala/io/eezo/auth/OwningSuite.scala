@@ -1,6 +1,6 @@
 package io.eezo.auth
 
-import java.time.{Clock, Instant, ZoneOffset}
+import java.time.Instant
 
 import io.eezo.core.Id
 import io.eezo.http.*
@@ -16,19 +16,15 @@ import io.eezo.http.*
 class OwningSuite extends munit.FunSuite {
 
   import OwningSuite.*
+  import SignInFixtures.*
 
   private val ann = User(Id.gen(), "ann@example.com")
-
-  /** The moment both the guard and the sessions here are fixed at, so nothing in this suite reads
-    * the wall clock and no sign in ages between one assertion and the next.
-    */
-  private val now: Instant = Instant.parse("2026-09-18T12:00:00Z")
 
   private def guard: Guard[User] =
     Guard[User](
       find = id => Option.when(id == ann.id)(ann),
       authenticate = (_, _) => None,
-      clock = Clock.fixed(now, ZoneOffset.UTC)
+      clock = clock
     )
 
   private def signedIn(who: Id[User], since: Instant = now): Request =
@@ -39,9 +35,7 @@ class OwningSuite extends munit.FunSuite {
       headers = Map.empty,
       body = Array.emptyByteArray,
       pathParams = Map.empty,
-      session = Session.empty
-        .withReserved(Guard.UserEntry, who.show)
-        .withReserved(Guard.StampEntry, Guard.stamped(since))
+      session = signedInSession(who, since)
     )
 
   test("the blog's declaration types as an Owned and names the model's own field") {
@@ -92,17 +86,11 @@ class OwningSuite extends munit.FunSuite {
 
   test("a sign in past its lifetime scopes nothing: the key is an error, not a stale owner") {
     val declared = guard.required[Post].owning(_.author).all
+    intercept[Unauthorized](declared.currentUser(signedIn(ann.id, since = stale)))
+    // The shape every session signed before the lifetime shipped has. Reading it as an owner would
+    // hand a copied session the rows of whoever it names, which is the whole reason for the stamp.
     intercept[Unauthorized](
-      declared.currentUser(
-        signedIn(ann.id, since = now.minus(Guard.DefaultLifetime).minusSeconds(1))
-      )
-    )
-    // The shape every cookie signed before the lifetime shipped has. Reading it as an owner would
-    // hand a copied cookie the rows of whoever it names, which is the whole reason for the stamp.
-    intercept[Unauthorized](
-      declared.currentUser(
-        signedIn(ann.id).copy(session = Session.empty.withReserved(Guard.UserEntry, ann.id.show))
-      )
+      declared.currentUser(signedIn(ann.id).copy(session = stamplessSession(ann.id)))
     )
   }
 

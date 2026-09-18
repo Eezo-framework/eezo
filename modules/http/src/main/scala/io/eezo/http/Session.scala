@@ -102,8 +102,8 @@ object Session {
 
   val empty: Session = Session(Map.empty, Map.empty, Map.empty)
 
-  /** The prefix of the names eezo keeps for itself, the flash, the CSRF token and the guard's
-    * three, which [[set]] refuses, [[withReserved]] requires and [[isEmpty]] looks past.
+  /** The prefix of the names eezo keeps for itself, the flash, the CSRF token and the guard's own
+    * entries, which [[set]] refuses, [[withReserved]] requires and [[isEmpty]] looks past.
     *
     * `private[eezo]` for the reason [[reserved]] gives: `modules/auth` builds its own names from it
     * rather than writing `"_user"` out, so a module that reserves a name cannot spell the prefix

@@ -2,7 +2,7 @@ package io.eezo.auth
 
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.time.{Clock, Duration, Instant, ZoneOffset}
+import java.time.{Clock, Duration, Instant}
 
 import io.eezo.core.Id
 import io.eezo.core.html.Html
@@ -19,19 +19,17 @@ import io.eezo.http.*
 class GuardSuite extends munit.FunSuite {
 
   import GuardSuite.*
+  import SignInFixtures.*
 
   case class User(id: Id[User], email: String, password: Password)
 
   private val ann  = User(Id.gen(), "ann@example.com", cheap)
   private val rows = Map(ann.id -> ann)
 
-  /** The one moment every guard in this suite is fixed at, so a test that moves time moves it in
-    * the session's stamp rather than in the clock. A fixed clock is what keeps the suite free of
-    * order dependence: no guard here holds a reading another test can have already advanced.
+  /** The counterpart to the shared `stale`: a second inside the default lifetime, which makes it
+    * the oldest sign in still valid.
     */
-  private val now: Instant = Instant.parse("2026-09-18T12:00:00Z")
-
-  private val clock: Clock = Clock.fixed(now, ZoneOffset.UTC)
+  private val almostStale: Instant = now.minus(Guard.DefaultLifetime).plusSeconds(1)
 
   private val find: Id[User] => Option[User] = id => rows.get(id)
 
@@ -74,19 +72,13 @@ class GuardSuite extends munit.FunSuite {
       path: String = "/posts",
       since: Instant = now
   ) =
-    browser(method, path).copy(
-      session = Session.empty
-        .withReserved(Guard.UserEntry, who.show)
-        .withReserved(Guard.StampEntry, Guard.stamped(since))
-    )
+    browser(method, path).copy(session = signedInSession(who, since))
 
-  /** A browser whose session names `who` and carries no stamp beside it: the shape every cookie
+  /** A browser whose session names `who` and carries no stamp beside it: the shape every session
     * signed before the lifetime shipped has, and the one a forged escalation would most like.
     */
   private def stampless(who: Id[User], path: String = "/posts") =
-    browser(Method.GET, path).copy(
-      session = Session.empty.withReserved(Guard.UserEntry, who.show)
-    )
+    browser(Method.GET, path).copy(session = stamplessSession(who))
 
   /** A public page that offers the way out, which is where an application has to put one: the
     * screens behind a guard are the derived ones, and a derived page renders a plain envelope with
@@ -144,19 +136,15 @@ class GuardSuite extends munit.FunSuite {
 
   // ------------------------------------------------------------ how long a sign in lasts
 
-  /** A moment just past the default lifetime, and one just inside it. */
-  private val stale: Instant  = now.minus(Guard.DefaultLifetime).minusSeconds(1)
-  private val recent: Instant = now.minus(Guard.DefaultLifetime).plusSeconds(1)
-
   test("a sign in younger than the lifetime reaches the guarded handler") {
-    val (response, ran) = watching(signedIn(ann.id, since = recent))
+    val (response, ran) = watching(signedIn(ann.id, since = almostStale))
     assertEquals(response.status, 200)
     assert(ran, "a sign in still inside the lifetime never reached the handler")
     // A guarded read that ever rewrote the stamp would turn the absolute lifetime into a sliding
     // one, and every page merely reading the session would start costing a `Set-Cookie`.
     assertEquals(
       response.session.flatMap(_.reserved(Guard.StampEntry)),
-      Some(Guard.stamped(recent)),
+      Some(Guard.stamped(almostStale)),
       "a guarded request that let the handler run touched the stamp on the way through"
     )
   }
@@ -224,7 +212,7 @@ class GuardSuite extends munit.FunSuite {
 
   test("a session naming nobody is anonymous whatever its stamp says, and never an error") {
     val t = posts()
-    List(Instant.EPOCH, stale, recent, now, now.plusSeconds(60)).foreach { since =>
+    List(Instant.EPOCH, stale, almostStale, now, now.plusSeconds(60)).foreach { since =>
       val orphan = browser(Method.GET, "/posts").copy(
         session = Session.empty.withReserved(Guard.StampEntry, Guard.stamped(since))
       )
@@ -232,6 +220,44 @@ class GuardSuite extends munit.FunSuite {
       assertEquals(refused.status, 303, since.toString)
       assertEquals(refused.header("Location"), Some("/login"), since.toString)
       intercept[Unauthorized](guard.current(orphan))
+    }
+  }
+
+  test("a session naming no user is untouched by age: its entries and its token come back whole") {
+    // What an anonymous browser really carries: an entry the application put there, a flash, and
+    // the token dispatch minted into it. No `_user` and no stamp, so none of it is a sign in, and
+    // that is the point: the lifetime is a property of the sign in, not of the session, so one
+    // holding only these is worth nothing to a thief and is never worth expiring.
+    //
+    // The flash is a pending one, because the delivered map a request really arrives with is
+    // `modules/http`'s own to build and is consumed by the response that follows either way. What
+    // it pins here is the thing the guard decides, that it amends the session it was handed rather
+    // than building a new one.
+    val token     = Csrf.Token.gen()
+    val anonymous =
+      Csrf.carrying(Session.empty, token).set("cart", "two books").flash("notice", "saved")
+    val visiting = browser(Method.GET, "/").copy(session = anonymous)
+    val going    = browser(Method.GET, "/posts").copy(session = anonymous)
+
+    // The second guard reads a clock ten years past every stamp this suite writes, so an age check
+    // that ever started discarding sessions naming nobody would have fired by then.
+    val ageless =
+      Guard[User](find, authenticate, clock = Clock.offset(clock, Duration.ofDays(3650)))
+
+    List("on the hour" -> guard, "ten years on" -> ageless).foreach { case (when, g) =>
+      val seen = RouteTable(Seq(frontPage(g))).dispatch(visiting)
+      assertEquals(htmlOf(seen), "the blog", s"an anonymous browser was offered a way out, $when")
+      assertEquals(seen.session, Some(anonymous), s"an open page rewrote the session, $when")
+      intercept[Unauthorized](g.current(visiting))
+
+      val refused = posts(g).dispatch(going)
+      assertEquals(refused.status, 303, when)
+      assertEquals(refused.header("Location"), Some("/login"), when)
+      assertEquals(
+        refused.session,
+        Some(anonymous.withReserved(Guard.ReturnEntry, "/posts")),
+        s"the refusal did more than remember where the browser was going, $when"
+      )
     }
   }
 
