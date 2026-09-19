@@ -328,7 +328,7 @@ object Resource {
           .getOrElse(
             throw new IllegalStateException(
               "no user is signed in for this request, so there is nobody for an owned route to " +
-                "scope to; a covered action has to be a guarded one"
+                "scope to; the declaration's guard let through a request it should have refused"
             )
           )
 
@@ -447,7 +447,7 @@ object Resource {
 
       /** The current user, or nobody when the request is anonymous. See [[whenOwn]]. */
       def currentUserOf(request: Request): Option[Any] =
-        owned.flatMap(o => o.currentUser(request))
+        owned.flatMap(_.currentUser(request))
 
       def index: Handler = request => {
         val rows = storeFor(request, Action.Index).all()

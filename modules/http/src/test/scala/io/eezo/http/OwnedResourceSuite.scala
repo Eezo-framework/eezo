@@ -65,10 +65,10 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     * `Create` and `Update` are deliberately left uncovered, which is what the reassignment defect
     * needs to happen at all.
     */
-  private def vaultsOwnedByOnlyDestroy(who: Id[Person]): Owned[Vault, Person] =
+  private def vaultsOwnedByOnlyDestroy(who: Option[Id[Person]]): Owned[Vault, Person] =
     Owned[Vault, Person](
       vaultOwner,
-      _ => Some(who),
+      _ => who,
       Set(Action.Destroy),
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
@@ -208,7 +208,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     // Update is not in this declaration's covers, so it is grace, not ada, standing in for who is
     // signed in on the request below: exactly the "anyone may edit" shape `only(Action.Destroy)`
     // describes, and the shape the reassignment defect needed to fire at all.
-    val table = RouteTable(Resource[Vault].routes(store, vaultsOwnedByOnlyDestroy(grace)))
+    val table = RouteTable(Resource[Vault].routes(store, vaultsOwnedByOnlyDestroy(Some(grace))))
 
     val answered = answer(
       table,
@@ -359,39 +359,26 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   test("a covered route reached with nobody signed in refuses rather than scoping to nobody") {
     // A declaration that names every action as guarded while its through is identity, which the
     // boot check compares sets against and therefore accepts; nothing about a live guard stops an
-    // anonymous request from reaching the handler here, so the two throws below are what a real
-    // guard's own refusal would otherwise make unreachable. Both have to fail loudly: a store
-    // narrowed to nobody would read rows that are not the requester's, and a create filling the
-    // owner field with a guess would write a row nobody can be refused over.
-    val store    = notes()
+    // anonymous request from reaching the handler here, so the throw below is what a real guard's
+    // own refusal would otherwise make unreachable. It has to fail loudly: a store narrowed to
+    // nobody would read rows that are not the requester's.
     val declared = Owned[Note, Person](
       noteOwner,
       _ => None,
       Action.values.toSet,
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
-    val table = RouteTable(Resource.routesOf[Note](store, declared))
+    val table = RouteTable(Resource.routesOf[Note](notes(), declared))
 
     intercept[IllegalStateException](answer(table, request(Method.GET, "/notes")))
-    intercept[IllegalStateException](
-      answer(table, request(Method.POST, "/notes", "title" -> "Mine", "body" -> "text"))
-    )
-    assertEquals(store.all().size, 0, "a create with nobody signed in wrote a row anyway")
   }
 
-  test("a create's owner throw fires even when covers does not name Create") {
-    // Action.values.toSet in the test above covers Create too, so storeFor also calls signedIn
-    // and would throw on its own; that test alone would still pass with the throw inside body
-    // removed. Only Destroy is covered here, so storeFor never calls signedIn for a create, and
-    // body's own fallback to signedIn is the one and only throw this test can observe.
-    val store    = InMemoryStore.scoped(vaultOwner)
-    val declared = Owned[Vault, Person](
-      vaultOwner,
-      _ => None,
-      Set(Action.Destroy),
-      Guarded(Action.values.toSet, identity, Seq.empty)
-    )
-    val table = RouteTable(Resource[Vault].routes(store, declared))
+  test("a create with nobody signed in refuses rather than writing a row nobody owns") {
+    // Only Destroy is covered here, so the store a create writes through is never narrowed, and
+    // filling the owner field is the one and only place this request can ask who is signed in. A
+    // create filling that field with a guess would write a row nobody can be refused over.
+    val store = InMemoryStore.scoped(vaultOwner)
+    val table = RouteTable(Resource[Vault].routes(store, vaultsOwnedByOnlyDestroy(None)))
 
     intercept[IllegalStateException](
       answer(table, request(Method.POST, "/vaults", "secret" -> "Mine"))

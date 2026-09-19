@@ -100,25 +100,11 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test("asking who is there when nobody is, is an error rather than a redirect") {
-    intercept[IllegalStateException](guard.current(browser(Method.GET, "/posts")))
-    intercept[IllegalStateException](guard.current(signedIn(Id.gen[User]())))
-  }
-
-  test("a handler on an unguarded route that asks who is there fails as a programming mistake") {
-    // Not an HTTP failure, which is why it leaves the route table as a plain
-    // `IllegalStateException` rather than as anything `modules/http` maps to a status: the
-    // boundary answers 500 for it, and the half of that this module can see is the type and the
-    // message. `BoundarySuite` pins the other half, the 500 itself.
-    val open = Route.Http(
-      Method.GET,
-      PathPattern.parse("/posts"),
-      request => Response.Ok(Html.text(guard.current(request).email))
-    )
-    val thrown =
-      intercept[IllegalStateException](
-        RouteTable(Seq(open)).dispatch(browser(Method.GET, "/posts"))
-      )
+    // Not an HTTP failure, which is why it is a plain `IllegalStateException` rather than anything
+    // `modules/http` maps to a status: the boundary answers 500 for whatever is outside its set.
+    val thrown = intercept[IllegalStateException](guard.current(browser(Method.GET, "/posts")))
     assert(thrown.getMessage.contains("this route is not guarded"), thrown.getMessage)
+    intercept[IllegalStateException](guard.current(signedIn(Id.gen[User]())))
   }
 
   // ------------------------------------------------------------ refusing

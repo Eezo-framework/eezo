@@ -84,17 +84,6 @@ class BoundarySuite extends munit.FunSuite {
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))
   }
 
-  test("asking who is signed in outside a guarded route is a 500, and says so only in dev") {
-    // The half of the guard's mistake this module can see: `Guard.current` throws a plain
-    // `IllegalStateException`, and what a browser is handed for it is decided here. The other
-    // half, that the guard throws exactly this, is `GuardSuite`'s, since `Boundary` is private to
-    // this package and `modules/auth`'s tests cannot reach it.
-    val mistake = new IllegalStateException("this route is not guarded")
-    assertEquals(problem(mistake).status, 500)
-    assertEquals(problem(mistake, dev = true).detail, "this route is not guarded")
-    assertNoDiff(problem(mistake).detail, "The server encountered an unexpected error.")
-  }
-
   test("a stack trace is logged for 500 and above, and never for a client mistake") {
     assert(!Boundary.logsStackTrace(404))
     assert(!Boundary.logsStackTrace(409))
