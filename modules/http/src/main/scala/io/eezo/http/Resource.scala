@@ -269,16 +269,16 @@ object Resource {
       /** Owned implies guarded, and a declaration that says otherwise is a table that cannot work
         * rather than one that works oddly. A covered handler reads who is signed in, and the only
         * thing that puts somebody there is the guard having refused everyone else first, so a
-        * covered route the guard leaves open answers `Unauthorized` for every request that reaches
-        * it: not a page anyone can use, and not a defect a browser would report as one.
+        * covered route the guard leaves open fails for every request that reaches it, with the
+        * mistake [[signedIn]] throws: not a page anyone can use, and a 500 rather than a defect a
+        * browser could report as its own.
         *
         * `Create` belongs beside `covers` here even when `covers` itself does not name it. [[body]]
         * fills the owner field from `currentUser` on every create, since there is no earlier row
         * for an uncovered write to keep the way [[keeping]] lets an uncovered `update` do, so a
         * mounted create needs a signed in user whatever the declaration says it covers. Left out of
         * this check, a declaration that guards only `Destroy` would mount a create it calls public
-        * that answers `Unauthorized` for every request that reaches it, the same failure this check
-        * exists to catch.
+        * that fails on every request that reaches it, the same failure this check exists to catch.
         *
         * Read against the actions that are actually **mounted**, since covering a role the model
         * subtracted names no route, and refusing a declaration over a page that does not exist
@@ -313,12 +313,31 @@ object Resource {
         */
       def covering(action: Action): Option[Owned[A, Any]] = owned.filter(_.covers.contains(action))
 
+      /** Who is signed in, for the two places that cannot go on without somebody: narrowing a store
+        * to its owner's rows, and filling the owner field of a brand new row.
+        *
+        * Nobody there is a mistake in the route table rather than a request to answer, and the
+        * Owned implies guarded check above refuses the shape that produces it, so reaching here
+        * means the table was built another way. It throws instead of guessing, because both
+        * alternatives are the ownership bypass this whole mechanism exists to close: a store
+        * narrowed to nobody reads rows that are not the requester's, and a row written with no
+        * owner belongs to nobody who can be refused.
+        */
+      def signedIn(o: Owned[A, Any], request: Request): Id[Any] =
+        o.currentUser(request)
+          .getOrElse(
+            throw new IllegalStateException(
+              "no user is signed in for this request, so there is nobody for an owned route to " +
+                "scope to; a covered action has to be a guarded one"
+            )
+          )
+
       /** The store one action reads and writes through: the current user's own rows when ownership
         * covers it, and the whole table when it does not. A blog's index and show are the whole
         * table, which is what makes two users read each other's posts.
         */
       def storeFor(request: Request, action: Action): Store[A] =
-        covering(action).zip(scope).fold(store) { case (o, s) => s.by(o.currentUser(request)) }
+        covering(action).zip(scope).fold(store) { case (o, s) => s.by(signedIn(o, request)) }
 
       /** What a covered action answers when the narrowed store has no such row.
         *
@@ -376,7 +395,7 @@ object Resource {
         */
       def body(request: Request, existing: Option[A]): Map[String, Seq[String]] =
         owned.fold(request.form) { o =>
-          val who = existing.map(o.ownerOf.get).getOrElse(o.currentUser(request))
+          val who = existing.map(o.ownerOf.get).getOrElse(signedIn(o, request))
           request.form.updated(o.ownerOf.name, Seq(who.show))
         }
 
@@ -395,8 +414,9 @@ object Resource {
         *
         * A key naming no row ends here as the 404 a missing row is everywhere else, before [[body]]
         * is built. The alternative is worse than a wrong status: an uncovered action may also be an
-        * unguarded one, and `body`'s fallback would then ask `currentUser` about an anonymous
-        * request and answer 401, which says "sign in" about a row that was never there.
+        * unguarded one, and `body`'s fallback would then ask who is signed in about an anonymous
+        * request and fail as a route table mistake, which blames the table for a row that was never
+        * there.
         */
       def keeping(request: Request, key: Id[A], target: Store[A]): Option[A] =
         if (covering(Action.Update).isDefined) None
@@ -409,11 +429,10 @@ object Resource {
         * The page this control sits on is not necessarily guarded itself: a blog's `Show` is open
         * to anyone, and `Edit` being covered says who may reach `Edit`, not who may reach `Show`.
         * So `o.currentUser(request)` is read speculatively by [[currentUserOf]], for a request
-        * nothing has vouched for, and the guard's own reading of the current user throws
-        * `Unauthorized` for exactly that request, nobody signed in. That is not a mistake in the
-        * route table the way it is inside a covered handler; it is an anonymous browser looking at
-        * a public page, and the honest reading of "who is the current user" for them is nobody, so
-        * the control is simply absent, the same as on a foreign row.
+        * nothing has vouched for, and it answers nobody for exactly that request. That is not a
+        * mistake in the route table the way it is inside a covered handler; it is an anonymous
+        * browser looking at a public page, and the honest reading of "who is the current user" for
+        * them is nobody, so the control is simply absent, the same as on a foreign row.
         *
         * `currentUser` is by name so that a page resolves it at most once for all its controls, and
         * not at all when no control is covered.
@@ -428,10 +447,7 @@ object Resource {
 
       /** The current user, or nobody when the request is anonymous. See [[whenOwn]]. */
       def currentUserOf(request: Request): Option[Any] =
-        owned.flatMap { o =>
-          try Some(o.currentUser(request))
-          catch { case Unauthorized(_) => None }
-        }
+        owned.flatMap(o => o.currentUser(request))
 
       def index: Handler = request => {
         val rows = storeFor(request, Action.Index).all()

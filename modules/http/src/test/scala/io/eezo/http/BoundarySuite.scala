@@ -17,7 +17,6 @@ class BoundarySuite extends munit.FunSuite {
 
   test("each member of the sealed set maps to its status") {
     assertEquals(problem(BadRequest("bad")).status, 400)
-    assertEquals(problem(Unauthorized("no one is signed in")).status, 401)
     assertEquals(problem(Forbidden("nope")).status, 403)
     assertEquals(problem(NotFound("/x")).status, 404)
     assertEquals(problem(MethodNotAllowed(Seq(Method.GET))).status, 405)
@@ -85,15 +84,15 @@ class BoundarySuite extends munit.FunSuite {
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))
   }
 
-  test("a 401 response carries a WWW-Authenticate challenge, which RFC 9110 requires") {
-    val response =
-      Boundary.errorResponse(
-        Unauthorized("no one is signed in"),
-        "/widgets/7",
-        Config(RouteTable.empty)
-      )
-    assertEquals(response.status, 401)
-    assertEquals(response.headers.toMap.get("WWW-Authenticate"), Some("Session"))
+  test("asking who is signed in outside a guarded route is a 500, and says so only in dev") {
+    // The half of the guard's mistake this module can see: `Guard.current` throws a plain
+    // `IllegalStateException`, and what a browser is handed for it is decided here. The other
+    // half, that the guard throws exactly this, is `GuardSuite`'s, since `Boundary` is private to
+    // this package and `modules/auth`'s tests cannot reach it.
+    val mistake = new IllegalStateException("this route is not guarded")
+    assertEquals(problem(mistake).status, 500)
+    assertEquals(problem(mistake, dev = true).detail, "this route is not guarded")
+    assertNoDiff(problem(mistake).detail, "The server encountered an unexpected error.")
   }
 
   test("a stack trace is logged for 500 and above, and never for a client mistake") {

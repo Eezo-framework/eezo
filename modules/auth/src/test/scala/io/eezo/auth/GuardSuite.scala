@@ -100,8 +100,25 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test("asking who is there when nobody is, is an error rather than a redirect") {
-    intercept[Unauthorized](guard.current(browser(Method.GET, "/posts")))
-    intercept[Unauthorized](guard.current(signedIn(Id.gen[User]())))
+    intercept[IllegalStateException](guard.current(browser(Method.GET, "/posts")))
+    intercept[IllegalStateException](guard.current(signedIn(Id.gen[User]())))
+  }
+
+  test("a handler on an unguarded route that asks who is there fails as a programming mistake") {
+    // Not an HTTP failure, which is why it leaves the route table as a plain
+    // `IllegalStateException` rather than as anything `modules/http` maps to a status: the
+    // boundary answers 500 for it, and the half of that this module can see is the type and the
+    // message. `BoundarySuite` pins the other half, the 500 itself.
+    val open = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      request => Response.Ok(Html.text(guard.current(request).email))
+    )
+    val thrown =
+      intercept[IllegalStateException](
+        RouteTable(Seq(open)).dispatch(browser(Method.GET, "/posts"))
+      )
+    assert(thrown.getMessage.contains("this route is not guarded"), thrown.getMessage)
   }
 
   // ------------------------------------------------------------ refusing
@@ -129,7 +146,7 @@ class GuardSuite extends munit.FunSuite {
     val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
     guard.required[Any].through(ws) match {
       case Route.Ws(_, endpoint, _) =>
-        intercept[Unauthorized](endpoint(browser(Method.GET, "/live")))
+        intercept[Forbidden](endpoint(browser(Method.GET, "/live")))
       case other => fail(s"a Ws route came back as $other")
     }
   }
@@ -207,7 +224,7 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test("the current user of a request whose sign in has expired is an error, not a stale row") {
-    intercept[Unauthorized](guard.current(signedIn(ann.id, since = stale)))
+    intercept[IllegalStateException](guard.current(signedIn(ann.id, since = stale)))
   }
 
   test("a session naming nobody is anonymous whatever its stamp says, and never an error") {
@@ -219,7 +236,7 @@ class GuardSuite extends munit.FunSuite {
       val refused = t.dispatch(orphan)
       assertEquals(refused.status, 303, since.toString)
       assertEquals(refused.header("Location"), Some("/login"), since.toString)
-      intercept[Unauthorized](guard.current(orphan))
+      intercept[IllegalStateException](guard.current(orphan))
     }
   }
 
@@ -248,7 +265,7 @@ class GuardSuite extends munit.FunSuite {
       val seen = RouteTable(Seq(frontPage(g))).dispatch(visiting)
       assertEquals(htmlOf(seen), "the blog", s"an anonymous browser was offered a way out, $when")
       assertEquals(seen.session, Some(anonymous), s"an open page rewrote the session, $when")
-      intercept[Unauthorized](g.current(visiting))
+      intercept[IllegalStateException](g.current(visiting))
 
       val refused = posts(g).dispatch(going)
       assertEquals(refused.status, 303, when)
@@ -273,7 +290,7 @@ class GuardSuite extends munit.FunSuite {
         val refused = t.dispatch(request)
         assertEquals(refused.status, 303, corrupt)
         assertEquals(refused.header("Location"), Some("/login"), corrupt)
-        intercept[Unauthorized](guard.current(request))
+        intercept[IllegalStateException](guard.current(request))
     }
   }
 
@@ -315,7 +332,7 @@ class GuardSuite extends munit.FunSuite {
     val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
     guard.required[Any].through(ws) match {
       case Route.Ws(_, endpoint, _) =>
-        intercept[Unauthorized](endpoint(signedIn(ann.id, since = stale, path = "/live")))
+        intercept[Forbidden](endpoint(signedIn(ann.id, since = stale, path = "/live")))
       case other => fail(s"a Ws route came back as $other")
     }
   }
@@ -326,7 +343,7 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(response.header("Location"), Some("/login"))
     assert(!ran, "an unstamped session reached the handler behind the guard")
 
-    intercept[Unauthorized](guard.current(stampless(ann.id)))
+    intercept[IllegalStateException](guard.current(stampless(ann.id)))
     assertEquals(
       htmlOf(RouteTable(Seq(frontPage(guard))).dispatch(stampless(ann.id, path = "/"))),
       "the blog",

@@ -48,7 +48,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   private def notesOwnedBy(who: Id[Person]): Owned[Note, Person] =
     Owned[Note, Person](
       noteOwner,
-      _ => who,
+      _ => Some(who),
       Action.values.toSet -- Set(Action.Index, Action.Show),
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
@@ -56,7 +56,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   private def basketsOwnedBy(who: Id[Person]): Owned[Basket, Person] =
     Owned[Basket, Person](
       basketOwner,
-      _ => who,
+      _ => Some(who),
       Action.values.toSet,
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
@@ -68,7 +68,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   private def vaultsOwnedByOnlyDestroy(who: Id[Person]): Owned[Vault, Person] =
     Owned[Vault, Person](
       vaultOwner,
-      _ => who,
+      _ => Some(who),
       Set(Action.Destroy),
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
@@ -76,7 +76,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   private def vaultsOwnedBy(who: Id[Person]): Owned[Vault, Person] =
     Owned[Vault, Person](
       vaultOwner,
-      _ => who,
+      _ => Some(who),
       Action.values.toSet -- Set(Action.Index, Action.Show),
       Guarded(Action.values.toSet, identity, Seq.empty)
     )
@@ -92,9 +92,8 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   private def status(table: RouteTable, request: Request): Int =
     try answer(table, request).status
     catch {
-      case NotFound(_)     => 404
-      case Forbidden(_)    => 403
-      case Unauthorized(_) => 401
+      case NotFound(_)  => 404
+      case Forbidden(_) => 403
     }
 
   private def note(key: Id[Note], owner: Id[Person], title: String): Note =
@@ -104,7 +103,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     val login = Route.derived(Method.GET, "/login", _ => Response.Ok(io.eezo.core.html.Html.empty))
     val declared = Owned[Note, Person](
       noteOwner,
-      _ => ada,
+      _ => Some(ada),
       Set(Action.Create),
       Guarded(Action.values.toSet, identity, Seq(login))
     )
@@ -119,13 +118,16 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
 
   test("an Owned is not the bare Guarded it refines, nor another Owned covering more") {
     val bare     = Guarded[Note](Action.values.toSet, identity, Seq.empty)
-    val declared = Owned[Note, Person](noteOwner, _ => ada, Set(Action.Create), bare)
+    val declared = Owned[Note, Person](noteOwner, _ => Some(ada), Set(Action.Create), bare)
 
     // The three inherited fields are the same three, so a declaration compared by them alone
     // would lose the half that makes it owned: the refinement has to be a different value from
     // what it refines, and from a declaration that covers other actions.
     assertNotEquals(declared: Guarded[Note], bare)
-    assertNotEquals(declared, Owned[Note, Person](noteOwner, _ => ada, Action.values.toSet, bare))
+    assertNotEquals(
+      declared,
+      Owned[Note, Person](noteOwner, _ => Some(ada), Action.values.toSet, bare)
+    )
   }
 
   test("the new and edit pages emit no input named for the owner field") {
@@ -330,13 +332,12 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
 
     // The shape `only` allows: Show is neither guarded nor covered, so an anonymous browser
     // reaches the handler directly, but Edit is both, and `currentUser` here stands in for the
-    // guard's own reading of it, which throws Unauthorized rather than answering when nobody is
-    // signed in. Create is guarded too, alongside Edit, Update and Destroy, since Note mounts it
-    // and an owned create always needs a signed in user; that is a different question from the one
-    // this test is about.
+    // guard's own reading of it, which answers nobody when nobody is signed in. Create is guarded
+    // too, alongside Edit, Update and Destroy, since Note mounts it and an owned create always
+    // needs a signed in user; that is a different question from the one this test is about.
     val declared = Owned[Note, Person](
       noteOwner,
-      _ => throw Unauthorized("nobody is signed in for this request"),
+      _ => None,
       Set(Action.Edit, Action.Update, Action.Destroy),
       Guarded(Set(Action.Create, Action.Edit, Action.Update, Action.Destroy), identity, Seq.empty)
     )
@@ -355,12 +356,55 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     assert(thrown.getMessage.contains("Note"), thrown.getMessage)
   }
 
-  test("a declaration covering a route its guard leaves open refuses to mount") {
-    // Owned implies guarded: a covered handler reads who is signed in, so a covered route nobody
-    // has to be signed in for answers 401 for every request rather than serving anyone.
+  test("a covered route reached with nobody signed in refuses rather than scoping to nobody") {
+    // A declaration that names every action as guarded while its through is identity, which the
+    // boot check compares sets against and therefore accepts; nothing about a live guard stops an
+    // anonymous request from reaching the handler here, so the two throws below are what a real
+    // guard's own refusal would otherwise make unreachable. Both have to fail loudly: a store
+    // narrowed to nobody would read rows that are not the requester's, and a create filling the
+    // owner field with a guess would write a row nobody can be refused over.
+    val store    = notes()
     val declared = Owned[Note, Person](
       noteOwner,
-      _ => ada,
+      _ => None,
+      Action.values.toSet,
+      Guarded(Action.values.toSet, identity, Seq.empty)
+    )
+    val table = RouteTable(Resource.routesOf[Note](store, declared))
+
+    intercept[IllegalStateException](answer(table, request(Method.GET, "/notes")))
+    intercept[IllegalStateException](
+      answer(table, request(Method.POST, "/notes", "title" -> "Mine", "body" -> "text"))
+    )
+    assertEquals(store.all().size, 0, "a create with nobody signed in wrote a row anyway")
+  }
+
+  test("a create's owner throw fires even when covers does not name Create") {
+    // Action.values.toSet in the test above covers Create too, so storeFor also calls signedIn
+    // and would throw on its own; that test alone would still pass with the throw inside body
+    // removed. Only Destroy is covered here, so storeFor never calls signedIn for a create, and
+    // body's own fallback to signedIn is the one and only throw this test can observe.
+    val store    = InMemoryStore.scoped(vaultOwner)
+    val declared = Owned[Vault, Person](
+      vaultOwner,
+      _ => None,
+      Set(Action.Destroy),
+      Guarded(Action.values.toSet, identity, Seq.empty)
+    )
+    val table = RouteTable(Resource[Vault].routes(store, declared))
+
+    intercept[IllegalStateException](
+      answer(table, request(Method.POST, "/vaults", "secret" -> "Mine"))
+    )
+    assertEquals(store.all().size, 0, "a create with nobody signed in wrote a row anyway")
+  }
+
+  test("a declaration covering a route its guard leaves open refuses to mount") {
+    // Owned implies guarded: a covered handler reads who is signed in, so a covered route nobody
+    // has to be signed in for fails on every request rather than serving anyone.
+    val declared = Owned[Note, Person](
+      noteOwner,
+      _ => Some(ada),
       Action.values.toSet,
       Guarded(Set(Action.Index), identity, Seq.empty)
     )
@@ -386,7 +430,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     // left to trip the assertion below.
     val declared = Owned[Vault, Person](
       vaultOwner,
-      _ => ada,
+      _ => Some(ada),
       Set(Action.Show, Action.Destroy),
       Guarded(Set(Action.Destroy, Action.Create), identity, Seq.empty)
     )
@@ -402,12 +446,12 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
   ) {
     // Neither covers nor the guard names Create here, and Vault mounts it since only Show is
     // subtracted. An owned create always fills the owner from currentUser, covered or not, so this
-    // shape would answer Unauthorized for every anonymous submission rather than the public create
-    // the declaration otherwise looks like, and the check that Owned implies guarded has to catch
-    // it the same way it catches an uncovered Destroy or Update.
+    // shape would fail on every anonymous submission rather than being the public create the
+    // declaration otherwise looks like, and the check that Owned implies guarded has to catch it
+    // the same way it catches an uncovered Destroy or Update.
     val declared = Owned[Vault, Person](
       vaultOwner,
-      _ => ada,
+      _ => Some(ada),
       Set(Action.Destroy),
       Guarded(Set(Action.Destroy), identity, Seq.empty)
     )
@@ -429,7 +473,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     // about.
     val declared = Owned[Vault, Person](
       vaultOwner,
-      _ => throw Unauthorized("nobody is signed in for this request"),
+      _ => None,
       Set(Action.Destroy),
       Guarded(Set(Action.Destroy, Action.Create), identity, Seq.empty)
     )
@@ -443,7 +487,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     val bogus    = OwnerOf[Note, Id[Person]]("auth0r", _.author)
     val declared = Owned[Note, Person](
       bogus,
-      _ => ada,
+      _ => Some(ada),
       Set(Action.Create),
       Guarded(Action.values.toSet, identity, Seq.empty)
     )

@@ -148,10 +148,13 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   test("an endpoint that throws answers the upgrade through the boundary, as a handler would") {
+    // The status a guarded socket handshake really earns, and the reason it is this one: a client
+    // has to be able to read the refusal, and Jetty's own client hides a 401 that carries no
+    // challenge to offer as a protocol violation.
     val refusing =
-      Route.Ws(PathPattern.parse("/live"), _ => throw Unauthorized("nobody is signed in"))
+      Route.Ws(PathPattern.parse("/live"), _ => throw Forbidden("nobody is signed in"))
     serving(RouteTable(Seq(refusing))) { (client, port) =>
-      refused(client, port, "/live", status = 401)
+      refused(client, port, "/live", status = 403)
     }
   }
 

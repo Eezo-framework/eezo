@@ -76,21 +76,22 @@ class OwningSuite extends munit.FunSuite {
 
   test("the current user of a request is who the session says is signed in") {
     val declared = guard.required[Post].owning(_.author).all
-    assertEquals(declared.currentUser(signedIn(ann.id)), ann.id)
+    assertEquals(declared.currentUser(signedIn(ann.id)), Some(ann.id))
   }
 
-  test("asking for the current user of a request nobody signed is an error rather than a guess") {
+  test("asking for the current user of a request nobody signed answers nobody") {
     val declared = guard.required[Post].owning(_.author).all
-    intercept[Unauthorized](declared.currentUser(signedIn(ann.id).copy(session = Session.empty)))
+    assertEquals(declared.currentUser(signedIn(ann.id).copy(session = Session.empty)), None)
   }
 
-  test("a sign in past its lifetime scopes nothing: the key is an error, not a stale owner") {
+  test("a sign in past its lifetime scopes nothing: the key is nobody, not a stale owner") {
     val declared = guard.required[Post].owning(_.author).all
-    intercept[Unauthorized](declared.currentUser(signedIn(ann.id, since = stale)))
+    assertEquals(declared.currentUser(signedIn(ann.id, since = stale)), None)
     // The shape every session signed before the lifetime shipped has. Reading it as an owner would
     // hand a copied session the rows of whoever it names, which is the whole reason for the stamp.
-    intercept[Unauthorized](
-      declared.currentUser(signedIn(ann.id).copy(session = stamplessSession(ann.id)))
+    assertEquals(
+      declared.currentUser(signedIn(ann.id).copy(session = stamplessSession(ann.id))),
+      None
     )
   }
 

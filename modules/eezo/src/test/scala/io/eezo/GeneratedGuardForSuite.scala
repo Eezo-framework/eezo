@@ -218,7 +218,7 @@ object OwnedRow {
   given io.eezo.http.Owned[OwnedRow, Owner] =
     io.eezo.http.Owned(
       io.eezo.core.OwnerOf("author", _.author),
-      _ => ada,
+      _ => Some(ada),
       io.eezo.http.Action.values.toSet,
       io.eezo.http.Guarded(io.eezo.http.Action.values.toSet, identity, Seq(DeclaredPage.login))
     )
@@ -240,7 +240,7 @@ object OwnedTableRow {
   given io.eezo.http.Owned[OwnedTableRow, Owner] =
     io.eezo.http.Owned(
       io.eezo.core.OwnerOf("author", _.author),
-      _ => OwnedRow.ada,
+      _ => Some(OwnedRow.ada),
       io.eezo.http.Action.values.toSet,
       io.eezo.http.Guarded(io.eezo.http.Action.values.toSet, identity, Seq(DeclaredPage.login))
     )

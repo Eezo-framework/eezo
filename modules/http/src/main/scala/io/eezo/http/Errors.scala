@@ -26,24 +26,17 @@ final case class MethodNotAllowed(allowed: Seq[Method])
     extends EezoException(s"allowed: ${allowed.mkString(", ")}")
 
 /** A request the application understood and refuses: a form whose CSRF token is missing or stale
-  * (#170), or later a write to a row the current user does not own. #166's constraint: no status
-  * here, and a redirect to login is a `Response`, never an error.
+  * (#170), a write to a row the current user does not own, or a guarded WebSocket handshake
+  * carrying no live sign in. #166's constraint: no status here, and a redirect to login is a
+  * `Response`, never an error.
+  *
+  * The one refusal there is, rather than a 403 beside a 401, because eezo signs in through a form
+  * and a session cookie and has no honest challenge to put on a 401: the scheme token a 401 needs
+  * would be one eezo invented, and a client reading the status alone learns as little from that as
+  * from this. What kind of refusal it was is the detail's job. See
+  * `docs/adr/0001-http-errors-live-in-http-and-carry-no-status.md`.
   */
 final case class Forbidden(detail: String) extends EezoException(detail)
-
-/** Nobody is signed in, on a route that needs somebody.
-  *
-  * Distinct from [[Forbidden]], which is a known user refused, and the distinction is load bearing
-  * rather than pedantic: `Forbidden` is already what a stale CSRF token earns and what ownership
-  * will earn, so reusing it here would make "your form is stale", "this row is not yours" and "who
-  * are you?" one value that no handler above could tell apart.
-  *
-  * This is the answer for a caller a redirect cannot help: `Guard.current` asked outside a guarded
-  * route, and a WebSocket upgrade, which has no page to send a browser to. A guarded HTML route
-  * answers an anonymous browser with a 303 to the login page instead, because that is a `Response`
-  * and never a failure.
-  */
-final case class Unauthorized(detail: String) extends EezoException(detail)
 
 /** The request body exceeded `HttpApp.maxBodySize`. */
 final case class PayloadTooLarge(limit: Long)
