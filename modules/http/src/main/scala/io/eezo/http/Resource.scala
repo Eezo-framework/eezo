@@ -270,8 +270,8 @@ object Resource {
         * rather than one that works oddly. A covered handler reads who is signed in, and the only
         * thing that puts somebody there is the guard having refused everyone else first, so a
         * covered route the guard leaves open fails for every request that reaches it, with the
-        * mistake [[signedIn]] throws: not a page anyone can use, and a 500 rather than a defect a
-        * browser could report as its own.
+        * mistake [[requireCurrentUser]] throws: not a page anyone can use, and a 500 rather than a
+        * defect a browser could report as its own.
         *
         * `Create` belongs beside `covers` here even when `covers` itself does not name it. [[body]]
         * fills the owner field from `currentUser` on every create, since there is no earlier row
@@ -323,7 +323,7 @@ object Resource {
         * narrowed to nobody reads rows that are not the requester's, and a row written with no
         * owner belongs to nobody who can be refused.
         */
-      def signedIn(o: Owned[A, Any], request: Request): Id[Any] =
+      def requireCurrentUser(o: Owned[A, Any], request: Request): Id[Any] =
         o.currentUser(request)
           .getOrElse(
             throw new IllegalStateException(
@@ -337,7 +337,9 @@ object Resource {
         * table, which is what makes two users read each other's posts.
         */
       def storeFor(request: Request, action: Action): Store[A] =
-        covering(action).zip(scope).fold(store) { case (o, s) => s.by(signedIn(o, request)) }
+        covering(action).zip(scope).fold(store) { case (o, s) =>
+          s.by(requireCurrentUser(o, request))
+        }
 
       /** What a covered action answers when the narrowed store has no such row.
         *
@@ -395,7 +397,7 @@ object Resource {
         */
       def body(request: Request, existing: Option[A]): Map[String, Seq[String]] =
         owned.fold(request.form) { o =>
-          val who = existing.map(o.ownerOf.get).getOrElse(signedIn(o, request))
+          val who = existing.map(o.ownerOf.get).getOrElse(requireCurrentUser(o, request))
           request.form.updated(o.ownerOf.name, Seq(who.show))
         }
 

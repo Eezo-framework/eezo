@@ -99,12 +99,24 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(guard.current(signedIn(ann.id)).email, "ann@example.com")
   }
 
-  test("asking who is there when nobody is, is an error rather than a redirect") {
-    // Not an HTTP failure, which is why it is a plain `IllegalStateException` rather than anything
-    // `modules/http` maps to a status: the boundary answers 500 for whatever is outside its set.
-    val thrown = intercept[IllegalStateException](guard.current(browser(Method.GET, "/posts")))
+  test("asking who is there on an unguarded route is a programming mistake, not a redirect") {
+    // Driven through a route table rather than by calling the guard directly, because the mistake
+    // is what a request to a route nobody guarded does: the handler runs, and the failure leaves
+    // the table instead of becoming a refusal. Not an HTTP failure, which is why it comes out as a
+    // plain `IllegalStateException` rather than as anything `modules/http` maps to a status. That
+    // the boundary then answers 500, detailed in dev and redacted in production, is pinned by
+    // `io.eezo.http.BoundarySuite`, in "an exception outside the set wraps into a 500" and "a 500
+    // detail is redacted in production and the cause's message in development", which is where it
+    // has to be, since `Boundary` is private to that package.
+    val open = Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      request => Response.Ok(Html.text(guard.current(request).email))
+    )
+    val table  = RouteTable(Seq(open))
+    val thrown = intercept[IllegalStateException](table.dispatch(browser(Method.GET, "/posts")))
     assert(thrown.getMessage.contains("this route is not guarded"), thrown.getMessage)
-    intercept[IllegalStateException](guard.current(signedIn(Id.gen[User]())))
+    intercept[IllegalStateException](table.dispatch(signedIn(Id.gen[User]())))
   }
 
   // ------------------------------------------------------------ refusing

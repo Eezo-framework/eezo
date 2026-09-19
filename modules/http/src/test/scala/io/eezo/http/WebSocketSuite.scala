@@ -3,11 +3,15 @@ package io.eezo.http
 import java.net.URI
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicReference
 
+import org.eclipse.jetty.client.Request as HandshakeRequest
+import org.eclipse.jetty.client.Response as HandshakeResponse
 import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.websocket.api.Callback
 import org.eclipse.jetty.websocket.api.Session
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest
+import org.eclipse.jetty.websocket.client.JettyUpgradeListener
 import org.eclipse.jetty.websocket.client.WebSocketClient
 
 /** The WebSocket half of the single Jetty mapping: eezo matches the path itself, and an upgrade
@@ -46,10 +50,32 @@ class WebSocketSuite extends munit.FunSuite {
   private def connect(client: WebSocketClient, port: Int, path: String): Session =
     client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
 
-  /** The upgrade at `path` is answered with `status` rather than left hanging. */
-  private def refused(client: WebSocketClient, port: Int, path: String, status: Int = 404): Unit = {
+  /** The upgrade at `path` is answered with a 404 rather than left hanging. */
+  private def refused(client: WebSocketClient, port: Int, path: String): Unit = {
     val failure = intercept[java.util.concurrent.ExecutionException](connect(client, port, path))
-    assert(clue(failure.getCause.toString).contains(status.toString))
+    assert(clue(failure.getCause.toString).contains("404"))
+  }
+
+  /** The status and the `WWW-Authenticate` the refused upgrade at `path` was answered with.
+    *
+    * Read off the handshake itself through an upgrade listener, which Jetty calls with the response
+    * whatever its status, because the `UpgradeException` the client throws carries the status code
+    * but none of the headers.
+    */
+  private def refusal(client: WebSocketClient, port: Int, path: String): (Int, Option[String]) = {
+    val answered = new AtomicReference[(Int, Option[String])](null)
+    val reading  = new JettyUpgradeListener {
+      override def onHandshakeResponse(
+          request: HandshakeRequest,
+          response: HandshakeResponse
+      ): Unit =
+        answered.set((response.getStatus, Option(response.getHeaders.get("WWW-Authenticate"))))
+    }
+    val failure = intercept[java.util.concurrent.ExecutionException](
+      client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path"), reading).get()
+    )
+    Option(answered.get)
+      .getOrElse(fail(s"the upgrade at $path never reached the listener, failing with $failure"))
   }
 
   test("a WebSocket route receives the open event and every message, with its path parameters") {
@@ -147,14 +173,22 @@ class WebSocketSuite extends munit.FunSuite {
     }
   }
 
-  test("an endpoint that throws answers the upgrade through the boundary, as a handler would") {
+  test("an endpoint that throws answers the upgrade 403, with no challenge to answer") {
     // The status a guarded socket handshake really earns, and the reason it is this one: a client
     // has to be able to read the refusal, and Jetty's own client hides a 401 that carries no
-    // challenge to offer as a protocol violation.
+    // challenge to offer as a protocol violation. Absent `WWW-Authenticate` is the other half of
+    // that: a 403 asks for no credentials, so there is nothing for a client to retry with, and a
+    // header here would be a promise this handshake cannot keep.
+    //
+    // An expired sign in arrives at this module as the same thrown `Forbidden`, since nothing in
+    // `modules/http` knows a guard exists, so no test here can tell the two apart. That the guard
+    // refuses an expired socket rather than redirecting it is pinned in `GuardSuite`.
     val refusing =
       Route.Ws(PathPattern.parse("/live"), _ => throw Forbidden("nobody is signed in"))
     serving(RouteTable(Seq(refusing))) { (client, port) =>
-      refused(client, port, "/live", status = 403)
+      val (status, challenge) = refusal(client, port, "/live")
+      assertEquals(status, 403)
+      assertEquals(challenge, None)
     }
   }
 

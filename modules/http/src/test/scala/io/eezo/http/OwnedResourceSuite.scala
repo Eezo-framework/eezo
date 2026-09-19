@@ -386,6 +386,34 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     assertEquals(store.all().size, 0, "a create with nobody signed in wrote a row anyway")
   }
 
+  test("every other covered verb with nobody signed in refuses the same way the index does") {
+    // The same declaration the index refuses under, with a row already in the store so the four
+    // requests below name a real key. Show and edit read through the narrowed store, update and
+    // destroy write through it, and each one asks who is signed in before it touches a row;
+    // nobody answers, so none of them may read, change or delete the row that is there.
+    val store = notes()
+    val key   = Id.gen[Note]()
+    store.insert(key, note(key, ada, "Mine"))
+    val declared = Owned[Note, Person](
+      noteOwner,
+      _ => None,
+      Action.values.toSet,
+      Guarded(Action.values.toSet, identity, Seq.empty)
+    )
+    val table = RouteTable(Resource[Note].routes(store, declared))
+
+    Seq(
+      request(Method.GET, s"/notes/${key.show}"),
+      request(Method.GET, s"/notes/${key.show}/edit"),
+      request(Method.PUT, s"/notes/${key.show}", "title" -> "Taken", "body" -> "text"),
+      request(Method.DELETE, s"/notes/${key.show}")
+    ).foreach { attempt =>
+      val tried = s"${attempt.method} ${attempt.path}"
+      intercept[IllegalStateException](answer(table, attempt))
+      assertEquals(store.find(key).map(_.title), Some("Mine"), tried)
+    }
+  }
+
   test("a declaration covering a route its guard leaves open refuses to mount") {
     // Owned implies guarded: a covered handler reads who is signed in, so a covered route nobody
     // has to be signed in for fails on every request rather than serving anyone.
