@@ -173,7 +173,7 @@ class WebSocketSuite extends munit.FunSuite {
     }
   }
 
-  test("an endpoint that throws answers the upgrade 403, with no challenge to answer") {
+  test("a throw answers the upgrade through the boundary, Forbidden as a 403 with no challenge") {
     // The status a guarded socket handshake really earns, and the reason it is this one: a client
     // has to be able to read the refusal, and Jetty's own client hides a 401 that carries no
     // challenge to offer as a protocol violation. Absent `WWW-Authenticate` is the other half of

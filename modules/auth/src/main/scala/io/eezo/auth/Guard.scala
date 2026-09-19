@@ -145,7 +145,7 @@ final class Guard[U] private (
     * requests it has not vouched for: a public show page reads it to decide whether to offer the
     * owner's controls. Whether nobody is an ordinary visitor or a route table that forgot to guard
     * a covered route is a question only the call site can answer, so the call site is where the
-    * refusal lives.
+    * mistake surfaces.
     */
   private val currentUserKey: Request => Option[Id[U]] = request => key(request.session)
 

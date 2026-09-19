@@ -356,7 +356,7 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     assert(thrown.getMessage.contains("Note"), thrown.getMessage)
   }
 
-  test("a covered route reached with nobody signed in refuses rather than scoping to nobody") {
+  test("a covered route reached with nobody signed in fails rather than scoping to nobody") {
     // A declaration that names every action as guarded while its through is identity, which the
     // boot check compares sets against and therefore accepts; nothing about a live guard stops an
     // anonymous request from reaching the handler here, so the throw below is what a real guard's
@@ -370,24 +370,26 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     )
     val table = RouteTable(Resource.routesOf[Note](notes(), declared))
 
-    intercept[IllegalStateException](answer(table, request(Method.GET, "/notes")))
+    val thrown = intercept[IllegalStateException](answer(table, request(Method.GET, "/notes")))
+    assert(thrown.getMessage.contains("nobody for an owned route to scope to"), thrown.getMessage)
   }
 
-  test("a create with nobody signed in refuses rather than writing a row nobody owns") {
+  test("a create with nobody signed in fails rather than writing a row nobody owns") {
     // Only Destroy is covered here, so the store a create writes through is never narrowed, and
     // filling the owner field is the one and only place this request can ask who is signed in. A
     // create filling that field with a guess would write a row nobody can be refused over.
     val store = InMemoryStore.scoped(vaultOwner)
     val table = RouteTable(Resource[Vault].routes(store, vaultsOwnedByOnlyDestroy(None)))
 
-    intercept[IllegalStateException](
+    val thrown = intercept[IllegalStateException](
       answer(table, request(Method.POST, "/vaults", "secret" -> "Mine"))
     )
+    assert(thrown.getMessage.contains("nobody for an owned route to scope to"), thrown.getMessage)
     assertEquals(store.all().size, 0, "a create with nobody signed in wrote a row anyway")
   }
 
-  test("every other covered verb with nobody signed in refuses the same way the index does") {
-    // The same declaration the index refuses under, with a row already in the store so the four
+  test("every other covered action with nobody signed in fails the same way the index does") {
+    // The same declaration the index fails under, with a row already in the store so the four
     // requests below name a real key. Show and edit read through the narrowed store, update and
     // destroy write through it, and each one asks who is signed in before it touches a row;
     // nobody answers, so none of them may read, change or delete the row that is there.
@@ -408,8 +410,12 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
       request(Method.PUT, s"/notes/${key.show}", "title" -> "Taken", "body" -> "text"),
       request(Method.DELETE, s"/notes/${key.show}")
     ).foreach { attempt =>
-      val tried = s"${attempt.method} ${attempt.path}"
-      intercept[IllegalStateException](answer(table, attempt))
+      val tried  = s"${attempt.method} ${attempt.path}"
+      val thrown = intercept[IllegalStateException](answer(table, attempt))
+      assert(
+        thrown.getMessage.contains("nobody for an owned route to scope to"),
+        s"$tried: ${thrown.getMessage}"
+      )
       assertEquals(store.find(key).map(_.title), Some("Mine"), tried)
     }
   }
