@@ -13,16 +13,16 @@ import io.eezo.http.{Action, Guarded, Owned, Request, Route}
   * to the user, so ownership could not be chained onto one.
   *
   * @param currentUser
-  *   who is signed in, as the key that a row's owner field holds. Read out of the session rather
-  *   than through the guard's `find`, because a covered route is a guarded route and the wrapper
-  *   already looked the user up before the handler ran; a second lookup per request would buy
-  *   nothing.
+  *   who is signed in, as the key that a row's owner field holds, and nobody when the request
+  *   carries no live sign in. Read out of the session rather than through the guard's `find`,
+  *   because a covered route is a guarded route and the wrapper already looked the user up before
+  *   the handler ran; a second lookup per request would buy nothing.
   */
 final class GuardedBy[A, U] private[auth] (
     actions: Set[Action],
     through: Route => Route,
     carries: Seq[Route],
-    val currentUser: Request => Id[U]
+    val currentUser: Request => Option[Id[U]]
 ) extends Guarded[A](actions, through, carries) {
 
   /** Which field of the model records its owner, written as a selector so the compiler checks it.
@@ -63,7 +63,7 @@ final class GuardedBy[A, U] private[auth] (
   */
 final class Owning[A, U] private[auth] (
     ownerOf: OwnerOf[A, Id[U]],
-    currentUser: Request => Id[U],
+    currentUser: Request => Option[Id[U]],
     guarded: Guarded[A]
 ) {
 

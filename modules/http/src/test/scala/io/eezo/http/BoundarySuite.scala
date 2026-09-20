@@ -17,7 +17,6 @@ class BoundarySuite extends munit.FunSuite {
 
   test("each member of the sealed set maps to its status") {
     assertEquals(problem(BadRequest("bad")).status, 400)
-    assertEquals(problem(Unauthorized("no one is signed in")).status, 401)
     assertEquals(problem(Forbidden("nope")).status, 403)
     assertEquals(problem(NotFound("/x")).status, 404)
     assertEquals(problem(MethodNotAllowed(Seq(Method.GET))).status, 405)
@@ -83,17 +82,6 @@ class BoundarySuite extends munit.FunSuite {
       )
     assertEquals(response.status, 405)
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))
-  }
-
-  test("a 401 response carries a WWW-Authenticate challenge, which RFC 9110 requires") {
-    val response =
-      Boundary.errorResponse(
-        Unauthorized("no one is signed in"),
-        "/widgets/7",
-        Config(RouteTable.empty)
-      )
-    assertEquals(response.status, 401)
-    assertEquals(response.headers.toMap.get("WWW-Authenticate"), Some("Session"))
   }
 
   test("a stack trace is logged for 500 and above, and never for a client mistake") {

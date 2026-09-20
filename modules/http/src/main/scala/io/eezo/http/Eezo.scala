@@ -260,9 +260,11 @@ object Eezo {
     * Jetty documents that a creator returning `null` "is responsible for completing the Callback
     * and sending a response", so an upgrade request matching no `Route.Ws` is answered here with a
     * 404 rather than falling through to the HTTP handler. An endpoint that throws while being
-    * built, a guard refusing with `Unauthorized` for one, is answered through the boundary the same
+    * built, a guard refusing with `Forbidden` for one, is answered through the boundary the same
     * way, since this creator runs outside `EezoHandler` and Jetty's own 500 page would name the
-    * exception.
+    * exception. That is also what lets the refusal reach the client at all: it is an ordinary
+    * status off the boundary, which a socket client can read, rather than a handshake failure of
+    * its own that Jetty would hide.
     *
     * The endpoint's request carries the session the handshake's cookie did, read the way the HTTP
     * handler reads it, but with its flash stripped: see [[readHandshake]] for why. Nothing is

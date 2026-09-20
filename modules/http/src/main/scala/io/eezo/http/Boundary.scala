@@ -34,15 +34,7 @@ private[http] object Boundary {
   def resolve(failure: Throwable, path: String, config: Config): Resolution = failure match {
     case e: EezoException =>
       e match {
-        case BadRequest(detail) => Resolution(Problem(400, detail, path))
-        // RFC 9110 section 15.5.2 requires at least one `WWW-Authenticate` challenge on every 401,
-        // not only for Basic or Digest. "Session" is a scheme token no browser implements, so it
-        // satisfies that requirement without a browser opening its own credential dialog over the
-        // page, while a programmatic client, such as a WebSocket upgrade, still gets a 401 it can
-        // read: Jetty's client treats a 401 carrying no challenge as a protocol violation and hides
-        // the status from the caller entirely.
-        case Unauthorized(detail) =>
-          Resolution(Problem(401, detail, path), Seq("WWW-Authenticate" -> "Session"))
+        case BadRequest(detail)        => Resolution(Problem(400, detail, path))
         case Forbidden(detail)         => Resolution(Problem(403, detail, path))
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>

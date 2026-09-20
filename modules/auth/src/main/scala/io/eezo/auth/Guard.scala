@@ -59,12 +59,18 @@ final class Guard[U] private (
     * not a thing to branch on. A public page that wants to greet a user if there is one is a
     * separate question, and it stays unanswered until a page actually asks it.
     *
-    * @throws Unauthorized
+    * A `java.lang.IllegalStateException` and not one of eezo's HTTP failures, because the mistake
+    * is in the route table rather than in the request: no request could have made this handler
+    * behave, so there is no status that describes the caller's part in it. It reaches the boundary
+    * as anything else outside the sealed set does and becomes a 500, whose detail a developer reads
+    * in `dev` and nobody reads in production.
+    *
+    * @throws java.lang.IllegalStateException
     *   when the session names nobody, or names a row that is no longer there.
     */
   def current(request: Request): U =
     who(request.session).getOrElse(
-      throw Unauthorized(
+      throw new IllegalStateException(
         "no user is signed in for this request; Guard.current is for a handler behind a guarded " +
           "route, and this route is not guarded"
       )
@@ -133,25 +139,26 @@ final class Guard[U] private (
     *
     * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's column
     * holds is the key, and reading the row back to take its key off again would be a lookup per
-    * request for a value the session already spells. It throws for the same reason [[current]]
-    * does, and the message says the same thing: asking for the current user is something a handler
-    * the guard let through does, so nobody being there is a route table that forgot to guard a
-    * covered route.
+    * request for a value the session already spells.
+    *
+    * It answers rather than throwing, unlike [[current]], because a `Resource` asks this about
+    * requests it has not vouched for: a public show page reads it to decide whether to offer the
+    * owner's controls. Whether nobody is an ordinary visitor or a route table that forgot to guard
+    * a covered route is a question only the call site can answer, so the call site is where the
+    * mistake surfaces.
     */
-  private val currentUserKey: Request => Id[U] = request =>
-    key(request.session)
-      .getOrElse(
-        throw Unauthorized(
-          "no user is signed in for this request, so there is nobody for an owned route to scope " +
-            "to; a covered action has to be a guarded one"
-        )
-      )
+  private val currentUserKey: Request => Option[Id[U]] = request => key(request.session)
 
   /** The wrapper every guarded route goes through.
     *
     * Two cases, because refusing an upgrade is not refusing a page. A browser asking for HTML is
     * sent to the login page, which is a `Response` and never a failure; a WebSocket has nowhere to
-    * send anyone, so it is [[Unauthorized]] and the boundary answers 401.
+    * send anyone, so it is [[io.eezo.http.Forbidden]] and the boundary answers 403.
+    *
+    * 403 rather than a status that says "sign in first", because a cookie session has no challenge
+    * to offer a client and a 401 carrying none is a status Jetty's WebSocket client hides from the
+    * caller as a protocol violation. A refusal a socket client cannot read is a refusal that
+    * teaches nobody anything, and the problem detail says which refusal this is.
     *
     * It wraps the handler rather than the dispatch, which is the whole of `RouteTable.dispatch`'s
     * ordering guarantee: `Csrf.protect` sits outside this, so a forged `POST` to a guarded route is
@@ -167,7 +174,7 @@ final class Guard[U] private (
         request =>
           if (signedIn(request)) route.endpoint(request)
           else
-            throw Unauthorized(
+            throw Forbidden(
               "this WebSocket route is guarded and no user is signed in; a socket has no page to " +
                 "be redirected to, so it is refused instead"
             )

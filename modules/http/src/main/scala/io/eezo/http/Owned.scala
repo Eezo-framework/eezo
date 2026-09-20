@@ -35,8 +35,15 @@ final class Owned[A, U](
       * request, and never the owner of any particular row. Supplied by the guard that made this
       * declaration, and read on every covered request rather than once, because a process serves
       * many browsers.
+      *
+      * `None` when nobody is signed in, because this is also asked about requests nothing vouched
+      * for: a public show page reads it to decide whether to offer the owner's controls, and an
+      * anonymous browser there is an ordinary visitor rather than a failure. Where a signed in user
+      * is the precondition, inside a covered handler, the caller turns the `None` into the mistake
+      * it is; answering with an exception here would make the public page pay a `catch` for the
+      * covered one's rule.
       */
-    val currentUser: Request => Id[U],
+    val currentUser: Request => Option[Id[U]],
 
     /** Which of the seven read and write through the current user's own rows alone. */
     val covers: Set[Action],

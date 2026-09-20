@@ -1,13 +1,23 @@
 package io.eezo.auth
 
+import java.net.URI
 import java.net.URLEncoder
+import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.time.{Clock, Duration, Instant}
+import java.util.concurrent.atomic.AtomicReference
 
 import io.eezo.core.Id
 import io.eezo.core.html.Html
 import io.eezo.core.html.Url
 import io.eezo.http.*
+import org.eclipse.jetty.client.Request as HandshakeRequest
+import org.eclipse.jetty.client.Response as HandshakeResponse
+import org.eclipse.jetty.server.ServerConnector
+import org.eclipse.jetty.websocket.api.Session.Listener.AbstractAutoDemanding
+import org.eclipse.jetty.websocket.client.ClientUpgradeRequest
+import org.eclipse.jetty.websocket.client.JettyUpgradeListener
+import org.eclipse.jetty.websocket.client.WebSocketClient
 
 /** The password guard: who it says is behind a request, what it does to a route, and the three
   * routes it carries.
@@ -93,15 +103,122 @@ class GuardSuite extends munit.FunSuite {
 
   private def whom(session: Session): Option[String] = session.reserved(Guard.UserEntry)
 
+  /** A route nobody guarded whose handler asks who is there: the mistake itself, as a route. */
+  private def unguarded: Route =
+    Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      request => Response.Ok(Html.text(guard.current(request).email))
+    )
+
+  /** The status and the page a booted server hands a browser that reaches [[unguarded]].
+    *
+    * Over the wire rather than through a route table, because the boundary that turns the mistake
+    * into a response is private to `io.eezo.http` and a real request is the only thing that runs
+    * it. The server takes an ephemeral port and comes down with the test.
+    */
+  private def visiting(dev: Boolean): (Int, String) = {
+    val server = Eezo.start(port = 0, config = Config(RouteTable(Seq(unguarded)), dev = dev))
+    try {
+      val port     = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      val response = HttpClient
+        .newHttpClient()
+        .send(
+          HttpRequest.newBuilder(URI.create(s"http://localhost:$port/posts")).GET().build(),
+          HttpResponse.BodyHandlers.ofString()
+        )
+      (response.statusCode, response.body)
+    } finally server.stop()
+  }
+
+  /** A client that demands its own events, since this side is not eezo's runtime. The abstract
+    * class rather than the `AutoDemanding` interface, for the reason `WebSocketSuite` gives: Scala
+    * emits a mixin forwarder for every default method of an interface, and Jetty binds its events
+    * by reflecting over the methods a listener declares, so it would see two for one event.
+    */
+  private class ClientListener extends AbstractAutoDemanding
+
+  /** A page that hands a browser the session it names, so that a handshake can carry a cookie eezo
+    * itself signed. The signing is private to `modules/http`, so the server mints the cookie on the
+    * way out of this page rather than the test writing one by hand.
+    */
+  private def handing(session: Session): Route =
+    Route.Http(
+      Method.GET,
+      PathPattern.parse("/plant"),
+      _ => Response.Ok(Html.text("planted")).withSession(session)
+    )
+
+  /** The session cookie a booted server set on the way out of [[handing]], ready to be sent back.
+    */
+  private def planted(port: Int): String =
+    HttpClient
+      .newHttpClient()
+      .send(
+        HttpRequest.newBuilder(URI.create(s"http://localhost:$port/plant")).GET().build(),
+        HttpResponse.BodyHandlers.ofString()
+      )
+      .headers()
+      .firstValue("Set-Cookie")
+      .orElseThrow(() => new NoSuchElementException("the page handed back no session cookie"))
+      .takeWhile(_ != ';')
+
+  /** The status and the `WWW-Authenticate` a real upgrade at `/live` is answered with, for a
+    * browser carrying `cookie` and, when there is none, for one carrying nothing at all.
+    *
+    * Read off the handshake through an upgrade listener, which Jetty calls with the response
+    * whatever its status, because the `UpgradeException` the client throws carries the status code
+    * but none of the headers.
+    */
+  private def upgrading(
+      client: WebSocketClient,
+      port: Int,
+      cookie: Option[String]
+  ): (Int, Option[String]) = {
+    val answered = new AtomicReference[(Int, Option[String])](null)
+    val reading  = new JettyUpgradeListener {
+      override def onHandshakeResponse(
+          request: HandshakeRequest,
+          response: HandshakeResponse
+      ): Unit =
+        answered.set((response.getStatus, Option(response.getHeaders.get("WWW-Authenticate"))))
+    }
+    val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
+    cookie.foreach(value => upgrade.setHeader("Cookie", value))
+    val failure = intercept[java.util.concurrent.ExecutionException](
+      client.connect(new ClientListener, upgrade, reading).get()
+    )
+    Option(answered.get)
+      .getOrElse(fail(s"the upgrade never reached the listener, failing with $failure"))
+  }
+
   // ------------------------------------------------------------ the current user
 
   test("the current user is the row the session names") {
     assertEquals(guard.current(signedIn(ann.id)).email, "ann@example.com")
   }
 
-  test("asking who is there when nobody is, is an error rather than a redirect") {
-    intercept[Unauthorized](guard.current(browser(Method.GET, "/posts")))
-    intercept[Unauthorized](guard.current(signedIn(Id.gen[User]())))
+  test("asking who is there on an unguarded route is a programming mistake, not a redirect") {
+    // Driven through a route table rather than by calling the guard directly, because the mistake
+    // is what a request to a route nobody guarded does: the handler runs, and the failure leaves
+    // the table instead of becoming a refusal. Not an HTTP failure, which is why it comes out as a
+    // plain `IllegalStateException` rather than as anything `modules/http` maps to a status. What a
+    // browser is handed for it is the test below.
+    val table  = RouteTable(Seq(unguarded))
+    val thrown = intercept[IllegalStateException](table.dispatch(browser(Method.GET, "/posts")))
+    assert(thrown.getMessage.contains("this route is not guarded"), thrown.getMessage)
+    intercept[IllegalStateException](table.dispatch(signedIn(Id.gen[User]())))
+  }
+
+  test("the browser that made the mistake is handed a 500, told why in dev and nothing more") {
+    val (told, page) = visiting(dev = true)
+    assertEquals(told, 500)
+    assert(page.contains("this route is not guarded"), page)
+
+    val (shipped, redacted) = visiting(dev = false)
+    assertEquals(shipped, 500)
+    assert(!redacted.contains("this route is not guarded"), redacted)
+    assert(redacted.contains("The server encountered an unexpected error."), redacted)
   }
 
   // ------------------------------------------------------------ refusing
@@ -129,7 +246,7 @@ class GuardSuite extends munit.FunSuite {
     val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
     guard.required[Any].through(ws) match {
       case Route.Ws(_, endpoint, _) =>
-        intercept[Unauthorized](endpoint(browser(Method.GET, "/live")))
+        intercept[Forbidden](endpoint(browser(Method.GET, "/live")))
       case other => fail(s"a Ws route came back as $other")
     }
   }
@@ -207,7 +324,7 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test("the current user of a request whose sign in has expired is an error, not a stale row") {
-    intercept[Unauthorized](guard.current(signedIn(ann.id, since = stale)))
+    intercept[IllegalStateException](guard.current(signedIn(ann.id, since = stale)))
   }
 
   test("a session naming nobody is anonymous whatever its stamp says, and never an error") {
@@ -219,7 +336,7 @@ class GuardSuite extends munit.FunSuite {
       val refused = t.dispatch(orphan)
       assertEquals(refused.status, 303, since.toString)
       assertEquals(refused.header("Location"), Some("/login"), since.toString)
-      intercept[Unauthorized](guard.current(orphan))
+      intercept[IllegalStateException](guard.current(orphan))
     }
   }
 
@@ -248,7 +365,7 @@ class GuardSuite extends munit.FunSuite {
       val seen = RouteTable(Seq(frontPage(g))).dispatch(visiting)
       assertEquals(htmlOf(seen), "the blog", s"an anonymous browser was offered a way out, $when")
       assertEquals(seen.session, Some(anonymous), s"an open page rewrote the session, $when")
-      intercept[Unauthorized](g.current(visiting))
+      intercept[IllegalStateException](g.current(visiting))
 
       val refused = posts(g).dispatch(going)
       assertEquals(refused.status, 303, when)
@@ -273,7 +390,7 @@ class GuardSuite extends munit.FunSuite {
         val refused = t.dispatch(request)
         assertEquals(refused.status, 303, corrupt)
         assertEquals(refused.header("Location"), Some("/login"), corrupt)
-        intercept[Unauthorized](guard.current(request))
+        intercept[IllegalStateException](guard.current(request))
     }
   }
 
@@ -315,8 +432,32 @@ class GuardSuite extends munit.FunSuite {
     val ws = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
     guard.required[Any].through(ws) match {
       case Route.Ws(_, endpoint, _) =>
-        intercept[Unauthorized](endpoint(signedIn(ann.id, since = stale, path = "/live")))
+        intercept[Forbidden](endpoint(signedIn(ann.id, since = stale, path = "/live")))
       case other => fail(s"a Ws route came back as $other")
+    }
+  }
+
+  test("a guarded socket answers a real handshake 403 and no challenge, anonymous or expired") {
+    // The two tests above pin the `Forbidden` the wrapper throws; this one pins what a client reads
+    // off the wire, the handshake being the one place that failure becomes a status. No challenge
+    // comes back with it because a 403 asks for no credentials, so a `WWW-Authenticate` here would
+    // be a promise the handshake cannot keep. `WebSocketSuite` reaches the same answer from a hand
+    // thrown `Forbidden`, since `modules/http` never sees a guard; this is the real guard refusing.
+    val socket = Route.Ws(PathPattern.parse("/live"), _ => fail("the endpoint was built"))
+    val table  = RouteTable(
+      Seq(handing(signedInSession(ann.id, since = stale)), guard.required[Any].through(socket))
+    )
+    val server = Eezo.start(port = 0, config = Config(table))
+    val client = new WebSocketClient()
+    client.start()
+    try {
+      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      assertEquals(upgrading(client, port, None), (403, None), "an upgrade nobody signed in for")
+      val expired = planted(port)
+      assertEquals(upgrading(client, port, Some(expired)), (403, None), "an expired sign in")
+    } finally {
+      client.stop()
+      server.stop()
     }
   }
 
@@ -326,7 +467,7 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(response.header("Location"), Some("/login"))
     assert(!ran, "an unstamped session reached the handler behind the guard")
 
-    intercept[Unauthorized](guard.current(stampless(ann.id)))
+    intercept[IllegalStateException](guard.current(stampless(ann.id)))
     assertEquals(
       htmlOf(RouteTable(Seq(frontPage(guard))).dispatch(stampless(ann.id, path = "/"))),
       "the blog",

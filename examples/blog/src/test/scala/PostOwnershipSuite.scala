@@ -14,7 +14,6 @@ import io.eezo.http.NotFound
 import io.eezo.http.Request
 import io.eezo.http.Response
 import io.eezo.http.Session
-import io.eezo.http.Unauthorized
 
 import models.Post
 import models.User
@@ -209,9 +208,8 @@ class PostOwnershipSuite extends munit.FunSuite {
     def status(method: Method, path: String, form: (String, String)*): Int =
       try send(method, path, form*).status
       catch {
-        case Forbidden(_)    => 403
-        case NotFound(_)     => 404
-        case Unauthorized(_) => 401
+        case Forbidden(_) => 403
+        case NotFound(_)  => 404
       }
 
     /** What a refusal said, for the 403s that have two possible authors. See [[Foreign]]. */

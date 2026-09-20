@@ -119,7 +119,10 @@ lazy val live = module("live")
 // every application that has a login page and no database.
 lazy val auth = module("auth")
   .dependsOn(core, http)
-  .settings(libraryDependencies += springCrypto)
+  // Jetty's WebSocket client is test scoped, so it does not arrive with `http`: `GuardSuite` boots
+  // a server and reads a guarded handshake's refusal off the wire, the same artifact `http` and
+  // `live` drive their own sockets with.
+  .settings(libraryDependencies ++= Seq(springCrypto, jettyWsClient))
 
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
