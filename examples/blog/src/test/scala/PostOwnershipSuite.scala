@@ -114,7 +114,7 @@ class PostOwnershipSuite extends munit.FunSuite {
 
   /** The two users, made once, through the application's own tools: `run sync --apply` for the
     * tables, exactly as `README.md` says to before the first request, and `CreateUser.hashPassword`
-    * for the hash, so the rows the guard authenticates against are the rows the operator's tool
+    * for the hash, so the rows the guard verifies against are the rows the operator's tool
     * would have written.
     */
   private lazy val signedUp: (Id[User], Id[User]) = {

@@ -3,6 +3,7 @@ package io.eezo.auth
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.{Clock, Duration, Instant}
+import java.util.concurrent.atomic.AtomicBoolean
 
 import io.eezo.core.Id
 import io.eezo.core.html.{Attrs, Html, Url}
@@ -14,19 +15,31 @@ import io.eezo.http.*
   * Keyless on purpose, which is the shape `Form` was built to allow and `Resource` to refuse: it
   * will never be a row, it mounts nothing, and the guard's own POST route is the only handler that
   * reads one. `Password.Plain` rather than `Password` is the whole point of the pair: this is the
-  * text as typed, on its way to a `verify`, and the type says so all the way from the input to
-  * [[Guard.authenticate]].
+  * text as typed, on its way to a `verify`, and the type says so all the way from the input to the
+  * one place a [[Guard]] verifies anything.
   */
 case class Login(email: String, password: Password.Plain) derives Form
 
 /** What identifies the user behind a request, for one way of signing in: a password.
   *
   * Built from two functions, a URL and how long a sign in should last, and nothing else. `find`
-  * turns the key in the session into the application's own user, and `authenticate` turns an email
-  * and a typed password into a key. Both are the application's, which is what keeps `modules/auth`
-  * off `modules/db`: the guard never learns that a table exists, and `examples/blog` supplies two
-  * one-line closures over its own `read`. Constructing one therefore touches nothing, so a boot
-  * that never serves opens no connection.
+  * turns the key in the session into the application's own user, and `credentials` turns an email
+  * into the key and the stored hash that go with it. Both are the application's, which is what
+  * keeps `modules/auth` off `modules/db`: the guard never learns that a table exists, and
+  * `examples/blog` supplies two one-line closures over its own `read`. Constructing one therefore
+  * touches nothing, so a boot that never serves opens no connection.
+  *
+  * `credentials` says where the hash is and stops there; comparing it against what was typed is the
+  * guard's, in [[submitted]] and nowhere else. An application that did its own comparison had to be
+  * trusted to answer an unknown email as slowly as a wrong password, which is not a thing a
+  * one-line lookup does by accident, and the plain text had to travel out to it to be compared.
+  *
+  * The login it carries is unthrottled, and deliberately: every attempt, right or wrong, known
+  * email or not, costs one bcrypt at [[Password]]'s shipped strength, so a few hundred guesses a
+  * second is also a few hundred quarter seconds of this server's CPU a second. Refusing an address
+  * after so many tries is the reverse proxy's job, where the addresses and the rest of the
+  * application's traffic already are, and not something a guard can do honestly from inside one
+  * process.
   *
   * One guard per user model. `required`, `only` and `except` are how it becomes a [[Guarded]], and
   * every declaration it makes carries [[carries]], the same three route instances, so an
@@ -34,7 +47,7 @@ case class Login(email: String, password: Password.Plain) derives Form
   */
 final class Guard[U] private (
     find: Id[U] => Option[U],
-    authenticate: (String, Password.Plain) => Option[Id[U]],
+    credentials: String => Option[(Id[U], Password)],
     login: Url,
     home: Url,
     lifetime: Duration,
@@ -272,16 +285,24 @@ final class Guard[U] private (
     * that will not decode and the one that decodes and is refused, go through [[rejected]], which
     * is where what comes back in the inputs is settled.
     *
-    * `authenticate` answers an unknown email without hashing anything, so the two cases take
-    * measurably different times. That is user enumeration by timing, and it is knowingly accepted
-    * here rather than papered over with a dummy verify, which is a defence that has to be
-    * maintained and is silently lost the first time the query changes.
+    * A miss pays the bcrypt a hit pays. An email `credentials` answers nothing for is verified
+    * against [[Password.dummy]] and the answer thrown away, so the two refusals cost the same and
+    * the clock stops saying which emails exist. The one thing that survives is `credentials`
+    * itself: an application's own query can still take different times for a row that is there and
+    * one that is not, and no amount of hashing here closes that.
+    *
+    * This is the only place in eezo a `Password.Plain` is ever verified, which is what makes the
+    * paragraph above a property of the guard rather than a habit every application has to keep.
     */
   private def submitted: Handler = request =>
     request
       .as[Login]
       .toOption
-      .flatMap(attempt => authenticate(attempt.email, attempt.password))
+      .flatMap(attempt =>
+        credentials(attempt.email).fold(missed(attempt.password)) { case (key, stored) =>
+          Option.when(stored.verify(attempt.password))(key)
+        }
+      )
       .fold(rejected(request)) { key =>
         Response
           .Redirect(Guard.back(request.session, home))
@@ -299,14 +320,40 @@ final class Guard[U] private (
           )
       }
 
+  /** Nobody, for the price of somebody.
+    *
+    * The verify is the whole of it: an unknown email has nothing to compare against, so it is
+    * compared against a hash of nothing, and the answer, which is `false` unless something
+    * remarkable has happened, is thrown away. Reading the answer would be the bug, since a text
+    * that matched [[Password.dummy]] would sign somebody in as nobody.
+    *
+    * The answer is written into [[discarded]] rather than dropped on the floor, because what is
+    * being bought here is the time the hash takes and not the boolean it produces. A pure call
+    * whose result nothing stores is a call an optimiser may delete, and the day one does, every
+    * test in this repository still passes while the enumeration oracle is quietly back open.
+    */
+  private def missed(typed: Password.Plain): None.type = {
+    discarded.set(Password.dummy.verify(typed))
+    None
+  }
+
+  /** Where [[missed]]'s answer goes to be forgotten.
+    *
+    * An `AtomicBoolean` and not a plain field: its `set` is a volatile write, which is a side
+    * effect no compiler and no JIT may reorder away, and that is what keeps the hash before it
+    * alive. Nothing reads it, on purpose, and nothing should: a reader would be reading whether the
+    * last unknown email happened to collide with a random hash.
+    */
+  private val discarded: AtomicBoolean = new AtomicBoolean(false)
+
   /** The 422 a refused sign in comes back as: the same page, the one message, and the body that was
     * submitted rendered back into the inputs.
     *
-    * The whole body goes in, both when it failed to decode as a [[Login]] and when it decoded and
-    * `authenticate` refused, so the email is there to be typed over rather than typed again. The
-    * password travels in that map too and still never reaches the page: `Form.render` suppresses
-    * every field that renders as a password box, which is where that rule belongs, since it holds
-    * for a rejected `Resource` submission just as much as for this one.
+    * The whole body goes in, both when it failed to decode as a [[Login]] and when the email and
+    * the password it decoded to did not match, so the email is there to be typed over. The password
+    * travels in that map too and still never reaches the page: `Form.render` suppresses every field
+    * that renders as a password box, which is where that rule belongs, since it holds for a
+    * rejected `Resource` submission just as much as for this one.
     *
     * The message stays on the page rather than becoming a [[FormErrors]] against `email` or
     * `password`, because an error beside one input says which of the two was wrong.
@@ -381,6 +428,14 @@ object Guard {
 
   /** A guard over `U`.
     *
+    * `credentials` answers with the key and the stored hash of the row that email names, and
+    * refuses to know anything about the text that was typed. A lookup that has returned its pair
+    * has finished, so the hashing happens after whatever the lookup held is let go: an application
+    * reading from a pool, as `examples/blog` does, is no longer holding a connection while bcrypt
+    * runs. That is what the shape gives and the whole of it. A `credentials` that handed back a
+    * pair from inside a scope it had not closed, or one whose second element is only computed when
+    * read, would still be holding it, and no signature can say otherwise.
+    *
     * `login` defaults to a mounted `/login`, which is what makes the common case one line and the
     * mounted case correct: a `Url.Mounted` is rewritten by `Route.under`'s response wrapper, so a
     * guard under `/admin` redirects to `/admin/login` and the login route it carries answers there.
@@ -404,12 +459,12 @@ object Guard {
     */
   def apply[U](
       find: Id[U] => Option[U],
-      authenticate: (String, Password.Plain) => Option[Id[U]],
+      credentials: String => Option[(Id[U], Password)],
       login: Url = Url.Mounted("/login"),
       home: Url = Url.Mounted("/"),
       lifetime: Duration = DefaultLifetime,
       clock: Clock = Clock.systemUTC()
-  ): Guard[U] = new Guard[U](find, authenticate, login, home, lifetime, clock)
+  ): Guard[U] = new Guard[U](find, credentials, login, home, lifetime, clock)
 
   /** The key out of the session text. A session eezo signed can only hold what eezo wrote, so a
     * value that is not a UUID means the secret changed under a live browser rather than that anyone
