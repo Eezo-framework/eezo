@@ -3,7 +3,6 @@ package io.eezo.auth
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.time.{Clock, Duration, Instant}
-import java.util.concurrent.atomic.AtomicBoolean
 
 import io.eezo.core.Id
 import io.eezo.core.html.{Attrs, Html, Url}
@@ -285,24 +284,25 @@ final class Guard[U] private (
     * that will not decode and the one that decodes and is refused, go through [[rejected]], which
     * is where what comes back in the inputs is settled.
     *
-    * A miss pays the bcrypt a hit pays. An email `credentials` answers nothing for is verified
-    * against [[Password.dummy]] and the answer thrown away, so the two refusals cost the same and
-    * the clock stops saying which emails exist. The one thing that survives is `credentials`
-    * itself: an application's own query can still take different times for a row that is there and
-    * one that is not, and no amount of hashing here closes that.
+    * A miss pays the bcrypt a hit pays, which is [[Password.matches]]'s doing: the two refusals
+    * cost the same and the clock stops saying which emails exist. The one thing that survives is
+    * `credentials` itself: an application's own query can still take different times for a row that
+    * is there and one that is not, and no amount of hashing here closes that.
     *
-    * This is the only place in eezo a `Password.Plain` is ever verified, which is what makes the
-    * paragraph above a property of the guard rather than a habit every application has to keep.
+    * This is the only place a guard verifies anything, which is what makes the paragraph above a
+    * property of the guard rather than a habit every application has to keep.
     */
   private def submitted: Handler = request =>
     request
       .as[Login]
       .toOption
-      .flatMap(attempt =>
-        credentials(attempt.email).fold(missed(attempt.password)) { case (key, stored) =>
-          Option.when(stored.verify(attempt.password))(key)
-        }
-      )
+      .flatMap { attempt =>
+        // Asked before `found` is opened and not inside it, because a `None` runs nothing that is
+        // written inside it, and the miss is the branch that has to pay.
+        val found   = credentials(attempt.email)
+        val matched = Password.matches(found.map(_._2), attempt.password)
+        found.collect { case (key, _) if matched => key }
+      }
       .fold(rejected(request)) { key =>
         Response
           .Redirect(Guard.back(request.session, home))
@@ -319,32 +319,6 @@ final class Guard[U] private (
             )
           )
       }
-
-  /** Nobody, for the price of somebody.
-    *
-    * The verify is the whole of it: an unknown email has nothing to compare against, so it is
-    * compared against a hash of nothing, and the answer, which is `false` unless something
-    * remarkable has happened, is thrown away. Reading the answer would be the bug, since a text
-    * that matched [[Password.dummy]] would sign somebody in as nobody.
-    *
-    * The answer is written into [[discarded]] rather than dropped on the floor, because what is
-    * being bought here is the time the hash takes and not the boolean it produces. A pure call
-    * whose result nothing stores is a call an optimiser may delete, and the day one does, every
-    * test in this repository still passes while the enumeration oracle is quietly back open.
-    */
-  private def missed(typed: Password.Plain): None.type = {
-    discarded.set(Password.dummy.verify(typed))
-    None
-  }
-
-  /** Where [[missed]]'s answer goes to be forgotten.
-    *
-    * An `AtomicBoolean` and not a plain field: its `set` is a volatile write, which is a side
-    * effect no compiler and no JIT may reorder away, and that is what keeps the hash before it
-    * alive. Nothing reads it, on purpose, and nothing should: a reader would be reading whether the
-    * last unknown email happened to collide with a random hash.
-    */
-  private val discarded: AtomicBoolean = new AtomicBoolean(false)
 
   /** The 422 a refused sign in comes back as: the same page, the one message, and the body that was
     * submitted rendered back into the inputs.
@@ -428,13 +402,13 @@ object Guard {
 
   /** A guard over `U`.
     *
-    * `credentials` answers with the key and the stored hash of the row that email names, and
-    * refuses to know anything about the text that was typed. A lookup that has returned its pair
-    * has finished, so the hashing happens after whatever the lookup held is let go: an application
-    * reading from a pool, as `examples/blog` does, is no longer holding a connection while bcrypt
-    * runs. That is what the shape gives and the whole of it. A `credentials` that handed back a
-    * pair from inside a scope it had not closed, or one whose second element is only computed when
-    * read, would still be holding it, and no signature can say otherwise.
+    * `credentials` answers with the key and the stored hash of the row that email names. A lookup
+    * that has returned its pair has finished, so the hashing happens after whatever the lookup held
+    * is let go: an application reading from a pool, as `examples/blog` does, is no longer holding a
+    * connection while bcrypt runs. That is what the shape gives and the whole of it. A
+    * `credentials` that handed back a pair from inside a scope it had not closed, or one whose
+    * second element is only computed when read, would still be holding it, and no signature can say
+    * otherwise.
     *
     * `login` defaults to a mounted `/login`, which is what makes the common case one line and the
     * mounted case correct: a `Url.Mounted` is rewritten by `Route.under`'s response wrapper, so a

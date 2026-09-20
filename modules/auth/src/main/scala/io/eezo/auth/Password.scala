@@ -131,7 +131,23 @@ object Password {
     * not in the repository: a constant would let anyone holding the source ask the running server
     * to verify the one text that matches, and measure a hit against it.
     */
-  private[auth] lazy val dummy: Password = hash(Plain(UUID.randomUUID().toString))
+  private lazy val dummy: Password = hash(Plain(UUID.randomUUID().toString))
+
+  /** Whether `typed` is the text `stored` was made from, at the price of one bcrypt whether or not
+    * there is a `stored`.
+    *
+    * A lookup that found nothing is verified against [[dummy]] and answered `false` whatever that
+    * verify said. Reading its answer would be the bug, since a text that matched the dummy would
+    * sign somebody in as nobody, and answering a literal here is what makes that impossible rather
+    * than unlikely. `dummy` is private so that this is the only line that can ask.
+    */
+  private[auth] def matches(stored: Option[Password], typed: Plain): Boolean =
+    stored match {
+      case Some(hash) => hash.verify(typed)
+      case None       =>
+        val _ = dummy.verify(typed)
+        false
+    }
 
   /** A hash already made, as read out of a row or written into a seed script. Takes the string at
     * its word: what algorithm and cost it names is what [[verify]] will use, which is what lets a
