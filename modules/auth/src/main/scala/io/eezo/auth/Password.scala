@@ -1,6 +1,7 @@
 package io.eezo.auth
 
 import java.nio.charset.StandardCharsets
+import java.util.UUID
 
 import org.springframework.security.crypto.bcrypt.BCrypt
 
@@ -113,6 +114,42 @@ object Password {
   /** The hash of a plain text, at [[Strength]], under a fresh salt. */
   def hash(plain: Plain): Password = BCrypt.hashpw(plain.text, BCrypt.gensalt(Version, Strength))
 
+  /** A hash of a text nobody typed and nobody can type again, for a sign in that found no row to
+    * verify against.
+    *
+    * It exists so that a miss costs what a hit costs. Without it an unknown email answers before
+    * any hashing happens, and the difference is large enough to read over a network: a quarter of a
+    * second against a millisecond is user enumeration, handed out one request at a time.
+    *
+    * `lazy`, because an application that never serves a login should not pay a quarter of a second
+    * at boot for a value it never reads. The price is that the first miss after a boot pays two
+    * hashes, this one and the verify against it, where a hit pays one. That is one observable
+    * request at the top of a process's life, against a delay on every boot there is, including the
+    * boots of the batch jobs and the schema commands.
+    *
+    * Random, and not a constant hash checked in here, so that the text this hash was made from is
+    * not in the repository: a constant would let anyone holding the source ask the running server
+    * to verify the one text that matches, and measure a hit against it.
+    */
+  private lazy val dummy: Password = hash(Plain(UUID.randomUUID().toString))
+
+  /** Whether `plain` is the text `stored` was made from, at the price of one bcrypt whether or not
+    * there is a `stored`.
+    *
+    * A lookup that found nothing is verified against [[dummy]] and answered `false` whatever that
+    * verify said. Reading its answer would be the bug, since a text that matched the dummy would
+    * sign somebody in as nobody, and answering a literal here is what makes that impossible rather
+    * than unlikely. `dummy` is private, so nothing outside `object Password` can reach it, and
+    * inside it this is the only line that does.
+    */
+  private[auth] def matches(stored: Option[Password], plain: Plain): Boolean =
+    stored match {
+      case Some(hash) => hash.verify(plain)
+      case None       =>
+        val _ = dummy.verify(plain)
+        false
+    }
+
   /** A hash already made, as read out of a row or written into a seed script. Takes the string at
     * its word: what algorithm and cost it names is what [[verify]] will use, which is what lets a
     * test seed a cheap hash and an application store an expensive one.
@@ -129,6 +166,12 @@ object Password {
       * Reads the algorithm and cost out of the stored string rather than assuming [[Strength]], so
       * a hash written before the cost moved still verifies. Nothing rehashes on a successful login
       * yet: that needs a second cost in the wild to be worth the write on every sign in.
+      *
+      * Until it does, a moved [[Strength]] costs a little of what [[dummy]] buys. A row still at
+      * the old cost verifies at a different speed than the dummy built at the new one, so the two
+      * branches stop matching for those rows. What that leaks is "this account is older than the
+      * cost change", not "this email exists", since every row written since moves at the same speed
+      * as a miss, and it is accepted at that price.
       *
       * A stored string that is not a bcrypt hash throws rather than answering `false`. That is a
       * column holding something eezo did not write, and it is worth a 500 on one login: answering

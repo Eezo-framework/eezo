@@ -23,7 +23,7 @@ class OwningSuite extends munit.FunSuite {
   private def guard: Guard[User] =
     Guard[User](
       find = id => Option.when(id == ann.id)(ann),
-      authenticate = (_, _) => None,
+      credentials = _ => None,
       clock = clock
     )
 
@@ -125,5 +125,5 @@ object OwningSuite {
   }
 
   /** Named, so the compile-error check can reach a guard from inside a string. */
-  val aGuard: Guard[User] = Guard[User](find = _ => None, authenticate = (_, _) => None)
+  val aGuard: Guard[User] = Guard[User](find = _ => None, credentials = _ => None)
 }

@@ -36,7 +36,7 @@ object User {
     */
   given Column[Password] = Column[String].imap(Password.stored)(_.value)
 
-  /** The lookup the guard authenticates through.
+  /** The lookup the guard signs people in through.
     *
     * `Store[A]` has five operations and no lookup by field, on purpose, so this is written against
     * `Table` directly. That is not a gap being worked around: a store is what the seven derived
@@ -47,19 +47,14 @@ object User {
 
   /** The blog's guard, and the reason `Main.scala` did not have to change.
     *
-    * `verify` runs outside the `read` scope, which is the whole shape of the second line: a bcrypt
-    * verify at strength 12 takes about a quarter of a second, and folding it into the `read` block
-    * would hold a pooled connection open for all of it, on every login attempt including the wrong
-    * ones.
-    *
-    * An unknown email is answered without hashing anything, so a wrong email and a wrong password
-    * take measurably different times. That is user enumeration by timing, and it is accepted here
-    * rather than hidden behind a dummy verify that the next change to this method would silently
-    * drop.
+    * `credentials` says where the stored hash is and nothing else. The comparison is the guard's,
+    * which is why no plain password appears anywhere in this application: there is no line here
+    * that could answer an unknown email faster than a wrong one, because there is no line here
+    * that hashes at all.
     */
   given guard: Guard[User] = Guard[User](
     find = id => read(Table[User].findById(id)),
-    authenticate = (email, plain) => byEmail(email).filter(_.password.verify(plain)).map(_.id),
+    credentials = email => byEmail(email).map(user => (user.id, user.password)),
     home = Url.Mounted("/posts")
   )
 }

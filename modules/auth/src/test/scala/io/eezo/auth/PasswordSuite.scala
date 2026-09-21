@@ -87,4 +87,16 @@ class PasswordSuite extends munit.FunSuite {
     assert(cheap.verify(Password.Plain("secret")))
     assert(!cheap.verify(Password.Plain("wrong")))
   }
+
+  test("a lookup that found nothing refuses every text") {
+    assert(!Password.matches(None, Password.Plain("secret")))
+    assert(!Password.matches(None, Password.Plain("correct horse battery staple")))
+  }
+
+  test("a lookup that found a hash answers what verifying that hash answers") {
+    // Strength 4, precomputed, so the two answers cost what a seeded hash costs everywhere else.
+    val stored = Password.stored("$2b$04$6oCIgC4QzztRP0Q1ZTYV2.rK6diTucKojirfE2pCcbTXpbuFq6hju")
+    assert(Password.matches(Some(stored), Password.Plain("secret")))
+    assert(!Password.matches(Some(stored), Password.Plain("wrong")))
+  }
 }

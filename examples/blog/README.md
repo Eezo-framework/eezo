@@ -90,6 +90,15 @@ forcing it. Either way, a second user is what it takes to see the effect.
 Visiting `/admin/posts` while signed out answers a 303 to `/admin/login` and remembers where you
 were going, so signing in lands on the page you asked for.
 
+`/admin/login` is unthrottled: it answers every attempt, and every attempt that decodes costs one
+bcrypt at strength 12, about a quarter of a second of CPU, whether the password is right, wrong, or
+typed against an email no row has; a body that does not decode, an empty password or one past the 72
+bytes bcrypt reads, is refused before any hashing. That is deliberate on both counts. Equal cost is
+what stops the clock from saying which emails have accounts, and no counter lives in the application
+because refusing an address after so many tries belongs where the addresses already are: put this
+behind a reverse proxy and rate limit `POST /admin/login` there, with nginx's `limit_req` or your
+platform's equivalent, before anybody but you can reach it.
+
 `POST /admin/logout` empties the session, and the front page is where the blog offers it:
 `app/Index.scala` ends with `User.guard.logoutForm(request, Url.Absolute("/admin/logout"))`, which
 renders a Sign out button for a browser that is signed in and nothing at all for one that is not.

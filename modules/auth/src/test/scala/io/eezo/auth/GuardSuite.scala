@@ -24,7 +24,10 @@ import org.eclipse.jetty.websocket.client.WebSocketClient
   *
   * Every user here is seeded with [[GuardSuite.cheap]], a precomputed strength 4 hash, rather than
   * through `Password.hash`. Hashing at the shipped strength 12 costs a quarter of a second, and a
-  * suite that pays it per user is a suite somebody later marks as ignored.
+  * suite that pays it per user is a suite somebody later marks as ignored. The one exception is the
+  * test that compares a miss against a hit: what it measures is one bcrypt against another, so it
+  * seeds its own user at the shipped strength, and it keeps that user to itself so that making the
+  * rest of the suite cheaper can never quietly make it meaningless.
   */
 class GuardSuite extends munit.FunSuite {
 
@@ -43,11 +46,11 @@ class GuardSuite extends munit.FunSuite {
 
   private val find: Id[User] => Option[User] = id => rows.get(id)
 
-  private val authenticate: (String, Password.Plain) => Option[Id[User]] =
-    (email, plain) => rows.values.find(_.email == email).filter(_.password.verify(plain)).map(_.id)
+  private val credentials: String => Option[(Id[User], Password)] =
+    email => rows.values.find(_.email == email).map(user => (user.id, user.password))
 
   /** Names no lifetime, so every test that uses it runs on `Guard.apply`'s own default. */
-  private def guard: Guard[User] = Guard[User](find, authenticate, clock = clock)
+  private def guard: Guard[User] = Guard[User](find, credentials, clock = clock)
 
   /** A page behind the guard, so a test can tell "the handler ran" from "the wrapper answered". */
   private def page(method: Method = Method.GET, path: String = "/posts"): Route =
@@ -289,7 +292,7 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test("the lifetime is the one the application named, not the default") {
-    val t = posts(Guard[User](find, authenticate, lifetime = Duration.ofMinutes(30), clock = clock))
+    val t = posts(Guard[User](find, credentials, lifetime = Duration.ofMinutes(30), clock = clock))
     assertEquals(t.dispatch(signedIn(ann.id, since = now.minusSeconds(29 * 60))).status, 200)
     assertEquals(t.dispatch(signedIn(ann.id, since = now.minusSeconds(31 * 60))).status, 303)
   }
@@ -359,7 +362,7 @@ class GuardSuite extends munit.FunSuite {
     // The second guard reads a clock ten years past every stamp this suite writes, so an age check
     // that ever started discarding sessions naming nobody would have fired by then.
     val ageless =
-      Guard[User](find, authenticate, clock = Clock.offset(clock, Duration.ofDays(3650)))
+      Guard[User](find, credentials, clock = Clock.offset(clock, Duration.ofDays(3650)))
 
     List("on the hour" -> guard, "ten years on" -> ageless).foreach { case (when, g) =>
       val seen = RouteTable(Seq(frontPage(g))).dispatch(visiting)
@@ -557,6 +560,54 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(ok.status, 422)
   }
 
+  test("an unknown email pays the bcrypt a wrong password pays, so only the clock could tell") {
+    // Seeded at the shipped strength rather than with `cheap`, because what this compares is one
+    // bcrypt against another: a known row hashed at strength 4 would put the two branches at
+    // different costs and the comparison would be measuring the seed instead of the guard.
+    val real = User(Id.gen(), "real@example.com", Password.hash(Password.Plain("secret")))
+    val g    = Guard[User](
+      find = id => Option.when(id == real.id)(real),
+      credentials = email => Option.when(email == real.email)((real.id, real.password)),
+      clock = clock
+    )
+    val t = app(g.required[Any])
+
+    def refusal(email: String): Long = {
+      val started  = System.nanoTime()
+      val response =
+        t.dispatch(submits("/login", Csrf.Token.gen(), "email" -> email, "password" -> "not it"))
+      val elapsed = System.nanoTime() - started
+      assertEquals(response.status, 422)
+      elapsed
+    }
+
+    // Once down each branch before anything is measured, so neither reading pays for the JIT's
+    // first look at bcrypt or for a hash the guard builds lazily on the first miss.
+    val _ = refusal("nobody@example.com")
+    val _ = refusal(real.email)
+
+    // The smallest of three readings on each side, minimum against minimum, so a pause during any
+    // one reading on either branch is thrown away rather than only on the known one. Noise only
+    // ever adds time, so a lone unknown reading could be lifted by a pause and satisfy the
+    // assertion even from a branch that skips the hash; three readings close that door on both
+    // sides at once. A slow or loaded machine makes this pass harder rather than flake. Three and
+    // no more on each side, because every reading is a quarter of a second of bcrypt when the guard
+    // is correct, and the suite header argues against paying that in a test; a miss that skipped
+    // the hash returns in a millisecond, so the extra readings only cost time when there is nothing
+    // to catch.
+    val known   = List.fill(3)(refusal(real.email)).min
+    val unknown = List.fill(3)(refusal("nobody@example.com")).min
+
+    // The only thing left that fails it is an unknown email that skips the hash, which answers in
+    // a millisecond against the quarter second a known one costs and is the enumeration oracle
+    // this exists to hold shut.
+    assert(
+      unknown * 2 >= known,
+      s"an unknown email took ${unknown / 1000000}ms where a wrong password on a known one took " +
+        s"${known / 1000000}ms, so the clock says which emails exist"
+    )
+  }
+
   test("a refused login hands the email back, so only the password has to be retyped") {
     val g    = guard
     val t    = app(g.required[Any])
@@ -569,7 +620,7 @@ class GuardSuite extends munit.FunSuite {
   test("a submission that does not decode at all still hands the email back") {
     val g = guard
     val t = app(g.required[Any])
-    // No password field, so `Login` never decodes and `authenticate` is never reached. The typing
+    // No password field, so `Login` never decodes and `credentials` is never reached. The typing
     // that did arrive comes back all the same.
     val html = htmlOf(t.dispatch(submits("/login", Csrf.Token.gen(), "email" -> ann.email)))
     assert(html.contains(s"""name="email" value="${ann.email}""""), html)
@@ -823,7 +874,7 @@ class GuardSuite extends munit.FunSuite {
   test(
     "a sign in with nothing remembered lands at the guard's home, not the mount root, once mounted"
   ) {
-    val g       = Guard[User](find, authenticate, home = Url.Mounted("/posts"))
+    val g       = Guard[User](find, credentials, home = Url.Mounted("/posts"))
     val mounted = RouteTable(
       Route.under("/admin")((g.required[Any].carries :+ g.required[Any].through(page())).distinct)
     )
@@ -843,7 +894,7 @@ class GuardSuite extends munit.FunSuite {
     var asked = 0
     val g     = Guard[User](
       find = id => { asked += 1; rows.get(id) },
-      authenticate = (_, _) => { asked += 1; None }
+      credentials = _ => { asked += 1; None }
     )
     val _ = g.required[Any]
     assertEquals(asked, 0)
