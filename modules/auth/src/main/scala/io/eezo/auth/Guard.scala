@@ -33,12 +33,13 @@ case class Login(email: String, password: Password.Plain) derives Form
   * trusted to answer an unknown email as slowly as a wrong password, which is not a thing a
   * one-line lookup does by accident, and the plain text had to travel out to it to be compared.
   *
-  * The login it carries is unthrottled, and deliberately: every attempt, right or wrong, known
-  * email or not, costs one bcrypt at [[Password]]'s shipped strength, so a few hundred guesses a
-  * second is also a few hundred quarter seconds of this server's CPU a second. Refusing an address
-  * after so many tries is the reverse proxy's job, where the addresses and the rest of the
-  * application's traffic already are, and not something a guard can do honestly from inside one
-  * process.
+  * The login it carries is unthrottled, and deliberately: every attempt that decodes, right or
+  * wrong, known email or not, costs one bcrypt at [[Password]]'s shipped strength, so a few hundred
+  * guesses a second is also a few hundred quarter seconds of this server's CPU a second. A body
+  * that will not decode, an empty password or one past the 72 bytes bcrypt reads, never gets that
+  * far. Refusing an address after so many tries is the reverse proxy's job, where the addresses and
+  * the rest of the application's traffic already are, and not something a guard can do honestly
+  * from inside one process.
   *
   * One guard per user model. `required`, `only` and `except` are how it becomes a [[Guarded]], and
   * every declaration it makes carries [[carries]], the same three route instances, so an
@@ -297,10 +298,10 @@ final class Guard[U] private (
       .as[Login]
       .toOption
       .flatMap { attempt =>
-        // Asked before `found` is opened and not inside it, because a `None` runs nothing that is
-        // written inside it, and the miss is the branch that has to pay.
-        val found   = credentials(attempt.email)
-        val matched = Password.matches(found.map(_._2), attempt.password)
+        val found = credentials(attempt.email)
+        // Computed out here and not inside `found.map`, because a `None` would skip it, and the
+        // miss is the branch that has to pay.
+        val matched = Password.matches(found.map { case (_, stored) => stored }, attempt.password)
         found.collect { case (key, _) if matched => key }
       }
       .fold(rejected(request)) { key =>

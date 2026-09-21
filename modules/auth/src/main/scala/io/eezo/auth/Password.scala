@@ -133,19 +133,20 @@ object Password {
     */
   private lazy val dummy: Password = hash(Plain(UUID.randomUUID().toString))
 
-  /** Whether `typed` is the text `stored` was made from, at the price of one bcrypt whether or not
+  /** Whether `plain` is the text `stored` was made from, at the price of one bcrypt whether or not
     * there is a `stored`.
     *
     * A lookup that found nothing is verified against [[dummy]] and answered `false` whatever that
     * verify said. Reading its answer would be the bug, since a text that matched the dummy would
     * sign somebody in as nobody, and answering a literal here is what makes that impossible rather
-    * than unlikely. `dummy` is private so that this is the only line that can ask.
+    * than unlikely. `dummy` is private, so nothing outside `object Password` can reach it, and
+    * inside it this is the only line that does.
     */
-  private[auth] def matches(stored: Option[Password], typed: Plain): Boolean =
+  private[auth] def matches(stored: Option[Password], plain: Plain): Boolean =
     stored match {
-      case Some(hash) => hash.verify(typed)
+      case Some(hash) => hash.verify(plain)
       case None       =>
-        val _ = dummy.verify(typed)
+        val _ = dummy.verify(plain)
         false
     }
 
