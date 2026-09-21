@@ -586,14 +586,17 @@ class GuardSuite extends munit.FunSuite {
     val _ = refusal("nobody@example.com")
     val _ = refusal(real.email)
 
-    // The smallest of three readings on the known side against a single one on the unknown side,
-    // which is what makes the comparison one sided. Noise only ever adds time, so it lifts
-    // `unknown` freely and has to land on all three known readings at once to lift `known`: a
-    // pause during any one of them is thrown away by the minimum. A slow or loaded machine makes
-    // this pass harder rather than flake. Three and no more, because every reading is a quarter of
-    // a second of bcrypt and the suite header argues against paying that in a test.
+    // The smallest of three readings on each side, minimum against minimum, so a pause during any
+    // one reading on either branch is thrown away rather than only on the known one. Noise only
+    // ever adds time, so a lone unknown reading could be lifted by a pause and satisfy the
+    // assertion even from a branch that skips the hash; three readings close that door on both
+    // sides at once. A slow or loaded machine makes this pass harder rather than flake. Three and
+    // no more on each side, because every reading is a quarter of a second of bcrypt when the guard
+    // is correct, and the suite header argues against paying that in a test; a miss that skipped
+    // the hash returns in a millisecond, so the extra readings only cost time when there is nothing
+    // to catch.
     val known   = List.fill(3)(refusal(real.email)).min
-    val unknown = refusal("nobody@example.com")
+    val unknown = List.fill(3)(refusal("nobody@example.com")).min
 
     // The only thing left that fails it is an unknown email that skips the hash, which answers in
     // a millisecond against the quarter second a known one costs and is the enumeration oracle
