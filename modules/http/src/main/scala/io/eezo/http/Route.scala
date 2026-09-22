@@ -122,8 +122,15 @@ object Route {
   * sorting was rejected because it is a rule a reader cannot see by reading the generated file top
   * to bottom, and that file is what people debug routing with. Rails, Phoenix and Play are all
   * declaration ordered for the same reason. The sbt plugin owns emit order.
+  *
+  * [[identify]] is who the table says is behind a request it serves, composed out of the `identify`
+  * of every declaration mounted into it: the generator writes that composition, and a table built
+  * by hand names nobody. It exists for the socket upgrade and for nothing else. A guarded page is
+  * named by the guard's own wrapper, inside [[dispatch]] and inside `Csrf.protect` with it, so a
+  * public page's handler reads nobody however the visitor signed in; an upgrade has no such wrapper
+  * on a route nobody guarded, and the one thing that holds every declaration at once is this table.
   */
-final class RouteTable(mounted: Seq[Route]) {
+final class RouteTable(mounted: Seq[Route], val identify: Request => Request = identity) {
 
   /** [[Route.describe]] is the key the whole table is deduplicated on: it already renders the
     * method and the pattern for an HTTP route and `WS` plus the pattern for an upgrade, so the two
@@ -250,13 +257,20 @@ final class RouteTable(mounted: Seq[Route]) {
     case _                                                       => false
   }
 
-  /** Concatenation. Order is preserved, so the receiver's routes keep winning. */
-  def ++(other: RouteTable): RouteTable = RouteTable(routes ++ other.routes)
+  /** Concatenation. Order is preserved, so the receiver's routes keep winning.
+    *
+    * The two stamps are composed rather than one of them chosen, because the framework routes an
+    * application appends, `HttpApp.serve`'s `table ++ RouteTable(frameworkRoutes)`, name nobody and
+    * must not cost the application the stamp its own declarations composed.
+    */
+  def ++(other: RouteTable): RouteTable =
+    new RouteTable(routes ++ other.routes, identify.andThen(other.identify))
 }
 
 object RouteTable {
 
-  def apply(routes: Seq[Route]): RouteTable = new RouteTable(routes)
+  def apply(routes: Seq[Route], identify: Request => Request = identity): RouteTable =
+    new RouteTable(routes, identify)
 
   val empty: RouteTable = new RouteTable(Seq.empty)
 }

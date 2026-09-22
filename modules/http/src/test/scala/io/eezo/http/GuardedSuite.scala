@@ -101,4 +101,16 @@ class GuardedSuite extends munit.FunSuite with ResourceFixtures {
   test("an existing call site that names no declaration still compiles and is unguarded") {
     assertEquals(Resource.routesOf[Widget](store).size, 7)
   }
+
+  test("a declaration written before there was anything to name still names nobody") {
+    // Three fields is how every declaration in the wild is written, and the fourth has to default
+    // to naming nobody or `Guarded.public` would be the only declaration that compiles.
+    val req = request(Method.GET, "/widgets")
+    assertEquals(guardedOn(Action.Create).identify(req), req)
+  }
+
+  test("a public declaration names nobody, the way it wraps nothing and carries nothing") {
+    val req = request(Method.GET, "/widgets")
+    assertEquals(Guarded.public[Widget].identify(req), req)
+  }
 }

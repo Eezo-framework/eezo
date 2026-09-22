@@ -46,6 +46,14 @@ object FromPath {
   *
   * `secure` is whether the browser reached the application over HTTPS, which is what decides a
   * cookie's `Secure` attribute. A request built by hand is not.
+  *
+  * `currentUser` is who the guard says is behind this request, as the key the session spells it
+  * with, and it is a fact about the request rather than a way to ask one: `http` holds the value
+  * and whoever owns the rule, a guard, holds the rule. It is written before the handler it is for
+  * runs, by the guard's own wrapper on a guarded page and by the route table's `identify` on a
+  * socket upgrade, and never from a header, a query or path parameter, or a frame, all of which a
+  * client chooses. Nobody is `None`, which is what every request in an application with no way of
+  * signing in carries, and what a request built by hand carries until something stamps it.
   */
 final case class Request(
     method: Method,
@@ -55,7 +63,8 @@ final case class Request(
     body: Array[Byte],
     pathParams: Map[String, String],
     session: Session = Session.empty,
-    secure: Boolean = false
+    secure: Boolean = false,
+    currentUser: Option[String] = None
 ) {
 
   /** A header, case insensitively, first value wins. */

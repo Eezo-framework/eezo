@@ -109,6 +109,31 @@ class GeneratedGuardForSuite extends munit.FunSuite {
     }
   }
 
+  test("the stamp one guard hands every declaration it makes is composed once, not once a row") {
+    // What `distinct` is for, and the reason it is worth having: the function is a `val` on the
+    // guard, so twenty guarded things hand the table the same instance and an upgrade reads the
+    // session once rather than twenty times.
+    var reads                                               = 0
+    val stamp: io.eezo.http.Request => io.eezo.http.Request = request => {
+      reads += 1
+      request.copy(currentUser = Some("ann"))
+    }
+    val named = NamingTable.of(Seq.fill(20)(stamp))
+    assertEquals(named(GeneratedGuardForSuite.anyRequest).currentUser, Some("ann"))
+    assertEquals(reads, 1)
+  }
+
+  test("a table whose declarations name nobody hands the request back exactly as it came") {
+    val request = GeneratedGuardForSuite.anyRequest
+    val named   = NamingTable.of(
+      Seq(
+        io.eezo.http.Guarded.public[Unguarded].identify,
+        io.eezo.http.Guarded.public[DeclaredPage.type].identify
+      )
+    )
+    assertEquals(named(request), request)
+  }
+
   test("the lenient helper still hands back a declaration that was written") {
     // The defect this pins: an application on the umbrella, or one reaching auth through a
     // `dependsOn` module, declares no `eezo-auth` of its own. Its table used to mount every route
@@ -118,6 +143,20 @@ class GeneratedGuardForSuite extends munit.FunSuite {
     assertEquals(guarded.actions, Set[io.eezo.http.Action](io.eezo.http.Action.Index))
     assertEquals(guarded.carries, Seq(DeclaredPage.login))
   }
+}
+
+object GeneratedGuardForSuite {
+
+  /** Any request at all, since what is under test is what the composed function does to one. */
+  def anyRequest: io.eezo.http.Request =
+    io.eezo.http.Request(
+      io.eezo.http.Method.GET,
+      "/",
+      Map.empty,
+      Map.empty,
+      Array.emptyByteArray,
+      Map.empty
+    )
 }
 
 /** A type with no `Guarded` and no `Resource` beside it: the silence both readings answer. */
@@ -180,6 +219,32 @@ object StrictTable {
   inline def forRoute[A](inline name: String): io.eezo.http.Guarded[A] = guardFor[A](name)
 
   inline def forModel[A](inline name: String): io.eezo.http.Guarded[A] = guardForModel[A](name)
+}
+
+/** The one naming function the generator writes beside the rows, verbatim.
+  *
+  * Compiled here for the reason the guard lookup is: the plugin's suite can string match the text
+  * and nothing more, and what has to hold is that the fold types, that `distinct` collapses the
+  * function one guard hands every declaration it makes, and that a table of declarations naming
+  * nobody hands a request straight back.
+  */
+object NamingTable {
+
+  // format: off
+  /** Who the table says is behind a request it serves, composed out of what every mounted
+    * declaration names with. It is run on a socket upgrade, which is the one place a route
+    * nobody guarded has no wrapper of its own to carry the answer.
+    */
+  private def identifying(
+      named: Seq[io.eezo.http.Request => io.eezo.http.Request]
+  ): io.eezo.http.Request => io.eezo.http.Request =
+    named.distinct
+      .foldLeft(identity[io.eezo.http.Request])((first, next) => first.andThen(next))
+  // format: on
+
+  def of(
+      named: Seq[io.eezo.http.Request => io.eezo.http.Request]
+  ): io.eezo.http.Request => io.eezo.http.Request = identifying(named)
 }
 
 /** The helper `RouteGenerator` emits for a build that declares no `eezo-auth`, verbatim.

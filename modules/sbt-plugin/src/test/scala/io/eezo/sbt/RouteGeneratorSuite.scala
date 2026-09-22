@@ -439,8 +439,38 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
     assert(
       clue(RouteGenerator.render(routes, Seq.empty, dbOnClasspath = true, authDeclared = false))
-        .contains("io.eezo.http.RouteTable(handwritten.distinct)")
+        .contains("io.eezo.http.RouteTable(handwritten.distinct, identify)")
     )
+  }
+
+  test("the table is handed the stamp its own declarations compose, in both readings") {
+    // The table names the current user on a socket upgrade, and what it names with is composed out
+    // of the very declarations the rows were mounted behind. Composed rather than looked up again,
+    // so there is no second place a route could be mounted behind one declaration and named by
+    // another.
+    val (routes, models) = helloRouteAndModel
+
+    val lenient = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = false)
+    assert(
+      clue(lenient).contains(
+        "private val identify: io.eezo.http.Request => io.eezo.http.Request ="
+      )
+    )
+    assert(clue(lenient).contains("guardFor[app.widgets.Index.type].identify"))
+    assert(clue(lenient).contains("guardFor[models.Widget].identify"))
+    assert(clue(lenient).contains(").distinct,\n      identify\n    )"))
+
+    val strict = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = true)
+    assert(
+      clue(strict).contains("""guardFor[app.widgets.Index.type]("app.widgets.Index").identify""")
+    )
+    assert(clue(strict).contains("""guardForModel[models.Widget]("models.Widget").identify"""))
+  }
+
+  test("a table of handwritten rows alone is named by them too") {
+    val routesOnly =
+      RouteGenerator.render(Seq(route("widgets/Index.scala")), Seq.empty, dbOnClasspath = false)
+    assert(clue(routesOnly).contains("io.eezo.http.RouteTable(handwritten.distinct, identify)"))
   }
 
   test("the guard helpers follow the rows that call them, like storeFor does") {
@@ -451,6 +481,9 @@ class RouteGeneratorSuite extends munit.FunSuite {
       val bare =
         RouteGenerator.render(Seq.empty, Seq.empty, dbOnClasspath = false, authDeclared = declared)
       assert(!clue(bare).contains("guardFor"))
+      // Nothing was mounted, so there is no declaration to name anyone with, and a `private val`
+      // holding a composition of nothing is one more thing `-Wunused:all` would report.
+      assert(!clue(bare).contains("identify"))
       assert(clue(bare).contains("io.eezo.http.RouteTable(handwritten)"))
     }
 
@@ -503,6 +536,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
       RouteGenerator.guardFor(authDeclared = true),
       RouteGenerator.guardFor(authDeclared = false),
       RouteGenerator.guardForModel,
+      RouteGenerator.identifying,
       RouteGenerator.storeFor(dbOnClasspath = true),
       RouteGenerator.storeFor(dbOnClasspath = false)
     ).foreach { helper =>

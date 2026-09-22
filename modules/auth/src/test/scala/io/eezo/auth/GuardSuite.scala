@@ -224,6 +224,93 @@ class GuardSuite extends munit.FunSuite {
     assert(redacted.contains("The server encountered an unexpected error."), redacted)
   }
 
+  // ------------------------------------------------------- the current user, on the request
+
+  /** A page that answers with whoever the request says is there, so the stamp is visible in the
+    * response rather than in a flag a passing test could leave unset.
+    */
+  private def naming: Route =
+    Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      request => Response.Ok(Html.text(request.currentUser.getOrElse("nobody")))
+    )
+
+  /** What the endpoint of an upgrade reads, which is `Eezo`'s WebSocket creator in one line: the
+    * table's own naming, over a handshake request whose session has already been read.
+    */
+  private def onUpgrade(request: Request, g: Guard[User] = guard): Option[String] = {
+    val declared = g.required[Any]
+    val socket   = Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})
+    RouteTable(declared.mounting(socket), declared.identify).identify(request).currentUser
+  }
+
+  test("the page the guard let through is handed a request that names the user") {
+    val response = RouteTable(Seq(guard.required[Any].through(naming))).dispatch(signedIn(ann.id))
+    assertEquals(response.status, 200)
+    // The key as the session spells it, which is what an owner field holds and what a live page
+    // compares its socket against.
+    assertEquals(htmlOf(response), ann.id.show)
+  }
+
+  test("a page nobody guarded names nobody, however the visitor signed in") {
+    assertEquals(htmlOf(RouteTable(Seq(naming)).dispatch(signedIn(ann.id))), "nobody")
+  }
+
+  test("the wrapper names nobody on an upgrade, which is the table's job and not its own") {
+    val seen = new AtomicReference[Option[String]](Some("never ran"))
+    val ws   = Route.Ws(
+      PathPattern.parse("/live"),
+      request => { seen.set(request.currentUser); new WsListener {} }
+    )
+    guard.required[Any].through(ws) match {
+      case Route.Ws(_, endpoint, _) => endpoint(signedIn(ann.id, path = "/live")): Unit
+      case other                    => fail(s"a Ws route came back as $other")
+    }
+    assertEquals(seen.get, None)
+  }
+
+  test(
+    "an upgrade the table named carries the key of a sign in that is still good, and nobody else's"
+  ) {
+    assertEquals(onUpgrade(signedIn(ann.id, path = "/live")), Some(ann.id.show))
+    assertEquals(onUpgrade(browser(Method.GET, "/live")), None)
+    assertEquals(onUpgrade(signedIn(ann.id, since = stale, path = "/live")), None)
+    assertEquals(onUpgrade(stampless(ann.id, path = "/live")), None)
+  }
+
+  test(
+    "two guards' stamps compose without the one that finds nobody erasing the one that found somebody"
+  ) {
+    // An application with two guards, one shorter lived than the other, exactly the shape
+    // `Guard.apply`'s own `lifetime` parameter exists for. A sign in three hours old is still good
+    // under the long guard's fortnight and already stale under the short guard's hour, so the two
+    // disagree, the way an admin guard and a user guard would.
+    val threeHoursAgo = now.minusSeconds(3 * 3600)
+    val request       = signedIn(ann.id, since = threeHoursAgo)
+
+    val long  = guard.required[Any]
+    val short = Guard[User](find, credentials, lifetime = Duration.ofHours(1), clock = clock)
+      .required[Any]
+
+    assertEquals(long.identify(request).currentUser, Some(ann.id.show))
+    assertEquals(short.identify(request).currentUser, None)
+
+    // The table composes every declaration's `identify` with `andThen`, in whatever order the
+    // declarations were mounted, so the fresh sign in one guard found has to survive a second
+    // guard's `None` either way round.
+    assertEquals(
+      long.identify.andThen(short.identify)(request).currentUser,
+      Some(ann.id.show),
+      "the short guard's stale verdict overwrote the long guard's fresh one"
+    )
+    assertEquals(
+      short.identify.andThen(long.identify)(request).currentUser,
+      Some(ann.id.show),
+      "the short guard's stale verdict overwrote the long guard's fresh one"
+    )
+  }
+
   // ------------------------------------------------------------ refusing
 
   test("an anonymous browser is sent to the login page and the handler never runs") {

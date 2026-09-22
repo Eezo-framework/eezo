@@ -237,4 +237,47 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(Route.under("admin")(routes).map(_.describe), Seq("GET /admin/widgets"))
     assertEquals(Route.under("/admin/")(routes).map(_.describe), Seq("GET /admin/widgets"))
   }
+
+  // ------------------------------------------------------------- who the table says is there
+
+  /** What a guard hands a table: a function that names the current user and refuses nobody. */
+  private val names: Request => Request = _.copy(currentUser = Some("ann"))
+
+  test("a table names nobody unless it was built with something that names") {
+    val req = request(Method.GET, "/")
+    assertEquals(RouteTable(Seq(get("/"))).identify(req), req)
+    assertEquals(RouteTable(Seq(get("/")), names).identify(req).currentUser, Some("ann"))
+  }
+
+  test("++ keeps the application's stamp, which is what HttpApp appends its framework routes to") {
+    // `HttpApp.serve` is `table ++ RouteTable(frameworkRoutes)`, so a framework route that names
+    // nobody must not cost the application the stamp its own declarations composed.
+    val application = RouteTable(Seq(get("/posts")), names)
+    val framework   = RouteTable(Seq(get("/health")))
+    val joined      = application ++ framework
+
+    assertEquals(joined.identify(request(Method.GET, "/posts")).currentUser, Some("ann"))
+    assertEquals(joined.routes.map(_.describe), Seq("GET /posts", "GET /health"))
+  }
+
+  test("++ composes the two stamps in order, so the argument's has the last word") {
+    val first  = RouteTable(Seq(get("/a")), _.copy(currentUser = Some("first")))
+    val second = RouteTable(Seq(get("/b")), _.copy(currentUser = Some("second")))
+    assertEquals(first.++(second).identify(request(Method.GET, "/a")).currentUser, Some("second"))
+    assertEquals(second.++(first).identify(request(Method.GET, "/a")).currentUser, Some("first"))
+  }
+
+  test("dispatch never stamps, so a handler on a public route reads nobody") {
+    // The stamp on the HTTP side is the guard's wrapper and nothing else, which is what keeps a
+    // page nobody guarded from naming the visitor who happens to be signed in. `identify` is for
+    // the upgrade, which has no wrapper to put it on.
+    val table = RouteTable(
+      Seq(get("/public", req => Response.Ok(Html.text(req.currentUser.getOrElse("nobody"))))),
+      names
+    )
+    assertEquals(
+      table.dispatch(request(Method.GET, "/public")).body,
+      Body.Html(Html.text("nobody"))
+    )
+  }
 }

@@ -83,6 +83,26 @@ class EezoPluginSuite extends munit.FunSuite {
       "      case _                          => io.eezo.http.Guarded.public[A]\n" +
       "    }\n" +
       "\n" +
+      "  /** Who the table says is behind a request it serves, composed out of what every mounted\n" +
+      "    * declaration names with. It is run on a socket upgrade, which is the one place a route\n" +
+      "    * nobody guarded has no wrapper of its own to carry the answer.\n" +
+      "    */\n" +
+      "  private def identifying(\n" +
+      "      named: Seq[io.eezo.http.Request => io.eezo.http.Request]\n" +
+      "  ): io.eezo.http.Request => io.eezo.http.Request =\n" +
+      "    named.distinct\n" +
+      "      .foldLeft(identity[io.eezo.http.Request])((first, next) => first.andThen(next))\n" +
+      "\n" +
+      "  /** Who this application says is behind a request its table serves. */\n" +
+      "  private val identify: io.eezo.http.Request => io.eezo.http.Request =\n" +
+      "    identifying(\n" +
+      "      Seq(\n" +
+      "        guardFor[app.eezoWitness.New.type].identify,\n" +
+      "        guardFor[app.eezoWitness._id.Show.type].identify,\n" +
+      "        guardFor[eezoWitness.Model].identify\n" +
+      "      )\n" +
+      "    )\n" +
+      "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
       "    * not the generator, decides which of them has a `Resource` and mounts the seven.\n" +
       "    */\n" +
@@ -90,7 +110,8 @@ class EezoPluginSuite extends munit.FunSuite {
       "    io.eezo.http.RouteTable(\n" +
       "      (handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct\n" +
+      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct,\n" +
+      "      identify\n" +
       "    )\n" +
       "  }\n" +
       "}\n"

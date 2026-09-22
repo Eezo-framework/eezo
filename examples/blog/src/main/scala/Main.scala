@@ -60,12 +60,16 @@ object Main extends EezoApp {
   }
 
   override def routes: RouteTable = {
-    val (derived, handwritten) =
-      Routes.table().routes.partition(_.provenance == Provenance.Derived)
+    val table                  = Routes.table()
+    val (derived, handwritten) = table.routes.partition(_.provenance == Provenance.Derived)
     // The board a second time, under the mount: /board and /admin/board serve the same live
     // component, and its `Url.Mounted` self link reads differently in each place - the visible
     // proof that live patches follow a mount (design/live.md §2.6).
     val boardMounted = Route.under("/admin")(handwritten.filter(_.describe == "GET /board"))
-    RouteTable(handwritten ++ Route.under("/admin")(derived) ++ boardMounted)
+    // `table.identify` and not the default an argumentless `RouteTable(...)` would fall back to:
+    // this mount rewrites which routes are served, not who the generated table says is behind a
+    // request, and a socket upgrade has no wrapper of its own to name the visitor the way a
+    // guarded page's handler does.
+    RouteTable(handwritten ++ Route.under("/admin")(derived) ++ boardMounted, table.identify)
   }
 }

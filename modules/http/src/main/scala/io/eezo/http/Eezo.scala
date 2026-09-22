@@ -286,10 +286,17 @@ object Eezo {
           .listenerFor(path, config)
           .orElse {
             config.routes.dispatchWs(path).map { (route, params) =>
+              // The table names the current user on the upgrade after the session has been read
+              // and before the endpoint is built, which is the only order that works: the stamp
+              // reads `request.session`, so running it first would make every upgrade anonymous
+              // with nothing to say so, and running it after the endpoint would be too late for
+              // the endpoint to read.
               route.endpoint(
-                readHandshake(
-                  requestOf(request, Method.GET, path, Array.emptyByteArray, params),
-                  config.secret
+                config.routes.identify(
+                  readHandshake(
+                    requestOf(request, Method.GET, path, Array.emptyByteArray, params),
+                    config.secret
+                  )
                 )
               )
             }

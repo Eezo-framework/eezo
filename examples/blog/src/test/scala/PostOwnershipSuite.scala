@@ -114,8 +114,8 @@ class PostOwnershipSuite extends munit.FunSuite {
 
   /** The two users, made once, through the application's own tools: `run sync --apply` for the
     * tables, exactly as `README.md` says to before the first request, and `CreateUser.hashPassword`
-    * for the hash, so the rows the guard verifies against are the rows the operator's tool
-    * would have written.
+    * for the hash, so the rows the guard verifies against are the rows the operator's tool would
+    * have written.
     */
   private lazy val signedUp: (Id[User], Id[User]) = {
     BlogDb.main(Array("sync", "--apply"))
@@ -178,6 +178,11 @@ class PostOwnershipSuite extends munit.FunSuite {
     }
 
     def get(path: String): Response = send(Method.GET, path)
+
+    /** The cookie jar this browser is carrying, for a test that wants to hand it to something other
+      * than a request this browser itself sends, such as `RouteTable.identify`.
+      */
+    def session: Session = jar
 
     /** A request the way this browser would send it: the session it holds, and, on an unsafe verb,
       * the token it was last served returned in the form encoded body.
@@ -347,6 +352,35 @@ class PostOwnershipSuite extends munit.FunSuite {
         stored(written).map(row => (row.title, row.author)),
         Some(("Second draft", alice))
       )
+    }
+  }
+
+  // ---------------------------------------------------------------------------------------------
+  // The table's stamp
+  // ---------------------------------------------------------------------------------------------
+
+  /** `Main.routes` rebuilds `Routes.table()` into two mounts rather than serving it as generated,
+    * which is documented in `Main.scala` as "the ordinary shape of an application". That rebuild
+    * must keep the generated table's `identify`, the one thing a socket upgrade reads to learn who
+    * is there: `RouteTable.dispatch` never applies it (a guarded page is named by the guard's own
+    * wrapper instead), so the only way to observe it is to call it directly, exactly as `Eezo`'s
+    * WebSocket creator does on a handshake.
+    */
+  test("the served table's identify still names a signed in browser, after the admin mount") {
+    blog {
+      val browser = signedIn(AliceEmail)
+
+      val handshake = Request(
+        method = Method.GET,
+        path = "/admin/board",
+        query = Map.empty,
+        headers = Map.empty,
+        body = Array.empty[Byte],
+        pathParams = Map.empty,
+        session = browser.session
+      )
+
+      assertEquals(Main.routes.identify(handshake).currentUser, Some(alice.show))
     }
   }
 }

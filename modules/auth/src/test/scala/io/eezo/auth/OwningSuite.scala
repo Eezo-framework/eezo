@@ -47,6 +47,14 @@ class OwningSuite extends munit.FunSuite {
     assertEquals(declared.actions, Action.values.toSet)
   }
 
+  test("an ownership declaration still names the user the guard behind it names") {
+    // Owned takes the declaration it refines apart field by field, so a field added to `Guarded`
+    // and not restated here is one an owned model silently loses: its pages would be guarded and
+    // its socket upgrades anonymous, with nothing to say so.
+    val declared = guard.required[Post].owning(_.author).all
+    assertEquals(declared.identify(signedIn(ann.id)).currentUser, Some(ann.id.show))
+  }
+
   test("a chain ending in all covers all seven, and one ending in only covers exactly those") {
     assertEquals(guard.required[Post].owning(_.author).all.covers, Action.values.toSet)
     assertEquals(

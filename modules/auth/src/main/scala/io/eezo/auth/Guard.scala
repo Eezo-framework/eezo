@@ -145,7 +145,7 @@ final class Guard[U] private (
   )
 
   private def declaring[A](actions: Set[Action]): GuardedBy[A, U] =
-    new GuardedBy[A, U](actions, through, carries, currentUserKey)
+    new GuardedBy[A, U](actions, through, carries, currentUserKey, stamp)
 
   /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
     * a declaration that goes on to scope rows by it.
@@ -162,6 +162,30 @@ final class Guard[U] private (
     */
   private val currentUserKey: Request => Option[Id[U]] = request => key(request.session)
 
+  /** The request with the guard's verdict written on it, as the key the session spells.
+    *
+    * One `val` per guard, for the reason [[carries]] is one: every declaration this guard makes
+    * hands the table the same instance, so a table mounting twenty guarded things composes one
+    * function rather than twenty copies of it.
+    *
+    * It is the same rule [[currentUserKey]] reads and never a second one, so a page and a socket
+    * upgrade cannot disagree about who is there, and it names rather than refuses: [[through]]
+    * decides who is let through, and this decides what the request says about whoever was.
+    *
+    * A request that already carries a name is handed back untouched, rather than overwritten with
+    * whatever this guard's own session entries say. `RouteTable` composes every declaration's stamp
+    * with `andThen`, and an application may hold more than one guard, one per user model, so a
+    * table can carry a guard whose sign in expires sooner beside one whose sign in lasts longer.
+    * Without this check the later stamp in the composition would answer `None` for a session it
+    * does not recognise as current and erase the `Some` an earlier guard in the same chain had
+    * already written for the same browser, turning a signed in visitor into nobody depending on the
+    * order declarations happened to be mounted in.
+    */
+  private val stamp: Request => Request =
+    request =>
+      if (request.currentUser.isDefined) request
+      else request.copy(currentUser = currentUserKey(request).map(_.show))
+
   /** The wrapper every guarded route goes through.
     *
     * Two cases, because refusing an upgrade is not refusing a page. A browser asking for HTML is
@@ -175,12 +199,19 @@ final class Guard[U] private (
     *
     * It wraps the handler rather than the dispatch, which is the whole of `RouteTable.dispatch`'s
     * ordering guarantee: `Csrf.protect` sits outside this, so a forged `POST` to a guarded route is
-    * refused as forged instead of being redirected to a login page an attacker can read.
+    * refused as forged instead of being redirected to a login page an attacker can read. The
+    * [[stamp]] is inside it for the same reason and must stay there: naming out in the dispatch
+    * would put it ahead of the CSRF check.
+    *
+    * Only the page arm names anyone. A page behind this guard is one the wrapper already let
+    * through, so the handler reads the user off the request it was handed; an upgrade is named by
+    * the route table instead, which is the one thing holding every declaration at once and so the
+    * only thing that can name a socket nobody guarded.
     */
   private val through: Route => Route = {
     case route: Route.Http =>
       route.copy(handler =
-        request => if (signedIn(request)) route.handler(request) else refuse(request)
+        request => if (signedIn(request)) route.handler(stamp(request)) else refuse(request)
       )
     case route: Route.Ws =>
       route.copy(endpoint =

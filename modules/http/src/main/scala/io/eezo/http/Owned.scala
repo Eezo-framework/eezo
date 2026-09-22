@@ -48,10 +48,11 @@ final class Owned[A, U](
     /** Which of the seven read and write through the current user's own rows alone. */
     val covers: Set[Action],
 
-    /** The declaration this one refines, which already says who has to be signed in. Its three
-      * fields are taken rather than restated, so the guard that produced it is still the one
-      * wrapping the routes and still the one whose login page travels with them. There is no way to
-      * build an `Owned` that mounts a login page nobody redirects to.
+    /** The declaration this one refines, which already says who has to be signed in. Its fields are
+      * taken rather than restated, so the guard that produced it is still the one wrapping the
+      * routes, still the one whose login page travels with them, and still the one naming the
+      * current user. There is no way to build an `Owned` that mounts a login page nobody redirects
+      * to, and none that is guarded by one thing and named by another.
       */
     guarded: Guarded[A]
-) extends Guarded[A](guarded.actions, guarded.through, guarded.carries)
+) extends Guarded[A](guarded.actions, guarded.through, guarded.carries, guarded.identify)

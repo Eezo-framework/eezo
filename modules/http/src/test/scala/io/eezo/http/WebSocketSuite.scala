@@ -136,6 +136,42 @@ class WebSocketSuite extends munit.FunSuite {
     }
   }
 
+  test("an upgrade is named by the table, after the handshake's session has been read") {
+    // Order is the whole of it: the stamp reads the session, so running it before the cookie has
+    // been read would make every upgrade anonymous, and silently, since nothing about a `None`
+    // says whether it was asked too early or answered honestly.
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/live"),
+          request =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = {
+                val _ = events.offer(s"user:${request.currentUser.getOrElse("nobody")}")
+              }
+            }
+        )
+      ),
+      request => request.copy(currentUser = request.session.get("user"))
+    )
+
+    serving(routes) { (client, port) =>
+      val cookie  = SessionCookie.encode(io.eezo.http.Session.empty.set("user", "42"), secret)
+      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
+      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
+      val session = client.connect(new ClientListener, upgrade).get()
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
+      session.close()
+    }
+
+    serving(routes) { (client, port) =>
+      val session = connect(client, port, "/live")
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:nobody")
+      session.close()
+    }
+  }
+
   test("a WebSocket route reads entries the handshake's cookie carried, but not its flash") {
     val events = new LinkedBlockingQueue[String]()
     val routes = RouteTable(
