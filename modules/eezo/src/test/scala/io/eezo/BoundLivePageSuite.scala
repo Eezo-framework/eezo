@@ -6,7 +6,7 @@ import io.eezo.core.html.Html
 import io.eezo.http.*
 import io.eezo.live.{Live, LiveServerFixtures}
 
-/** A bound live page driven the way a browser drives one: a real guard, the cookie eezo itself
+/** A bound live page driven the way a browser drives one: a real guard, the session eezo itself
   * signed, and a real upgrade over a real socket.
   *
   * It lives in the umbrella because it is the only place `http`, `auth` and `live` are all on one
@@ -17,7 +17,7 @@ import io.eezo.live.{Live, LiveServerFixtures}
   *
   * No password is ever hashed here. A sign in is planted by handing the browser a session eezo
   * signed, which is what a successful login would have written anyway, so the expiry case costs a
-  * cookie rather than a fortnight and the suite costs no bcrypt.
+  * planted session rather than a fortnight and the suite costs no bcrypt.
   */
 class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
 
@@ -36,7 +36,7 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
       clock = SignInFixtures.clock
     )
 
-  /** A page that hands the browser a session, so the tests below own a real signed cookie without
+  /** A page that hands the browser a session, so the tests below own a real signed session without
     * going through a password.
     */
   private def planting(at: String, session: Session): Route =
@@ -46,13 +46,14 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
       _ => Response.Ok(Html.text("planted")).withSession(session)
     )
 
-  /** What the generator emits: the guarded page through its declaration, and the declaration's own
-    * `identify` on the table, which is what reaches an upgrade.
+  /** What the generator emits: the guarded page through its declaration, a public page beside it,
+    * and the declaration's own `identify` on the table, which is what reaches an upgrade.
     */
   private def bound(body: Rig => Unit): Unit = {
     val dashboard: Guarded[Any] = guard.required[Any]
     val user                    =
       dashboard.mounting(pageRoute(Live.mount(_, new Counter), "/dashboard")) ++ Seq(
+        pageRoute(Live.mount(_, new Counter), "/public"),
         planting("/plant/alice", SignInFixtures.signedInSession(alice.id)),
         planting("/plant/mallory", SignInFixtures.signedInSession(mallory.id)),
         planting("/plant/lapsed", SignInFixtures.signedInSession(alice.id, SignInFixtures.stale))
@@ -75,10 +76,7 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
   test("a guarded page joins with the very cookie that rendered it") {
     bound { rig =>
       val cookie = cookieFrom(rig, "/plant/alice")
-      val wire   = rig.connect(rig.mountedPageId("/dashboard", cookie), cookie)
-      wire.join()
-      assert(wire.frame().contains("\"setChildren\""))
-      wire.close()
+      rig.joins(rig.mountedPageId("/dashboard", cookie), cookie)
     }
   }
 
@@ -92,7 +90,10 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
   test("a guarded page refuses another signed in user, with 4403") {
     bound { rig =>
       val id = rig.mountedPageId("/dashboard", cookieFrom(rig, "/plant/alice"))
-      assertEquals(rig.connect(id, cookieFrom(rig, "/plant/mallory")).closed()._1, 4403)
+      assertEquals(
+        rig.connect(id, cookieFrom(rig, "/plant/mallory")).closed(),
+        (4403, "not signed in as the page's user")
+      )
     }
   }
 
@@ -101,7 +102,23 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
       val id = rig.mountedPageId("/dashboard", cookieFrom(rig, "/plant/alice"))
       // The same person, the same browser: a sign in the guard no longer honours names nobody, and
       // nobody is not the page's user.
-      assertEquals(rig.connect(id, cookieFrom(rig, "/plant/lapsed")).closed()._1, 4403)
+      assertEquals(
+        rig.connect(id, cookieFrom(rig, "/plant/lapsed")).closed(),
+        (4403, "not signed in as the page's user")
+      )
+    }
+  }
+
+  test("a page on a public route is bound to nobody, though a signed in visitor rendered it") {
+    bound { rig =>
+      // /public is outside the declaration, so nothing names the request that renders it and the
+      // page is bound to nobody, whoever the browser was signed in as. A socket carrying no session
+      // joins it, and so does one carrying another signed in user's. Each gets a mount of its own,
+      // because any page, bound or not, admits one socket at a time.
+      val visiting = cookieFrom(rig, "/plant/alice")
+
+      rig.joins(rig.mountedPageId("/public", visiting))
+      rig.joins(rig.mountedPageId("/public", visiting), cookieFrom(rig, "/plant/mallory"))
     }
   }
 }

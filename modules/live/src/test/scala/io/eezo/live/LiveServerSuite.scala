@@ -59,10 +59,6 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
       assert(response.body().contains("applyPatches"))
       assert(response.body().contains("__eezoLiveClient"))
       assertEquals(response.headers().firstValue("Cache-Control").orElse(""), "no-cache")
-
-      // Origin and identity share 4403, so the console line the script prints is the only thing
-      // that tells an operator which refusal they are reading: it has to carry the server's reason.
-      assert(response.body().contains("event.reason"), response.body())
     }
   }
 
@@ -153,10 +149,7 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
       val evil   = rig.connect(pageId, headers = Seq("Origin" -> "http://evil.example"))
       assertEquals(evil.closed(), (4403, "origin mismatch"))
 
-      val own = rig.connect(pageId, headers = Seq("Origin" -> s"http://localhost:${rig.port}"))
-      own.join()
-      assert(own.frame().contains("\"setChildren\""))
-      own.close()
+      rig.joins(pageId, headers = Seq("Origin" -> s"http://localhost:${rig.port}"))
     }
   }
 

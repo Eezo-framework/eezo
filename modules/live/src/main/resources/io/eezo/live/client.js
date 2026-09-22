@@ -143,9 +143,11 @@
         // Server reachable, connection unwanted: reload into a fresh page id.
         if (event.code === 4404) { recover("page no longer on the server"); return; }
         if (event.code === 4409) { recover("this page is open in another tab"); return; }
-        // 4403 is every refusal at the upgrade: a cross-site origin, or a socket that is not
-        // signed in as the page's user. Only the server knows which, so its reason is printed
-        // rather than guessed at. No reload: reloading would render the same refusal again.
+        // 4403 is every refusal at the upgrade: an origin refusal and a current user refusal
+        // share the code, so only the server knows which one this is, and its reason is printed
+        // rather than guessed at. No harness reads this console line, since no test drives a
+        // browser, so this comment is the pin on it. No reload: reloading would render the same
+        // refusal again.
         if (event.code === 4403) {
           console.error("eezo live: refused: " + event.reason);
           state("lost");

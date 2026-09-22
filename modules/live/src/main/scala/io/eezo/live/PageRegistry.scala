@@ -9,7 +9,7 @@ import java.time.Duration
   * one connection at a time. On a bound page the id is the second factor rather than the whole
   * capability: the first is the current user the page was rendered for, which the upgrade has to
   * name again. On a page rendered for nobody the id is still all there is, which is what a public
-  * page has always been. The registry is capped because every mount runs `init` — usually a query —
+  * page has always been. The registry is capped because every mount runs `init`, usually a query,
   * with no requirement that a socket ever connect, which is a cheap amplification vector left
   * uncapped.
   *
@@ -30,24 +30,25 @@ private[live] final class PageRegistry(
 
   import PageRegistry.{ConnectRefusal, Status}
 
-  private final case class Slot(page: Page[?], owner: Option[String], status: Status)
+  private final case class Slot(page: Page[?], renderedFor: Option[String], status: Status)
 
   private val slots  = scala.collection.mutable.HashMap.empty[String, Slot]
   private val random = new SecureRandom()
 
   /** Mints an id and registers the page built for it, or `None` at the cap — the mount's cue to
-    * render the page dead rather than fail the response (M3 decides the rendering). `owner` is the
-    * current user the render was for; `None` is a page rendered on a public route.
+    * render the page dead rather than fail the response (M3 decides the rendering). `renderedFor`
+    * is the current user the render was for; `None` is a page rendered on a public route.
     */
-  def register(owner: Option[String], create: String => Page[?]): Option[Page[?]] = synchronized {
-    if (slots.size >= cap) None
-    else {
-      val id   = newId()
-      val page = create(id)
-      slots.update(id, Slot(page, owner, Status.NeverConnected(clock())))
-      Some(page)
+  def register(renderedFor: Option[String], create: String => Page[?]): Option[Page[?]] =
+    synchronized {
+      if (slots.size >= cap) None
+      else {
+        val id   = newId()
+        val page = create(id)
+        slots.update(id, Slot(page, renderedFor, Status.NeverConnected(clock())))
+        Some(page)
+      }
     }
-  }
 
   /** Claims the page for a socket. One connection at a time: a second upgrade on a page that is
     * already connected is refused, not shared — two writers through one mailbox would be legal, but
@@ -63,8 +64,8 @@ private[live] final class PageRegistry(
     */
   def connect(id: String, who: Option[String]): Either[ConnectRefusal, Page[?]] = synchronized {
     slots.get(id) match {
-      case None                                                    => Left(ConnectRefusal.Unknown)
-      case Some(slot) if slot.owner.isDefined && who != slot.owner =>
+      case None => Left(ConnectRefusal.Unknown)
+      case Some(slot) if slot.renderedFor.isDefined && who != slot.renderedFor =>
         Left(ConnectRefusal.NotTheUser)
       case Some(slot) =>
         slot.status match {

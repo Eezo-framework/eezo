@@ -84,7 +84,7 @@ object Live {
     * `request` is the request being answered, and the one thing read off it is `currentUser`: a
     * page rendered behind a guarded route is bound to that user and admits only their socket
     * (docs/live.md §7). There is no request free overload, because a page that forgot to say who
-    * rendered it would silently be the open one, and that has to be a compile error.
+    * rendered it would quietly stay unbound, and that has to be a compile error.
     */
   def mount[S](request: Request, component: Component[S]): Html =
     mount(request, (_: Async[S]) => component)
@@ -189,8 +189,8 @@ object Live {
     */
   private def endpoint(request: Request): WsListener = new WsListener {
 
-    // Read off the upgrade once, so the listener keeps three small values for the socket's
-    // lifetime rather than the whole request.
+    // The current user is read off the upgrade once, when this listener is built, and compared
+    // once, when the socket opens.
     private val id       = request.pathParams.getOrElse("page", "")
     private val who      = request.currentUser
     private val originOk = originAllowed(request)

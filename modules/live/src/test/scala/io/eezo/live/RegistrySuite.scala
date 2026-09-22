@@ -53,7 +53,7 @@ class RegistrySuite extends munit.FunSuite {
     assertEquals(reg.connect("0" * 32, None), Left(PageRegistry.ConnectRefusal.Unknown))
   }
 
-  test("an unbound page admits a named socket too, since nobody owns it") {
+  test("an unbound page admits a named socket too, since it is bound to nobody") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
     val page = reg.register(None, mounted).get

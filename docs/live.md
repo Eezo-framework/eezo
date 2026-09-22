@@ -221,7 +221,7 @@ setting matters:
 Two devices on one deployed guestbook is the whole acceptance test: sign on the phone, watch
 the laptop.
 
-## 9. When things break — designed-in behavior, not bugs
+## 9. When things break: designed-in behavior, not bugs
 
 - **Kill the server; the page goes quiet.** The client logs `connection lost, reconnecting…`
   once and retries forever (capped ~3s); the anchor carries `data-eezo-state="lost"` for

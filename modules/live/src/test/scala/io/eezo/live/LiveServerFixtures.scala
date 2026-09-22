@@ -44,7 +44,7 @@ trait LiveServerFixtures { self: munit.FunSuite =>
     )
 
   /** The page id off a mounted response's marker. */
-  protected def pageIdIn(html: String): String =
+  private def pageIdIn(html: String): String =
     "data-eezo-page=\"([0-9a-f]{32})\"".r
       .findFirstMatchIn(html)
       .map(_.group(1))
@@ -83,6 +83,17 @@ trait LiveServerFixtures { self: munit.FunSuite =>
       val upgrade  = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/eezo/live/$pageId"))
       headers.foreach((name, value) => upgrade.setHeader(name, value))
       new Wire(ws.connect(listener, upgrade).get(), listener)
+    }
+
+    /** A socket that joins `pageId`, is answered with the full resync every join is owed, and hangs
+      * up: the whole visit a suite drives when admission is the only thing under test.
+      */
+    def joins(pageId: String, headers: Seq[(String, String)] = Nil): Unit = {
+      val wire = connect(pageId, headers)
+      wire.join()
+      val resync = wire.frame()
+      assert(resync.contains("\"setChildren\""), resync)
+      wire.close()
     }
   }
 
@@ -123,8 +134,8 @@ trait LiveServerFixtures { self: munit.FunSuite =>
     def close(code: Int = 1000): Unit = session.close(code, "bye", Callback.NOOP)
 
     /** A hard transport close, no close frame: the server sees an abnormal drop (1006), which is
-      * what starts the grace window. `session.close(1006, …)` cannot stand in — 1006 is reserved
-      * and may not be sent over the wire.
+      * what starts the grace window. `session.close(1006, …)` cannot stand in, because 1006 is
+      * reserved and may not be sent over the wire.
       */
     def drop(): Unit = session.disconnect()
   }
