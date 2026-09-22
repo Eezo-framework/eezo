@@ -13,13 +13,11 @@ object Index {
   /** A demo page anyone may open; the blog has a guard, so saying so is not optional. */
   given Guarded[Index.type] = Guarded.public
 
-  def index(request: Request): Response = {
-    val _ = request
+  def index(request: Request): Response =
     Response.Ok(
       Html.doctype ++ html(
         head(meta(Attrs.charset := "utf-8"), title("calling out")),
-        body(Live.mount(new Callout(_)))
+        body(Live.mount(request, new Callout(_)))
       )
     )
-  }
 }

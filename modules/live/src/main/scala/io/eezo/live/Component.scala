@@ -57,10 +57,11 @@ object Event {
   * `work` is ordinary blocking direct-style code: an outbound call through
   * `io.eezo.http.client.Http`, a `transact` block, both.
   *
-  * The capability arrives by constructor, through `Live.mount(async => new Weather(async))`, so
-  * `Component`'s three methods stay exactly as they are; `Init` extends this, so `init` can start a
-  * load and return a loading state — the page responds instantly and the data patches in. `render`
-  * must not call it: render runs per event, and work started there is work started per keystroke.
+  * The capability arrives by constructor, through
+  * `Live.mount(request, async => new Weather(async))`, so `Component`'s three methods stay exactly
+  * as they are; `Init` extends this, so `init` can start a load and return a loading state. The
+  * page responds instantly and the data patches in. `render` must not call it: render runs per
+  * event, and work started there is work started per keystroke.
   *
   * [[get]] and [[post]] are [[apply]] pre-composed with the HTTP client, shaped so the reaction is
   * a **total** function over `Reply`'s four arms: the compiler itself asks what happens when

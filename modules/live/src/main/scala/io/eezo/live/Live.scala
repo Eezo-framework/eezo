@@ -14,7 +14,7 @@ import io.eezo.http.{Body, Eezo, Method, PathPattern, Request, Response, Route, 
   *
   * {{{
   * def board(request: Request): Response =
-  *   Response.Ok(layout(Live.mount(Board())))
+  *   Response.Ok(layout(Live.mount(request, Board())))
   * }}}
   *
   * `mount` runs `init`, registers the page, and returns a fragment of two nodes: the anchor
@@ -80,23 +80,32 @@ object Live {
     * layout puts it. At the registry's cap the component is rendered once, statically, and the page
     * says so in an attribute the client logs — a busy site degrades to working pages that do not
     * update, never to errors (design/live.md §2.5).
+    *
+    * `request` is the request being answered, and the one thing read off it is `currentUser`: a
+    * page rendered behind a guarded route is bound to that user and admits only their socket
+    * (docs/live.md §7). There is no request free overload, because a page that forgot to say who
+    * rendered it would quietly stay unbound, and that has to be a compile error.
     */
-  def mount[S](component: Component[S]): Html = mount((_: Async[S]) => component)
+  def mount[S](request: Request, component: Component[S]): Html =
+    mount(request, (_: Async[S]) => component)
 
   /** The factory overload for a component that calls out: the [[Async]] it is built with is the
     * page's own, so work it declares comes back through this page's mailbox. Wired through a relay
     * because the page cannot exist before its component does; the relay is aimed before `init`
     * runs, so even a fetch-at-mount lands.
     */
-  def mount[S](create: Async[S] => Component[S]): Html =
-    registry.register { id =>
-      val sender = new Sender(id)
-      val _      = senders.put(id, sender)
-      val relay  = new Relay[S]
-      val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
-      relay.aim(page)
-      page
-    } match {
+  def mount[S](request: Request, create: Async[S] => Component[S]): Html =
+    registry.register(
+      request.currentUser,
+      id => {
+        val sender = new Sender(id)
+        val _      = senders.put(id, sender)
+        val relay  = new Relay[S]
+        val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
+        relay.aim(page)
+        page
+      }
+    ) match {
       case Some(page) =>
         try {
           val tree = page.mount()
@@ -180,19 +189,27 @@ object Live {
     */
   private def endpoint(request: Request): WsListener = new WsListener {
 
-    private val id = request.pathParams.getOrElse("page", "")
+    // The current user is read off the upgrade once, when this listener is built, and compared
+    // once, when the socket opens.
+    private val id       = request.pathParams.getOrElse("page", "")
+    private val who      = request.currentUser
+    private val originOk = originAllowed(request)
 
     private var attached: Option[(Page[?], Sender)] = None
 
     override def onOpen(conn: WsConn): Unit =
-      if (!originAllowed(request)) {
+      if (!originOk) {
         log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, origin mismatch")
         conn.close(4403, "origin mismatch")
       } else {
-        registry.connect(id) match {
+        registry.connect(id, who) match {
           case Left(PageRegistry.ConnectRefusal.Unknown) => conn.close(4404, "unknown page")
           case Left(PageRegistry.ConnectRefusal.AlreadyConnected) =>
             conn.close(4409, "page already connected")
+          // Expired, signed out, or a stranger: the registry cannot tell which.
+          case Left(PageRegistry.ConnectRefusal.NotTheUser) =>
+            log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, not the page's user")
+            conn.close(4403, "not signed in as the page's user")
           case Right(page) =>
             senders.get(id) match {
               case null   => conn.close(4404, "unknown page")
@@ -271,8 +288,9 @@ object Live {
   }
 
   /** A browser names where the page came from; a socket opened by another site is refused. No
-    * `Origin` header is a non-browser client, allowed: the page id is the capability, and origin
-    * checking exists against cross-site use of a *browser's* credentials.
+    * `Origin` header is a non-browser client, allowed: origin checking exists against cross-site
+    * use of a *browser's* credentials, and what protects the page is its id plus, on a bound page,
+    * the current user the upgrade has to name.
     */
   private def originAllowed(request: Request): Boolean =
     request.header("Origin") match {
