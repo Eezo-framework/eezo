@@ -150,7 +150,7 @@ final class Guard[U] private (
   /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
     * a declaration that goes on to scope rows by it.
     *
-    * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's column
+    * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's field
     * holds is the key, and reading the row back to take its key off again would be a lookup per
     * request for a value the session already spells.
     *
@@ -174,21 +174,26 @@ final class Guard[U] private (
     * arm of `through` writes the same name through [[named]] off the key it already decoded to let
     * the request in, rather than calling this and reading the session a second time.
     *
-    * A request that already carries a name is handed back untouched, rather than overwritten with
-    * whatever this guard's own session entries say. `RouteTable` composes the naming of every
-    * declaration with `andThen`, and an application may hold more than one guard, one per user
-    * model, so a table can carry a guard whose sign in expires sooner beside one whose sign in
-    * lasts longer. Without this check the later function in the composition would answer `None` for
-    * a session it does not recognise as current and erase the `Some` an earlier guard in the same
-    * chain had already written for the same browser, turning a signed in visitor into nobody
-    * depending on the order declarations happened to be mounted in.
+    * A guard that finds nobody hands the request back as it came, which is the whole of what the
+    * `fold` says and the reason two of these compose at all. `RouteTable` composes the naming of
+    * every declaration with `andThen`, and an application may hold more than one guard, one per
+    * user model, so a table can carry a guard whose sign in expires sooner beside one whose sign in
+    * lasts longer; the one that recognises nobody writes nothing, so it cannot erase what the other
+    * found, whichever order the two were mounted in. When both find somebody the later one in mount
+    * order has the last word, which is the rule the table already keeps for composing two of them
+    * with `++`.
     */
   private val identify: Request => Request =
     request => currentUserKey(request).fold(request)(named(request, _))
 
-  /** `request` naming `id`, unless it already names someone; see [[identify]] for why not. */
+  /** `request` naming `id`, as the key and not the row.
+    *
+    * `Id.show` is the one spelling, the same one the session carries and the same one an owner
+    * field holds, so a handler, a socket upgrade and a row all compare the same string and nothing
+    * has to parse anything to find out whether they agree.
+    */
   private def named(request: Request, id: Id[U]): Request =
-    if (request.currentUser.isDefined) request else request.copy(currentUser = Some(id.show))
+    request.copy(currentUser = Some(id.show))
 
   /** The wrapper every guarded route goes through.
     *
@@ -237,7 +242,7 @@ final class Guard[U] private (
     *
     * The pair rather than one half or the other, because the callers want different halves of the
     * same lookup and neither half recovers the other. [[through]] writes the key on the request,
-    * which is what an owner column holds and what [[currentUserKey]] answers, while [[current]]
+    * which is what an owner field holds and what [[currentUserKey]] answers, while [[current]]
     * wants the row. Answering the key alone would send every handler behind a guard back through
     * `find` for a row this method had already read, and answering the row alone would mean taking a
     * key back off a user, which is `find`'s direction and not its inverse.

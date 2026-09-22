@@ -260,9 +260,9 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
 
   /** Concatenation. Order is preserved, so the receiver's routes keep winning.
     *
-    * The two stamps are composed rather than one of them chosen, because the framework routes an
+    * The two namings are composed rather than one of them chosen, because the framework routes an
     * application appends, `HttpApp.serve`'s `table ++ RouteTable(frameworkRoutes)`, name nobody and
-    * must not cost the application the stamp its own declarations composed.
+    * must not cost the application the naming its own declarations composed.
     */
   def ++(other: RouteTable): RouteTable =
     new RouteTable(routes ++ other.routes, identify.andThen(other.identify))

@@ -102,8 +102,8 @@ class RequestSuite extends munit.FunSuite {
   }
 
   test("a request built by hand names nobody, and so does one in a build with no guard at all") {
-    // The stamp is written by whoever holds the rule, and `http` holds none: nothing short of a
-    // guard can name anyone, so a request nobody stamped carries nobody.
+    // The naming is written by whoever holds the rule, and `http` holds none: nothing short of
+    // a guard can name anyone, so a request nobody named carries nobody.
     assertEquals(request().currentUser, None)
   }
 }

@@ -146,9 +146,9 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   test("an upgrade is named by the table, after the handshake's session has been read") {
-    // Order is the whole of it: the stamp reads the session, so running it before the handshake's
-    // session has been read would make every upgrade anonymous, and silently, since nothing about
-    // a `None` says whether it was asked too early or answered honestly.
+    // Order is the whole of it: the naming reads the session, so running it before the
+    // handshake's session has been read would make every upgrade anonymous, and silently, since
+    // nothing about a `None` says whether it was asked too early or answered honestly.
     val events = new LinkedBlockingQueue[String]()
     val routes = RouteTable(
       Seq(

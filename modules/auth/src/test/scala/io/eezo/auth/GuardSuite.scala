@@ -244,19 +244,22 @@ class GuardSuite extends munit.FunSuite {
     * one place an application ever sees this: a naming the table performed and then dropped on the
     * floor would pass an assertion made on the request and still leave every live page anonymous.
     *
-    * The socket is mounted beside the guard's own pages rather than behind its wrapper, which is
-    * the case only a table can answer: an upgrade nobody guarded is still named, and a guarded one
-    * refuses an anonymous handshake before its endpoint runs, which is pinned elsewhere and would
-    * leave three of the four sessions here with no endpoint to read anything.
+    * `guarded` says which of the two sockets an application mounts this is. Beside the guard's own
+    * pages, which is the default, is the case only a table can answer: an upgrade nobody guarded is
+    * still named, and it is the only one that can read all four sessions, since a guarded socket
+    * refuses an anonymous handshake before its endpoint runs and would leave three of the four with
+    * no endpoint to read anything. Behind the wrapper is the shape an application that guards its
+    * live pages actually mounts, and the naming still has to reach the endpoint through it.
     */
-  private def onUpgrade(request: Request): Option[String] = {
+  private def onUpgrade(request: Request, guarded: Boolean = false): Option[String] = {
     val seen     = new AtomicReference[Option[String]](Some("the endpoint never ran"))
     val declared = guard.required[Any]
     val socket   = Route.Ws(
       PathPattern.parse("/live"),
       upgrade => { seen.set(upgrade.currentUser); new WsListener {} }
     )
-    val table = RouteTable(declared.carries :+ socket, declared.identify)
+    val mounted = if (guarded) declared.through(socket) else socket
+    val table   = RouteTable(declared.carries :+ mounted, declared.identify)
     table.dispatchWs(request.path) match {
       case Some((route, _)) => route.endpoint(table.identify(request)): Unit
       case None             => fail(s"no WebSocket route matched ${request.path}")
@@ -296,6 +299,16 @@ class GuardSuite extends munit.FunSuite {
     assertEquals(onUpgrade(browser(Method.GET, "/live")), None)
     assertEquals(onUpgrade(signedIn(ann.id, since = stale, path = "/live")), None)
     assertEquals(onUpgrade(stampless(ann.id, path = "/live")), None)
+  }
+
+  test("a guarded upgrade reads the key off the request the table named, inside its endpoint") {
+    // The shape an application that guards a live page mounts: the socket behind the guard's own
+    // wrapper, in a table that names the handshake. The wrapper names nobody on an upgrade, so the
+    // endpoint reads what the table wrote, and it has to survive being wrapped.
+    assertEquals(
+      onUpgrade(signedIn(ann.id, path = "/live"), guarded = true),
+      Some(ann.id.show)
+    )
   }
 
   test(

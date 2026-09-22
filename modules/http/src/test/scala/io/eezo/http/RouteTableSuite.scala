@@ -249,9 +249,9 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(RouteTable(Seq(get("/")), names).identify(req).currentUser, Some("ann"))
   }
 
-  test("++ keeps the application's stamp, which is what HttpApp appends its framework routes to") {
+  test("++ keeps the application's naming, which is what HttpApp appends its framework routes to") {
     // `HttpApp.serve` is `table ++ RouteTable(frameworkRoutes)`, so a framework route that names
-    // nobody must not cost the application the stamp its own declarations composed.
+    // nobody must not cost the application the naming its own declarations composed.
     val application = RouteTable(Seq(get("/posts")), names)
     val framework   = RouteTable(Seq(get("/health")))
     val joined      = application ++ framework
@@ -260,21 +260,21 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(joined.routes.map(_.describe), Seq("GET /posts", "GET /health"))
   }
 
-  test("++ composes the two stamps in order, so the argument's has the last word") {
+  test("++ composes the two namings in order, so the argument's has the last word") {
     val first  = RouteTable(Seq(get("/a")), _.copy(currentUser = Some("first")))
     val second = RouteTable(Seq(get("/b")), _.copy(currentUser = Some("second")))
     assertEquals(first.++(second).identify(request(Method.GET, "/a")).currentUser, Some("second"))
     assertEquals(second.++(first).identify(request(Method.GET, "/a")).currentUser, Some("first"))
   }
 
-  test("naming composes the stamp one guard hands every declaration once, not once a row") {
+  test("naming composes the function one guard hands every declaration once, not once a row") {
     // What `distinct` is for: the function is a `val` on the guard, so twenty guarded things hand
     // the table the same instance and an upgrade reads the session once rather than twenty times.
-    var reads                     = 0
-    val stamp: Request => Request = request => {
+    var reads                      = 0
+    val naming: Request => Request = request => {
       reads += 1; request.copy(currentUser = Some("ann"))
     }
-    val named = RouteTable.naming(Seq.fill(20)(stamp))
+    val named = RouteTable.naming(Seq.fill(20)(naming))
     assertEquals(named(request(Method.GET, "/")).currentUser, Some("ann"))
     assertEquals(reads, 1)
   }
@@ -286,8 +286,8 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(named(req), req)
   }
 
-  test("dispatch never stamps, so a handler on a public route reads nobody") {
-    // The stamp on the HTTP side is the guard's wrapper and nothing else, which is what keeps a
+  test("dispatch never names, so a handler on a public route reads nobody") {
+    // The naming on the HTTP side is the guard's wrapper and nothing else, which is what keeps a
     // page nobody guarded from naming the visitor who happens to be signed in. `identify` is for
     // the upgrade, which has no wrapper to put it on.
     val table = RouteTable(

@@ -53,7 +53,7 @@ object FromPath {
   * runs, by the guard's own wrapper on a guarded page and by the route table's `identify` on a
   * socket upgrade, and never from a header, a query or path parameter, or a frame, all of which a
   * client chooses. Nobody is `None`, which is what every request in an application with no way of
-  * signing in carries, and what a request built by hand carries until something stamps it.
+  * signing in carries, and what a request built by hand carries until something names it.
   */
 final case class Request(
     method: Method,

@@ -354,7 +354,7 @@ class PostOwnershipSuite extends munit.FunSuite {
   }
 
   // ---------------------------------------------------------------------------------------------
-  // The table's stamp
+  // The table's naming
   // ---------------------------------------------------------------------------------------------
 
   /** `Main.routes` rebuilds `Routes.table()` into two mounts rather than serving it as generated,
