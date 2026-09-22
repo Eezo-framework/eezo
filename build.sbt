@@ -140,6 +140,10 @@ lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(core % "compile->compile;test->test", http, db, live, auth)
   .settings(commonSettings)
   .settings(name := "eezo")
+  // Jetty's WebSocket client is test scoped, so it does not arrive with `http` or `live`:
+  // `BoundLivePageSuite` is the one place a real guard, a real cookie and a real live socket meet,
+  // and it drives that socket with the same artifact `http`, `live` and `auth` drive their own.
+  .settings(libraryDependencies += jettyWsClient)
 
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross built for sbt 1 and sbt 2 from one source. See

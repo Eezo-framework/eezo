@@ -506,8 +506,13 @@ object Guard {
     */
   private[auth] def parse[U](text: String): Option[Id[U]] = summon[FromPath[Id[U]]].apply(text)
 
-  /** The moment of a sign in, as the session carries it. [[readStamp]] reads it back. */
-  private[auth] def stamped(at: Instant): String = at.toEpochMilli.toString
+  /** The moment of a sign in, as the session carries it. [[readStamp]] reads it back.
+    *
+    * Reachable from the whole of `io.eezo` for [[UserEntry]]'s reason: the umbrella's own suites
+    * plant a sign in rather than pay for a login, and a stamp they spelled by hand would be a
+    * second encoding of this one, free to drift from it in silence.
+    */
+  private[eezo] def stamped(at: Instant): String = at.toEpochMilli.toString
 
   /** The moment [[stamped]] wrote, back out of the session text, and `None` for anything that is
     * not one.
