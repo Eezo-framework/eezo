@@ -9,7 +9,7 @@ import io.eezo.live.{Async, Component, Event, Init, Live}
   * its four outcomes each driving their own state, and the page never freezing while the call
   * runs.
   *
-  * The component is built with its [[Async]] through `Live.mount(async => new Callout(async))`.
+  * The component is built with its [[Async]] through `Live.mount(request, async => new Callout(async))`.
   * A click starts the call on its own virtual thread and returns the loading state at once; the
   * reaction is a total match over `Reply`, so forgetting the `Denied` arm is a compile error,
   * not a production surprise. The token toggle is the whole auth demo: break it and the same

@@ -93,15 +93,16 @@ object Index {
     Response.Ok(
       Html.doctype ++ html(
         head(meta(Attrs.charset := "utf-8"), title("counter")),
-        body(Live.mount(new Counter))
+        body(Live.mount(request, new Counter))
       )
     )
 }
 ```
 
 You own the whole document — title, stylesheets, chrome. `Live.mount` returns a fragment: the
-anchor div holding the first render, and the client script tag. Save; the dev server restarts;
-open `http://localhost:8080/counter`.
+anchor div holding the first render, and the client script tag. It takes the request you are
+answering, because that is what says whether the page is bound (§7); there is no overload without
+it. Save; the dev server restarts; open `http://localhost:8080/counter`.
 
 Click. The number moves with no page load. In DevTools → Network → WS → Messages you can read
 the whole protocol: `{"kind":"event","name":"inc"...}` up, one `setText` patch down. View
@@ -167,7 +168,7 @@ Slow work must not block the page (one thread per page is the whole concurrency 
 component that calls an HTTP API is mounted with its `Async` capability:
 
 ```scala
-Live.mount(new Callout(_))          // i.e. Live.mount(async => new Callout(async))
+Live.mount(request, new Callout(_))   // i.e. Live.mount(request, async => new Callout(async))
 
 final class Callout(async: Async[S]) extends Component[S] {
   def handle(event: Event, s: S): S = event.name match {
@@ -188,7 +189,24 @@ The reaction is a total match over the four ways an HTTP call ends — `Denied` 
 own arm so forgetting the expired-token case is a compile error, not a production surprise.
 `examples/blog`'s `/callout` page demos all arms with a toggleable token.
 
-## 7. Deploy
+## 7. A page behind a guard: the bound page
+
+A live page rendered behind a guarded route is a **bound page**. It remembers the current user of
+the request that rendered it, and admits one socket, whose upgrade must name the same current
+user; a sign in that has expired or been replaced names nobody, and nobody is not the page's user,
+so the socket is refused with `4403`. A page rendered on a public route is unbound whoever the
+visitor was, and anyone holding its id may join, as before guards existed. That is why `mount`
+takes the request: it reads exactly one thing off it, who the guard let through.
+
+The binding is checked when the socket opens and never again while it stays open. A page whose
+user signs out, or whose sign in lapses, keeps working for as long as its socket lives; the
+refusal arrives at the next upgrade, which in practice is the reconnect after a network blip.
+Nothing is pushed at an open socket to close it.
+
+Nothing is asked of you beyond mounting with the request. Guard the route, and the page behind it
+is bound; leave it public, and it is not.
+
+## 8. Deploy
 
 Nothing live-specific to configure: `eezo deploy` from `docs/deploying.md` ships it, and the
 page works over `wss://` because the client derives the socket scheme from the page's. One
@@ -203,7 +221,7 @@ setting matters:
 Two devices on one deployed guestbook is the whole acceptance test: sign on the phone, watch
 the laptop.
 
-## 8. When things break — designed-in behavior, not bugs
+## 9. When things break — designed-in behavior, not bugs
 
 - **Kill the server; the page goes quiet.** The client logs `connection lost, reconnecting…`
   once and retries forever (capped ~3s); the anchor carries `data-eezo-state="lost"` for
@@ -225,10 +243,15 @@ the laptop.
   your machine's forward on one side, the server's own loopback on the other. Test the URL
   from the server host, not your laptop. Found the hard way: a VS Code port-forward on a Mac
   answered the browser and swallowed a jshell probe, and the component was innocent all along.
-- **The page renders but never connects, console shows `4403`.** The socket upgrade failed the
-  origin check: the page was served from one host and the socket opened against another.
-  Serve and connect through the same origin (the client does this by construction; a reverse
-  proxy that rewrites `Host` but forwards `Origin` is the usual culprit).
+- **The page renders but never connects, console shows `4403`.** The upgrade was refused, and
+  the console line carries the server's own reason, which is the only thing that tells the two
+  refusals apart. `origin mismatch` means the page was served from one host and the socket opened
+  against another: serve and connect through the same origin (the client does this by
+  construction; a reverse proxy that rewrites `Host` but forwards `Origin` is the usual culprit).
+  `not signed in as the page's user` means a bound page (§7) was joined by a socket that is
+  somebody else, or nobody: an expired or replaced sign in reads as nobody. The cure is to
+  sign in again and reload the page yourself: unlike 4404 and 4409 the client does not reload
+  itself here, because reloading would only render the same refusal again.
 - **`NotCanonical: <div> inside <p>...` at mount.** The differ refuses trees the HTML parser
   would restructure, because a restructured DOM breaks patch addressing silently. The message
   names the parser's move; restructure as it says. Same for mixed keyed/unkeyed children and
