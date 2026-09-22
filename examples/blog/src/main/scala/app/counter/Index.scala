@@ -18,11 +18,13 @@ object Index {
   /** A demo page anyone may open; the blog has a guard, so saying so is not optional. */
   given Guarded[Index.type] = Guarded.public
 
-  def index(request: Request): Response =
+  def index(request: Request): Response = {
+    val _ = request
     Response.Ok(
       Html.doctype ++ html(
         head(meta(Attrs.charset := "utf-8"), title("eezo live counter")),
-        body(Live.mount(request, new Counter))
+        body(Live.mount(new Counter))
       )
     )
+  }
 }

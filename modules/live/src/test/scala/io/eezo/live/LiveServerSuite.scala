@@ -42,18 +42,17 @@ class LiveServerSuite extends munit.FunSuite {
   }
 
   /** A handwritten page route whose handler mounts per request, which is what a real handler does:
-    * `mounted` is handed the request, so every GET is a fresh page bound to whoever that request
-    * named.
+    * `mounted` is by-name so every GET is a fresh page.
     */
-  private def pageRoute(mounted: Request => Html, at: String = "/counter"): Route =
+  private def pageRoute(mounted: => Html, at: String = "/counter"): Route =
     Route.Http(
       Method.GET,
       PathPattern.parse(at),
-      request =>
+      _ =>
         Response.Ok(
           Html.doctype ++ html(
             head(title("t")),
-            io.eezo.core.html.Tags.body(mounted(request))
+            io.eezo.core.html.Tags.body(mounted)
           )
         )
     )
@@ -75,7 +74,7 @@ class LiveServerSuite extends munit.FunSuite {
   }
 
   private def serving(body: Rig => Unit): Unit =
-    servingRoutes(Seq(pageRoute(Live.mount(_, new Counter))))(body)
+    servingRoutes(Seq(pageRoute(Live.mount(new Counter))))(body)
 
   private final class Rig(val port: Int, ws: WebSocketClient) {
 
@@ -112,12 +111,10 @@ class LiveServerSuite extends munit.FunSuite {
 
   private final class Listener extends Session.Listener.AbstractAutoDemanding {
     val frames = new LinkedBlockingQueue[String]()
-    val closes = new LinkedBlockingQueue[(Int, String)]()
+    val closes = new LinkedBlockingQueue[Int]()
 
     override def onWebSocketText(text: String): Unit               = { val _ = frames.offer(text) }
-    override def onWebSocketClose(code: Int, reason: String): Unit = {
-      val _ = closes.offer((code, reason))
-    }
+    override def onWebSocketClose(code: Int, reason: String): Unit = { val _ = closes.offer(code) }
   }
 
   /** One live connection, with blocking expectations. */
@@ -138,14 +135,10 @@ class LiveServerSuite extends munit.FunSuite {
     /** A frame if one arrives within the window, null otherwise: for drain-until-quiet loops. */
     def poll(millis: Long): String | Null = listener.frames.poll(millis, TimeUnit.MILLISECONDS)
 
-    def closeCode(): Int = closed()._1
-
-    /** Both halves of the close: the code every refusal is sorted by, and the reason that is the
-      * only thing telling apart two refusals sharing the same code, such as origin and identity
-      * both closing with 4403.
-      */
-    def closed(): (Int, String) =
-      Option(listener.closes.poll(5, TimeUnit.SECONDS)).getOrElse(fail("no close within 5s"))
+    def closeCode(): Int = {
+      val code = listener.closes.poll(5, TimeUnit.SECONDS)
+      Option(code).getOrElse(fail("no close within 5s")).intValue
+    }
 
     def close(code: Int = 1000): Unit = session.close(code, "bye", Callback.NOOP)
 
@@ -173,13 +166,6 @@ class LiveServerSuite extends munit.FunSuite {
       assert(response.body().contains("applyPatches"))
       assert(response.body().contains("__eezoLiveClient"))
       assertEquals(response.headers().firstValue("Cache-Control").orElse(""), "no-cache")
-
-      // Origin and identity share 4403, so the console line is the only thing that tells an
-      // operator which refusal they are reading. It has to be the server's own reason rather than
-      // a guess the script made, and nothing else in the gate can see the browser run this.
-      assert(!response.body().contains("refused (origin)"), "the script still guesses the reason")
-      assert(response.body().contains("event.code === 4403"), response.body())
-      assert(response.body().contains("\"eezo live: refused: \" + event.reason"), response.body())
     }
   }
 
@@ -268,7 +254,7 @@ class LiveServerSuite extends munit.FunSuite {
     serving { rig =>
       val pageId = rig.mountedPageId()
       val evil   = rig.connect(pageId, origin = Some("http://evil.example"))
-      assertEquals(evil.closed(), (4403, "origin mismatch"))
+      assertEquals(evil.closeCode(), 4403)
 
       val own = rig.connect(pageId, origin = Some(s"http://localhost:${rig.port}"))
       own.join()
@@ -321,7 +307,7 @@ class LiveServerSuite extends munit.FunSuite {
   }
 
   test("a page mounted under a prefix: links right in the response, the resync and the patches") {
-    val mounted = Route.under("/admin")(Seq(pageRoute(Live.mount(_, new LinkCounter))))
+    val mounted = Route.under("/admin")(Seq(pageRoute(Live.mount(new LinkCounter))))
     servingRoutes(mounted) { rig =>
       // The initial response was rewritten by the mount: the base and the link both moved.
       val html = rig.get("/admin/counter").body()
@@ -368,7 +354,7 @@ class LiveServerSuite extends munit.FunSuite {
       def render(s: (Int, Int)): Html                     = div(span(s._1), em(s._2))
     }
 
-    servingRoutes(Seq(pageRoute(Live.mount(_, new FloodBoard)))) { rig =>
+    servingRoutes(Seq(pageRoute(Live.mount(new FloodBoard)))) { rig =>
       val wire = rig.connect(rig.mountedPageId())
       wire.join()
       val _ = wire.frame()
@@ -415,7 +401,7 @@ class LiveServerSuite extends munit.FunSuite {
       }
     }
 
-    servingRoutes(Seq(pageRoute(Live.mount(_, new Signup)))) { rig =>
+    servingRoutes(Seq(pageRoute(Live.mount(new Signup)))) { rig =>
       val html = rig.get("/counter").body()
       assert(html.contains("data-eezo-input=\"email-changed\""), html)
       assert(html.contains("data-eezo-debounce=\"300\""), html)
@@ -477,7 +463,7 @@ class LiveServerSuite extends munit.FunSuite {
         else Response.status(401)
     )
 
-    servingRoutes(Seq(api, pageRoute(request => Live.mount(request, new Caller(_))))) { rig =>
+    servingRoutes(Seq(api, pageRoute(Live.mount(new Caller(_))))) { rig =>
       baseUrl.set(s"http://localhost:${rig.port}")
       val wire = rig.connect(rig.mountedPageId())
       wire.join()

@@ -15,11 +15,13 @@ object Index {
   /** A demo page anyone may open; the blog has a guard, so saying so is not optional. */
   given Guarded[Index.type] = Guarded.public
 
-  def index(request: Request): Response =
+  def index(request: Request): Response = {
+    val _ = request
     Response.Ok(
       Html.doctype ++ html(
         head(meta(Attrs.charset := "utf-8"), title("guestbook")),
-        body(Live.mount(request, new Guestbook))
+        body(Live.mount(new Guestbook))
       )
     )
+  }
 }

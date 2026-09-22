@@ -14,7 +14,7 @@ import io.eezo.http.{Body, Eezo, Method, PathPattern, Request, Response, Route, 
   *
   * {{{
   * def board(request: Request): Response =
-  *   Response.Ok(layout(Live.mount(request, Board())))
+  *   Response.Ok(layout(Live.mount(Board())))
   * }}}
   *
   * `mount` runs `init`, registers the page, and returns a fragment of two nodes: the anchor
@@ -80,24 +80,16 @@ object Live {
     * layout puts it. At the registry's cap the component is rendered once, statically, and the page
     * says so in an attribute the client logs — a busy site degrades to working pages that do not
     * update, never to errors (design/live.md §2.5).
-    *
-    * `request` is the request being answered, and the one thing read off it is `currentUser`. A
-    * page rendered behind a guarded route is bound to whoever the guard let through, and its socket
-    * is admitted only when the upgrade names that same user; a page rendered on a public route is
-    * bound to nobody and anyone holding its id joins, whoever the visitor was. There is no request
-    * free overload, because a page that forgot which of the two it is would silently be the open
-    * one, and that mistake has to be a compile error rather than a page a stranger can drive.
     */
-  def mount[S](request: Request, component: Component[S]): Html =
-    mount(request, (_: Async[S]) => component)
+  def mount[S](component: Component[S]): Html = mount((_: Async[S]) => component)
 
   /** The factory overload for a component that calls out: the [[Async]] it is built with is the
     * page's own, so work it declares comes back through this page's mailbox. Wired through a relay
     * because the page cannot exist before its component does; the relay is aimed before `init`
     * runs, so even a fetch-at-mount lands.
     */
-  def mount[S](request: Request, create: Async[S] => Component[S]): Html =
-    registry.register(request.currentUser) { id =>
+  def mount[S](create: Async[S] => Component[S]): Html =
+    registry.register { id =>
       val sender = new Sender(id)
       val _      = senders.put(id, sender)
       val relay  = new Relay[S]
@@ -197,15 +189,10 @@ object Live {
         log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, origin mismatch")
         conn.close(4403, "origin mismatch")
       } else {
-        registry.connect(id, request.currentUser) match {
+        registry.connect(id) match {
           case Left(PageRegistry.ConnectRefusal.Unknown) => conn.close(4404, "unknown page")
           case Left(PageRegistry.ConnectRefusal.AlreadyConnected) =>
             conn.close(4409, "page already connected")
-          // Expired, signed out, or somebody else entirely: the registry compared two strings and
-          // cannot tell which, so the refusal says the one thing it knows.
-          case Left(PageRegistry.ConnectRefusal.NotTheUser) =>
-            log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, not the page's user")
-            conn.close(4403, "not signed in as the page's user")
           case Right(page) =>
             senders.get(id) match {
               case null   => conn.close(4404, "unknown page")
@@ -284,9 +271,8 @@ object Live {
   }
 
   /** A browser names where the page came from; a socket opened by another site is refused. No
-    * `Origin` header is a non-browser client, allowed: origin checking exists against cross-site
-    * use of a *browser's* credentials, and what protects the page is its id plus, on a bound page,
-    * the current user the upgrade has to name.
+    * `Origin` header is a non-browser client, allowed: the page id is the capability, and origin
+    * checking exists against cross-site use of a *browser's* credentials.
     */
   private def originAllowed(request: Request): Boolean =
     request.header("Origin") match {
