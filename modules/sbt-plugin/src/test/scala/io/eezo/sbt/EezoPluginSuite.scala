@@ -83,6 +83,16 @@ class EezoPluginSuite extends munit.FunSuite {
       "      case _                          => io.eezo.http.Guarded.public[A]\n" +
       "    }\n" +
       "\n" +
+      "  /** Who this application says is behind a request its table serves. */\n" +
+      "  private val identify: io.eezo.http.Request => io.eezo.http.Request =\n" +
+      "    io.eezo.http.RouteTable.naming(\n" +
+      "      Seq(\n" +
+      "        guardFor[app.eezoWitness.New.type].identify,\n" +
+      "        guardFor[app.eezoWitness._id.Show.type].identify,\n" +
+      "        guardFor[eezoWitness.Model].identify\n" +
+      "      )\n" +
+      "    )\n" +
+      "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
       "    * not the generator, decides which of them has a `Resource` and mounts the seven.\n" +
       "    */\n" +
@@ -90,7 +100,8 @@ class EezoPluginSuite extends munit.FunSuite {
       "    io.eezo.http.RouteTable(\n" +
       "      (handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct\n" +
+      "      io.eezo.http.Resource.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct,\n" +
+      "      identify\n" +
       "    )\n" +
       "  }\n" +
       "}\n"

@@ -9,7 +9,7 @@ import scala.annotation.implicitNotFound
   * to produce one of these and nothing else. `http` therefore has no guard in it at all, which is
   * what keeps a login page out of an application that has no users.
   *
-  * Three fields, and each is one question a route table has to answer.
+  * Four fields, and each is one question a route table has to answer.
   *
   * [[actions]] is which of the seven the declaration covers, so a model can guard writing and leave
   * reading public. A page rather than a model is `Guarded[Index.type]`, whose routes are
@@ -33,6 +33,14 @@ import scala.annotation.implicitNotFound
   * concatenates them and takes `distinct`; two equal but separate instances would mount the login
   * page twice and `RouteTable`'s duplicate check would refuse to boot.
   *
+  * [[identify]] is the gentle half of [[through]]: it names the current user on a request and never
+  * refuses one. The two are separate because refusing and naming happen in different places. A
+  * guarded page is refused and named by the same wrapper, so `through` does both for it; an upgrade
+  * has no wrapper the table can reach around a public route, so the table composes the `identify`
+  * of every declaration mounted into it and runs that on the handshake. A declaration that knows
+  * nobody, [[Guarded.public]] and any built before there was anything to name, hands the request
+  * back exactly as it came.
+  *
   * Not `final`, and that is the one concession this type makes to [[Owned]]. Ownership is a
   * refinement of being guarded rather than a second kind of declaration beside it, so an owned
   * model declares one thing and the route table's lookup, its `mounting` and every call site that
@@ -40,9 +48,9 @@ import scala.annotation.implicitNotFound
   * every one of those places learning a second one and an owned model writing two lines that have
   * to agree.
   *
-  * Being open is also why it is a plain class with three `val`s rather than a `case class`. A case
+  * Being open is also why it is a plain class with plain `val`s rather than a `case class`. A case
   * class that something extends lies about all three of the things `case` generates: an [[Owned]]
-  * would equal a bare `Guarded` carrying the same three fields, two `Owned` differing only in what
+  * would equal a bare `Guarded` carrying the same four fields, two `Owned` differing only in what
   * they cover or whose field records the owner would equal each other, and `copy` on an `Owned`
   * would hand back a plain `Guarded` with the ownership silently gone. A declaration is read for
   * its fields and never copied or compared, so nothing here wants those; what it wants is that a
@@ -67,7 +75,8 @@ import scala.annotation.implicitNotFound
 class Guarded[A](
     val actions: Set[Action],
     val through: Route => Route,
-    val carries: Seq[Route]
+    val carries: Seq[Route],
+    val identify: Request => Request = identity
 ) {
 
   /** What one handwritten route becomes in the table: the guard's own pages, and that route
@@ -89,10 +98,11 @@ class Guarded[A](
 
 object Guarded {
 
-  /** Anyone may reach it: no action is covered, nothing is wrapped, and no login page is carried.
+  /** Anyone may reach it: no action is covered, nothing is wrapped, no login page is carried and
+    * nobody is named.
     *
     * A `def` rather than a `val`, because `Guarded` is invariant in `A` and one shared instance
-    * would need a cast at every use. The three fields it builds hold nothing, so the allocation is
+    * would need a cast at every use. The four fields it builds hold nothing, so the allocation is
     * the cheapest thing in a route table's construction.
     *
     * It is public and named, unlike `Actions`' all-seven default, which is a given precisely so

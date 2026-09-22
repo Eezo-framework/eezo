@@ -50,6 +50,18 @@ class WebSocketSuite extends munit.FunSuite {
   private def connect(client: WebSocketClient, port: Int, path: String): Session =
     client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
 
+  /** [[connect]], with `session` on the handshake the way a browser would carry it. */
+  private def connect(
+      client: WebSocketClient,
+      port: Int,
+      path: String,
+      session: io.eezo.http.Session
+  ): Session = {
+    val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port$path"))
+    upgrade.setHeader("Cookie", s"eezo_session=${SessionCookie.encode(session, secret)}")
+    client.connect(new ClientListener, upgrade).get()
+  }
+
   /** The upgrade at `path` is answered with a 404 rather than left hanging. */
   private def refused(client: WebSocketClient, port: Int, path: String): Unit = {
     val failure = intercept[java.util.concurrent.ExecutionException](connect(client, port, path))
@@ -127,11 +139,41 @@ class WebSocketSuite extends munit.FunSuite {
     )
 
     serving(routes) { (client, port) =>
-      val cookie  = SessionCookie.encode(io.eezo.http.Session.empty.set("user", "42"), secret)
-      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
-      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
-      val session = client.connect(new ClientListener, upgrade).get()
+      val session = connect(client, port, "/live", io.eezo.http.Session.empty.set("user", "42"))
       assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
+      session.close()
+    }
+  }
+
+  test("an upgrade is named by the table, after the handshake's session has been read") {
+    // Order is the whole of it: the naming reads the session, so running it before the
+    // handshake's session has been read would make every upgrade anonymous, and silently, since
+    // nothing about a `None` says whether it was asked too early or answered honestly.
+    val events = new LinkedBlockingQueue[String]()
+    val routes = RouteTable(
+      Seq(
+        Route.Ws(
+          PathPattern.parse("/live"),
+          request =>
+            new WsListener {
+              override def onOpen(conn: WsConn): Unit = {
+                val _ = events.offer(s"user:${request.currentUser.getOrElse("nobody")}")
+              }
+            }
+        )
+      ),
+      request => request.copy(currentUser = request.session.get("user"))
+    )
+
+    serving(routes) { (client, port) =>
+      val session = connect(client, port, "/live", io.eezo.http.Session.empty.set("user", "42"))
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
+      session.close()
+    }
+
+    serving(routes) { (client, port) =>
+      val session = connect(client, port, "/live")
+      assertEquals(events.poll(5, TimeUnit.SECONDS), "user:nobody")
       session.close()
     }
   }
@@ -155,13 +197,12 @@ class WebSocketSuite extends munit.FunSuite {
     )
 
     serving(routes) { (client, port) =>
-      val cookie = SessionCookie.encode(
-        io.eezo.http.Session.empty.set("user", "42").flash("notice", "welcome"),
-        secret
+      val session = connect(
+        client,
+        port,
+        "/live",
+        io.eezo.http.Session.empty.set("user", "42").flash("notice", "welcome")
       )
-      val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port/live"))
-      upgrade.setHeader("Cookie", s"eezo_session=$cookie")
-      val session = client.connect(new ClientListener, upgrade).get()
       assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42 flash:none")
       session.close()
     }

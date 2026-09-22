@@ -100,4 +100,10 @@ class RequestSuite extends munit.FunSuite {
     assertEquals(req.paramOpt[Int]("bad"), None)
     assertEquals(req.paramOpt[Int]("missing"), None)
   }
+
+  test("a request built by hand names nobody, and so does one in a build with no guard at all") {
+    // The naming is written by whoever holds the rule, and `http` holds none: nothing short of
+    // a guard can name anyone, so a request nobody named carries nobody.
+    assertEquals(request().currentUser, None)
+  }
 }

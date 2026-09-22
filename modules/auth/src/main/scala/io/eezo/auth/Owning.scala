@@ -17,13 +17,17 @@ import io.eezo.http.{Action, Guarded, Owned, Request, Route}
   *   carries no live sign in. Read out of the session rather than through the guard's `find`,
   *   because a covered route is a guarded route and the wrapper already looked the user up before
   *   the handler ran; a second lookup per request would buy nothing.
+  * @param identify
+  *   the guard's own naming, handed on to `Guarded` and read by nothing here; see
+  *   [[io.eezo.http.Guarded.identify]].
   */
 final class GuardedBy[A, U] private[auth] (
     actions: Set[Action],
     through: Route => Route,
     carries: Seq[Route],
-    val currentUser: Request => Option[Id[U]]
-) extends Guarded[A](actions, through, carries) {
+    val currentUser: Request => Option[Id[U]],
+    identify: Request => Request
+) extends Guarded[A](actions, through, carries, identify) {
 
   /** Which field of the model records its owner, written as a selector so the compiler checks it.
     *

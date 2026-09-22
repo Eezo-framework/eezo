@@ -145,12 +145,12 @@ final class Guard[U] private (
   )
 
   private def declaring[A](actions: Set[Action]): GuardedBy[A, U] =
-    new GuardedBy[A, U](actions, through, carries, currentUserKey)
+    new GuardedBy[A, U](actions, through, carries, currentUserKey, identify)
 
   /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
     * a declaration that goes on to scope rows by it.
     *
-    * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's column
+    * The session's own entry, decoded, rather than [[current]]'s row: what an owned model's field
     * holds is the key, and reading the row back to take its key off again would be a lookup per
     * request for a value the session already spells.
     *
@@ -161,6 +161,39 @@ final class Guard[U] private (
     * mistake surfaces.
     */
   private val currentUserKey: Request => Option[Id[U]] = request => key(request.session)
+
+  /** The request with the guard's verdict written on it, as the key the session spells.
+    *
+    * One `val` per guard, for the reason [[carries]] is one: every declaration this guard makes
+    * hands the table the same instance, so a table mounting twenty guarded things composes one
+    * function rather than twenty copies of it.
+    *
+    * It is the same rule [[currentUserKey]] reads and never a second one, so a page and a socket
+    * upgrade cannot disagree about who is there, and it names rather than refuses: [[through]]
+    * decides who is let through, and this decides what the request says about whoever was. The page
+    * arm of `through` writes the same name through [[named]] off the key it already decoded to let
+    * the request in, rather than calling this and reading the session a second time.
+    *
+    * A guard that finds nobody hands the request back as it came, which is the whole of what the
+    * `fold` says and the reason two of these compose at all. `RouteTable` composes the naming of
+    * every declaration with `andThen`, and an application may hold more than one guard, one per
+    * user model, so a table can carry a guard whose sign in expires sooner beside one whose sign in
+    * lasts longer; the one that recognises nobody writes nothing, so it cannot erase what the other
+    * found, whichever order the two were mounted in. When both find somebody the later one in mount
+    * order has the last word, which is the rule the table already keeps for composing two of them
+    * with `++`.
+    */
+  private val identify: Request => Request =
+    request => currentUserKey(request).fold(request)(named(request, _))
+
+  /** `request` naming `id`, as the key and not the row.
+    *
+    * `Id.show` is the one spelling, the same one the session carries and the same one an owner
+    * field holds, so a handler, a socket upgrade and a row all compare the same string and nothing
+    * has to parse anything to find out whether they agree.
+    */
+  private def named(request: Request, id: Id[U]): Request =
+    request.copy(currentUser = Some(id.show))
 
   /** The wrapper every guarded route goes through.
     *
@@ -175,17 +208,28 @@ final class Guard[U] private (
     *
     * It wraps the handler rather than the dispatch, which is the whole of `RouteTable.dispatch`'s
     * ordering guarantee: `Csrf.protect` sits outside this, so a forged `POST` to a guarded route is
-    * refused as forged instead of being redirected to a login page an attacker can read.
+    * refused as forged instead of being redirected to a login page an attacker can read. Naming
+    * sits inside it for the same reason and must stay there: naming out in the dispatch would put
+    * it ahead of the CSRF check.
+    *
+    * Only the page arm names anyone. A page behind this guard is one the wrapper already let
+    * through, so the handler reads the user off the request it was handed; an upgrade is named by
+    * the route table instead, which is the one thing holding every declaration at once and so the
+    * only thing that can name a socket nobody guarded.
     */
   private val through: Route => Route = {
     case route: Route.Http =>
       route.copy(handler =
-        request => if (signedIn(request)) route.handler(request) else refuse(request)
+        request =>
+          signedIn(request.session) match {
+            case Some((id, _)) => route.handler(named(request, id))
+            case None          => refuse(request)
+          }
       )
     case route: Route.Ws =>
       route.copy(endpoint =
         request =>
-          if (signedIn(request)) route.endpoint(request)
+          if (signedIn(request.session).isDefined) route.endpoint(request)
           else
             throw Forbidden(
               "this WebSocket route is guarded and no user is signed in; a socket has no page to " +
@@ -194,10 +238,25 @@ final class Guard[U] private (
       )
   }
 
-  private def signedIn(request: Request): Boolean = who(request.session).isDefined
+  /** The user the session names and the key it named them by, if it names one that is still there.
+    *
+    * The pair rather than one half or the other, because the callers want different halves of the
+    * same lookup and neither half recovers the other. [[through]] writes the key on the request,
+    * which is what an owner field holds and what [[currentUserKey]] answers, while [[current]]
+    * wants the row. Answering the key alone would send every handler behind a guard back through
+    * `find` for a row this method had already read, and answering the row alone would mean taking a
+    * key back off a user, which is `find`'s direction and not its inverse.
+    *
+    * It is also the only place either of the two questions a guard is asked about a request, who is
+    * there and whether anybody is, gets decided. `find` is the application's, and an application
+    * whose users are rows is one where it is a query, so how many times a single request runs it is
+    * a number worth keeping at one.
+    */
+  private def signedIn(session: Session): Option[(Id[U], U)] =
+    key(session).flatMap(id => find(id).map((id, _)))
 
   /** The user the session names, if it names one that is still there. */
-  private def who(session: Session): Option[U] = key(session).flatMap(find)
+  private def who(session: Session): Option[U] = signedIn(session).map(_._2)
 
   /** The key the session names, whether or not its user is still there, and only while the sign in
     * that wrote it is still inside [[lifetime]].

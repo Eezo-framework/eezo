@@ -224,6 +224,122 @@ class GuardSuite extends munit.FunSuite {
     assert(redacted.contains("The server encountered an unexpected error."), redacted)
   }
 
+  // ------------------------------------------------------- the current user, on the request
+
+  /** A page that answers with whoever the request says is there, so the naming is visible in the
+    * response rather than in a flag a passing test could leave unset.
+    */
+  private def naming: Route =
+    Route.Http(
+      Method.GET,
+      PathPattern.parse("/posts"),
+      request => Response.Ok(Html.text(request.currentUser.getOrElse("nobody")))
+    )
+
+  /** What the endpoint of an upgrade reads, which is `Eezo`'s WebSocket creator in one line: the
+    * route looked up on the table, the handshake request named by the table before anything is
+    * built, and the endpoint run on what came back.
+    *
+    * It reads inside the endpoint rather than off the named request, because the endpoint is the
+    * one place an application ever sees this: a naming the table performed and then dropped on the
+    * floor would pass an assertion made on the request and still leave every live page anonymous.
+    *
+    * `guarded` says which of the two sockets an application mounts this is. Beside the guard's own
+    * pages, which is the default, is the case only a table can answer: an upgrade nobody guarded is
+    * still named, and it is the only one that can read all four sessions, since a guarded socket
+    * refuses an anonymous handshake before its endpoint runs and would leave three of the four with
+    * no endpoint to read anything. Behind the wrapper is the shape an application that guards its
+    * live pages actually mounts, and the naming still has to reach the endpoint through it.
+    */
+  private def onUpgrade(request: Request, guarded: Boolean = false): Option[String] = {
+    val seen     = new AtomicReference[Option[String]](Some("the endpoint never ran"))
+    val declared = guard.required[Any]
+    val socket   = Route.Ws(
+      PathPattern.parse("/live"),
+      upgrade => { seen.set(upgrade.currentUser); new WsListener {} }
+    )
+    val mounted = if (guarded) declared.through(socket) else socket
+    val table   = RouteTable(declared.carries :+ mounted, declared.identify)
+    table.dispatchWs(request.path) match {
+      case Some((route, _)) => route.endpoint(table.identify(request)): Unit
+      case None             => fail(s"no WebSocket route matched ${request.path}")
+    }
+    seen.get
+  }
+
+  test("the page the guard let through is handed a request that names the user") {
+    val response = RouteTable(Seq(guard.required[Any].through(naming))).dispatch(signedIn(ann.id))
+    assertEquals(response.status, 200)
+    // The key as the session spells it, which is what an owner field holds and what a live page
+    // compares its socket against.
+    assertEquals(htmlOf(response), ann.id.show)
+  }
+
+  test("a page nobody guarded names nobody, however the visitor signed in") {
+    assertEquals(htmlOf(RouteTable(Seq(naming)).dispatch(signedIn(ann.id))), "nobody")
+  }
+
+  test("the wrapper names nobody on an upgrade, which is the table's job and not its own") {
+    val seen = new AtomicReference[Option[String]](Some("never ran"))
+    val ws   = Route.Ws(
+      PathPattern.parse("/live"),
+      request => { seen.set(request.currentUser); new WsListener {} }
+    )
+    guard.required[Any].through(ws) match {
+      case Route.Ws(_, endpoint, _) => endpoint(signedIn(ann.id, path = "/live")): Unit
+      case other                    => fail(s"a Ws route came back as $other")
+    }
+    assertEquals(seen.get, None)
+  }
+
+  test(
+    "an upgrade the table named carries the key of a sign in that is still good, and nobody else's"
+  ) {
+    assertEquals(onUpgrade(signedIn(ann.id, path = "/live")), Some(ann.id.show))
+    assertEquals(onUpgrade(browser(Method.GET, "/live")), None)
+    assertEquals(onUpgrade(signedIn(ann.id, since = stale, path = "/live")), None)
+    assertEquals(onUpgrade(stampless(ann.id, path = "/live")), None)
+  }
+
+  test("a guarded upgrade reads the key off the request the table named, inside its endpoint") {
+    // The shape an application that guards a live page mounts: the socket behind the guard's own
+    // wrapper, in a table that names the handshake. The wrapper names nobody on an upgrade, so the
+    // endpoint reads what the table wrote, and it has to survive being wrapped.
+    assertEquals(
+      onUpgrade(signedIn(ann.id, path = "/live"), guarded = true),
+      Some(ann.id.show)
+    )
+  }
+
+  test(
+    "two guards' naming composes without the one that finds nobody erasing the one that found somebody"
+  ) {
+    // An application with two guards, one shorter lived than the other, exactly the shape
+    // `Guard.apply`'s own `lifetime` parameter exists for. A sign in three hours old is still good
+    // under the long guard's fortnight and already stale under the short guard's hour, so the two
+    // disagree, the way an admin guard and a user guard would.
+    val threeHoursAgo = now.minusSeconds(3 * 3600)
+    val request       = signedIn(ann.id, since = threeHoursAgo)
+
+    val long  = guard.required[Any]
+    val short = Guard[User](find, credentials, lifetime = Duration.ofHours(1), clock = clock)
+      .required[Any]
+
+    assertEquals(long.identify(request).currentUser, Some(ann.id.show))
+    assertEquals(short.identify(request).currentUser, None)
+
+    // The table composes every declaration's `identify` with `andThen`, in whatever order the
+    // declarations were mounted, so the fresh sign in one guard found has to survive a second
+    // guard's `None` either way round.
+    Seq(long -> short, short -> long).foreach { (first, second) =>
+      assertEquals(
+        first.identify.andThen(second.identify)(request).currentUser,
+        Some(ann.id.show),
+        "the guard that found nobody erased the sign in the other guard found"
+      )
+    }
+  }
+
   // ------------------------------------------------------------ refusing
 
   test("an anonymous browser is sent to the login page and the handler never runs") {
