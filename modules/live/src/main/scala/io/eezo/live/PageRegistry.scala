@@ -30,18 +30,16 @@ private[live] final class PageRegistry(
 
   import PageRegistry.{ConnectRefusal, Status}
 
-  /** `owner` is the current user the render was for, and `None` is a page rendered on a public
-    * route, which anyone holding the id joins.
-    */
   private final case class Slot(page: Page[?], owner: Option[String], status: Status)
 
   private val slots  = scala.collection.mutable.HashMap.empty[String, Slot]
   private val random = new SecureRandom()
 
   /** Mints an id and registers the page built for it, or `None` at the cap — the mount's cue to
-    * render the page dead rather than fail the response (M3 decides the rendering).
+    * render the page dead rather than fail the response (M3 decides the rendering). `owner` is the
+    * current user the render was for; `None` is a page rendered on a public route.
     */
-  def register(owner: Option[String])(create: String => Page[?]): Option[Page[?]] = synchronized {
+  def register(owner: Option[String], create: String => Page[?]): Option[Page[?]] = synchronized {
     if (slots.size >= cap) None
     else {
       val id   = newId()
@@ -61,13 +59,12 @@ private[live] final class PageRegistry(
     * definition of being signed in.
     *
     * The wrong user is answered before the already connected check, so that a refusal never tells a
-    * stranger whether somebody is on the page. Refusing leaves the slot as it was, so the page's
-    * own user still finds it joinable afterwards.
+    * stranger whether somebody is on the page.
     */
   def connect(id: String, who: Option[String]): Either[ConnectRefusal, Page[?]] = synchronized {
     slots.get(id) match {
-      case None => Left(ConnectRefusal.Unknown)
-      case Some(slot) if slot.owner.exists(owner => !who.contains(owner)) =>
+      case None                                                    => Left(ConnectRefusal.Unknown)
+      case Some(slot) if slot.owner.isDefined && who != slot.owner =>
         Left(ConnectRefusal.NotTheUser)
       case Some(slot) =>
         slot.status match {

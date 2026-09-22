@@ -135,15 +135,19 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // are not on its classpath. `EezoApp` stacks the two entry traits, and the drift page the database
 // edge contributes to `dev` lives here because it is the one thing that needs both. `test->test` on
 // `core`, here and on the two edges, is what lets every entry trait suite share `core`'s
-// `Captured`.
+// `Captured`; on `live` and `auth` it is what lets `BoundLivePageSuite`, the one place a real
+// guard, a real cookie and a real live socket meet, share `live`'s socket rig and `auth`'s planted
+// sign in rather than spell either a second time.
 lazy val eezo = (project in file("modules/eezo"))
-  .dependsOn(core % "compile->compile;test->test", http, db, live, auth)
+  .dependsOn(
+    core % "compile->compile;test->test",
+    http,
+    db,
+    live % "compile->compile;test->test",
+    auth % "compile->compile;test->test"
+  )
   .settings(commonSettings)
   .settings(name := "eezo")
-  // Jetty's WebSocket client is test scoped, so it does not arrive with `http` or `live`:
-  // `BoundLivePageSuite` is the one place a real guard, a real cookie and a real live socket meet,
-  // and it drives that socket with the same artifact `http`, `live` and `auth` drive their own.
-  .settings(libraryDependencies += jettyWsClient)
 
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross built for sbt 1 and sbt 2 from one source. See

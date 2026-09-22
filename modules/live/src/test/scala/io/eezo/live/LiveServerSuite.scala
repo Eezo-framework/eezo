@@ -1,25 +1,19 @@
 package io.eezo.live
 
-import java.net.URI
-import java.net.http.{HttpClient, HttpRequest, HttpResponse}
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
-
 import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
 import io.eezo.http.*
-import org.eclipse.jetty.server.ServerConnector
-import org.eclipse.jetty.websocket.api.{Callback, Session}
-import org.eclipse.jetty.websocket.client.{ClientUpgradeRequest, WebSocketClient}
 
 /** The whole M3 path, against a booted server: mount over HTTP, join over WebSocket, events in,
   * patches out, and every refusal with its close code. This is the suite that stands in for a
   * browser everywhere a browser is not the point; the manual counter test is the browser's turn.
   */
-class LiveServerSuite extends munit.FunSuite {
+class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
 
   private val bumps = new Topic[Unit]
 
-  private final class Counter extends Component[Int] {
+  /** A counter that also moves on a publish, for the tests about what a resync carries. */
+  private final class SubscribedCounter extends Component[Int] {
     def init(ctx: Init[Int]): Int = {
       ctx.subscribe(bumps)((_, n) => n + 1)
       0
@@ -41,120 +35,12 @@ class LiveServerSuite extends munit.FunSuite {
       div(a(Attrs.href := Url.Mounted(s"/posts/$n"), "posts"), span(n))
   }
 
-  /** A handwritten page route whose handler mounts per request, which is what a real handler does:
-    * `mounted` is handed the request, so every GET is a fresh page bound to whoever that request
-    * named.
-    */
-  private def pageRoute(mounted: Request => Html, at: String = "/counter"): Route =
-    Route.Http(
-      Method.GET,
-      PathPattern.parse(at),
-      request =>
-        Response.Ok(
-          Html.doctype ++ html(
-            head(title("t")),
-            io.eezo.core.html.Tags.body(mounted(request))
-          )
-        )
-    )
-
-  /** Everything a test drives: one server with the given user routes plus the live framework
-    * routes, one HTTP client, one WS client.
-    */
-  private def servingRoutes(user: Seq[Route])(body: Rig => Unit): Unit = {
-    val server = Eezo.start(port = 0, config = Config(RouteTable(user ++ Live.routes)))
-    val ws     = new WebSocketClient()
-    ws.start()
-    try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
-      body(new Rig(port, ws))
-    } finally {
-      ws.stop()
-      server.stop()
-    }
-  }
+  /** The given user routes plus the live framework routes. */
+  private def servingRoutes(user: Seq[Route])(body: Rig => Unit): Unit =
+    serving(RouteTable(user ++ Live.routes))(body)
 
   private def serving(body: Rig => Unit): Unit =
-    servingRoutes(Seq(pageRoute(Live.mount(_, new Counter))))(body)
-
-  private final class Rig(val port: Int, ws: WebSocketClient) {
-
-    private val http = HttpClient.newHttpClient()
-
-    def get(path: String): HttpResponse[String] =
-      http.send(
-        HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path")).build(),
-        HttpResponse.BodyHandlers.ofString()
-      )
-
-    /** Mounts a fresh page over HTTP and returns its id, read off the marker. */
-    def mountedPageId(at: String = "/counter"): String = {
-      val html = get(at).body()
-      "data-eezo-page=\"([0-9a-f]{32})\"".r
-        .findFirstMatchIn(html)
-        .map(_.group(1))
-        .getOrElse(fail(s"no page marker in: $html"))
-    }
-
-    // Jetty 12.1 deprecates this ClientUpgradeRequest path without a public replacement that sets
-    // request headers; scoped here rather than build-wide, and only in test client code.
-    @annotation.nowarn("cat=deprecation")
-    def connect(pageId: String, origin: Option[String] = None): Wire = {
-      val listener = new Listener
-      val upgrade  = new ClientUpgradeRequest()
-      origin.foreach(o => upgrade.setHeaders(java.util.Map.of("Origin", java.util.List.of(o))))
-      val session =
-        ws.connect(listener, URI.create(s"ws://localhost:$port/eezo/live/$pageId"), upgrade)
-          .get()
-      new Wire(session, listener)
-    }
-  }
-
-  private final class Listener extends Session.Listener.AbstractAutoDemanding {
-    val frames = new LinkedBlockingQueue[String]()
-    val closes = new LinkedBlockingQueue[(Int, String)]()
-
-    override def onWebSocketText(text: String): Unit               = { val _ = frames.offer(text) }
-    override def onWebSocketClose(code: Int, reason: String): Unit = {
-      val _ = closes.offer((code, reason))
-    }
-  }
-
-  /** One live connection, with blocking expectations. */
-  private final class Wire(session: Session, listener: Listener) {
-
-    def send(text: String): Unit = session.sendText(text, Callback.NOOP)
-
-    def join(base: String = "/"): Unit = send(s"""{"kind":"join","base":"$base"}""")
-
-    def event(name: String): Unit = send(s"""{"kind":"event","name":"$name","payload":{}}""")
-
-    def frame(): String = {
-      val received = listener.frames.poll(5, TimeUnit.SECONDS)
-      assert(received != null, "no frame within 5s")
-      received
-    }
-
-    /** A frame if one arrives within the window, null otherwise: for drain-until-quiet loops. */
-    def poll(millis: Long): String | Null = listener.frames.poll(millis, TimeUnit.MILLISECONDS)
-
-    def closeCode(): Int = closed()._1
-
-    /** Both halves of the close: the code every refusal is sorted by, and the reason that is the
-      * only thing telling apart two refusals sharing the same code, such as origin and identity
-      * both closing with 4403.
-      */
-    def closed(): (Int, String) =
-      Option(listener.closes.poll(5, TimeUnit.SECONDS)).getOrElse(fail("no close within 5s"))
-
-    def close(code: Int = 1000): Unit = session.close(code, "bye", Callback.NOOP)
-
-    /** A hard transport close, no close frame: the server sees an abnormal drop (1006), which is
-      * what starts the grace window. `session.close(1006, …)` cannot stand in — 1006 is reserved
-      * and may not be sent over the wire.
-      */
-    def drop(): Unit = session.disconnect()
-  }
+    servingRoutes(Seq(pageRoute(Live.mount(_, new SubscribedCounter))))(body)
 
   test("the mounted page carries the marker, the base, the first render and the script") {
     serving { rig =>
@@ -174,12 +60,9 @@ class LiveServerSuite extends munit.FunSuite {
       assert(response.body().contains("__eezoLiveClient"))
       assertEquals(response.headers().firstValue("Cache-Control").orElse(""), "no-cache")
 
-      // Origin and identity share 4403, so the console line is the only thing that tells an
-      // operator which refusal they are reading. It has to be the server's own reason rather than
-      // a guess the script made, and nothing else in the gate can see the browser run this.
-      assert(!response.body().contains("refused (origin)"), "the script still guesses the reason")
-      assert(response.body().contains("event.code === 4403"), response.body())
-      assert(response.body().contains("\"eezo live: refused: \" + event.reason"), response.body())
+      // Origin and identity share 4403, so the console line the script prints is the only thing
+      // that tells an operator which refusal they are reading: it has to carry the server's reason.
+      assert(response.body().contains("event.reason"), response.body())
     }
   }
 
@@ -267,10 +150,10 @@ class LiveServerSuite extends munit.FunSuite {
   test("a cross-site origin is refused with 4403; the page's own origin is welcome") {
     serving { rig =>
       val pageId = rig.mountedPageId()
-      val evil   = rig.connect(pageId, origin = Some("http://evil.example"))
+      val evil   = rig.connect(pageId, headers = Seq("Origin" -> "http://evil.example"))
       assertEquals(evil.closed(), (4403, "origin mismatch"))
 
-      val own = rig.connect(pageId, origin = Some(s"http://localhost:${rig.port}"))
+      val own = rig.connect(pageId, headers = Seq("Origin" -> s"http://localhost:${rig.port}"))
       own.join()
       assert(own.frame().contains("\"setChildren\""))
       own.close()

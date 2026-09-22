@@ -35,18 +35,18 @@ class RegistrySuite extends munit.FunSuite {
     val now = new AtomicLong(0)
     val reg = registry(now, cap = 3)
 
-    val pages = (1 to 3).map(_ => reg.register(None)(mounted).get)
+    val pages = (1 to 3).map(_ => reg.register(None, mounted).get)
     assertEquals(pages.map(_.id).distinct.size, 3)
     pages.foreach(page => assert(page.id.matches("[0-9a-f]{32}"), page.id))
 
-    assertEquals(reg.register(None)(mounted), None)
+    assertEquals(reg.register(None, mounted), None)
     assertEquals(reg.size, 3)
   }
 
   test("connect claims the page once; a second socket is refused, not shared") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(None)(mounted).get
+    val page = reg.register(None, mounted).get
 
     assertEquals(reg.connect(page.id, None).map(_.id), Right(page.id))
     assertEquals(reg.connect(page.id, None), Left(PageRegistry.ConnectRefusal.AlreadyConnected))
@@ -56,7 +56,7 @@ class RegistrySuite extends munit.FunSuite {
   test("an unbound page admits a named socket too, since nobody owns it") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(None)(mounted).get
+    val page = reg.register(None, mounted).get
 
     assertEquals(reg.connect(page.id, Some("alice")).map(_.id), Right(page.id))
   }
@@ -64,7 +64,7 @@ class RegistrySuite extends munit.FunSuite {
   test("a bound page admits its own user's socket and refuses every other") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(Some("alice"))(mounted).get
+    val page = reg.register(Some("alice"), mounted).get
 
     assertEquals(reg.connect(page.id, None), Left(PageRegistry.ConnectRefusal.NotTheUser))
     assertEquals(
@@ -77,7 +77,7 @@ class RegistrySuite extends munit.FunSuite {
   test("the wrong user is answered before the already connected check, so liveness never leaks") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(Some("alice"))(mounted).get
+    val page = reg.register(Some("alice"), mounted).get
     assert(reg.connect(page.id, Some("alice")).isRight)
 
     assertEquals(
@@ -96,7 +96,7 @@ class RegistrySuite extends munit.FunSuite {
   test("refusing the wrong user leaves the page exactly as it was, still joinable by its own") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(Some("alice"))(mounted).get
+    val page = reg.register(Some("alice"), mounted).get
 
     assertEquals(
       reg.connect(page.id, Some("mallory")),
@@ -113,8 +113,8 @@ class RegistrySuite extends munit.FunSuite {
   test("a page nobody ever connects to is reaped after its TTL, and closed by the reap") {
     val now   = new AtomicLong(0)
     val reg   = registry(now)
-    val page  = reg.register(None)(mounted).get
-    val other = reg.register(None)(mounted).get
+    val page  = reg.register(None, mounted).get
+    val other = reg.register(None, mounted).get
     assertEquals(reg.connect(other.id, None).isRight, true)
 
     now.set(29_999)
@@ -133,7 +133,7 @@ class RegistrySuite extends munit.FunSuite {
   test("a dropped socket keeps its page for the grace window; a rejoin inside it works") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(None)(mounted).get
+    val page = reg.register(None, mounted).get
     assert(reg.connect(page.id, None).isRight)
 
     now.set(10_000)
@@ -152,7 +152,7 @@ class RegistrySuite extends munit.FunSuite {
   test("a clean close frees immediately and closes the page") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(None)(mounted).get
+    val page = reg.register(None, mounted).get
 
     reg.close(page.id)
     assertEquals(reg.size, 0)
@@ -163,7 +163,7 @@ class RegistrySuite extends munit.FunSuite {
   test("disconnect on an unknown or never-connected page is a quiet no-op") {
     val now  = new AtomicLong(0)
     val reg  = registry(now)
-    val page = reg.register(None)(mounted).get
+    val page = reg.register(None, mounted).get
 
     reg.disconnect("0" * 32)
     reg.disconnect(page.id) // never connected: stays NeverConnected, still TTL-reaped

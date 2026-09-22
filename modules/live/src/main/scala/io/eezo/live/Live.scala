@@ -81,12 +81,10 @@ object Live {
     * says so in an attribute the client logs — a busy site degrades to working pages that do not
     * update, never to errors (design/live.md §2.5).
     *
-    * `request` is the request being answered, and the one thing read off it is `currentUser`. A
-    * page rendered behind a guarded route is bound to whoever the guard let through, and its socket
-    * is admitted only when the upgrade names that same user; a page rendered on a public route is
-    * bound to nobody and anyone holding its id joins, whoever the visitor was. There is no request
-    * free overload, because a page that forgot which of the two it is would silently be the open
-    * one, and that mistake has to be a compile error rather than a page a stranger can drive.
+    * `request` is the request being answered, and the one thing read off it is `currentUser`: a
+    * page rendered behind a guarded route is bound to that user and admits only their socket
+    * (docs/live.md §7). There is no request free overload, because a page that forgot to say who
+    * rendered it would silently be the open one, and that has to be a compile error.
     */
   def mount[S](request: Request, component: Component[S]): Html =
     mount(request, (_: Async[S]) => component)
@@ -97,14 +95,17 @@ object Live {
     * runs, so even a fetch-at-mount lands.
     */
   def mount[S](request: Request, create: Async[S] => Component[S]): Html =
-    registry.register(request.currentUser) { id =>
-      val sender = new Sender(id)
-      val _      = senders.put(id, sender)
-      val relay  = new Relay[S]
-      val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
-      relay.aim(page)
-      page
-    } match {
+    registry.register(
+      request.currentUser,
+      id => {
+        val sender = new Sender(id)
+        val _      = senders.put(id, sender)
+        val relay  = new Relay[S]
+        val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
+        relay.aim(page)
+        page
+      }
+    ) match {
       case Some(page) =>
         try {
           val tree = page.mount()
@@ -188,21 +189,24 @@ object Live {
     */
   private def endpoint(request: Request): WsListener = new WsListener {
 
-    private val id = request.pathParams.getOrElse("page", "")
+    // Read off the upgrade once, so the listener keeps three small values for the socket's
+    // lifetime rather than the whole request.
+    private val id       = request.pathParams.getOrElse("page", "")
+    private val who      = request.currentUser
+    private val originOk = originAllowed(request)
 
     private var attached: Option[(Page[?], Sender)] = None
 
     override def onOpen(conn: WsConn): Unit =
-      if (!originAllowed(request)) {
+      if (!originOk) {
         log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, origin mismatch")
         conn.close(4403, "origin mismatch")
       } else {
-        registry.connect(id, request.currentUser) match {
+        registry.connect(id, who) match {
           case Left(PageRegistry.ConnectRefusal.Unknown) => conn.close(4404, "unknown page")
           case Left(PageRegistry.ConnectRefusal.AlreadyConnected) =>
             conn.close(4409, "page already connected")
-          // Expired, signed out, or somebody else entirely: the registry compared two strings and
-          // cannot tell which, so the refusal says the one thing it knows.
+          // Expired, signed out, or a stranger: the registry cannot tell which.
           case Left(PageRegistry.ConnectRefusal.NotTheUser) =>
             log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, not the page's user")
             conn.close(4403, "not signed in as the page's user")
