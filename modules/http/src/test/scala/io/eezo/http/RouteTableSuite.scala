@@ -267,6 +267,25 @@ class RouteTableSuite extends munit.FunSuite {
     assertEquals(second.++(first).identify(request(Method.GET, "/a")).currentUser, Some("first"))
   }
 
+  test("naming composes the stamp one guard hands every declaration once, not once a row") {
+    // What `distinct` is for: the function is a `val` on the guard, so twenty guarded things hand
+    // the table the same instance and an upgrade reads the session once rather than twenty times.
+    var reads                     = 0
+    val stamp: Request => Request = request => {
+      reads += 1; request.copy(currentUser = Some("ann"))
+    }
+    val named = RouteTable.naming(Seq.fill(20)(stamp))
+    assertEquals(named(request(Method.GET, "/")).currentUser, Some("ann"))
+    assertEquals(reads, 1)
+  }
+
+  test("naming over declarations that name nobody hands the request back exactly as it came") {
+    val req   = request(Method.GET, "/")
+    val named =
+      RouteTable.naming(Seq(Guarded.public[Int].identify, Guarded.public[String].identify))
+    assertEquals(named(req), req)
+  }
+
   test("dispatch never stamps, so a handler on a public route reads nobody") {
     // The stamp on the HTTP side is the guard's wrapper and nothing else, which is what keeps a
     // page nobody guarded from naming the visitor who happens to be signed in. `identify` is for

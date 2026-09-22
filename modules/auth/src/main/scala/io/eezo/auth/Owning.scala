@@ -18,9 +18,8 @@ import io.eezo.http.{Action, Guarded, Owned, Request, Route}
   *   because a covered route is a guarded route and the wrapper already looked the user up before
   *   the handler ran; a second lookup per request would buy nothing.
   * @param identify
-  *   the guard's own stamp, handed on to `Guarded` and read by nothing here. It is the same
-  *   function the guard's wrapper puts on the pages it lets through, so what a declaration hands
-  *   the route table and what a guarded page is handed are one rule rather than two.
+  *   the guard's own stamp, handed on to `Guarded` and read by nothing here; see
+  *   [[io.eezo.http.Guarded.identify]].
   */
 final class GuardedBy[A, U] private[auth] (
     actions: Set[Action],

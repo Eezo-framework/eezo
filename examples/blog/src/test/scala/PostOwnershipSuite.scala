@@ -179,17 +179,12 @@ class PostOwnershipSuite extends munit.FunSuite {
 
     def get(path: String): Response = send(Method.GET, path)
 
-    /** The cookie jar this browser is carrying, for a test that wants to hand it to something other
-      * than a request this browser itself sends, such as `RouteTable.identify`.
-      */
-    def session: Session = jar
-
     /** A request the way this browser would send it: the session it holds, and, on an unsafe verb,
       * the token it was last served returned in the form encoded body.
       */
-    def send(method: Method, path: String, form: (String, String)*): Response = {
-      val fields  = if (method.safe) form else form :+ (Csrf.Field -> token)
-      val request = Request(
+    def request(method: Method, path: String, form: (String, String)*): Request = {
+      val fields = if (method.safe) form else form :+ (Csrf.Field -> token)
+      Request(
         method = method,
         path = path,
         query = Map.empty,
@@ -200,8 +195,11 @@ class PostOwnershipSuite extends munit.FunSuite {
         pathParams = Map.empty,
         session = jar
       )
+    }
 
-      val response = table.dispatch(request)
+    /** [[request]], dispatched, keeping the session and the token the answer carried. */
+    def send(method: Method, path: String, form: (String, String)*): Response = {
+      val response = table.dispatch(request(method, path, form*))
       response.session.foreach(session => jar = session)
       markup(response).foreach(scrape)
       response
@@ -370,16 +368,7 @@ class PostOwnershipSuite extends munit.FunSuite {
     blog {
       val browser = signedIn(AliceEmail)
 
-      val handshake = Request(
-        method = Method.GET,
-        path = "/admin/board",
-        query = Map.empty,
-        headers = Map.empty,
-        body = Array.empty[Byte],
-        pathParams = Map.empty,
-        session = browser.session
-      )
-
+      val handshake = browser.request(Method.GET, "/admin/board")
       assertEquals(Main.routes.identify(handshake).currentUser, Some(alice.show))
     }
   }

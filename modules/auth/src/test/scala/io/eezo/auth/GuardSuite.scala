@@ -239,8 +239,8 @@ class GuardSuite extends munit.FunSuite {
   /** What the endpoint of an upgrade reads, which is `Eezo`'s WebSocket creator in one line: the
     * table's own naming, over a handshake request whose session has already been read.
     */
-  private def onUpgrade(request: Request, g: Guard[User] = guard): Option[String] = {
-    val declared = g.required[Any]
+  private def onUpgrade(request: Request): Option[String] = {
+    val declared = guard.required[Any]
     val socket   = Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})
     RouteTable(declared.mounting(socket), declared.identify).identify(request).currentUser
   }
@@ -299,16 +299,13 @@ class GuardSuite extends munit.FunSuite {
     // The table composes every declaration's `identify` with `andThen`, in whatever order the
     // declarations were mounted, so the fresh sign in one guard found has to survive a second
     // guard's `None` either way round.
-    assertEquals(
-      long.identify.andThen(short.identify)(request).currentUser,
-      Some(ann.id.show),
-      "the short guard's stale verdict overwrote the long guard's fresh one"
-    )
-    assertEquals(
-      short.identify.andThen(long.identify)(request).currentUser,
-      Some(ann.id.show),
-      "the short guard's stale verdict overwrote the long guard's fresh one"
-    )
+    Seq(long -> short, short -> long).foreach { (first, second) =>
+      assertEquals(
+        first.identify.andThen(second.identify)(request).currentUser,
+        Some(ann.id.show),
+        "the guard that found nobody erased the sign in the other guard found"
+      )
+    }
   }
 
   // ------------------------------------------------------------ refusing

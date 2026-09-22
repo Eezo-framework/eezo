@@ -110,5 +110,5 @@ object Guarded {
     * decision somebody made, and it should be legible in the companion of the thing it was made
     * about.
     */
-  def public[A]: Guarded[A] = Guarded(Set.empty, identity, Seq.empty, identity)
+  def public[A]: Guarded[A] = Guarded(Set.empty, identity, Seq.empty)
 }

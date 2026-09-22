@@ -170,7 +170,9 @@ final class Guard[U] private (
     *
     * It is the same rule [[currentUserKey]] reads and never a second one, so a page and a socket
     * upgrade cannot disagree about who is there, and it names rather than refuses: [[through]]
-    * decides who is let through, and this decides what the request says about whoever was.
+    * decides who is let through, and this decides what the request says about whoever was. The page
+    * arm of `through` writes the same name through [[named]] off the key it already decoded to let
+    * the request in, rather than calling this and reading the session a second time.
     *
     * A request that already carries a name is handed back untouched, rather than overwritten with
     * whatever this guard's own session entries say. `RouteTable` composes every declaration's stamp
@@ -182,9 +184,11 @@ final class Guard[U] private (
     * order declarations happened to be mounted in.
     */
   private val stamp: Request => Request =
-    request =>
-      if (request.currentUser.isDefined) request
-      else request.copy(currentUser = currentUserKey(request).map(_.show))
+    request => currentUserKey(request).fold(request)(named(request, _))
+
+  /** `request` naming `id`, unless it already names someone; see [[stamp]] for why not. */
+  private def named(request: Request, id: Id[U]): Request =
+    if (request.currentUser.isDefined) request else request.copy(currentUser = Some(id.show))
 
   /** The wrapper every guarded route goes through.
     *
@@ -211,7 +215,11 @@ final class Guard[U] private (
   private val through: Route => Route = {
     case route: Route.Http =>
       route.copy(handler =
-        request => if (signedIn(request)) route.handler(stamp(request)) else refuse(request)
+        request =>
+          signedInAs(request) match {
+            case Some(id) => route.handler(named(request, id))
+            case None     => refuse(request)
+          }
       )
     case route: Route.Ws =>
       route.copy(endpoint =
@@ -225,7 +233,11 @@ final class Guard[U] private (
       )
   }
 
-  private def signedIn(request: Request): Boolean = who(request.session).isDefined
+  private def signedIn(request: Request): Boolean = signedInAs(request).isDefined
+
+  /** The key of the user the session names, if it names one that is still there. */
+  private def signedInAs(request: Request): Option[Id[U]] =
+    key(request.session).filter(id => find(id).isDefined)
 
   /** The user the session names, if it names one that is still there. */
   private def who(session: Session): Option[U] = key(session).flatMap(find)

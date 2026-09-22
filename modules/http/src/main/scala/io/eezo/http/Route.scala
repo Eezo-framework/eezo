@@ -123,14 +123,15 @@ object Route {
   * to bottom, and that file is what people debug routing with. Rails, Phoenix and Play are all
   * declaration ordered for the same reason. The sbt plugin owns emit order.
   *
-  * [[identify]] is who the table says is behind a request it serves, composed out of the `identify`
-  * of every declaration mounted into it: the generator writes that composition, and a table built
-  * by hand names nobody. It exists for the socket upgrade and for nothing else. A guarded page is
-  * named by the guard's own wrapper, inside [[dispatch]] and inside `Csrf.protect` with it, so a
-  * public page's handler reads nobody however the visitor signed in; an upgrade has no such wrapper
-  * on a route nobody guarded, and the one thing that holds every declaration at once is this table.
+  * [[identify]] is who the table says is behind a request it serves, [[RouteTable.naming]] over the
+  * `identify` of every declaration mounted into it: the generator writes that call, and a table
+  * built by hand names nobody. It exists for the socket upgrade and for nothing else. A guarded
+  * page is named by the guard's own wrapper, inside [[dispatch]] and inside `Csrf.protect` with it,
+  * so a public page's handler reads nobody however the visitor signed in; an upgrade has no such
+  * wrapper on a route nobody guarded, and the one thing that holds every declaration at once is
+  * this table.
   */
-final class RouteTable(mounted: Seq[Route], val identify: Request => Request = identity) {
+final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
 
   /** [[Route.describe]] is the key the whole table is deduplicated on: it already renders the
     * method and the pattern for an HTTP route and `WS` plus the pattern for an upgrade, so the two
@@ -272,5 +273,19 @@ object RouteTable {
   def apply(routes: Seq[Route], identify: Request => Request = identity): RouteTable =
     new RouteTable(routes, identify)
 
-  val empty: RouteTable = new RouteTable(Seq.empty)
+  val empty: RouteTable = RouteTable(Seq.empty)
+
+  /** The one naming function a table is handed, composed out of what every declaration mounted into
+    * it names with. The generated `Routes.table()` calls this with the `identify` of the very
+    * declarations its rows were mounted behind, in the order they were mounted, so no route can be
+    * wrapped by one declaration and named by another.
+    *
+    * `distinct` for the reason the rows themselves are taken `distinct`: one guard hands the same
+    * function to every declaration it makes, so an application with twenty guarded things reads the
+    * session once per upgrade rather than twenty times, and `distinct` is identity before it is
+    * equality, which is exactly what a shared function value wants. A declaration that names nobody
+    * hands the request straight back, so composing one costs an application with no guard nothing
+    * it can measure.
+    */
+  def naming(named: Seq[Request => Request]): Request => Request = Function.chain(named.distinct)
 }

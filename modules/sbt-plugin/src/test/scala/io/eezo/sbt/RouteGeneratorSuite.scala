@@ -456,6 +456,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
         "private val identify: io.eezo.http.Request => io.eezo.http.Request ="
       )
     )
+    assert(clue(lenient).contains("io.eezo.http.RouteTable.naming("))
     assert(clue(lenient).contains("guardFor[app.widgets.Index.type].identify"))
     assert(clue(lenient).contains("guardFor[models.Widget].identify"))
     assert(clue(lenient).contains(").distinct,\n      identify\n    )"))
@@ -465,12 +466,6 @@ class RouteGeneratorSuite extends munit.FunSuite {
       clue(strict).contains("""guardFor[app.widgets.Index.type]("app.widgets.Index").identify""")
     )
     assert(clue(strict).contains("""guardForModel[models.Widget]("models.Widget").identify"""))
-  }
-
-  test("a table of handwritten rows alone is named by them too") {
-    val routesOnly =
-      RouteGenerator.render(Seq(route("widgets/Index.scala")), Seq.empty, dbOnClasspath = false)
-    assert(clue(routesOnly).contains("io.eezo.http.RouteTable(handwritten.distinct, identify)"))
   }
 
   test("the guard helpers follow the rows that call them, like storeFor does") {
@@ -536,7 +531,6 @@ class RouteGeneratorSuite extends munit.FunSuite {
       RouteGenerator.guardFor(authDeclared = true),
       RouteGenerator.guardFor(authDeclared = false),
       RouteGenerator.guardForModel,
-      RouteGenerator.identifying,
       RouteGenerator.storeFor(dbOnClasspath = true),
       RouteGenerator.storeFor(dbOnClasspath = false)
     ).foreach { helper =>

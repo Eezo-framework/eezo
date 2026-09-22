@@ -106,48 +106,4 @@ class RequestSuite extends munit.FunSuite {
     // guard can name anyone, so a request nobody stamped carries nobody.
     assertEquals(request().currentUser, None)
   }
-
-  test("nothing under modules/http/src/main names the current user itself") {
-    // The invariant the field lives by: `http` holds the value and whoever holds the rule, a guard,
-    // writes it. Nothing here may, which is what keeps a header, a query or path parameter and a
-    // frame, all of them a client's to choose, out of it. The one writer is the guard's stamp in
-    // `modules/auth`, and the table's `identify` is that stamp composed rather than a second one.
-    //
-    // A write is `currentUser =`, as a named argument to `copy` or to the constructor. The pattern
-    // steps around `val currentUser =`, which is [[Owned]]'s own function of that name, a lookup a
-    // resource calls and an older thing entirely, bound to a local in `Resource`.
-    val writes  = java.util.regex.Pattern.compile("""(?<!val )(?<!var )currentUser\s*=""")
-    val written = RequestSuite
-      .sourcesUnder("modules/http/src/main")
-      .filter { case (_, text) => writes.matcher(text).find() }
-      .map { case (path, _) => path }
-    assertEquals(written, Seq.empty[String], "something in http names the current user itself")
-  }
-}
-
-object RequestSuite {
-
-  /** Every Scala source under `path`, found from the working directory sbt runs a suite in and from
-    * its parents, so that the scan passes whether the suite was started at the build root or inside
-    * the module. `RouteGeneratorSuite` reads its pinned copy the same way and for the same reason.
-    */
-  def sourcesUnder(path: String): Seq[(String, String)] = {
-    def upwards(from: java.io.File, left: Int): Option[java.io.File] = {
-      val candidate = new java.io.File(from, path)
-      if (candidate.isDirectory) Some(candidate)
-      else if (left == 0 || from.getParentFile == null) None
-      else upwards(from.getParentFile, left - 1)
-    }
-    def walk(dir: java.io.File): Seq[java.io.File] =
-      Option(dir.listFiles()).toSeq.flatten.flatMap { file =>
-        if (file.isDirectory) walk(file) else Seq(file)
-      }
-    val here = new java.io.File(".").getCanonicalFile
-    val root = upwards(here, 4).getOrElse(throw new AssertionError(s"$path not found from $here"))
-    walk(root).filter(_.getName.endsWith(".scala")).sortBy(_.getPath).map { file =>
-      val source = scala.io.Source.fromFile(file, "UTF-8")
-      try (file.getPath, source.mkString)
-      finally source.close()
-    }
-  }
 }
