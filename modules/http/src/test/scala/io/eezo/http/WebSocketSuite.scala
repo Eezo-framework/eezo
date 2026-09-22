@@ -50,7 +50,7 @@ class WebSocketSuite extends munit.FunSuite {
   private def connect(client: WebSocketClient, port: Int, path: String): Session =
     client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
 
-  /** [[connect]], with `session` in the handshake's cookie the way a browser would carry it. */
+  /** [[connect]], with `session` on the handshake the way a browser would carry it. */
   private def connect(
       client: WebSocketClient,
       port: Int,
@@ -146,9 +146,9 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   test("an upgrade is named by the table, after the handshake's session has been read") {
-    // Order is the whole of it: the stamp reads the session, so running it before the cookie has
-    // been read would make every upgrade anonymous, and silently, since nothing about a `None`
-    // says whether it was asked too early or answered honestly.
+    // Order is the whole of it: the stamp reads the session, so running it before the handshake's
+    // session has been read would make every upgrade anonymous, and silently, since nothing about
+    // a `None` says whether it was asked too early or answered honestly.
     val events = new LinkedBlockingQueue[String]()
     val routes = RouteTable(
       Seq(

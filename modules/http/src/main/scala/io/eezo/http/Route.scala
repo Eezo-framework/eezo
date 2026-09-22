@@ -270,6 +270,18 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
 
 object RouteTable {
 
+  /** A table over these routes, naming whoever `identify` names, and nobody when it is left out.
+    *
+    * The default is the one thing to be careful with, because it is silent. An application that
+    * rebuilds the generated table by hand, to mount half of it under a prefix or to reorder it, has
+    * the routes of a table that names the current user and is one argument away from a table that
+    * names nobody: `RouteTable(table.routes)` compiles, serves every page exactly as before, and
+    * turns every socket upgrade anonymous, with nothing in the request to say whether it was never
+    * named or honestly named nobody. A table built from another table's routes therefore passes
+    * that table's `identify` along with them, `RouteTable(rearranged, table.identify)`, and
+    * examples/blog is the worked case. The default is for a table whose routes were never behind a
+    * declaration at all, the framework's own routes among them.
+    */
   def apply(routes: Seq[Route], identify: Request => Request = identity): RouteTable =
     new RouteTable(routes, identify)
 
@@ -282,10 +294,10 @@ object RouteTable {
     *
     * `distinct` for the reason the rows themselves are taken `distinct`: one guard hands the same
     * function to every declaration it makes, so an application with twenty guarded things reads the
-    * session once per upgrade rather than twenty times, and `distinct` is identity before it is
-    * equality, which is exactly what a shared function value wants. A declaration that names nobody
-    * hands the request straight back, so composing one costs an application with no guard nothing
-    * it can measure.
+    * session once per upgrade rather than twenty times. Equality on a function value is equality of
+    * the reference and nothing else, which is exactly what a shared instance wants. A declaration
+    * that names nobody hands the request straight back, so composing one costs an application with
+    * no guard nothing it can measure.
     */
-  def naming(named: Seq[Request => Request]): Request => Request = Function.chain(named.distinct)
+  def naming(namers: Seq[Request => Request]): Request => Request = Function.chain(namers.distinct)
 }

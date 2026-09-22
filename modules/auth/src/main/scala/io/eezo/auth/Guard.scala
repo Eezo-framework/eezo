@@ -145,7 +145,7 @@ final class Guard[U] private (
   )
 
   private def declaring[A](actions: Set[Action]): GuardedBy[A, U] =
-    new GuardedBy[A, U](actions, through, carries, currentUserKey, stamp)
+    new GuardedBy[A, U](actions, through, carries, currentUserKey, identify)
 
   /** Who the guard says is behind this request, as the key an owned model's owner field holds, for
     * a declaration that goes on to scope rows by it.
@@ -175,18 +175,18 @@ final class Guard[U] private (
     * the request in, rather than calling this and reading the session a second time.
     *
     * A request that already carries a name is handed back untouched, rather than overwritten with
-    * whatever this guard's own session entries say. `RouteTable` composes every declaration's stamp
-    * with `andThen`, and an application may hold more than one guard, one per user model, so a
-    * table can carry a guard whose sign in expires sooner beside one whose sign in lasts longer.
-    * Without this check the later stamp in the composition would answer `None` for a session it
-    * does not recognise as current and erase the `Some` an earlier guard in the same chain had
-    * already written for the same browser, turning a signed in visitor into nobody depending on the
-    * order declarations happened to be mounted in.
+    * whatever this guard's own session entries say. `RouteTable` composes the naming of every
+    * declaration with `andThen`, and an application may hold more than one guard, one per user
+    * model, so a table can carry a guard whose sign in expires sooner beside one whose sign in
+    * lasts longer. Without this check the later function in the composition would answer `None` for
+    * a session it does not recognise as current and erase the `Some` an earlier guard in the same
+    * chain had already written for the same browser, turning a signed in visitor into nobody
+    * depending on the order declarations happened to be mounted in.
     */
-  private val stamp: Request => Request =
+  private val identify: Request => Request =
     request => currentUserKey(request).fold(request)(named(request, _))
 
-  /** `request` naming `id`, unless it already names someone; see [[stamp]] for why not. */
+  /** `request` naming `id`, unless it already names someone; see [[identify]] for why not. */
   private def named(request: Request, id: Id[U]): Request =
     if (request.currentUser.isDefined) request else request.copy(currentUser = Some(id.show))
 
@@ -203,9 +203,9 @@ final class Guard[U] private (
     *
     * It wraps the handler rather than the dispatch, which is the whole of `RouteTable.dispatch`'s
     * ordering guarantee: `Csrf.protect` sits outside this, so a forged `POST` to a guarded route is
-    * refused as forged instead of being redirected to a login page an attacker can read. The
-    * [[stamp]] is inside it for the same reason and must stay there: naming out in the dispatch
-    * would put it ahead of the CSRF check.
+    * refused as forged instead of being redirected to a login page an attacker can read. Naming
+    * sits inside it for the same reason and must stay there: naming out in the dispatch would put
+    * it ahead of the CSRF check.
     *
     * Only the page arm names anyone. A page behind this guard is one the wrapper already let
     * through, so the handler reads the user off the request it was handed; an upgrade is named by
@@ -216,15 +216,15 @@ final class Guard[U] private (
     case route: Route.Http =>
       route.copy(handler =
         request =>
-          signedInAs(request) match {
-            case Some(id) => route.handler(named(request, id))
-            case None     => refuse(request)
+          signedIn(request.session) match {
+            case Some((id, _)) => route.handler(named(request, id))
+            case None          => refuse(request)
           }
       )
     case route: Route.Ws =>
       route.copy(endpoint =
         request =>
-          if (signedIn(request)) route.endpoint(request)
+          if (signedIn(request.session).isDefined) route.endpoint(request)
           else
             throw Forbidden(
               "this WebSocket route is guarded and no user is signed in; a socket has no page to " +
@@ -233,14 +233,25 @@ final class Guard[U] private (
       )
   }
 
-  private def signedIn(request: Request): Boolean = signedInAs(request).isDefined
-
-  /** The key of the user the session names, if it names one that is still there. */
-  private def signedInAs(request: Request): Option[Id[U]] =
-    key(request.session).filter(id => find(id).isDefined)
+  /** The user the session names and the key it named them by, if it names one that is still there.
+    *
+    * The pair rather than one half or the other, because the callers want different halves of the
+    * same lookup and neither half recovers the other. [[through]] writes the key on the request,
+    * which is what an owner column holds and what [[currentUserKey]] answers, while [[current]]
+    * wants the row. Answering the key alone would send every handler behind a guard back through
+    * `find` for a row this method had already read, and answering the row alone would mean taking a
+    * key back off a user, which is `find`'s direction and not its inverse.
+    *
+    * It is also the only place either of the two questions a guard is asked about a request, who is
+    * there and whether anybody is, gets decided. `find` is the application's, and an application
+    * whose users are rows is one where it is a query, so how many times a single request runs it is
+    * a number worth keeping at one.
+    */
+  private def signedIn(session: Session): Option[(Id[U], U)] =
+    key(session).flatMap(id => find(id).map((id, _)))
 
   /** The user the session names, if it names one that is still there. */
-  private def who(session: Session): Option[U] = key(session).flatMap(find)
+  private def who(session: Session): Option[U] = signedIn(session).map(_._2)
 
   /** The key the session names, whether or not its user is still there, and only while the sign in
     * that wrote it is still inside [[lifetime]].

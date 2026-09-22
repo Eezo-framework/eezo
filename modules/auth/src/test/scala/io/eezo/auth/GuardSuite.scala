@@ -226,7 +226,7 @@ class GuardSuite extends munit.FunSuite {
 
   // ------------------------------------------------------- the current user, on the request
 
-  /** A page that answers with whoever the request says is there, so the stamp is visible in the
+  /** A page that answers with whoever the request says is there, so the naming is visible in the
     * response rather than in a flag a passing test could leave unset.
     */
   private def naming: Route =
@@ -237,12 +237,31 @@ class GuardSuite extends munit.FunSuite {
     )
 
   /** What the endpoint of an upgrade reads, which is `Eezo`'s WebSocket creator in one line: the
-    * table's own naming, over a handshake request whose session has already been read.
+    * route looked up on the table, the handshake request named by the table before anything is
+    * built, and the endpoint run on what came back.
+    *
+    * It reads inside the endpoint rather than off the named request, because the endpoint is the
+    * one place an application ever sees this: a naming the table performed and then dropped on the
+    * floor would pass an assertion made on the request and still leave every live page anonymous.
+    *
+    * The socket is mounted beside the guard's own pages rather than behind its wrapper, which is
+    * the case only a table can answer: an upgrade nobody guarded is still named, and a guarded one
+    * refuses an anonymous handshake before its endpoint runs, which is pinned elsewhere and would
+    * leave three of the four sessions here with no endpoint to read anything.
     */
   private def onUpgrade(request: Request): Option[String] = {
+    val seen     = new AtomicReference[Option[String]](Some("the endpoint never ran"))
     val declared = guard.required[Any]
-    val socket   = Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})
-    RouteTable(declared.mounting(socket), declared.identify).identify(request).currentUser
+    val socket   = Route.Ws(
+      PathPattern.parse("/live"),
+      upgrade => { seen.set(upgrade.currentUser); new WsListener {} }
+    )
+    val table = RouteTable(declared.carries :+ socket, declared.identify)
+    table.dispatchWs(request.path) match {
+      case Some((route, _)) => route.endpoint(table.identify(request)): Unit
+      case None             => fail(s"no WebSocket route matched ${request.path}")
+    }
+    seen.get
   }
 
   test("the page the guard let through is handed a request that names the user") {
@@ -280,7 +299,7 @@ class GuardSuite extends munit.FunSuite {
   }
 
   test(
-    "two guards' stamps compose without the one that finds nobody erasing the one that found somebody"
+    "two guards' naming composes without the one that finds nobody erasing the one that found somebody"
   ) {
     // An application with two guards, one shorter lived than the other, exactly the shape
     // `Guard.apply`'s own `lifetime` parameter exists for. A sign in three hours old is still good

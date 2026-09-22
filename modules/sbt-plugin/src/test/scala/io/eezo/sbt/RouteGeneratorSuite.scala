@@ -443,29 +443,126 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
   }
 
-  test("the table is handed the stamp its own declarations compose, in both readings") {
+  /** The naming block as the generator emits it, wrapped around the rows a shape declares.
+    *
+    * The frame is spelled out once and the rows are handed in verbatim, so each test below says
+    * only what its own shape declares while still pinning the whole block an application compiles.
+    */
+  private def namingBlock(rows: String): String =
+    "  /** Who this application says is behind a request its table serves. */\n" +
+      "  private val identify: io.eezo.http.Request => io.eezo.http.Request =\n" +
+      "    io.eezo.http.RouteTable.naming(\n" +
+      "      Seq(\n" +
+      rows +
+      "      )\n" +
+      "    )\n"
+
+  test("a handwritten route composes the table's naming, in both readings") {
     // The table names the current user on a socket upgrade, and what it names with is composed out
-    // of the very declarations the rows were mounted behind. Composed rather than looked up again,
-    // so there is no second place a route could be mounted behind one declaration and named by
-    // another.
+    // of the very declarations the rows were mounted behind. Composed rather than looked up a
+    // second time, so there is no second place a route could be mounted behind one declaration and
+    // named by another. The whole block is demanded rather than a fragment of it, because a row
+    // that drifts from the row above it is exactly what a fragment would let through.
+    val routes = Seq(route("widgets/Index.scala"))
+
+    val lenient =
+      RouteGenerator.render(routes, Seq.empty, dbOnClasspath = false, authDeclared = false)
+    assert(
+      clue(lenient).contains(namingBlock("        guardFor[app.widgets.Index.type].identify\n"))
+    )
+    assert(clue(lenient).contains("    io.eezo.http.RouteTable(handwritten.distinct, identify)"))
+
+    val strict =
+      RouteGenerator.render(routes, Seq.empty, dbOnClasspath = false, authDeclared = true)
+    assert(
+      clue(strict).contains(
+        namingBlock("        guardFor[app.widgets.Index.type](\"app.widgets.Index\").identify\n")
+      )
+    )
+    assert(clue(strict).contains("    io.eezo.http.RouteTable(handwritten.distinct, identify)"))
+  }
+
+  test("a model composes the table's naming, in both readings") {
+    // A derived row is mounted behind its own declaration, and where silence is an error that
+    // declaration is the model helper rather than the route one. The naming has to spell the same
+    // lookup the `routesOf` line beside it spells, which is why both are pinned together.
+    val lenient = RouteGenerator.render(Seq.empty, widget, dbOnClasspath = false)
+    assert(clue(lenient).contains(namingBlock("        guardFor[models.Widget].identify\n")))
+    assert(
+      clue(lenient).contains(
+        "    io.eezo.http.RouteTable(\n" +
+          "      (handwritten ++\n" +
+          "      // from src/main/scala/models/Widget.scala\n" +
+          "      io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
+          "      identify\n" +
+          "    )"
+      )
+    )
+
+    val strict =
+      RouteGenerator.render(Seq.empty, widget, dbOnClasspath = false, authDeclared = true)
+    assert(
+      clue(strict).contains(
+        namingBlock("        guardForModel[models.Widget](\"models.Widget\").identify\n")
+      )
+    )
+    assert(
+      clue(strict).contains(
+        "    io.eezo.http.RouteTable(\n" +
+          "      (handwritten ++\n" +
+          "      // from src/main/scala/models/Widget.scala\n" +
+          "      io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
+          "      identify\n" +
+          "    )"
+      )
+    )
+  }
+
+  test("handwritten and derived declarations compose one naming, in both readings") {
+    // Both halves of the table in one file: the handwritten rows name first, in the order they
+    // were mounted, and the derived rows follow them, so the naming reads down the file the way
+    // the table was built.
     val (routes, models) = helloRouteAndModel
 
     val lenient = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = false)
     assert(
       clue(lenient).contains(
-        "private val identify: io.eezo.http.Request => io.eezo.http.Request ="
+        namingBlock(
+          "        guardFor[app.widgets.Index.type].identify,\n" +
+            "        guardFor[models.Widget].identify\n"
+        )
       )
     )
-    assert(clue(lenient).contains("io.eezo.http.RouteTable.naming("))
-    assert(clue(lenient).contains("guardFor[app.widgets.Index.type].identify"))
-    assert(clue(lenient).contains("guardFor[models.Widget].identify"))
-    assert(clue(lenient).contains(").distinct,\n      identify\n    )"))
+    assert(
+      clue(lenient).contains(
+        "    io.eezo.http.RouteTable(\n" +
+          "      (handwritten ++\n" +
+          "      // from src/main/scala/models/Widget.scala\n" +
+          "      io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
+          "      identify\n" +
+          "    )"
+      )
+    )
 
     val strict = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = true)
     assert(
-      clue(strict).contains("""guardFor[app.widgets.Index.type]("app.widgets.Index").identify""")
+      clue(strict).contains(
+        namingBlock(
+          "        guardFor[app.widgets.Index.type](\"app.widgets.Index\").identify,\n" +
+            "        guardForModel[models.Widget](\"models.Widget\").identify\n"
+        )
+      )
     )
-    assert(clue(strict).contains("""guardForModel[models.Widget]("models.Widget").identify"""))
+    assert(
+      clue(strict).contains(
+        "    io.eezo.http.RouteTable(\n" +
+          "      (handwritten ++\n" +
+          "      // from src/main/scala/models/Widget.scala\n" +
+          "      io.eezo.http.Resource.routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
+          "      identify\n" +
+          "    )"
+      )
+    )
   }
 
   test("the guard helpers follow the rows that call them, like storeFor does") {
