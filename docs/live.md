@@ -193,8 +193,9 @@ own arm so forgetting the expired-token case is a compile error, not a productio
 
 A live page rendered behind a guarded route is a **bound page**. It remembers the current user of
 the request that rendered it, and admits one socket, whose upgrade must name the same current
-user; a sign in that has expired or been replaced names nobody, and nobody is not the page's user,
-so the socket is refused with `4403`. A page rendered on a public route is unbound whoever the
+user; a sign in that has lapsed, or that was signed out, names nobody, and a browser now signed
+in as another account names that account. Neither is the page's user, so the socket is refused
+with `4403`. A page rendered on a public route is unbound whoever the
 visitor was, and anyone holding its id may join, as before guards existed. That is why `mount`
 takes the request: it reads exactly one thing off it, who the guard let through.
 
@@ -249,9 +250,11 @@ the laptop.
   against another: serve and connect through the same origin (the client does this by
   construction; a reverse proxy that rewrites `Host` but forwards `Origin` is the usual culprit).
   `not signed in as the page's user` means a bound page (§7) was joined by a socket that is
-  somebody else, or nobody: an expired or replaced sign in reads as nobody. The cure is to
-  sign in again and reload the page yourself: unlike 4404 and 4409 the client does not reload
-  itself here, because reloading would only render the same refusal again.
+  somebody else, or nobody: a lapsed or signed out session names nobody, and a browser signed
+  in as a different account names that account. Note that eezo never revokes an earlier sign
+  in; a session cookie is good until its stamp is older than the guard's lifetime. The cure is
+  to sign in again and reload the page yourself: unlike 4404 and 4409 the client does not
+  reload itself here, because reloading would only render the same refusal again.
 - **`NotCanonical: <div> inside <p>...` at mount.** The differ refuses trees the HTML parser
   would restructure, because a restructured DOM breaks patch addressing silently. The message
   names the parser's move; restructure as it says. Same for mixed keyed/unkeyed children and
