@@ -59,6 +59,11 @@ each other without ever naming `/admin`. `app/Index.scala` is the page that has 
 lives outside the mount, nothing rewrites what it emits, so it links with the plain string
 `"/admin/posts"`, a finished address that stays exactly as written.
 
+## Failures
+
+How a handler refuses a request, what a programming mistake becomes, and what each boundary
+answers is one page: [docs/failures.md](docs/failures.md).
+
 ## Licence
 
 eezo is released under the [MIT License](LICENSE).
