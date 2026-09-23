@@ -43,6 +43,28 @@ class CapabilitySuite extends FunSuite {
     assert(e.contains("use `attempt`"), e)
   }
 
+  test("an attempt that names no failure says to name one") {
+    // Left unnamed, E is inferred as Nothing: a savepoint that owns no failure while reading as if
+    // it recovered. Naming Throwable, the next test, would own every failure instead.
+    val e = compileErrors("import io.eezo.db.Scopes.*; transact { attempt { needsTx() } }")
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
+    assert(e.contains("name the failure this savepoint owns"), e)
+  }
+
+  test("an attempt that names Throwable is refused the same way") {
+    val e =
+      compileErrors("import io.eezo.db.Scopes.*; transact { attempt[Throwable] { needsTx() } }")
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
+    assert(e.contains("name the failure this savepoint owns"), e)
+  }
+
+  test("an attempt that names a failure compiles, with the result type inferred") {
+    val e = compileErrors(
+      "import io.eezo.db.Scopes.*; transact { val r: Either[java.sql.SQLException, Int] = attempt[java.sql.SQLException] { needsTx(); 1 }; r }"
+    )
+    assertEquals(e, "")
+  }
+
   test("a transact inside a read says to move it outward") {
     val e = compileErrors("import io.eezo.db.Scopes.*; read { transact { needsTx() } }")
     assert(e.contains("cannot open a transaction inside a `read` scope"), e)

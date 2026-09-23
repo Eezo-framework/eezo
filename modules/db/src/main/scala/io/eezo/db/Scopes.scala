@@ -3,6 +3,7 @@ package io.eezo.db
 import io.eezo.db.capability.*
 import io.eezo.db.engine.{Run, Scope}
 import scala.compiletime.{error, summonFrom}
+import scala.reflect.TypeTest
 import scala.util.control.NonFatal
 
 /** The scopes: the whole database API's entry points. DESIGN §8.2.
@@ -40,22 +41,71 @@ object Scopes {
       case _        => Run.read(body)
     }
 
-  /** A sub-unit that may fail and be recovered, on a savepoint. DESIGN §8.12.
+  /** A sub unit that may fail and be recovered, on a savepoint. DESIGN §8.12.
+    *
+    * The savepoint owns only the failure its caller names, because recovering is a claim that the
+    * transaction is still fine to use. A duplicate key is something the caller expected and knows
+    * how to answer; a defect, or a scope guard's refusal, is something nobody inside the
+    * transaction planned for, and turning it into a value would let the request carry on as if it
+    * had. So anything else thrown inside still ends the request, with the enclosing `transact`
+    * rolling back. Naming a broad type such as `RuntimeException` brings that swallowing back,
+    * guard refusals included, which is why the choice is left in plain sight at the call site.
+    *
+    * `attempt[E]` returns an [[Attempt]] rather than taking the body itself because Scala 3 cannot
+    * apply one type argument and infer the other: with `[E, A]` on one method every caller would
+    * have to spell out `A` as well. A bare `attempt { ... }` would infer `E` as Nothing and own no
+    * failure at all, while reading as if it recovered; naming Throwable would own every failure.
+    * Neither is a choice the caller made, so both are refused at compile time.
     *
     * Never implicit in nesting: past 64 subtransactions PGPROC's cached subxid array overflows and
     * every visibility check hits the subtrans SLRU, which is a cliff for a savepoint per iteration.
     */
-  def attempt[A](body: Tx ?-> A)(using tx: Tx): Either[Throwable, A] = {
-    val c  = tx.connection
-    val sp = c.setSavepoint()
-    try {
-      val a = body(using tx)
-      c.releaseSavepoint(sp)
-      Right(a)
-    } catch {
-      case NonFatal(e) =>
-        c.rollback(sp)
-        Left(e)
+  inline def attempt[E <: Throwable](using TypeTest[Throwable, E]): Attempt[E] =
+    summonFrom {
+      case _: (E =:= Throwable) => nameTheFailure()
+      case _: (E =:= Nothing)   => nameTheFailure()
+      case _                    => new Attempt[E]
+    }
+
+  private inline def nameTheFailure(): Nothing =
+    error(
+      "name the failure this savepoint owns: `attempt[SQLException] { ... }`.\n" +
+        "Anything else thrown inside still rolls the transaction back."
+    )
+
+  /** The second half of [[attempt]], split off only so the caller names `E` and `A` is inferred.
+    *
+    * The failure is judged by a TypeTest rather than a ClassTag because a union such as
+    * `SQLException | TimeoutException` has no single class: its ClassTag is the common superclass,
+    * Exception, and would quietly own every defect the caller never named.
+    */
+  final class Attempt[E <: Throwable](using owns: TypeTest[Throwable, E]) {
+
+    /** The savepoint is rolled back before the failure is judged, so the sub unit's writes are
+      * gone whether it comes back as a `Left` or keeps travelling. If that rollback fails the
+      * transaction is no longer where the caller thinks, so nothing is owned: the body's failure
+      * travels on, carrying the rollback's as suppressed.
+      */
+    def apply[A](body: Tx ?-> A)(using tx: Tx): Either[E, A] = {
+      val c  = tx.connection
+      val sp = c.setSavepoint()
+      try {
+        val a = body(using tx)
+        c.releaseSavepoint(sp)
+        Right(a)
+      } catch {
+        case NonFatal(e) =>
+          try c.rollback(sp)
+          catch {
+            case NonFatal(r) =>
+              e.addSuppressed(r)
+              throw e
+          }
+          e match {
+            case owns(owned) => Left(owned)
+            case _           => throw e
+          }
+      }
     }
   }
 

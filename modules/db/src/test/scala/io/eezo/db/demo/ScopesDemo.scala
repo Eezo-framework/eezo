@@ -5,6 +5,7 @@ import io.eezo.db.capability.OffThread
 import io.eezo.db.engine.{Installed, ReentrantScope}
 import io.eezo.db.Scopes.*
 import io.eezo.db.support.Pg
+import java.sql.SQLException
 
 /** A runnable walk through phase 1. Not a test: it prints what happens so the behaviour and the
   * messages can be read.
@@ -145,7 +146,7 @@ object ScopesDemo {
     step("8. attempt rolls back a sub-unit and the transaction carries on") {
       transact {
         note(9, "kept")
-        val failed = attempt { note(9, "duplicate key") }
+        val failed = attempt[SQLException] { note(9, "duplicate key") }
         println(s"   the sub-unit failed: ${failed.isLeft}")
         note(10, "still writable") // without a savepoint Postgres would refuse this
       }
