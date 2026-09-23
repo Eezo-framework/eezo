@@ -3,6 +3,7 @@ package io.eezo.http
 import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.concurrent.TimeoutException
 
 import scala.jdk.CollectionConverters.*
 
@@ -11,6 +12,7 @@ import org.eclipse.jetty.server.Request as JettyRequest
 import org.eclipse.jetty.server.Response as JettyResponse
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.ServerConnector
+import org.eclipse.jetty.server.handler.GracefulHandler
 import org.eclipse.jetty.util.Callback
 import org.eclipse.jetty.util.thread.VirtualThreadPool
 import org.eclipse.jetty.websocket.api.Session
@@ -72,8 +74,11 @@ private[eezo] object Config {
   *
   * The framework brings the server up and down. [[run]] blocks until the server stops, and the
   * server stops on the JVM's shutdown, so a SIGTERM unwinds `run`, `HttpApp.serve` returns, and
-  * whatever wrapped it (the database edge's `withDatabase`) runs its `finally`. [[stop]] is the
-  * same path for a test that started a server through `run` and wants it back down.
+  * whatever wrapped it (the database edge's `withDatabase`) runs its `finally`. The server drains
+  * before any of that: it refuses new requests and lets the ones in flight finish, for up to
+  * [[StopTimeout]], so the database closes after the last request has been answered rather than
+  * under one still inside a transaction. [[stop]] is the same path, drain included, for a test that
+  * started a server through `run` and wants it back down.
   */
 object Eezo {
 
@@ -85,6 +90,33 @@ object Eezo {
     * `DevProcess.stop` gives the child before `destroyForcibly`.
     */
   private val UnwindTimeout: Duration = Duration.ofSeconds(10)
+
+  /** How long `stop` lets requests in flight finish before it closes their connections anyway.
+    *
+    * It must stay below [[UnwindTimeout]]. The hook spends the drain first and starts waiting on
+    * the caller only after it, so a shutdown costs the two added together, and the process is
+    * killed on a clock that is not ours: ten seconds after the stop in dev, the window
+    * [[UnwindTimeout]] is named after, and five on Fly unless its `kill_timeout` says otherwise. A
+    * drain that ran into either kill would skip `withDatabase`'s `finally`, which is the one thing
+    * it exists to protect. Three seconds leaves the unwind room inside the shorter of the two. It
+    * covers a request that is slow, not one that is stuck, and [[drainAndStop]] logs it when a stop
+    * cuts one off.
+    */
+  private[http] val StopTimeout: Duration = Duration.ofSeconds(3)
+
+  /** How long a connection may sit silent once the drain has begun before it is closed.
+    *
+    * The same silence ends two very different connections: one a browser keeps open between
+    * requests, which only holds the stop, and one whose client pauses mid upload or mid download,
+    * which is a request in flight the drain exists to finish. A production stop is a deploy, where
+    * the client is anyone on any network and a second of waiting costs nobody, so it keeps Jetty's
+    * own second. A dev stop is the restart on every save, where the browser's idle connection would
+    * add that second to each reload and the one client is on the loopback and never pauses, so it
+    * gets a tenth of that. Silence does not fail a handler that computes without touching the
+    * connection: a request is read whole before its handler runs.
+    */
+  private[http] def shutdownIdleTimeout(dev: Boolean): Duration =
+    if (dev) Duration.ofMillis(100) else Duration.ofSeconds(1)
 
   /** The server [[run]] is joining, if any, so that [[stop]] and the shutdown hook can reach it.
     * One slot, not a set: `run` is what `main` ends in, once per process.
@@ -112,9 +144,10 @@ object Eezo {
 
   /** Boots the server and blocks until it stops.
     *
-    * The server comes down with the JVM: a shutdown hook stops it, which returns `join`, and then
-    * waits up to [[UnwindTimeout]] for the calling thread to finish, so the caller's `finally`
-    * blocks run before the process exits. The hook is removed again when `run` returns any other
+    * The server comes down with the JVM: a shutdown hook stops it, draining the requests in flight
+    * first, which returns `join`, and then waits up to [[UnwindTimeout]] for the calling thread to
+    * finish, so the caller's `finally` blocks run before the process exits and after the last
+    * request they could have been serving. The hook is removed again when `run` returns any other
     * way, and the `IllegalStateException` the removal throws during a shutdown is the case where
     * the hook is what returned `join`.
     */
@@ -122,10 +155,9 @@ object Eezo {
     val server = build(port, config)
     val caller = Thread.currentThread()
     val hook   = new Thread(
-      () => {
-        server.stop()
-        caller.join(UnwindTimeout.toMillis)
-      },
+      () =>
+        try drainAndStop(server)
+        finally caller.join(UnwindTimeout.toMillis),
       "eezo-shutdown"
     )
     Runtime.getRuntime.addShutdownHook(hook)
@@ -142,7 +174,24 @@ object Eezo {
   }
 
   /** Stops the server [[run]] is joining, so that `run` returns. Nothing if none is running. */
-  private[eezo] def stop(): Unit = running.foreach(_.stop())
+  private[eezo] def stop(): Unit = running.foreach(drainAndStop)
+
+  /** The one way eezo stops a server, for the hook and [[stop]] alike.
+    *
+    * Jetty brings the server down whatever the drain did, and only then reports a drain that
+    * [[StopTimeout]] cut short, by throwing. That is a line for the log rather than a failure: the
+    * hook still has the caller to wait for, and the caller's `finally` is the point of the whole
+    * sequence.
+    */
+  private def drainAndStop(server: Server): Unit =
+    try server.stop()
+    catch {
+      case _: TimeoutException =>
+        log.log(
+          System.Logger.Level.WARNING,
+          s"requests still in flight ${StopTimeout.toSeconds} seconds after the stop began were cut off"
+        )
+    }
 
   /** Boots the server and returns it, still running: [[build]] and then `start`, for a suite that
     * holds the handle itself.
@@ -184,7 +233,14 @@ object Eezo {
       }
     )
     upgrade.setHandler(new EezoHandler(config))
-    server.setHandler(upgrade)
+    // Outermost, so every request is counted from the start, and an upgrade that arrives during the
+    // drain is refused like any other request. A socket stops counting once its handshake is
+    // written, and Jetty closes the open ones with 1001 as the drain begins, so a live page never
+    // holds the stop open.
+    val graceful = new GracefulHandler(upgrade)
+    graceful.setShutdownIdleTimeout(shutdownIdleTimeout(config.dev).toMillis)
+    server.setHandler(graceful)
+    server.setStopTimeout(StopTimeout.toMillis)
 
     announce(config)
     server

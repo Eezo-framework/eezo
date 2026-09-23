@@ -194,6 +194,11 @@ image and runs in the release machine before the new code serves. If it fails, t
 the old version keeps serving, and the migration's own output says why. `eezo deploy` with
 nothing pending prints `no pending migrations` in the release step and just ships code.
 
+When the new version replaces a machine, Fly signals the old one to stop. The server stops taking
+new requests at once, gives the ones already running up to three seconds to finish, and only
+then closes the database, so a request inside a transaction completes instead of losing its
+connection halfway.
+
 CI is the same two commands, non-interactively: authenticate with `FLY_API_TOKEN`, and pass
 `--app <name>` on the first-ever deploy (interactive prompts are refused when there's no TTY).
 

@@ -4,6 +4,8 @@ import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.time.Duration
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 import io.eezo.core.html.Html
 import io.eezo.core.html.Tags.*
@@ -52,30 +54,58 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     intercept[java.io.IOException](get(port, "/hello"))
   }
 
+  // Here rather than with the other drain tests: `run` and `stop` share one slot for the whole
+  // process, and suites run side by side, so every test that uses them lives in this one suite,
+  // where they run one after the other.
+  test("stop on a server run is holding goes through the same drain and returns without throwing") {
+    val entered = new CountDownLatch(1)
+    val release = new CountDownLatch(1)
+    val held    = RouteTable(
+      Seq(
+        Route.Http(
+          Method.GET,
+          PathPattern.parse("/held"),
+          _ => {
+            entered.countDown()
+            release.await()
+            Response.Ok(Html.text("finished"))
+          }
+        )
+      )
+    )
+    val port     = freePort()
+    var returned = false
+    val runner   = new Thread(
+      () => {
+        Eezo.run(port, Config(held, secret = secret))
+        returned = true
+      },
+      "eezo-drain-run"
+    )
+    runner.setDaemon(true)
+    runner.start()
+    try {
+      assertEquals(awaiting(port, Eezo.HealthPath).statusCode(), 200)
+      val _ = client.sendAsync(
+        HttpRequest.newBuilder(URI.create(s"http://localhost:$port/held")).GET().build(),
+        HttpResponse.BodyHandlers.ofString()
+      )
+      assert(entered.await(5, TimeUnit.SECONDS), "the held handler never started")
+      val began = System.nanoTime()
+      Eezo.stop()
+      val took = Duration.ofNanos(System.nanoTime() - began)
+      assert(clue(took).compareTo(Eezo.StopTimeout) >= 0, "stop did not wait on the drain")
+      assert(clue(took).compareTo(Eezo.StopTimeout.plusSeconds(1)) < 0, "stop overran")
+    } finally {
+      release.countDown()
+      Eezo.stop()
+      runner.join(5000)
+    }
+    assert(returned, "run did not return after stop")
+  }
+
   test("stop with nothing running is a no-op") {
     Eezo.stop()
-  }
-
-  /** A port nobody is listening on right now, for a server started through `run`, which binds the
-    * port it is given and hands back nothing to ask.
-    */
-  private def freePort(): Int = {
-    val socket = new java.net.ServerSocket(0)
-    try socket.getLocalPort
-    finally socket.close()
-  }
-
-  /** `get`, retried while the server is still coming up. */
-  private def awaiting(port: Int, path: String): HttpResponse[String] = {
-    val deadline                        = System.nanoTime() + 10_000_000_000L
-    def attempt(): HttpResponse[String] =
-      try get(port, path)
-      catch {
-        case _: java.io.IOException if System.nanoTime() < deadline =>
-          Thread.sleep(50)
-          attempt()
-      }
-    attempt()
   }
 
   test("a handwritten route renders HTML produced by the core DSL") {
@@ -117,10 +147,8 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
 
   test("the WebSocket container overrides the three defaults the research calls defects") {
     serving(hello) { (server, _) =>
-      val upgrade = server.getHandler match {
-        case h: WebSocketUpgradeHandler => h
-        case other                      => fail(s"expected a WebSocketUpgradeHandler, got $other")
-      }
+      val upgrade = Option(server.getDescendant(classOf[WebSocketUpgradeHandler]))
+        .getOrElse(fail("the handler tree has no WebSocketUpgradeHandler"))
       val container = upgrade.getServerWebSocketContainer
       assertEquals(container.getIdleTimeout, Duration.ofMinutes(5))
       assertEquals(container.getMaxTextMessageSize, 1L * 1024 * 1024)
