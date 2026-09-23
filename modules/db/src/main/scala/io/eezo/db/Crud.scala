@@ -3,9 +3,6 @@ package io.eezo.db
 import io.eezo.db.capability.*
 import io.eezo.core.Id
 
-/** An `update` or `delete` that matched no row. */
-final case class NoSuchRow(msg: String) extends RuntimeException(msg)
-
 /** CRUD by primary key, as extensions on the derived `Table[T]`. DESIGN §8.2.
   *
   * Extensions rather than methods on the trait, so that `Table[T]` stays a plain description: the
@@ -27,12 +24,13 @@ extension [T](t: Table[T]) {
 
   /** Writes every column of `row`, matched by its own key.
     *
-    * Last-write-wins: two edits to different fields of the same row end with the second overwriting
-    * the first, including fields it never touched. That is the accepted default (DESIGN §8.6); the
-    * zero-rows check below is the one conflict it can still detect, and it is the branch an
-    * optimistic-concurrency check would later reuse without changing this signature.
+    * The later write wins: two edits to different fields of the same row end with the second
+    * overwriting the first, including fields it never touched. That is the accepted default (DESIGN
+    * §8.6). A count of 0 is the one conflict it can still report, and it is where an optimistic
+    * concurrency check would later answer too: a version in the `where` turns a stale write into
+    * the same 0, so the signature would not change.
     */
-  def update(row: T)(using tx: Tx): Unit = updateById(t.idOf(row), row)
+  def update(row: T)(using tx: Tx): Int = updateById(t.idOf(row), row)
 
   /** The row to write found by `id` rather than by the key inside `row`.
     *
@@ -40,21 +38,38 @@ extension [T](t: Table[T]) {
     * apart at `core`'s `Store[A]`, whose `update(key, row)` promises to replace "the row under
     * `key`": binding `id` here is what makes a stale key report `false` rather than write to
     * `row`'s own key and report `true`, which is the answer the in-memory half gives.
+    *
+    * The count comes back rather than an exception because a write that matched nothing is an
+    * answer, not a failure. The caller that cares asks, and raising would have rolled back every
+    * other write in the same `transact` over a row that was simply not there.
+    *
+    * 0 is also all the conflict detection there is. eezo writes by primary key and tracks no
+    * versions, so when two writers edit the same row both see 1 and the later one wins silently:
+    * the earlier edit is lost without a trace. 0 says only that the row was never inserted or that
+    * something deleted it after it was read.
     */
-  def updateById(id: Id[T], row: T)(using tx: Tx): Unit = {
+  def updateById(id: Id[T], row: T)(using tx: Tx): Int = {
     val ps = tx.connection.prepareStatement(t.updateByIdSql)
     try {
       t.encode(ps, 1, row)
       Column[Id[T]].put(ps, t.columns.size + 1, id)
-      expectOne(ps.executeUpdate(), "update", t.tableName, id)
+      ps.executeUpdate()
     } finally ps.close()
   }
 
-  def delete(id: Id[T])(using tx: Tx): Unit = {
+  /** The count rather than an exception, for the reason `updateById` gives: a missing row is an
+    * answer, and only the caller knows whether it matters.
+    *
+    * eezo deletes by primary key and tracks no versions, so an update that lands first is erased by
+    * a later delete without either writer learning of the other: the edit is lost silently. An
+    * update that lands after the delete is not silent, it sees 0. Here 0 says only that the row was
+    * already gone.
+    */
+  def delete(id: Id[T])(using tx: Tx): Int = {
     val ps = tx.connection.prepareStatement(t.deleteByIdSql)
     try {
       Column[Id[T]].put(ps, 1, id)
-      expectOne(ps.executeUpdate(), "delete", t.tableName, id)
+      ps.executeUpdate()
     } finally ps.close()
   }
 
@@ -100,15 +115,3 @@ extension [T](t: Table[T]) {
     } finally ps.close()
   }
 }
-
-private def expectOne[T](rows: Int, verb: String, table: String, id: Id[T]): Unit =
-  if (rows != 1)
-    throw NoSuchRow(
-      s"""|$verb matched $rows rows in "$table" for id ${id.show}, expected 1.
-          |
-          |The row is not there. Something else deleted it between the read and this write, or it
-          |was never inserted. eezo writes by primary key and does not track versions, so a missing
-          |row is the one conflict it can detect: if two writers edited the same row, the later
-          |write wins silently.
-          |""".stripMargin
-    )
