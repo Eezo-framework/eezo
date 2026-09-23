@@ -58,6 +58,14 @@ class CapabilitySuite extends FunSuite {
     assert(e.contains("name the failure this savepoint owns"), e)
   }
 
+  test("Attempt cannot be built by hand, bypassing attempt's guard") {
+    // `new Scopes.Attempt[Throwable]` (or `[Nothing]`) would own every non-fatal failure,
+    // guard refusals and defects included, even though `attempt[Throwable]` is refused above.
+    val e = compileErrors("new io.eezo.db.Scopes.Attempt[Throwable]")
+    assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
+    assert(e.contains("cannot be accessed"), e)
+  }
+
   test("an attempt that names a failure compiles, with the result type inferred") {
     val e = compileErrors(
       "import io.eezo.db.Scopes.*; transact { val r: Either[java.sql.SQLException, Int] = attempt[java.sql.SQLException] { needsTx(); 1 }; r }"

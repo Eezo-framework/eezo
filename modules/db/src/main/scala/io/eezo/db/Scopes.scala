@@ -2,6 +2,7 @@ package io.eezo.db
 
 import io.eezo.db.capability.*
 import io.eezo.db.engine.{Run, Scope}
+import scala.annotation.publicInBinary
 import scala.compiletime.{error, summonFrom}
 import scala.reflect.TypeTest
 import scala.util.control.NonFatal
@@ -78,8 +79,16 @@ object Scopes {
     * The failure is judged by a TypeTest rather than a ClassTag because a union such as
     * `SQLException | TimeoutException` has no single class: its ClassTag is the common superclass,
     * Exception, and would quietly own every defect the caller never named.
+    *
+    * The type stays public, so a caller can hold one and call `apply`, but the constructor does
+    * not: a public one would let `new Attempt[Throwable]` or `new Attempt[Nothing]` build the same
+    * unguarded savepoint that `attempt`'s `summonFrom` refuses to hand out. `publicInBinary` is
+    * there only because `attempt` is `inline` and expands `new Attempt[E]` at the call site; without
+    * it the private constructor cannot be reached from outside `Scopes` at all.
     */
-  final class Attempt[E <: Throwable](using owns: TypeTest[Throwable, E]) {
+  final class Attempt[E <: Throwable] @publicInBinary private[Scopes] (using
+      owns: TypeTest[Throwable, E]
+  ) {
 
     /** The savepoint is rolled back before the failure is judged, so the sub unit's writes are
       * gone whether it comes back as a `Left` or keeps travelling. If that rollback fails the
