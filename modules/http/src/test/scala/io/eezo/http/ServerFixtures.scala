@@ -40,6 +40,28 @@ trait ServerFixtures { self: munit.FunSuite =>
     } finally server.stop()
   }
 
+  /** A port nobody is listening on right now, for a server started through `run`, which binds the
+    * port it is given and hands back nothing to ask.
+    */
+  protected def freePort(): Int = {
+    val socket = new java.net.ServerSocket(0)
+    try socket.getLocalPort
+    finally socket.close()
+  }
+
+  /** `get`, retried while the server is still coming up. */
+  protected def awaiting(port: Int, path: String): HttpResponse[String] = {
+    val deadline                        = System.nanoTime() + 10_000_000_000L
+    def attempt(): HttpResponse[String] =
+      try get(port, path)
+      catch {
+        case _: java.io.IOException if System.nanoTime() < deadline =>
+          Thread.sleep(50)
+          attempt()
+      }
+    attempt()
+  }
+
   /** A request over the loopback, the session cookie set when `cookie` is defined. */
   protected def send(
       port: Int,
