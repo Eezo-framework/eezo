@@ -42,7 +42,7 @@ class BoundPageSuite extends munit.FunSuite with LiveServerFixtures {
     */
   private def bound(body: Rig => Unit): Unit = {
     val user = guarded.mounting(page("/dashboard")) :+ page("/public")
-    serving(RouteTable(user, guarded.identify) ++ RouteTable(Live.routes))(body)
+    serving(RouteTable(user, guarded.identify) ++ RouteTable(Live.routes(Set.empty)))(body)
   }
 
   private def as(who: String): Seq[(String, String)] = Seq(WhoHeader -> who)

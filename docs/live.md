@@ -222,6 +222,44 @@ setting matters:
 Two devices on one deployed guestbook is the whole acceptance test: sign on the phone, watch
 the laptop.
 
+### Origins
+
+A browser names the page that opened a socket in its `Origin` header, and the live socket
+admits only its own origin: the scheme the browser used (`https` when the connection is TLS or
+`X-Forwarded-Proto` says `https`, `http` otherwise) plus the `Host` it asked for. Scheme and host
+compare case insensitively and a default port (80 for `http`, 443 for `https`) is ignored,
+but nothing else is lenient: `https://localhost:8080` is not `http://localhost:8080`. An upgrade
+with no `Origin` is not a browser and is admitted. With no configuration this is all you need,
+and `eezo deploy` on Fly needs nothing either: Fly sends `X-Forwarded-Proto` and passes the
+browser's `Host` through.
+
+A proxy of your own in front is where it can go wrong. If it rewrites `Host` to the upstream's
+address, or terminates TLS without saying so, the server computes an origin the browser never
+used and every live page is refused. Fix the proxy first; in nginx that is
+
+```nginx
+proxy_set_header Host $http_host;
+proxy_set_header X-Forwarded-Proto $scheme;
+```
+
+Use `$http_host`, not the more common `proxy_set_header Host $host`: `$host` drops the port, so
+a proxy listening on a port other than 80 or 443 (`localhost:8080` in front of an app on 9000)
+would still forward an origin the browser never used.
+
+When the page really is served from another origin, list it:
+
+```scala
+object Main extends EezoApp {
+  override def schema: Schema     = AppSchema
+  override def routes: RouteTable = Routes.table()
+  override protected def allowedOrigins: Set[String] = Set("https://app.example")
+}
+```
+
+Each entry is a whole origin, `scheme://host` or `scheme://host:port`, matched exactly: no
+wildcards, no subdomains, no path. An entry that is not an origin fails the boot with a message
+naming it. The list widens the server's own origin and never replaces it.
+
 ## 9. When things break: designed-in behavior, not bugs
 
 - **Kill the server; the page goes quiet.** The client logs `connection lost, reconnecting…`
@@ -246,9 +284,12 @@ the laptop.
   answered the browser and swallowed a jshell probe, and the component was innocent all along.
 - **The page renders but never connects, console shows `4403`.** The upgrade was refused, and
   the console line carries the server's own reason, which is the only thing that tells the two
-  refusals apart. `origin mismatch` means the page was served from one host and the socket opened
-  against another: serve and connect through the same origin (the client does this by
-  construction; a reverse proxy that rewrites `Host` but forwards `Origin` is the usual culprit).
+  refusals apart. `origin <origin> not allowed` (it read `origin mismatch` in earlier versions)
+  means the socket was opened by a page whose origin is neither the server's own nor in
+  `allowedOrigins`. The server log has a WARNING with both origins side by side. The client
+  serves and connects through the same origin by construction, so the usual culprit is a
+  reverse proxy that rewrites `Host` or terminates TLS without `X-Forwarded-Proto`: see
+  Origins in §8.
   `not signed in as the page's user` means a bound page (§7) was joined by a socket that is
   somebody else, or nobody: a lapsed or signed out session names nobody, and a browser signed
   in as a different account names that account. Note that eezo never revokes an earlier sign

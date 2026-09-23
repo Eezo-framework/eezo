@@ -145,8 +145,11 @@ object Request {
     *
     * `X-Forwarded-Proto` is trusted for this one question and nothing else. A client that forges it
     * only puts `Secure` on its own cookies, and cannot take it off anyone's, since a TLS connection
-    * counts whatever the header says. A chain of proxies lists the schemes in order, and the first
-    * is the one the browser used.
+    * counts whatever the header says. The answer also picks the scheme of the origin the live
+    * socket computes for itself (`io.eezo.live.Origins.served`), so a forger can flip that scheme
+    * too, but only for its own socket: a browser cannot add headers to a WebSocket upgrade, and a
+    * client that can is not a browser and carries no victim's cookie. A chain of proxies lists the
+    * schemes in order, and the first is the one the browser used.
     */
   private[http] def isSecure(tls: Boolean, headers: Map[String, Seq[String]]): Boolean =
     tls || headerValues(headers, "X-Forwarded-Proto").headOption
