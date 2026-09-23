@@ -227,6 +227,14 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
     }
   }
 
+  test("a port above 65535 is refused the same way on a plain host as on an underscore one") {
+    // java.net.URI reads a host for "localhost" and hands back 99999 from getPort unchecked;
+    // the bound has to be enforced here too, or a typo like this survives boot and can never match
+    // a real browser Origin, since no browser can send a port outside 0 to 65535.
+    assertEquals(Origins.normalise("http://localhost:99999"): Option[String], None)
+    intercept[IllegalArgumentException](Live.routes(Set("http://localhost:99999")))
+  }
+
   test("normalisation applies to the Host side too, and the scheme comes from the connection") {
     assert(
       Origins.admits(upgrade(false, "Origin" -> "HTTP://Host", "Host" -> "HOST:80"), Set.empty)

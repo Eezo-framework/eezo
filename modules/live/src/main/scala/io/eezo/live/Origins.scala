@@ -38,7 +38,7 @@ private[live] object Origins {
       for {
         s         <- scheme
         (h, port) <- hostAndPort
-        if bare && h.nonEmpty
+        if bare && h.nonEmpty && port <= 65535
       } yield {
         if (port == -1 || DefaultPorts.get(s).contains(port)) s"$s://$h" else s"$s://$h:$port"
       }
