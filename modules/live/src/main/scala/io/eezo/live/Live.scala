@@ -1,6 +1,5 @@
 package io.eezo.live
 
-import java.net.URI
 import java.nio.charset.StandardCharsets
 import java.util.concurrent.ConcurrentHashMap
 
@@ -130,25 +129,32 @@ object Live {
     * socket every page joins, and the client script. Both under the reserved prefix, both
     * unmounted, both absent from `eezo routes` (they are the framework's, not the user's) though
     * present in the boot listing, which shows what is actually served.
+    *
+    * `allowedOrigins` is the one thing the socket needs from the application, which is why this is
+    * a method with no parameterless twin: a twin would let `LiveApp` drop an application's list
+    * without a compile error. Empty means a socket is admitted from the server's own origin only.
     */
-  val routes: Seq[Route] = Seq(
-    Route.Ws(PathPattern.parse(s"${Eezo.ReservedPrefix}/live/:page"), endpoint),
-    Route.Http(
-      Method.GET,
-      PathPattern.parse(s"${Eezo.ReservedPrefix}/live.js"),
-      _ =>
-        Response(
-          200,
-          Seq(
-            "Content-Type" -> "text/javascript; charset=utf-8",
-            // Revalidate every load: the script changes with the framework, and a browser holding
-            // a stale copy across a dev rebuild is a debugging session that blames the wrong code.
-            "Cache-Control" -> "no-cache"
-          ),
-          Body.Bytes(clientJs)
-        )
+  def routes(allowedOrigins: Set[String]): Seq[Route] = {
+    val allowed = allowedOrigins.map(Origins.listed)
+    Seq(
+      Route.Ws(PathPattern.parse(s"${Eezo.ReservedPrefix}/live/:page"), endpoint(allowed, _)),
+      Route.Http(
+        Method.GET,
+        PathPattern.parse(s"${Eezo.ReservedPrefix}/live.js"),
+        _ =>
+          Response(
+            200,
+            Seq(
+              "Content-Type" -> "text/javascript; charset=utf-8",
+              // Revalidate every load: the script changes with the framework, and a browser holding
+              // a stale copy across a dev rebuild is a debugging session that blames the wrong code.
+              "Cache-Control" -> "no-cache"
+            ),
+            Body.Bytes(clientJs)
+          )
+      )
     )
-  )
+  }
 
   /** The anchor div: the node the applier resolves every path from. `data-eezo-base` is a mounted
     * url, so `Route.under` moves it with the page and the client reports the moved value at join
@@ -187,94 +193,105 @@ object Live {
   /** One socket, one page, states in lockstep with the registry. Jetty delivers a session's
     * callbacks serially, so the `attached` var is single-threaded by contract.
     */
-  private def endpoint(request: Request): WsListener = new WsListener {
+  private def endpoint(allowed: Set[Origins.Normalised], request: Request): WsListener =
+    new WsListener {
 
-    // The current user is read off the upgrade once, when this listener is built, and compared
-    // once, when the socket opens.
-    private val id       = request.pathParams.getOrElse("page", "")
-    private val who      = request.currentUser
-    private val originOk = originAllowed(request)
+      // The current user is read off the upgrade once, when this listener is built, and compared
+      // once, when the socket opens.
+      private val id       = request.pathParams.getOrElse("page", "")
+      private val who      = request.currentUser
+      private val originOk = Origins.admits(request, allowed)
 
-    private var attached: Option[(Page[?], Sender)] = None
+      private var attached: Option[(Page[?], Sender)] = None
 
-    override def onOpen(conn: WsConn): Unit =
-      if (!originOk) {
-        log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, origin mismatch")
-        conn.close(4403, "origin mismatch")
-      } else {
-        registry.connect(id, who) match {
-          case Left(PageRegistry.ConnectRefusal.Unknown) => conn.close(4404, "unknown page")
-          case Left(PageRegistry.ConnectRefusal.AlreadyConnected) =>
-            conn.close(4409, "page already connected")
-          // Expired, signed out, or a stranger: the registry cannot tell which.
-          case Left(PageRegistry.ConnectRefusal.NotTheUser) =>
-            log.log(System.Logger.Level.WARNING, s"page $id: upgrade refused, not the page's user")
-            conn.close(4403, "not signed in as the page's user")
-          case Right(page) =>
-            senders.get(id) match {
-              case null   => conn.close(4404, "unknown page")
-              case sender =>
-                sender.attach(conn)
-                attached = Some((page, sender))
-            }
+      override def onOpen(conn: WsConn): Unit =
+        if (!originOk) {
+          val received = Origins.shown(request.header("Origin").getOrElse(""))
+          val served   = Origins.served(request).fold("unknown, no usable Host")(Origins.shown)
+          log.log(
+            System.Logger.Level.WARNING,
+            s"page $id: upgrade refused, origin $received not allowed, this server is $served; " +
+              "a proxy that rewrites Host should forward it (and one that terminates TLS should " +
+              "send X-Forwarded-Proto), or add the origin to LiveApp.allowedOrigins"
+          )
+          conn.close(4403, s"origin $received not allowed")
+        } else {
+          registry.connect(id, who) match {
+            case Left(PageRegistry.ConnectRefusal.Unknown) => conn.close(4404, "unknown page")
+            case Left(PageRegistry.ConnectRefusal.AlreadyConnected) =>
+              conn.close(4409, "page already connected")
+            // Expired, signed out, or a stranger: the registry cannot tell which.
+            case Left(PageRegistry.ConnectRefusal.NotTheUser) =>
+              log.log(
+                System.Logger.Level.WARNING,
+                s"page $id: upgrade refused, not the page's user"
+              )
+              conn.close(4403, "not signed in as the page's user")
+            case Right(page) =>
+              senders.get(id) match {
+                case null   => conn.close(4404, "unknown page")
+                case sender =>
+                  sender.attach(conn)
+                  attached = Some((page, sender))
+              }
+          }
         }
-      }
 
-    override def onText(conn: WsConn, text: String): Unit =
-      attached.foreach { case (page, _) =>
-        Wire.read(text) match {
-          case Left(problem) =>
-            log.log(System.Logger.Level.WARNING, s"page $id sent a malformed frame: $problem")
-            conn.send(Wire.error(problem))
-          case Right(Wire.ClientMessage.Join(base)) =>
-            // The reported base is the prefix the client's DOM was rewritten with; the resync
-            // that follows carries the tree rebased to match, and starts the client from
-            // whatever moved between mount and join (design/live.md §2.6).
-            mountPrefix(base) match {
-              case Some(prefix) => page.rebase(prefix)
-              case None         =>
-                log.log(
-                  System.Logger.Level.WARNING,
-                  s"page $id sent a dubious base '$base'; ignored"
-                )
-            }
-            page.resync()
-          case Right(Wire.ClientMessage.Emit(event)) =>
-            try page.event(event)
-            catch {
-              case e: Exception =>
-                log.log(System.Logger.Level.ERROR, s"page $id event '${event.name}' failed", e)
-                conn.send(Wire.error(s"event '${event.name}' failed"))
-            }
-          case Right(Wire.ClientMessage.Ping)                   => conn.send(Wire.pong)
-          case Right(Wire.ClientMessage.PatchesFailed(reasons)) =>
-            // The correctness alarm (design/live.md §1.1 on §4.3): a patch the applier refused
-            // means the two sides disagreed about the DOM. Loud in the log, healed by a resync.
-            log.log(
-              System.Logger.Level.ERROR,
-              s"page $id refused ${reasons.size} patch(es): ${reasons.mkString("; ")} — resyncing"
-            )
-            page.resync()
+      override def onText(conn: WsConn, text: String): Unit =
+        attached.foreach { case (page, _) =>
+          Wire.read(text) match {
+            case Left(problem) =>
+              log.log(System.Logger.Level.WARNING, s"page $id sent a malformed frame: $problem")
+              conn.send(Wire.error(problem))
+            case Right(Wire.ClientMessage.Join(base)) =>
+              // The reported base is the prefix the client's DOM was rewritten with; the resync
+              // that follows carries the tree rebased to match, and starts the client from
+              // whatever moved between mount and join (design/live.md §2.6).
+              mountPrefix(base) match {
+                case Some(prefix) => page.rebase(prefix)
+                case None         =>
+                  log.log(
+                    System.Logger.Level.WARNING,
+                    s"page $id sent a dubious base '$base'; ignored"
+                  )
+              }
+              page.resync()
+            case Right(Wire.ClientMessage.Emit(event)) =>
+              try page.event(event)
+              catch {
+                case e: Exception =>
+                  log.log(System.Logger.Level.ERROR, s"page $id event '${event.name}' failed", e)
+                  conn.send(Wire.error(s"event '${event.name}' failed"))
+              }
+            case Right(Wire.ClientMessage.Ping)                   => conn.send(Wire.pong)
+            case Right(Wire.ClientMessage.PatchesFailed(reasons)) =>
+              // The correctness alarm (design/live.md §1.1 on §4.3): a patch the applier refused
+              // means the two sides disagreed about the DOM. Loud in the log, healed by a resync.
+              log.log(
+                System.Logger.Level.ERROR,
+                s"page $id refused ${reasons.size} patch(es): ${reasons.mkString("; ")} — resyncing"
+              )
+              page.resync()
+          }
         }
-      }
 
-    override def onClose(code: Int, reason: String): Unit =
-      attached.foreach { case (page, sender) =>
-        sender.detach()
-        // 1000 is the client saying goodbye on purpose (beforeunload); everything else gets the
-        // grace window, reaped on the cadence below.
-        if (code == 1000) {
-          registry.close(page.id)
-          val _ = senders.remove(page.id)
-        } else registry.disconnect(page.id)
-      }
+      override def onClose(code: Int, reason: String): Unit =
+        attached.foreach { case (page, sender) =>
+          sender.detach()
+          // 1000 is the client saying goodbye on purpose (beforeunload); everything else gets the
+          // grace window, reaped on the cadence below.
+          if (code == 1000) {
+            registry.close(page.id)
+            val _ = senders.remove(page.id)
+          } else registry.disconnect(page.id)
+        }
 
-    override def onError(cause: Throwable): Unit =
-      attached.foreach { case (page, sender) =>
-        sender.detach()
-        registry.disconnect(page.id)
-      }
-  }
+      override def onError(cause: Throwable): Unit =
+        attached.foreach { case (page, sender) =>
+          sender.detach()
+          registry.disconnect(page.id)
+        }
+    }
 
   /** The join's base report, validated down to a path this process would itself have written:
     * `Response.under` only ever produces normalised absolute paths, so anything else is a client
@@ -286,21 +303,6 @@ object Live {
   extension (base: String) {
     private def matchesSafePrefix: Boolean = base.matches("/[A-Za-z0-9_./-]*")
   }
-
-  /** A browser names where the page came from; a socket opened by another site is refused. No
-    * `Origin` header is a non-browser client, allowed: origin checking exists against cross-site
-    * use of a *browser's* credentials, and what protects the page is its id plus, on a bound page,
-    * the current user the upgrade has to name.
-    */
-  private def originAllowed(request: Request): Boolean =
-    request.header("Origin") match {
-      case None         => true
-      case Some(origin) =>
-        request.header("Host").exists { host =>
-          try new URI(origin).getAuthority == host
-          catch { case _: Exception => false }
-        }
-    }
 
   /** Breaks the page-needs-component-needs-async cycle at mount: transitions posted before the
     * relay is aimed can only come from the component's constructor, which is code running before

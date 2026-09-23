@@ -58,7 +58,7 @@ class BoundLivePageSuite extends munit.FunSuite with LiveServerFixtures {
         planting("/plant/mallory", SignInFixtures.signedInSession(mallory.id)),
         planting("/plant/lapsed", SignInFixtures.signedInSession(alice.id, SignInFixtures.stale))
       )
-    serving(RouteTable(user, dashboard.identify) ++ RouteTable(Live.routes))(body)
+    serving(RouteTable(user, dashboard.identify) ++ RouteTable(Live.routes(Set.empty)))(body)
   }
 
   /** The session cookie eezo signed for the browser that visited `path`, as a header to send back.
