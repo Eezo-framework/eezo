@@ -31,9 +31,11 @@ import scala.io.StdIn
   *
   * A `Database` is installed only around what needs one. `ddl`, `dump`, `freeze` and `help` never
   * touch it, so they work with the database down; the program and the other commands get one for
-  * their whole duration. Today installing is free even when nothing queries, because `Pool` opens
-  * connections per use and `Database.connect` never touches the network; if the pool ever becomes
-  * eager, [[program]] is the one that has to become lazy.
+  * their whole duration. Installing never waits on the network: the pool starts empty
+  * (`initializationFailTimeout` negative), so `Database.connect` returns at once and the pool fills
+  * in the background. It is deliberately not eager, as Phoenix is not: with Postgres down, `dev`
+  * keeps serving every page that needs no database, and `sbt run` fails on the first query that
+  * needs Postgres, after the acquire timeout, rather than refusing to start.
   */
 trait DbApp extends Dispatch with DbInit {
 

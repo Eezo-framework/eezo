@@ -66,14 +66,25 @@ object Pg {
   * project; see the comment on that setting in `build.sbt`.
   */
 abstract class DbSuite extends PgSuite {
+
+  /** Kept so [[afterAll]] can close it. A pool holds its connections open for its whole life, so a
+    * suite that only uninstalled would leave them to the next suites, and a dozen suites of them
+    * exhaust the container's `max_connections`.
+    */
+  private var database: Database | Null = null
+
   override def beforeAll(): Unit = {
     super.beforeAll()
     exec(s"""drop schema if exists "$pgSchema" cascade""", s"""create schema "$pgSchema"""")
-    Installed.install(Pg.database(pgSchema))
+    val d = Pg.database(pgSchema)
+    database = d
+    Installed.install(d)
   }
 
   override def afterAll(): Unit = {
     Installed.uninstall()
+    val d = database
+    if (d != null) d.close()
     super.afterAll()
   }
 }

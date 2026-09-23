@@ -23,10 +23,9 @@ object Run {
 
   def tx[A](body: Tx ?-> A): A =
     Scope.enter(ScopeKind.Write) {
-      val db   = Installed.get
-      val c    = db.pool.acquire()
-      val h    = new TxHandle(c)
-      val prev = c.getAutoCommit
+      val db = Installed.get
+      val c  = db.pool.acquire()
+      val h  = new TxHandle(c)
       c.setAutoCommit(false)
       try {
         val a = body(using h)
@@ -38,7 +37,6 @@ object Run {
           throw e
       } finally {
         h.retire()
-        c.setAutoCommit(prev)
         db.pool.release(c)
       }
     }

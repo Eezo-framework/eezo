@@ -91,7 +91,7 @@ lazy val http = module("http")
 lazy val db = module("db")
   .dependsOn(core % "compile->compile;test->test")
   .settings(
-    libraryDependencies ++= Seq(postgresql, testcontainersPg),
+    libraryDependencies ++= Seq(postgresql, hikari, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
     // a preference. research/capture-checking.md §6.3 measured that a capture checked library
     // requires nothing of downstream and gives downstream nothing: the guarantee is real inside

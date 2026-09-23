@@ -405,7 +405,9 @@ object Tour extends DbApp {
   private def prepare(c: Connection): Unit = {
     header()
     exec(c, s"""drop schema if exists "$Schema0" cascade""")
-    exec(c, s"""create schema "$Schema0"""")
+    // `if not exists`: the pool fills in the background while this runs, and each new connection's
+    // `databaseInit` may create the schema between the drop and this line.
+    exec(c, s"""create schema if not exists "$Schema0"""")
     exec(c, s"""set search_path to "$Schema0"""")
     note(s"Working in schema `$Schema0` on ${Db.url}, so nothing else is touched.")
     note("Everything is dropped again at the end.")

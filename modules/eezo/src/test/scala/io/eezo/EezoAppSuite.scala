@@ -18,9 +18,9 @@ import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteT
   * check under that same `Database` and then the http edge's dev server. Both are overrides of a
   * hook each edge implements (`program`, `devServer`), and the compiler refuses a trait that stacks
   * the two edges without overriding `program`, so the suite also pins that a hand stacking in
-  * either order does not compile. No Postgres is needed: `Database.connect` never touches the
-  * network, so a bogus URL installs and closes without a query, and the drift check skips an empty
-  * schema and warns about a database it cannot reach.
+  * either order does not compile. No Postgres is needed: `Database.connect` never waits on the
+  * network, since the pool fills in the background, so a bogus URL installs and closes without a
+  * query, and the drift check skips an empty schema and warns about a database it cannot reach.
   */
 class EezoAppSuite extends munit.FunSuite {
 
@@ -71,6 +71,11 @@ class EezoAppSuite extends munit.FunSuite {
     * `withDatabase` uninstalls and closes on the way out, the same unwinding a SIGTERM causes
     * through the shutdown hook. The thread ends normally, which is what the callers' "uninstalled
     * once the dev server stops" assertions are about.
+    *
+    * The join waits 15 s because closing a pool whose database is down is not quick: HikariCP's
+    * shutdown waits for its connection adder, whose retry backoff sleeps up to its 5 s login
+    * timeout and cannot be interrupted. A drift check against a dead database has already spent the
+    * 5 s acquire timeout before the page is served, so a 5 s join leaves no margin at all.
     */
   private def developing(app: Recording)(body: HttpResponse[String] => Unit): Unit = {
     val thread = new Thread(() => { app.run(List("dev")); () }, "eezo-dev")
@@ -79,7 +84,7 @@ class EezoAppSuite extends munit.FunSuite {
     try body(awaitPage(app.port))
     finally {
       Eezo.stop()
-      thread.join(5000)
+      thread.join(15000)
       assert(!thread.isAlive, "dev did not return once the server was stopped")
     }
   }
