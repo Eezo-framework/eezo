@@ -59,7 +59,7 @@ class CapabilitySuite extends FunSuite {
   }
 
   test("Attempt cannot be built by hand, bypassing attempt's guard") {
-    // `new Scopes.Attempt[Throwable]` (or `[Nothing]`) would own every non-fatal failure,
+    // `new Scopes.Attempt[Throwable]` (or `[Nothing]`) would own every NonFatal failure,
     // guard refusals and defects included, even though `attempt[Throwable]` is refused above.
     val e = compileErrors("new io.eezo.db.Scopes.Attempt[Throwable]")
     assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")

@@ -83,8 +83,8 @@ object Scopes {
     * The type stays public, so a caller can hold one and call `apply`, but the constructor does
     * not: a public one would let `new Attempt[Throwable]` or `new Attempt[Nothing]` build the same
     * unguarded savepoint that `attempt`'s `summonFrom` refuses to hand out. `publicInBinary` is
-    * there only because `attempt` is `inline` and expands `new Attempt[E]` at the call site; without
-    * it the private constructor cannot be reached from outside `Scopes` at all.
+    * there only because `attempt` is `inline` and expands `new Attempt[E]` at the call site: Scala
+    * refuses to inline a private constructor without it, so `attempt` itself would not compile.
     */
   final class Attempt[E <: Throwable] @publicInBinary private[Scopes] (using
       owns: TypeTest[Throwable, E]
