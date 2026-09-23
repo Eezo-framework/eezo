@@ -65,12 +65,14 @@ object CrudDemo {
     }
 
     step("4. delete removes it") {
-      transact { t.delete(faber.id) }
+      val matched = transact { t.delete(faber.id) }
+      println(s"   rows matched: $matched")
       println(s"   findById: ${read { t.findById(faber.id) }}")
     }
 
-    step("5. updating a row that is gone raises rather than reporting success") {
-      transact { t.update(faber.copy(name = "back from the dead")) }
+    step("5. updating a row that is gone matches no row") {
+      val matched = transact { t.update(faber.copy(name = "back from the dead")) }
+      println(s"   rows matched: $matched")
     }
 
     step("6. a write and the read that checks it share one transaction") {

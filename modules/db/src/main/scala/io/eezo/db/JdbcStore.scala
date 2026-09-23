@@ -91,22 +91,16 @@ object JdbcStore {
       */
     def insert(key: Id[A], row: A): Unit = transact(t.insert(row))
 
-    /** `NoSuchRow` becomes `false` here, and nowhere else. `core`'s trait says nothing throws and
-      * `Resource` turns a `false` into a 404; db reports a zero-row write by raising. Converting is
-      * this implementation's job precisely so that neither of the other two learns the other's
-      * vocabulary.
+    /** A count becomes a `Boolean` here, and nowhere else. `core`'s trait says nothing throws and
+      * `Resource` turns a `false` into a 404; db reports how many rows a write matched. The seam
+      * still exists so that neither of the other two learns the other's vocabulary, and nothing is
+      * caught, because a write that matched no row is not an error in db either.
       */
     def update(key: Id[A], row: A): Boolean =
-      transact {
-        try { t.updateById(key, row); true }
-        catch { case _: NoSuchRow => false }
-      }
+      transact(t.updateById(key, row) == 1)
 
     def delete(key: Id[A]): Boolean =
-      transact {
-        try { t.delete(key); true }
-        catch { case _: NoSuchRow => false }
-      }
+      transact(t.delete(key) == 1)
   }
 
   /** One owner's rows, as the four owner aware statements address them.

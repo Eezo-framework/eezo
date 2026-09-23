@@ -33,24 +33,23 @@ class CrudSuite extends DbSuite {
     val h = house("Faber")
     transact { Table[PublishingHouse].insert(h) }
     val moved = h.copy(name = "Faber & Faber", location = "Bloomsbury")
-    transact { Table[PublishingHouse].update(moved) }
+    assertEquals(transact { Table[PublishingHouse].update(moved) }, 1)
     assertEquals(read { Table[PublishingHouse].findById(h.id) }, Some(moved))
   }
 
   test("updateById matches on the id it is given, not the one inside the row") {
     val h = house("Faber")
     transact { Table[PublishingHouse].insert(h) }
-    val moved = h.copy(name = "Faber & Faber")
-    intercept[NoSuchRow] {
-      transact { Table[PublishingHouse].updateById(Id.gen[PublishingHouse](), moved) }
-    }
+    val moved   = h.copy(name = "Faber & Faber")
+    val matched = transact { Table[PublishingHouse].updateById(Id.gen[PublishingHouse](), moved) }
+    assertEquals(matched, 0)
     assertEquals(read { Table[PublishingHouse].findById(h.id) }, Some(h))
   }
 
   test("delete removes the row") {
     val h = house("Faber")
     transact { Table[PublishingHouse].insert(h) }
-    transact { Table[PublishingHouse].delete(h.id) }
+    assertEquals(transact { Table[PublishingHouse].delete(h.id) }, 1)
     assertEquals(read { Table[PublishingHouse].findById(h.id) }, None)
   }
 
@@ -60,24 +59,29 @@ class CrudSuite extends DbSuite {
     assertEquals(read { Table[PublishingHouse].all() }.toSet, hs.toSet)
   }
 
-  test("updating a row that is gone raises, rather than reporting success") {
+  test("updating a row that is gone matches no row, rather than reporting success") {
     val h = house("Faber")
     transact { Table[PublishingHouse].insert(h) }
     transact { Table[PublishingHouse].delete(h.id) }
 
-    val e = intercept[NoSuchRow] {
-      transact { Table[PublishingHouse].update(h.copy(name = "renamed")) }
-    }
-    assert(e.getMessage.contains("matched 0 rows"), e.getMessage)
-    assert(e.getMessage.contains(h.id.show), e.getMessage)
-    assert(e.getMessage.contains("does not track versions"), e.getMessage)
+    assertEquals(transact { Table[PublishingHouse].update(h.copy(name = "renamed")) }, 0)
+    assertEquals(read { Table[PublishingHouse].findById(h.id) }, None)
   }
 
-  test("deleting a row that is gone raises too") {
-    val e = intercept[NoSuchRow] {
-      transact { Table[PublishingHouse].delete(Id.gen[PublishingHouse]()) }
+  test("deleting a row that is gone matches no row too") {
+    assertEquals(transact { Table[PublishingHouse].delete(Id.gen[PublishingHouse]()) }, 0)
+  }
+
+  test("a write that matches no row leaves its transaction usable, and the rest commits") {
+    val h       = house("Faber")
+    val matched = transact {
+      val updated = Table[PublishingHouse].updateById(Id.gen[PublishingHouse](), h)
+      val deleted = Table[PublishingHouse].delete(Id.gen[PublishingHouse]())
+      Table[PublishingHouse].insert(h)
+      (updated, deleted)
     }
-    assert(e.getMessage.contains("delete matched 0 rows"), e.getMessage)
+    assertEquals(matched, (0, 0))
+    assertEquals(read { Table[PublishingHouse].findById(h.id) }, Some(h))
   }
 
   test("a write and the read that checks it share one transaction") {
