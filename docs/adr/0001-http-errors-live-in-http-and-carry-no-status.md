@@ -19,3 +19,5 @@ Sealing means `modules/auth` cannot add a refusal from its own module, and will 
 Users are not blocked from statuses eezo does not model. `Response.status(code)` returns one as a value, which is the better tool inside a handler, and `Eezo.run(..., problems: PartialFunction[Throwable, Problem])` maps an exception thrown deeper in the call stack. That hook is tried after eezo's own set and before the fallback to 500, so extension sits at the boundary alongside the status itself rather than on the exception.
 
 Recorded in full on [issue #104](https://github.com/Eezo-framework/eezo/issues/104).
+
+Which failures belong in this set, what the rest travel as, and where each stops is [ADR 0006](0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md).
