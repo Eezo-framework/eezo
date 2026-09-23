@@ -8,7 +8,7 @@ import io.eezo.core.Id
 import io.eezo.core.html.Tags.{body, html, p}
 import io.eezo.core.support.Captured.captured
 import io.eezo.db.{Schema, SchemaError, Table}
-import io.eezo.db.engine.Installed
+import io.eezo.db.engine.{ConnectionUnavailable, Installed}
 import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteTable}
 
 /** The umbrella's entry trait: both edges stacked, `EezoApp extends HttpApp with DbApp`.
@@ -138,6 +138,24 @@ class EezoAppSuite extends munit.FunSuite {
       }
     finally System.setErr(saved)
     assert(!app.booted)
+  }
+
+  test("a ConnectionUnavailable out of a handler is a 500 at the request boundary") {
+    // The database edge's environment failure is not in the http edge's sealed set, and http cannot
+    // name it; only here, where both edges meet, can a test show it lands in the 500 arm.
+    val app = new Recording {
+      private val starved: Handler = _ =>
+        throw new ConnectionUnavailable(
+          "no database connection within 250 ms from the pool of size 1",
+          new java.sql.SQLTransientConnectionException("timed out")
+        )
+      override def routes: RouteTable =
+        RouteTable(Seq(Route.Http(Method.GET, PathPattern.parse("/"), starved)))
+    }
+    developing(app) { page =>
+      assertEquals(page.statusCode(), 500)
+      assert(page.body().contains("no database connection within 250 ms"), page.body())
+    }
   }
 
   test("both edges' commands are known: routes needs no database, help lists both") {

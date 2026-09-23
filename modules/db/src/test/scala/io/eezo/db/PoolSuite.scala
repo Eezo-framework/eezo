@@ -1,13 +1,14 @@
 package io.eezo.db
 
 import io.eezo.db.Scopes.*
-import io.eezo.db.engine.{Database, Installed, Pool}
-import io.eezo.db.support.{Pg, PgSuite}
+import io.eezo.db.engine.{ConnectionUnavailable, Database, Installed, Pool}
+import io.eezo.db.support.{Pg, PgSuite, Refusing}
 
 import java.net.{ServerSocket, Socket, URI}
-import java.sql.{Connection, SQLException, SQLTransientConnectionException}
+import java.sql.{Connection, SQLException}
 import java.time.Duration
-import java.util.concurrent.ConcurrentLinkedQueue
+import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
+import java.util.concurrent.atomic.AtomicReference
 
 /** The pool against a real Postgres: what it reuses, when it opens, and how it fails.
   *
@@ -33,17 +34,6 @@ class PoolSuite extends PgSuite {
     new Database(
       new Pool(Pg.jdbcUrl, Pg.username, Pg.password, init, size = 1, Duration.ofSeconds(5))
     )
-
-  /** A url on a local port nobody listens on, so every connect is refused at once and what the test
-    * measures is the pool's wait rather than the network's.
-    */
-  private def refusingUrl(): String = {
-    val socket = new ServerSocket(0)
-    val port   =
-      try socket.getLocalPort
-      finally socket.close()
-    s"jdbc:postgresql://127.0.0.1:$port/none"
-  }
 
   private def millisSince(start: Long): Long = (System.nanoTime() - start) / 1000000
 
@@ -164,7 +154,10 @@ class PoolSuite extends PgSuite {
         val d     = Database.connect(
           s"jdbc:postgresql://127.0.0.1:${silent.getLocalPort}/none",
           "nobody",
-          "nothing"
+          "nothing",
+          init = _ => (),
+          size = DbInit.DefaultPoolSize,
+          acquireTimeout = DbInit.DefaultAcquireTimeout
         )
         (d, millisSince(start))
       } finally silent.close()
@@ -173,15 +166,98 @@ class PoolSuite extends PgSuite {
   }
 
   test(
-    "with the database down, the first read waits the acquire timeout and fails in HikariCP's words"
+    "with the database down, the first read waits the acquire timeout and fails in eezo's words"
   ) {
     val timeout = Duration.ofMillis(500)
-    val pool    = new Pool(refusingUrl(), "nobody", "nothing", _ => (), size = 1, timeout)
+    val pool    = new Pool(Refusing.jdbcUrl(), "nobody", "hunter2", _ => (), size = 1, timeout)
     installing(new Database(pool)) {
-      val start = System.nanoTime()
-      intercept[SQLTransientConnectionException](read { backend() })
+      val start  = System.nanoTime()
+      val e      = intercept[ConnectionUnavailable](read { backend() })
       val waited = millisSince(start)
       assert(waited >= timeout.toMillis - 50, s"the borrow gave up after $waited ms")
+      assert(e.getMessage.contains("refused"), s"the driver's failure is missing: ${e.getMessage}")
+      assert(!e.getMessage.contains("hunter2"), e.getMessage)
+      assert(!e.getMessage.contains("detached"), s"no detached block is involved: ${e.getMessage}")
+    }
+  }
+
+  test("a detached block that needs a second connection from a full pool fails, and says why") {
+    // A pool of one, and the read around the detached block holds it: the second borrow can only
+    // wait on the thread that is waiting, so the timeout is all that stands between this and a hang.
+    val timeout = Duration.ofMillis(500)
+    val pool    = new Pool(Pg.jdbcUrl, Pg.username, Pg.password, _ => (), size = 1, timeout)
+    installing(new Database(pool)) {
+      val start  = System.nanoTime()
+      val e      = intercept[ConnectionUnavailable](read { detached { backend() } })
+      val waited = millisSince(start)
+      assert(waited >= timeout.toMillis - 50, s"the borrow gave up after $waited ms")
+      assert(waited < 10000, s"the borrow waited $waited ms, which is a hang, not a timeout")
+      assert(
+        e.getMessage.contains("a `detached` block took a second connection from a full pool"),
+        e.getMessage
+      )
+      assert(!e.getMessage.contains("\n"), e.getMessage)
+    }
+  }
+
+  /** A pool of one whose only connection another thread holds for as long as `body` runs, so every
+    * borrow in `body` finds the pool full while the database is up.
+    */
+  private def starved[A](timeout: Duration)(body: => A): A = {
+    val pool = new Pool(Pg.jdbcUrl, Pg.username, Pg.password, _ => (), size = 1, timeout)
+    installing(new Database(pool)) {
+      val held    = new CountDownLatch(1)
+      val release = new CountDownLatch(1)
+      val failure = new AtomicReference[Throwable]()
+      // the holder's own first borrow opens a physical connection under the short timeout, so it
+      // can fail; the latch opens either way, and the failure is what the test then reports
+      val holder = Thread.ofVirtual().start { () =>
+        try read { held.countDown(); release.await() }
+        catch { case e: Throwable => failure.set(e) }
+        finally held.countDown()
+      }
+      try {
+        assert(
+          held.await(10, TimeUnit.SECONDS),
+          "the holder neither got the only connection nor failed"
+        )
+        Option(failure.get()).foreach(e => fail("the holder never got the only connection", e))
+        body
+      } finally {
+        release.countDown()
+        holder.join()
+      }
+    }
+  }
+
+  test("a full pool starved by another thread carries no detached hint, plain or detached") {
+    // the pool is full, but this thread holds nothing of it: the hint would be a false lead
+    starved(Duration.ofMillis(500)) {
+      val plain = intercept[ConnectionUnavailable](read { backend() })
+      assert(!plain.getMessage.contains("detached"), plain.getMessage)
+      val alone = intercept[ConnectionUnavailable](detached { backend() })
+      assert(!alone.getMessage.contains("detached"), alone.getMessage)
+    }
+  }
+
+  test("a detached block on a thread forked inside a read carries no detached hint") {
+    // the fork inherits the parent's marker, but the connection it names is the parent's: the fork
+    // holds nothing, so telling it that it waited on itself would be a false lead
+    val timeout = Duration.ofMillis(500)
+    val pool    = new Pool(Pg.jdbcUrl, Pg.username, Pg.password, _ => (), size = 1, timeout)
+    installing(new Database(pool)) {
+      var caught: Option[ConnectionUnavailable] = None
+      read {
+        val t = Thread.ofVirtual().unstarted { () =>
+          caught =
+            try { detached { backend() }; None }
+            catch { case e: ConnectionUnavailable => Some(e) }
+        }
+        t.start()
+        t.join()
+      }
+      val e = caught.getOrElse(fail("the fork's borrow did not time out"))
+      assert(!e.getMessage.contains("detached"), e.getMessage)
     }
   }
 
@@ -191,7 +267,7 @@ class PoolSuite extends PgSuite {
     try {
       val pool = new Pool(outage.url, Pg.username, Pg.password, _ => (), size = 1, timeout)
       installing(new Database(pool)) {
-        intercept[SQLTransientConnectionException](read { backend() })
+        intercept[ConnectionUnavailable](read { backend() })
         outage.restore()
         // HikariCP retries on its own schedule, so the first borrow after the restore may still
         // time out; what matters is that this pool gets there without being rebuilt.
@@ -199,7 +275,7 @@ class PoolSuite extends PgSuite {
         def served(): Int =
           try read { backend() }
           catch {
-            case _: SQLTransientConnectionException if System.nanoTime() < deadline => served()
+            case _: ConnectionUnavailable if System.nanoTime() < deadline => served()
           }
         assert(served() > 0, "the same pool served a read once Postgres was back")
       }

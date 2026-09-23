@@ -18,14 +18,19 @@ object Database {
 
   /** Built at the edge, from parsed config, so that a bad URL fails in `main` with the config parse
     * in the stack trace rather than at whatever moment something first touches a hidden holder.
+    *
+    * No parameter has a default so that `DbInit` is the one place that decides the pool's settings,
+    * and a caller that skips it has to say what it wants.
     */
   def connect(
       url: String,
       user: String,
       password: String,
-      init: Connection -> Unit = _ => ()
+      init: Connection -> Unit,
+      size: Int,
+      acquireTimeout: Duration
   ): Database =
-    new Database(new Pool(url, user, password, init, size = 10, Duration.ofMillis(5000)))
+    new Database(new Pool(url, user, password, init, size, acquireTimeout))
 }
 
 /** Where the installed `Database` lives.
