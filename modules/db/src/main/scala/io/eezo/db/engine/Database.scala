@@ -1,6 +1,7 @@
 package io.eezo.db.engine
 
 import java.sql.Connection
+import java.time.Duration
 
 /** A database, and the only thing that owns a `Pool`.
   *
@@ -23,7 +24,8 @@ object Database {
       user: String,
       password: String,
       init: Connection -> Unit = _ => ()
-  ): Database = new Database(new Pool(url, user, password, init))
+  ): Database =
+    new Database(new Pool(url, user, password, init, size = 10, Duration.ofMillis(5000)))
 }
 
 /** Where the installed `Database` lives.

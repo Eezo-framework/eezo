@@ -24,6 +24,14 @@ object Dependencies {
       * eezo would be exposed to behind Caddy (patched in 12.1.10).
       */
     val jetty = "12.1.11"
+
+    /** HikariCP. 7.1.0 is a floor, not a preference: the releases before it spin in
+      * `ConcurrentBag.requite` with `Thread.yield` when a connection returns to a pool that has
+      * waiters, which saturates every carrier thread under virtual thread load (HikariCP issue
+      * 2398, fixed by PR 2402). eezo serves each request on a virtual thread, so that is the load
+      * it always runs under.
+      */
+    val hikari = "7.1.0"
   }
 
   /** The test framework. Every module gets it; nothing else is shared by default. */
@@ -44,6 +52,15 @@ object Dependencies {
 
   /** The JDBC driver. `db` is the only module that speaks to a database. */
   val postgresql = "org.postgresql" % "postgresql" % V.postgresql
+
+  /** The connection pool, `db` only, behind `engine.Pool`.
+    *
+    * A pool is the kind of code whose bugs show up as a stall under load on somebody else's
+    * machine, and HikariCP is the one on the JVM whose failure modes are already known. It brings
+    * `slf4j-api` with it and no binding: which logger an application uses is the application's
+    * choice.
+    */
+  val hikari = "com.zaxxer" % "HikariCP" % V.hikari
 
   /** A real Postgres for the `db` suite.
     *
