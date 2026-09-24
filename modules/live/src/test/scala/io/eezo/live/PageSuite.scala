@@ -1,6 +1,9 @@
 package io.eezo.live
 
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch}
+import java.util.logging.{Handler, Level, LogRecord, Logger}
+
+import scala.concurrent.duration.DurationInt
 
 import io.eezo.core.html.{Html, Key}
 import io.eezo.core.html.Tags.*
@@ -254,6 +257,133 @@ class PageSuite extends munit.FunSuite {
       )
     )
     page.close()
+  }
+
+  /** Runs `body` with the records the live logger publishes about `pageId` collecting into the
+    * queue it is handed, so it can poll them while it runs. The logger is process wide and other
+    * suites share it, so a record is kept only when it names this page, the trailing space keeping
+    * "p1" from matching "p10".
+    */
+  private def logsAbout[A](pageId: String)(
+      body: ConcurrentLinkedQueue[(Level, String)] => A
+  ): A = {
+    val logger   = Logger.getLogger("io.eezo.live")
+    val captured = new ConcurrentLinkedQueue[(Level, String)]()
+    val handler  = new Handler {
+      override def publish(record: LogRecord): Unit =
+        if (record.getMessage.startsWith(s"page $pageId ")) {
+          val _ = captured.add((record.getLevel, record.getMessage))
+        }
+      override def flush(): Unit = ()
+      override def close(): Unit = ()
+    }
+    logger.addHandler(handler)
+    try body(captured)
+    finally logger.removeHandler(handler)
+  }
+
+  private def messagesAt(
+      level: Level,
+      records: ConcurrentLinkedQueue[(Level, String)]
+  ): List[String] = {
+    import scala.jdk.CollectionConverters.*
+    records.asScala.toList.collect { case (`level`, message) => message }
+  }
+
+  /** Holding the page thread on a latch lets a test keep an event past the injected threshold for
+    * as long as it needs, then decide whether that event ends in success or in failure; the
+    * instant events show that work inside the threshold stays silent.
+    */
+  private final class Held(gate: CountDownLatch) extends Component[Int] {
+    def init(ctx: Init[Int]): Int         = 0
+    def handle(event: Event, n: Int): Int = {
+      if (event.name == "slow" || event.name == "doomed") gate.await()
+      if (event.name == "doomed") throw new IllegalStateException("doomed")
+      n + 1
+    }
+    def render(n: Int): Html = div(span(n))
+  }
+
+  test("an event held past the threshold warns once, still completes, then logs one INFO") {
+    val gate    = new CountDownLatch(1)
+    val page    = new Page("p10", new Held(gate), slowEventThreshold = 20.millis)
+    val _       = page.mount()
+    val outcome = new java.util.concurrent.atomic.AtomicReference[Option[Throwable]]()
+
+    logsAbout("p10") { records =>
+      val caller = Thread
+        .ofVirtual()
+        .start(() =>
+          outcome.set(
+            try { page.event(Event("slow")); None }
+            catch { case e: Throwable => Some(e) }
+          )
+        )
+      eventually(messagesAt(Level.WARNING, records).nonEmpty)
+      // Ten thresholds more: the warning must not repeat, and the caller must still be waiting.
+      Thread.sleep(200)
+      assert(caller.isAlive, "the threshold must never cut the event off")
+      assertEquals(
+        messagesAt(Level.WARNING, records),
+        List("page p10 event 'slow' still running after 20ms; the socket waits for it")
+      )
+      assertEquals(messagesAt(Level.INFO, records), Nil)
+
+      gate.countDown()
+      assert(caller.join(java.time.Duration.ofSeconds(5)), "the event never completed")
+      assertEquals(outcome.get, None)
+      assertEquals(messagesAt(Level.WARNING, records).size, 1)
+      val infos = messagesAt(Level.INFO, records)
+      assertEquals(infos.size, 1, infos)
+      assert(infos.head.matches("page p10 event 'slow' finished after \\d+s"), infos)
+    }
+    page.close()
+  }
+
+  test("an event that warned and then fails logs no finish; its failure is the socket's to log") {
+    val gate    = new CountDownLatch(1)
+    val page    = new Page("p12", new Held(gate), slowEventThreshold = 20.millis)
+    val _       = page.mount()
+    val outcome = new java.util.concurrent.atomic.AtomicReference[Option[Throwable]]()
+
+    logsAbout("p12") { records =>
+      val caller = Thread
+        .ofVirtual()
+        .start(() =>
+          outcome.set(
+            try { page.event(Event("doomed")); None }
+            catch { case e: Throwable => Some(e) }
+          )
+        )
+      eventually(messagesAt(Level.WARNING, records).nonEmpty)
+      gate.countDown()
+      assert(caller.join(java.time.Duration.ofSeconds(5)), "the event never completed")
+      outcome.get match {
+        case Some(e: IllegalStateException) => assertEquals(e.getMessage, "doomed")
+        case other => fail(s"expected the handle's own exception, got $other")
+      }
+      assertEquals(messagesAt(Level.WARNING, records).size, 1)
+      assertEquals(messagesAt(Level.INFO, records), Nil)
+    }
+    page.close()
+  }
+
+  test("an event finishing inside the threshold logs neither a warning nor a finish") {
+    // Generous, so a slow runner cannot push a trivial event past it.
+    val page = new Page("p11", new Held(new CountDownLatch(0)), slowEventThreshold = 2.seconds)
+    val _    = page.mount()
+    logsAbout("p11") { records =>
+      (1 to 5).foreach(_ => page.event(Event("click")))
+      page.event(Event("slow"))
+      assertEquals(messagesAt(Level.WARNING, records), Nil)
+      assertEquals(messagesAt(Level.INFO, records), Nil)
+    }
+    page.close()
+  }
+
+  test("the default threshold is ten seconds and the warning reads it as 10s") {
+    assertEquals(Page.SlowEventThreshold, 10.seconds)
+    assertEquals(Page.logText(Page.SlowEventThreshold), "10s")
   }
 
   test("close cancels the subscription and later publishes reach nobody") {
