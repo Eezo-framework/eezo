@@ -170,9 +170,13 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
     scalacOptions := {
       val common = Seq("-deprecation", "-feature", "-unchecked")
       scalaBinaryVersion.value match {
-        case "2.12" => common ++ Seq("-Xsource:3", "-release:8")
+        // No `-Ywarn-value-discard` here: it rejects the `expr: Unit` ascription that
+        // DevProcess.scala uses to satisfy the Scala 3 value discard check, so value discard is
+        // checked on the Scala 3 axis only.
+        case "2.12" =>
+          common ++ Seq("-Xsource:3", "-release:8", "-Xfatal-warnings", "-Ywarn-unused")
         // 3.8.4 already defaults to 17; stated so a compiler upgrade cannot move it in silence.
-        case _ => common ++ Seq("-release:17")
+        case _ => common ++ Seq("-release:17", "-Werror", "-Wunused:all", "-Wvalue-discard")
       }
     },
     // `-Xlint:-options` is sbt 1 only: JDK 26 javac calls source and target 8 obsolete,
