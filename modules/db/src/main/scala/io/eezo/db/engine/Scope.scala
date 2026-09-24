@@ -30,6 +30,18 @@ private[eezo] object Scope {
 
   private val current = new InheritableThreadLocal[Open | Null]
 
+  /** The scope a `detached` on this thread set aside, while its body runs. A plain `ThreadLocal`,
+    * unlike [[current]]: a fork that inherited it would claim a connection its parent holds.
+    */
+  private val suspended = new ThreadLocal[Open | Null]
+
+  /** Asked only when a borrow has timed out, to tell a pool starved by its own caller from one
+    * starved by load or an outage. By then `enter` has put this thread's fresh marker in
+    * [[current]] and `detached` has cleared the outer one, so only [[suspended]] still knows a
+    * connection is out.
+    */
+  private[engine] def holdsAnotherScope: Boolean = suspended.get() != null
+
   def enter[A](kind: ScopeKind)(body: => A): A = {
     val outer = current.get()
     if (outer != null)
@@ -50,9 +62,14 @@ private[eezo] object Scope {
     */
   def detached[A](body: => A): A = {
     val outer = current.get()
+    val aside = suspended.get()
     current.set(null)
+    suspended.set(if (outer != null && (outer.owner eq Thread.currentThread())) outer else aside)
     try body
-    finally current.set(outer)
+    finally {
+      current.set(outer)
+      suspended.set(aside)
+    }
   }
 
   /** Built only on the failure path: at the moment of the violation the outer scope is still on the

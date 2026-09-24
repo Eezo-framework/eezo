@@ -1,6 +1,6 @@
 package io.eezo.db.support
 
-import io.eezo.db.{Schema, Table}
+import io.eezo.db.{DbInit, Schema, Table}
 import io.eezo.db.engine.{Database, Installed}
 import io.eezo.db.schema.{Introspect, SchemaSnap}
 
@@ -48,7 +48,14 @@ object Pg {
     * wrong schema. This is the reason `Pool` takes the hook at all (DESIGN §8.7).
     */
   def database(schema: String): Database =
-    Database.connect(jdbcUrl, username, password, init = searchPath(schema))
+    Database.connect(
+      jdbcUrl,
+      username,
+      password,
+      init = searchPath(schema),
+      size = DbInit.DefaultPoolSize,
+      acquireTimeout = DbInit.DefaultAcquireTimeout
+    )
 
   /** The connection init hook that isolates a suite by schema: [[database]]'s, and the one a suite
     * that builds its own `Database` through `DbInit` names as `databaseInit`.

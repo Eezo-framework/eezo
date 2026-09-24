@@ -156,6 +156,10 @@ fly secrets list
 
 One row, `DATABASE_URL`, digest only. `Staged` status is normal — there are no machines yet.
 
+`EEZO_DB_POOL_SIZE` is the number of connections in the pool, default 10.
+
+`EEZO_DB_ACQUIRE_TIMEOUT` is how many milliseconds a request waits for a connection before it fails with a 500, default 5000.
+
 ## 6. Deploy for real
 
 ```bash
