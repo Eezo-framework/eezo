@@ -32,14 +32,22 @@ object Dependencies {
       * it always runs under.
       */
     val hikari = "7.1.0"
+
+    /** The SLF4J binding. It follows the `slf4j-api` that Jetty and HikariCP both pin in their POMs
+      * rather than leading it: a provider at another version either evicts that API or runs against
+      * one it was not built for, and the next Jetty or HikariCP bump that moves the API moves this
+      * with it.
+      */
+    val slf4j = "2.0.17"
   }
 
   /** The test framework. Every module gets it; nothing else is shared by default. */
   val munit = "org.scalameta" %% "munit" % V.munit % Test
 
   /** The HTTP server, `modules/http` only. `jetty-websocket-jetty-server` pulls the server core
-    * with it, so these two coordinates are the whole of eezo's server dependency: ten jars, of
-    * which the only non-Jetty one is `slf4j-api`.
+    * with it, so these two coordinates are the whole of eezo's server code: ten jars, of which the
+    * only non Jetty one is `slf4j-api`. The eleventh jar an application gets is `slf4jJdk14`, which
+    * carries no server code and exists only to give `slf4j-api` somewhere to write.
     */
   val jettyServer   = "org.eclipse.jetty"           % "jetty-server"                 % V.jetty
   val jettyWsServer = "org.eclipse.jetty.websocket" % "jetty-websocket-jetty-server" % V.jetty
@@ -57,10 +65,22 @@ object Dependencies {
     *
     * A pool is the kind of code whose bugs show up as a stall under load on somebody else's
     * machine, and HikariCP is the one on the JVM whose failure modes are already known. It brings
-    * `slf4j-api` with it and no binding: which logger an application uses is the application's
-    * choice.
+    * `slf4j-api` with it and no binding of its own; the binding comes from `slf4jJdk14`, which `db`
+    * ships beside it.
     */
   val hikari = "com.zaxxer" % "HikariCP" % V.hikari
+
+  /** One logging backend for Jetty, HikariCP and eezo, chosen by the framework.
+    *
+    * eezo writes its own lines through the JDK's `System.Logger`, and Jetty and HikariCP write
+    * theirs through `slf4j-api`. Left to the application, a binding is something only the examples
+    * with a server remembered, so a database only application printed SLF4J's no providers banner
+    * on its first run and lost every line HikariCP wrote about its pool. Shipping this binding with
+    * the two modules that bring `slf4j-api` puts all three on one backend by default. It is on both
+    * rather than on the umbrella so that an application on one edge alone gets it too. An
+    * application that wants Logback excludes it and adds `slf4j-jdk-platform-logging` instead.
+    */
+  val slf4jJdk14 = "org.slf4j" % "slf4j-jdk14" % V.slf4j % Runtime
 
   /** A real Postgres for the `db` suite.
     *
