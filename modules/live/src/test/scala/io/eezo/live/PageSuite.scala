@@ -54,8 +54,9 @@ class PageSuite extends munit.FunSuite {
     val topic          = new Topic[String]
     val component      = new BoardComponent(topic)
     val (frames, send) = collector()
-    val page           = new Page("p1", component, send)
-    val initial        = page.mount()
+    val page           = new Page("p1", component)
+    page.attach(send)
+    val initial = page.mount()
 
     val clickers   = 8
     val perClicker = 25
@@ -115,8 +116,9 @@ class PageSuite extends munit.FunSuite {
       def render(notes: List[String]): Html = div(span(notes.length))
     }
 
-    val page = new Page("p2", component, send)
-    val _    = page.mount()
+    val page = new Page("p2", component)
+    page.attach(send)
+    val _ = page.mount()
 
     val burst   = 200
     val blocker = Thread.ofVirtual().start(() => page.event(Event("wait")))
@@ -151,8 +153,9 @@ class PageSuite extends munit.FunSuite {
       def render(n: Int): Html = div(span(n))
     }
 
-    val page = new Page("p3", component, send, mailboxCapacity = 8)
-    val _    = page.mount()
+    val page = new Page("p3", component, mailboxCapacity = 8)
+    page.attach(send)
+    val _ = page.mount()
 
     val blocker = Thread.ofVirtual().start(() => page.event(Event("wait")))
     // Wait until the page thread has taken "wait" off the queue, or the burst races it.
@@ -179,6 +182,39 @@ class PageSuite extends munit.FunSuite {
     page.close()
   }
 
+  test("frames reach only an attached listener; with none attached they drop without a throw") {
+    val topic          = new Topic[String]
+    val component      = new BoardComponent(topic)
+    val (frames, send) = collector()
+    val page           = new Page("p9", component)
+    val initial        = page.mount()
+
+    // Nobody listening: the step and the resync still run, and nothing surfaces to the caller.
+    page.event(Event("click"))
+    page.resync()
+    page.event(Event("click"))
+    assert(frames.isEmpty)
+
+    // Attached: the resync replays the whole tree, so the dropped frames are owed to nobody.
+    page.attach(send)
+    page.resync()
+    page.event(Event("click"))
+    // Two frames whether the loop drains them in one batch or two: the step's patches and the
+    // whole tree resync.
+    assertEquals(frames.size, 2, "an attached listener must see the resync and the step")
+
+    page.detach()
+    page.event(Event("click"))
+    page.resync()
+    page.event(Event("click"))
+    assertEquals(frames.size, 2)
+
+    // What was delivered, replayed over the initial tree, lands on the state as of the detach.
+    val atDetach = Canonical.root(component.render(Board(3, Nil)))
+    assert(DomEqual.all(replayed(initial, frames), Vector(atDetach)))
+    page.close()
+  }
+
   test("subscribe outside init throws, by name") {
     val topic               = new Topic[String]
     var smuggled: Init[Int] = null
@@ -192,7 +228,7 @@ class PageSuite extends munit.FunSuite {
       def render(n: Int): Html = div(span(n))
     }
 
-    val page = new Page("p4", component, _ => ())
+    val page = new Page("p4", component)
     val _    = page.mount()
     val e    = intercept[IllegalStateException](page.event(Event("go")))
     assert(e.getMessage.contains("subscribe outside init"), e.getMessage)
@@ -202,8 +238,9 @@ class PageSuite extends munit.FunSuite {
   test("an event whose handle throws fails alone; the page and the batch survive") {
     val (frames, send) = collector()
     val topic          = new Topic[String]
-    val page           = new Page("p5", new BoardComponent(topic), send)
-    val _              = page.mount()
+    val page           = new Page("p5", new BoardComponent(topic))
+    page.attach(send)
+    val _ = page.mount()
 
     val boom = intercept[IllegalArgumentException](page.event(Event("boom")))
     assertEquals(boom.getMessage, "component said no")
@@ -221,7 +258,7 @@ class PageSuite extends munit.FunSuite {
 
   test("close cancels the subscription and later publishes reach nobody") {
     val topic = new Topic[String]
-    val page  = new Page("p6", new BoardComponent(topic), _ => ())
+    val page  = new Page("p6", new BoardComponent(topic))
     val _     = page.mount()
     assertEquals(topic.subscriberCount, 1)
 
@@ -242,7 +279,7 @@ class PageSuite extends munit.FunSuite {
       def render(n: Int): Html              = span("a") ++ span("b") // a fragment, not one root
     }
 
-    val page = new Page("p7", component, _ => ())
+    val page = new Page("p7", component)
     intercept[NotCanonical](page.mount())
     assertEquals(topic.subscriberCount, 0)
   }
@@ -258,8 +295,9 @@ class PageSuite extends munit.FunSuite {
     }
 
     val (frames, send) = collector()
-    val page           = new Page("p8", new Linked, send)
-    val initial        = page.mount()
+    val page           = new Page("p8", new Linked)
+    page.attach(send)
+    val initial = page.mount()
     assert(initial.render.contains("href=\"/posts/0\""))
 
     page.rebase("/admin")
@@ -310,9 +348,9 @@ class PageSuite extends munit.FunSuite {
     val holder = new java.util.concurrent.atomic.AtomicReference[Page[S]]
     val page   = new Page[S](
       "p-async",
-      create(new Async[S](transition => Option(holder.get).foreach(_.post(transition)))),
-      send
+      create(new Async[S](transition => Option(holder.get).foreach(_.post(transition))))
     )
+    page.attach(send)
     holder.set(page)
     val _ = page.mount()
     page
