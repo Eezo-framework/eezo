@@ -85,13 +85,13 @@ lazy val core = module("core")
 // Jetty boot, request parsing, response writing, file based routing.
 lazy val http = module("http")
   .dependsOn(core % "compile->compile;test->test")
-  .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, jettyWsClient))
+  .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, slf4jJdk14, jettyWsClient))
 
 // Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
 lazy val db = module("db")
   .dependsOn(core % "compile->compile;test->test")
   .settings(
-    libraryDependencies ++= Seq(postgresql, hikari, testcontainersPg),
+    libraryDependencies ++= Seq(postgresql, hikari, slf4jJdk14, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
     // a preference. research/capture-checking.md §6.3 measured that a capture checked library
     // requires nothing of downstream and gives downstream nothing: the guarantee is real inside

@@ -59,6 +59,26 @@ each other without ever naming `/admin`. `app/Index.scala` is the page that has 
 lives outside the mount, nothing rewrites what it emits, so it links with the plain string
 `"/admin/posts"`, a finished address that stays exactly as written.
 
+## Logging
+
+eezo, Jetty and HikariCP all log through `java.util.logging` by default, so their lines share one
+format on stderr. eezo writes its own through the JDK's `System.Logger`; Jetty and HikariCP write
+through SLF4J, and `eezo-http` and `eezo-db` each bring `org.slf4j:slf4j-jdk14` at runtime to send
+those to the same place. An application that wants Logback instead makes two changes together: it
+excludes `org.slf4j:slf4j-jdk14` from the eezo artifacts, and it adds
+`org.slf4j:slf4j-jdk-platform-logging`, which hands eezo's `System.Logger` lines to SLF4J. The
+exclusion is one rule for the whole project rather than one on the `eezo` line, because `eezo-auth`,
+`eezo-live` and `eezo-testkit` reach `eezo-http` too and would bring the binding back. Adding
+Logback without the exclusion leaves two SLF4J providers on the classpath, `slf4j-jdk14` and
+`logback-classic`, and SLF4J warns about it at every boot.
+
+```scala
+libraryDependencies += "io.eezo" %% "eezo" % eezoVersion
+excludeDependencies += ExclusionRule("org.slf4j", "slf4j-jdk14")
+libraryDependencies += "org.slf4j" % "slf4j-jdk-platform-logging" % "2.0.17"
+libraryDependencies += "ch.qos.logback" % "logback-classic" % logbackVersion
+```
+
 ## Failures
 
 How a handler refuses a request, what a programming mistake becomes, and what each boundary

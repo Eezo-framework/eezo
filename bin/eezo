@@ -53,9 +53,7 @@ need_sbt() {
 #   - the three "[error] Nonzero exit code" lines sbt prints when the app exits 1: that exit code
 #     is the command's *answer* (drift, refusal — design/cli.md), not a failure of the build, so
 #     those specific lines are dropped. The app's code is still this script's exit code.
-#
-# Only SLF4J's own "no providers" stderr grumble is filtered by pattern, because it has a prefix
-# nothing else uses.
+
 # The spinner: a braille wheel on stderr while a slow step works. Stderr and only when it is a
 # TTY, so a redirected stdout (`--json > file`) never receives a spinner byte, and CI logs stay
 # clean. The trap clears the line however the script leaves.
@@ -111,7 +109,7 @@ run_captured() { # <label> <command...>
 
 replay_captured() { # <stdout filter regex, or '' for none>
   if [ -n "$1" ]; then grep -vE "$1" "$CAPTURED_OUT" || true; else cat "$CAPTURED_OUT"; fi
-  grep -vE '^SLF4J\(' "$CAPTURED_ERR" >&2 || true
+  cat "$CAPTURED_ERR" >&2
   rm -f "$CAPTURED_OUT" "$CAPTURED_ERR"
   CAPTURED_OUT=""
   CAPTURED_ERR=""
@@ -137,9 +135,7 @@ forward() { # <label> <sbt args...>
 # destructive changes, and a prompt behind a spinner is a hang with good intentions.
 forward_live() {
   set +e
-  sbt_cmd "$@" \
-    2> >(grep -vE '^SLF4J\(' >&2) \
-    | grep -vE "$SBT_NOISE"
+  sbt_cmd "$@" | grep -vE "$SBT_NOISE"
   local code="${PIPESTATUS[0]}"
   set -e
   exit "$code"
@@ -369,8 +365,6 @@ scalaVersion := "$SCALA_VERSION"
 enablePlugins(EezoPlugin)
 
 libraryDependencies += "io.eezo" %% "eezo" % "$EEZO_VERSION"
-// Jetty logs through SLF4J; this routes it to java.util.logging alongside eezo's own logger.
-libraryDependencies += "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime
 
 scalacOptions ++= Seq("-release", "$JDK_FLOOR", "-deprecation", "-feature", "-unchecked", "-no-indent")
 

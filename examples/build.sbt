@@ -37,11 +37,6 @@ lazy val commonSettings = Seq(
 // the classpath: see each example's README for the line that proves it.
 def edge(artifact: String) = "io.eezo" %% artifact % EezoVersion.value
 
-// Jetty logs through SLF4J; routing it to java.util.logging puts it on the same backend as eezo's
-// own `System.Logger`, and silences SLF4J's no-provider warning at boot. Only an example with the
-// http edge carries Jetty, so only those carry this.
-lazy val jettyLogging = "org.slf4j" % "slf4j-jdk14" % "2.0.16" % Runtime
-
 // `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
 // forked run to the project dir so the terminal commands and the dev loop write one place.
 lazy val runInProjectDir =
@@ -55,7 +50,7 @@ lazy val hello = (project in file("hello"))
   .settings(commonSettings)
   .settings(
     name := "hello",
-    libraryDependencies ++= Seq(edge("eezo-http"), jettyLogging)
+    libraryDependencies += edge("eezo-http")
   )
 
 // The database edge alone: one model deriving `Table`, an `AppSchema`, and a `boot` that is a job
@@ -88,7 +83,6 @@ lazy val blog = (project in file("blog"))
     libraryDependencies ++= Seq(
       edge("eezo"),
       edge("eezo-auth"),
-      jettyLogging,
       "org.scalameta" %% "munit" % "1.3.4" % Test,
       // `PostOwnershipSuite` drives the real route table over real rows, so it needs a real
       // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
@@ -108,6 +102,6 @@ lazy val todo = (project in file("todo"))
   .settings(commonSettings)
   .settings(
     name := "todo",
-    libraryDependencies ++= Seq(edge("eezo"), jettyLogging),
+    libraryDependencies += edge("eezo"),
     runInProjectDir
   )
