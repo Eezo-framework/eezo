@@ -18,7 +18,7 @@ class RegistrySuite extends munit.FunSuite {
   }
 
   private def mounted(id: String): Page[Int] = {
-    val page = new Page(id, Noop, _ => ())
+    val page = new Page(id, Noop)
     val _    = page.mount()
     page
   }

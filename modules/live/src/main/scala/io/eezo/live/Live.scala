@@ -1,7 +1,6 @@
 package io.eezo.live
 
 import java.nio.charset.StandardCharsets
-import java.util.concurrent.ConcurrentHashMap
 
 import io.eezo.core.html.{AttrName, Attr, Attrs, Html, Tags, Url}
 import io.eezo.http.{Body, Eezo, Method, PathPattern, Request, Response, Route, WsConn, WsListener}
@@ -34,7 +33,6 @@ object Live {
 
   private val log      = System.getLogger("io.eezo.live")
   private val registry = new PageRegistry()
-  private val senders  = new ConcurrentHashMap[String, Sender]
 
   private val PageAttr     = AttrName("data-eezo-page")
   private val DeadAttr     = AttrName("data-eezo-dead")
@@ -97,10 +95,8 @@ object Live {
     registry.register(
       request.currentUser,
       id => {
-        val sender = new Sender(id)
-        val _      = senders.put(id, sender)
-        val relay  = new Relay[S]
-        val page   = new Page(id, create(new Async[S](relay.post)), sender.send)
+        val relay = new Relay[S]
+        val page  = new Page(id, create(new Async[S](relay.post)))
         relay.aim(page)
         page
       }
@@ -112,7 +108,6 @@ object Live {
         } catch {
           case e: Throwable =>
             registry.close(page.id)
-            val _ = senders.remove(page.id)
             throw e
         }
       case None =>
@@ -202,7 +197,7 @@ object Live {
       private val who      = request.currentUser
       private val originOk = Origins.admits(request, allowed)
 
-      private var attached: Option[(Page[?], Sender)] = None
+      private var attached: Option[Page[?]] = None
 
       override def onOpen(conn: WsConn): Unit =
         if (!originOk) {
@@ -228,17 +223,26 @@ object Live {
               )
               conn.close(4403, "not signed in as the page's user")
             case Right(page) =>
-              senders.get(id) match {
-                case null   => conn.close(4404, "unknown page")
-                case sender =>
-                  sender.attach(conn)
-                  attached = Some((page, sender))
-              }
+              page.attach(patches =>
+                try conn.send(Wire.patches(patches))
+                catch {
+                  case e: Exception =>
+                    // A stalled or vanished client. Closing fires onClose, which starts
+                    // the grace window.
+                    log.log(
+                      System.Logger.Level.WARNING,
+                      s"page $id: send failed (${e.getMessage}); closing the connection"
+                    )
+                    page.detach()
+                    conn.close(1011, "send failed")
+                }
+              )
+              attached = Some(page)
           }
         }
 
       override def onText(conn: WsConn, text: String): Unit =
-        attached.foreach { case (page, _) =>
+        attached.foreach { page =>
           Wire.read(text) match {
             case Left(problem) =>
               log.log(System.Logger.Level.WARNING, s"page $id sent a malformed frame: $problem")
@@ -276,19 +280,17 @@ object Live {
         }
 
       override def onClose(code: Int, reason: String): Unit =
-        attached.foreach { case (page, sender) =>
-          sender.detach()
+        attached.foreach { page =>
+          page.detach()
           // 1000 is the client saying goodbye on purpose (beforeunload); everything else gets the
           // grace window, reaped on the cadence below.
-          if (code == 1000) {
-            registry.close(page.id)
-            val _ = senders.remove(page.id)
-          } else registry.disconnect(page.id)
+          if (code == 1000) registry.close(page.id)
+          else registry.disconnect(page.id)
         }
 
       override def onError(cause: Throwable): Unit =
-        attached.foreach { case (page, sender) =>
-          sender.detach()
+        attached.foreach { page =>
+          page.detach()
           registry.disconnect(page.id)
         }
     }
@@ -317,33 +319,6 @@ object Live {
     def post(transition: S => S): Unit = target.foreach(_.post(transition))
   }
 
-  /** The socket a page's frames leave through, if one is attached. Detached, frames drop by design:
-    * the resync at the next join replays the tree, so nothing is owed to a socket that is not
-    * there.
-    */
-  private final class Sender(pageId: String) {
-
-    @volatile private var conn: Option[WsConn] = None
-
-    def attach(c: WsConn): Unit = conn = Some(c)
-
-    def detach(): Unit = conn = None
-
-    def send(patches: List[Patch]): Unit = conn.foreach { c =>
-      try c.send(Wire.patches(patches))
-      catch {
-        case e: Exception =>
-          // A stalled or vanished client. Closing fires onClose, which starts the grace window.
-          log.log(
-            System.Logger.Level.WARNING,
-            s"page $pageId: send failed (${e.getMessage}); closing the connection"
-          )
-          detach()
-          c.close(1011, "send failed")
-      }
-    }
-  }
-
   locally {
     // The reaper: never-connected pages past their TTL and dropped pages past their grace window
     // go, on a fixed cadence, for the process's lifetime. A virtual thread parked 10s at a time.
@@ -354,7 +329,6 @@ object Live {
         while (true) {
           Thread.sleep(10_000)
           val gone = registry.reap()
-          gone.foreach(id => senders.remove(id))
           if (gone.nonEmpty)
             log.log(System.Logger.Level.INFO, s"reaped ${gone.size} live page(s)")
         }

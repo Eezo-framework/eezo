@@ -38,7 +38,6 @@ import io.eezo.core.html.Html
 private[live] final class Page[S](
     val id: String,
     component: Component[S],
-    send: List[Patch] => Unit,
     mailboxCapacity: Int = Page.DefaultMailboxCapacity
 ) {
 
@@ -61,6 +60,9 @@ private[live] final class Page[S](
   @volatile private var subscriptions: List[Subscription] = Nil
   @volatile private var worker: Thread | Null             = null
   @volatile private var closed                            = false
+
+  // Written by the socket's threads, read by the page thread on every frame.
+  @volatile private var listener: Option[List[Patch] => Unit] = None
 
   /** The mount prefix the client's DOM was rewritten with (design/live.md §2.6): "/" until the join
     * reports otherwise. Owned by the loop thread, like the trees it rewrites.
@@ -88,8 +90,8 @@ private[live] final class Page[S](
   }
 
   /** One client event, processed to completion: when this returns, the state has moved, the patches
-    * are handed to `send`, and the baseline is stored. Blocking is the point — see the class
-    * comment. Throws what `handle` (or the render after it) threw.
+    * are handed to the attached listener, and the baseline is stored. Blocking is the point, as the
+    * class comment explains. Throws what `handle` (or the render after it) threw.
     */
   def event(event: Event): Unit = {
     if (closed) throw new IllegalStateException(s"page $id closed")
@@ -128,6 +130,18 @@ private[live] final class Page[S](
     if (!mailbox.offer(Msg.Resync)) {
       val _ = dropped.incrementAndGet()
     }
+
+  /** Hands the page's frames to `out` until [[detach]]. Frames sent while nothing is attached, in
+    * the gap between mount and join or during a grace window, are dropped rather than buffered: the
+    * join that attaches a listener also asks for a [[resync]], which replays the whole tree, so
+    * nothing is owed to a socket that was not there, and a page nobody watches holds no backlog.
+    */
+  private[live] def attach(out: List[Patch] => Unit): Unit = listener = Some(out)
+
+  /** Stops handing frames out. Unconditional and idempotent, and never through the mailbox, because
+    * a listener whose write failed calls it from the page's own thread.
+    */
+  private[live] def detach(): Unit = listener = None
 
   /** Stops the page: cancels its subscriptions, stops the thread, and fails whatever callers were
     * still waiting. Idempotent, callable from any thread — the registry reaps through this.
@@ -277,6 +291,8 @@ private[live] final class Page[S](
         case el: Html.Element => el
         case other => throw new IllegalStateException(s"under() changed the root: $other")
       }
+
+  private def send(patches: List[Patch]): Unit = listener.foreach(_(patches))
 
   /** Whoever was still queued when the page closed must not wait forever. */
   private def drainPendingAsClosed(): Unit = {

@@ -40,7 +40,8 @@ object Demo {
         )
     }
 
-    val page = new Page("demo", component, patches => println(Wire.patches(patches)))
+    val page = new Page("demo", component)
+    page.attach(patches => println(Wire.patches(patches)))
 
     step("mount: init runs, the first render is the HTML the response would embed") {
       println(page.mount().render)
