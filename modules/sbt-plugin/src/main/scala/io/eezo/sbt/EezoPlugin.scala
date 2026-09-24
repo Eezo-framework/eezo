@@ -86,7 +86,7 @@ object EezoPlugin extends AutoPlugin {
 
   import autoImport._
 
-  override lazy val projectSettings: Seq[Setting[_]] = Seq(
+  override lazy val projectSettings: Seq[Setting[?]] = Seq(
     Compile / eezoGenerateRoutes := generate.value,
     // The generated file lands in `sourceManaged`, not in a directory of eezo's own, because BSP
     // and IntelliJ take their source roots from `managedSources` rather than from what happens to
@@ -190,7 +190,7 @@ object EezoPlugin extends AutoPlugin {
     * unknown, so `eezoDev` prints the unknown command line on every save; a rerun on save loop for
     * a job is sbt's own `~run`.
     */
-  override lazy val globalSettings: Seq[Setting[_]] =
+  override lazy val globalSettings: Seq[Setting[?]] =
     addCommandAlias("eezoDev", "~eezoRestart")
 
   /** `eezoSync --apply` → `run sync --apply`: the task's own arguments, appended after the command.
