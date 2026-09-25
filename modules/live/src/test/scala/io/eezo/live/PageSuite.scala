@@ -291,8 +291,8 @@ class PageSuite extends munit.FunSuite {
   }
 
   /** Holding the page thread on a latch lets a test keep an event past the injected threshold for
-    * as long as it needs, then decide whether that event ends in success or in failure; the
-    * instant events show that work inside the threshold stays silent.
+    * as long as it needs, then decide whether that event ends in success or in failure; the instant
+    * events show that work inside the threshold stays silent.
     */
   private final class Held(gate: CountDownLatch) extends Component[Int] {
     def init(ctx: Init[Int]): Int         = 0
