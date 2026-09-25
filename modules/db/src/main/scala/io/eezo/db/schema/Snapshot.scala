@@ -32,11 +32,6 @@ final case class IndexSnap(name: String, columns: List[String], unique: Boolean)
       "unique"  -> Json.Bool(unique)
     )
   )
-  def createDdl(table: String): String = {
-    val u    = if (unique) "unique " else ""
-    val cols = columns.map(c => "\"" + c + "\"").mkString(", ")
-    s"""create ${u}index "$name" on "$table" ($cols)"""
-  }
 }
 
 final case class TableSnap(name: String, columns: List[ColumnSnap], indexes: List[IndexSnap]) {

@@ -8,7 +8,7 @@ package io.eezo.db.schema
   */
 object Ddl {
 
-  private def q(s: String): String = "\"" + s + "\""
+  private def q(s: String): String = "\"" + s.replace("\"", "\"\"") + "\""
 
   private def checkName(table: String, column: String, expr: String): String = {
     val h = Integer.toHexString(expr.hashCode & 0xffffff)
@@ -53,8 +53,10 @@ object Ddl {
     case Change.DropForeignKey(t, c) =>
       s"alter table ${q(t)} drop constraint ${q(s"fk_${t}_$c")}"
 
-    case Change.CreateIndex(t, i) => i.createDdl(t)
-    case Change.DropIndex(_, n)   => s"drop index ${q(n)}"
+    case Change.CreateIndex(t, i) =>
+      val u = if (i.unique) "unique " else ""
+      s"create ${u}index ${q(i.name)} on ${q(t)} (${i.columns.map(q).mkString(", ")})"
+    case Change.DropIndex(_, n) => s"drop index ${q(n)}"
   }
 
   def render(cs: List[Change]): List[String] = cs.map(render)
