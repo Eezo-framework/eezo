@@ -12,24 +12,85 @@ class DbInitSuite extends FunSuite {
   private def parsed(url: String) =
     DbInit.parseDatabaseUrl(url).getOrElse(fail(s"expected $url to parse"))
 
-  test("the full form: user, password, host, port, database") {
+  test("the full form: user, password, host, port, database, and TLS required when no query") {
     assertEquals(
       parsed("postgres://app:secret@db.internal:5433/prod"),
-      DbInit.Parsed("jdbc:postgresql://db.internal:5433/prod", "app", "secret")
+      DbInit.Parsed("jdbc:postgresql://db.internal:5433/prod?sslmode=require", "app", "secret")
     )
   }
 
-  test("postgresql scheme, no port, query string carried onto the jdbc url") {
+  test("postgresql scheme, no port, an explicit sslmode=require is not doubled") {
     assertEquals(
       parsed("postgresql://app:secret@db.internal/prod?sslmode=require"),
       DbInit.Parsed("jdbc:postgresql://db.internal/prod?sslmode=require", "app", "secret")
     )
   }
 
+  test("a query without sslmode keeps its parameters, in order, and gains sslmode=require last") {
+    assertEquals(
+      parsed(
+        "postgres://app:secret@host/db?application_name=x&options=-c%20search_path%3Dapp"
+      ).jdbcUrl,
+      "jdbc:postgresql://host/db?application_name=x&options=-c%20search_path%3Dapp&sslmode=require"
+    )
+  }
+
+  test("an empty query is no query: sslmode=require joins with a question mark alone") {
+    assertEquals(
+      parsed("postgres://app@host/db?").jdbcUrl,
+      "jdbc:postgresql://host/db?sslmode=require"
+    )
+  }
+
+  test("an explicit sslmode wins, whatever its value: the query passes through byte for byte") {
+    assertEquals(
+      parsed("postgres://app@host/db?sslmode=disable").jdbcUrl,
+      "jdbc:postgresql://host/db?sslmode=disable",
+      "Fly's attach writes sslmode=disable on purpose"
+    )
+    assertEquals(
+      parsed("postgres://app@host/db?sslmode=verify-full&sslrootcert=%2Fetc%2Fca.pem").jdbcUrl,
+      "jdbc:postgresql://host/db?sslmode=verify-full&sslrootcert=%2Fetc%2Fca.pem"
+    )
+  }
+
+  test("sslmode counts wherever it sits among the parameters") {
+    assertEquals(
+      parsed("postgres://app@host/db?application_name=x&sslmode=disable").jdbcUrl,
+      "jdbc:postgresql://host/db?application_name=x&sslmode=disable"
+    )
+  }
+
+  test("a bare sslmode with no value is still an explicit sslmode, left for the driver to refuse") {
+    assertEquals(
+      parsed("postgres://app@host/db?sslmode").jdbcUrl,
+      "jdbc:postgresql://host/db?sslmode"
+    )
+  }
+
+  test("only the sslmode key counts, not a key that ends in it or a value that mentions it") {
+    assertEquals(
+      parsed("postgres://app@host/db?foosslmode=disable").jdbcUrl,
+      "jdbc:postgresql://host/db?foosslmode=disable&sslmode=require"
+    )
+    assertEquals(
+      parsed("postgres://app@host/db?application_name=sslmode=disable").jdbcUrl,
+      "jdbc:postgresql://host/db?application_name=sslmode=disable&sslmode=require"
+    )
+  }
+
+  test("ssl=true is not sslmode: it still gains sslmode=require, which the driver ranks above it") {
+    assertEquals(
+      parsed("postgres://app@host/db?ssl=true").jdbcUrl,
+      "jdbc:postgresql://host/db?ssl=true&sslmode=require",
+      "only the sslmode key is matched; a URL wanting verify-full spells sslmode=verify-full"
+    )
+  }
+
   test("percent-encoded credentials are decoded") {
     assertEquals(
       parsed("postgres://us%40er:p%40ss%2Fword@host/db"),
-      DbInit.Parsed("jdbc:postgresql://host/db", "us@er", "p@ss/word")
+      DbInit.Parsed("jdbc:postgresql://host/db?sslmode=require", "us@er", "p@ss/word")
     )
   }
 
