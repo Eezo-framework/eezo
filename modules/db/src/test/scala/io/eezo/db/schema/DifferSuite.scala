@@ -68,6 +68,22 @@ class DifferSuite extends FunSuite {
     assert(d.head.risky)
   }
 
+  test("a dropped check goes before a type change on the same column") {
+    // Postgres reparses every check on the column against the new type during the type change,
+    // so a check written for the old type must already be gone by then.
+    val d = Differ.diff(
+      snap(tbl("book", id, col("t", "text", checks = List("length(t) <= 10")))),
+      snap(tbl("book", id, col("t", "integer")))
+    )
+    assertEquals(
+      d,
+      List(
+        Change.DropCheck("book", "t", "length(t) <= 10"),
+        Change.AlterType("book", "t", "text", "integer")
+      )
+    )
+  }
+
   test("narrowing to not-null is risky; widening to null is not") {
     val nullable    = snap(tbl("book", id, col("t", nullable = true)))
     val notNullable = snap(tbl("book", id, col("t", nullable = false)))
