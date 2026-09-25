@@ -2,6 +2,8 @@ package io.eezo.db.engine
 
 import io.eezo.db.capability.*
 
+import java.sql.Connection
+
 /** The non-inline hops behind `Scopes.transact` and `Scopes.read`.
   *
   * This is where the **capture contract** lives (DESIGN §8.4): `body: Tx ?-> A` on a *non-inline*
@@ -24,32 +26,49 @@ object Run {
   def tx[A](body: Tx ?-> A): A =
     Scope.enter(ScopeKind.Write) {
       val db = Installed.get
-      val c  = db.pool.acquire()
-      val h  = new TxHandle(c)
-      c.setAutoCommit(false)
-      try {
-        val a = body(using h)
-        c.commit()
-        a
-      } catch {
-        case e: Throwable =>
-          c.rollback()
-          throw e
-      } finally {
-        h.retire()
-        db.pool.release(c)
-      }
+      transacting(db.pool.acquire(), db.pool.release)(body)
     }
 
   def read[A](body: DB ?-> A): A =
     Scope.enter(ScopeKind.Read) {
       val db = Installed.get
-      val c  = db.pool.acquire()
-      val h  = new ReadHandle(c)
-      try body(using h)
-      finally {
-        h.retire()
-        db.pool.release(c)
-      }
+      reading(db.pool.acquire(), db.pool.release)(body)
     }
+
+  /** Split from `tx` so the borrow protocol can be tested on a connection that fails on demand,
+    * which a real pool cannot hand out: an open pgjdbc connection never refuses `setAutoCommit`, and
+    * one closed behind HikariCP's back is evicted by it, which hides whether release ran. Every
+    * path from here reaches `release` once, because a slot that misses it is lost to the pool for
+    * the life of the process.
+    */
+  private[engine] def transacting[A](c: Connection, release: Connection -> Unit)(
+      body: Tx ?-> A
+  ): A =
+    try {
+      val h = new TxHandle(c)
+      try {
+        // outside the rollback below: a connection still in auto commit refuses a rollback, and
+        // that refusal would replace the failure the caller needs to see
+        c.setAutoCommit(false)
+        try {
+          val a = body(using h)
+          c.commit()
+          a
+        } catch {
+          case e: Throwable =>
+            c.rollback()
+            throw e
+        }
+      } finally h.retire()
+    } finally release(c)
+
+  /** The same shape as `transacting`, so that a handle constructor which one day can fail still
+    * gives the connection back.
+    */
+  private[engine] def reading[A](c: Connection, release: Connection -> Unit)(body: DB ?-> A): A =
+    try {
+      val h = new ReadHandle(c)
+      try body(using h)
+      finally h.retire()
+    } finally release(c)
 }
