@@ -81,17 +81,6 @@ class BacklogSuite extends DbSuite {
     d
   }
 
-  // ── 1 ────────────────────────────────────────────────────────────────────────────────
-  backlog(1, "a check is dropped before the type it constrains is altered") {
-    // Differ.diffColumn emits the type change first, and Postgres will not alter a column
-    // out from under a CHECK that references it.
-    val from = snap(tbl("t", id, col("c", "text", checks = List("length(c) <= 10"))))
-    val to   = snap(tbl("t", id, col("c", "integer")))
-    exec(Ddl.render(Differ.diff(empty, from))*)
-    exec(Ddl.render(Differ.diff(from, to))*)
-    assertEquals(Differ.diff(live(), to), Nil)
-  }
-
   // ── 2 ────────────────────────────────────────────────────────────────────────────────
   backlog(2, "a narrowing type change does not silently truncate") {
     // AlterType renders `using "c"::varchar(100)` unconditionally, and an explicit cast to

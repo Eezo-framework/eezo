@@ -1,6 +1,5 @@
 package io.eezo.db.schema
 
-// TODO A DropCheck must precede an AlterType on the same column in real Postgres — currently it doesn't
 object Differ {
 
   /** Changes to turn `from` into `to`. */
@@ -84,6 +83,8 @@ object Differ {
       case _ => Nil
     }
 
-    typeChange ++ nullChange ++ checksDropped ++ checksAdded ++ fkChange
+    // Postgres reparses every check on the column against the new type, so the checks this
+    // change drops have to be gone before the type changes.
+    checksDropped ++ typeChange ++ nullChange ++ checksAdded ++ fkChange
   }
 }

@@ -55,8 +55,20 @@ class DifferRoundTripSuite extends PgSuite {
     snap(tbl("author", id, col("name", checks = List("length(name) <= 100"))))
   )
 
-  // "drop a check" is absent from the round-trips above because it does not work at all.
-  // See BacklogSuite, item 25.
+  // No round trip above drops a check, because a check created inline with its table cannot be
+  // dropped yet (BacklogSuite, item 25). The test below drops a check added apart from its table.
+
+  test("change a type whose check the old type needed") {
+    // The check is added apart from its table so it carries the name DropCheck renders.
+    val check = "length(name) <= 10"
+    val from  = snap(tbl("author", id, col("name", "text", checks = List(check))))
+    val to    = snap(tbl("author", id, col("name", "integer")))
+    exec(Ddl.render(Differ.diff(empty, snap(tbl("author", id, col("name", "text")))))*)
+    exec(Ddl.render(Change.AddCheck("author", "name", check)))
+    assertEquals(Differ.diff(live(), from), Nil, "setup did not land on `from`")
+    exec(Ddl.render(Differ.diff(from, to))*)
+    assertEquals(Differ.diff(live(), to), Nil, "diff(from, to) did not land on `to`")
+  }
 
   roundTrip("add an index")(
     snap(author),
