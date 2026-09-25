@@ -1,10 +1,10 @@
 package io.eezo.live
 
-import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.{Await, Promise}
-import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, Promise, TimeoutException}
+import scala.concurrent.duration.{Duration, DurationInt, FiniteDuration}
 
 import io.eezo.core.html.Html
 
@@ -38,7 +38,8 @@ import io.eezo.core.html.Html
 private[live] final class Page[S](
     val id: String,
     component: Component[S],
-    mailboxCapacity: Int = Page.DefaultMailboxCapacity
+    mailboxCapacity: Int = Page.DefaultMailboxCapacity,
+    slowEventThreshold: FiniteDuration = Page.SlowEventThreshold
 ) {
 
   private enum Msg {
@@ -98,9 +99,32 @@ private[live] final class Page[S](
     val done = Promise[Unit]()
     mailbox.put(Msg.FromClient(event, done))
     // `Await` on a virtual thread parks rather than pins, and a `Promise` failure surfaces the
-    // original exception directly — no `CompletionException` to unwrap, the reason `CompletableFuture`
-    // was not the right tool for an in-house completion signal. The wait is unbounded on purpose:
-    // a `handle` that never returns is a page-loop bug, not a caller's timeout to guess at.
+    // original exception directly, with no `CompletionException` to unwrap: the reason
+    // `CompletableFuture` was not the right tool for an in house completion signal. The wait is
+    // unbounded on purpose, as an HTTP handler's is: a `handle` waiting on a row lock is slow, not
+    // wrong, and cutting it off would leave the state and the client guessing. Unbounded is not
+    // silent, though: past the threshold the wait is logged once, and a successful end once more,
+    // so a frozen page shows up in the log instead of nowhere. A failed end gets no INFO, because
+    // the socket already logs it as an ERROR and "finished" there would read as success.
+    val started = System.nanoTime()
+    try {
+      val _ = Await.ready(done.future, slowEventThreshold)
+    } catch {
+      case _: TimeoutException =>
+        log.log(
+          System.Logger.Level.WARNING,
+          s"page $id event '${event.name}' still running after ${Page.logText(slowEventThreshold)}; " +
+            "the socket waits for it"
+        )
+        val _ = Await.ready(done.future, Duration.Inf)
+        if (done.future.value.exists(_.isSuccess)) {
+          val seconds = TimeUnit.NANOSECONDS.toSeconds(System.nanoTime() - started)
+          log.log(
+            System.Logger.Level.INFO,
+            s"page $id event '${event.name}' finished after ${seconds}s"
+          )
+        }
+    }
     Await.result(done.future, Duration.Inf)
   }
 
@@ -310,4 +334,15 @@ private[live] object Page {
 
   /** Room for a burst without room for a runaway: past this, topic deliveries drop-to-resync. */
   val DefaultMailboxCapacity: Int = 256
+
+  /** How long a client event may hold its socket before the log hears about it. Not a deadline, and
+    * not an application setting: it only decides when a slow page stops being silent.
+    */
+  val SlowEventThreshold: FiniteDuration = 10.seconds
+
+  /** A threshold as a log line should read it: `10s`, or `20ms` for the sub second values tests
+    * inject, since whole seconds would print those as `0s`.
+    */
+  def logText(threshold: FiniteDuration): String =
+    if (threshold.toMillis % 1000 == 0) s"${threshold.toSeconds}s" else s"${threshold.toMillis}ms"
 }
