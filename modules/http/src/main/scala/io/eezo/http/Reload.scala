@@ -10,14 +10,14 @@ import io.eezo.core.html.Tags.*
   * server answers and refreshes the page. Whole page, no state kept. This is the reload contract
   * (issue 153). Both entry points read `config.dev` here, so the dev gate has one owner.
   *
-  * The endpoint sits under `HttpServer.ReservedPrefix`. Today it is the only framework route
+  * The endpoint sits under `RouteTable.ReservedPrefix`. Today it is the only framework route
   * dispatched before the user's table; the dev server's drift page mounts its actions under the
   * same prefix as ordinary routes.
   */
 private[http] object Reload {
 
   /** The reserved endpoint. WebSocket only: an HTTP GET on it is an ordinary 404. */
-  private[http] val path: String = s"${HttpServer.ReservedPrefix}/reload"
+  private[http] val path: String = s"${RouteTable.ReservedPrefix}/reload"
 
   /** The client, inline. About thirty lines held here rather than served from a second reserved
     * path, so there is no resource to locate and no caching question.
