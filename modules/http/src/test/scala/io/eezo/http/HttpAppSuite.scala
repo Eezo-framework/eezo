@@ -83,7 +83,7 @@ class HttpAppSuite extends munit.FunSuite {
   test("every server setting is an override with the server's own default") {
     val app = new Recording
     assertEquals(app.port, 8080)
-    assertEquals(app.maxBodySize, Config.DefaultMaxBodySize)
+    assertEquals(app.maxBodySize, HttpConfig.DefaultMaxBodySize)
     assert(!app.problems.isDefinedAt(new RuntimeException("anything")))
   }
 }

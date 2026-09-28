@@ -3,7 +3,17 @@ package io.eezo.live
 import java.nio.charset.StandardCharsets
 
 import io.eezo.core.html.{AttrName, Attr, Attrs, Html, Tags, Url}
-import io.eezo.http.{Body, Eezo, Method, PathPattern, Request, Response, Route, WsConn, WsListener}
+import io.eezo.http.{
+  Body,
+  HttpServer,
+  Method,
+  PathPattern,
+  Request,
+  Response,
+  Route,
+  WsConn,
+  WsListener
+}
 
 /** The live layer's front door: [[mount]] in a handler, [[routes]] on the server, the event binding
   * attributes in views.
@@ -132,10 +142,10 @@ object Live {
   def routes(allowedOrigins: Set[String]): Seq[Route] = {
     val allowed = allowedOrigins.map(Origins.listed)
     Seq(
-      Route.Ws(PathPattern.parse(s"${Eezo.ReservedPrefix}/live/:page"), endpoint(allowed, _)),
+      Route.Ws(PathPattern.parse(s"${HttpServer.ReservedPrefix}/live/:page"), endpoint(allowed, _)),
       Route.Http(
         Method.GET,
-        PathPattern.parse(s"${Eezo.ReservedPrefix}/live.js"),
+        PathPattern.parse(s"${HttpServer.ReservedPrefix}/live.js"),
         _ =>
           Response(
             200,
@@ -159,7 +169,7 @@ object Live {
     Tags.div(mark, Attrs.eezoBase := Url.Mounted("/"), tree)
 
   private val script: Html =
-    Tags.script(Attrs.src := s"${Eezo.ReservedPrefix}/live.js", AttrName("defer") := true)
+    Tags.script(Attrs.src := s"${HttpServer.ReservedPrefix}/live.js", AttrName("defer") := true)
 
   /** The component rendered with no page behind it: `init` runs, its subscriptions are immediately
     * cancelled, and the tree is served as it stands.

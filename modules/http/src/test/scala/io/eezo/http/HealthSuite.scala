@@ -3,8 +3,6 @@ package io.eezo.http
 import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 
-import org.eclipse.jetty.server.ServerConnector
-
 /** The framework health endpoint: always mounted, unshadowable, and cheap. */
 class HealthSuite extends munit.FunSuite {
 
@@ -17,10 +15,10 @@ class HealthSuite extends munit.FunSuite {
     )
 
   test("GET /eezo/health answers 200 on a server with no routes at all") {
-    val server = Eezo.start(port = 0, config = Config(RouteTable.empty))
+    val server = HttpServer.start(port = 0, routes = RouteTable.empty)
     try {
-      val port     = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
-      val response = get(port, Eezo.HealthPath)
+      val port     = server.port
+      val response = get(port, HttpServer.HealthPath)
       assertEquals(response.statusCode(), 200)
       assertEquals(response.body(), "ok")
       // and nothing else under the reserved prefix leaks a page
@@ -32,10 +30,10 @@ class HealthSuite extends munit.FunSuite {
     val table = RouteTable(
       Seq(Route.Http(Method.GET, PathPattern.parse("/*rest"), _ => Response.status(418)))
     )
-    val server = Eezo.start(port = 0, config = Config(table))
+    val server = HttpServer.start(port = 0, routes = table)
     try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
-      assertEquals(get(port, Eezo.HealthPath).statusCode(), 200)
+      val port = server.port
+      assertEquals(get(port, HttpServer.HealthPath).statusCode(), 200)
       assertEquals(get(port, "/anything-else").statusCode(), 418)
     } finally server.stop()
   }

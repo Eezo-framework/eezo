@@ -361,8 +361,8 @@ class PostOwnershipSuite extends munit.FunSuite {
     * which is documented in `Main.scala` as "the ordinary shape of an application". That rebuild
     * must keep the generated table's `identify`, the one thing a socket upgrade reads to learn who
     * is there: `RouteTable.dispatch` never applies it (a guarded page is named by the guard's own
-    * wrapper instead), so the only way to observe it is to call it directly, exactly as `Eezo`'s
-    * WebSocket creator does on a handshake.
+    * wrapper instead), so the only way to observe it is to call it directly, exactly as
+    * `HttpServer`'s WebSocket creator does on a handshake.
     */
   test("the served table's identify still names a signed in browser, after the admin mount") {
     blog {

@@ -7,7 +7,6 @@ import java.util.concurrent.atomic.AtomicReference
 
 import org.eclipse.jetty.client.Request as HandshakeRequest
 import org.eclipse.jetty.client.Response as HandshakeResponse
-import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.websocket.api.Callback
 import org.eclipse.jetty.websocket.api.Session
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest
@@ -35,11 +34,12 @@ class WebSocketSuite extends munit.FunSuite {
   private def serving(routes: RouteTable, dev: Boolean = false)(
       body: (WebSocketClient, Int) => Unit
   ): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, dev = dev, secret = secret))
+    val server =
+      HttpServer.start(port = 0, routes = routes, config = HttpConfig(dev = dev, secret = secret))
     val client = new WebSocketClient()
     client.start()
     try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      val port = server.port
       body(client, port)
     } finally {
       client.stop()

@@ -7,7 +7,6 @@ import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import io.eezo.core.html.Html
 import io.eezo.core.html.Tags.*
 import io.eezo.http.*
-import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.websocket.api.{Callback, Session}
 import org.eclipse.jetty.websocket.client.{ClientUpgradeRequest, WebSocketClient}
 
@@ -54,10 +53,10 @@ trait LiveServerFixtures { self: munit.FunSuite =>
     * afterwards. The live framework routes are the caller's to add.
     */
   protected def serving(table: RouteTable)(body: Rig => Unit): Unit = {
-    val server = Eezo.start(port = 0, config = Config(table))
+    val server = HttpServer.start(port = 0, routes = table)
     val ws     = new WebSocketClient()
     ws.start()
-    try body(new Rig(server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort, ws))
+    try body(new Rig(server.port, ws))
     finally {
       ws.stop()
       server.stop()

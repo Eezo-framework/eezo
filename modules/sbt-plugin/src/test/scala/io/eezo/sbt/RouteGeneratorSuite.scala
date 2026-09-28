@@ -90,7 +90,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
   }
 
   test(
-    "a fixture laid out like examples/hello/src/main/scala/app/Hello.scala renders the GET /hello row Main.scala's Eezo.run consumes"
+    "a fixture laid out like examples/hello/src/main/scala/app/Hello.scala renders the GET /hello row Main.scala's HttpApp serves"
   ) {
     val helloRoute = route("Hello.scala")
     assertEquals(helloRoute.method, "GET")

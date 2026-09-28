@@ -212,7 +212,7 @@ class CsrfSuite extends munit.FunSuite with ResourceFixtures {
   // ---------------------------------------------------------------- the boundary
 
   test("Forbidden is a 403 at the boundary") {
-    val resolution = Boundary.resolve(Forbidden("no"), "/things", Config(RouteTable.empty))
+    val resolution = Boundary.resolve(Forbidden("no"), "/things", HttpConfig())
     assertEquals(resolution.problem.status, 403)
     assertEquals(resolution.problem.title, "Forbidden")
     assertEquals(resolution.problem.detail, "no")

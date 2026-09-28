@@ -13,7 +13,6 @@ import io.eezo.core.html.Url
 import io.eezo.http.*
 import org.eclipse.jetty.client.Request as HandshakeRequest
 import org.eclipse.jetty.client.Response as HandshakeResponse
-import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.websocket.api.Session.Listener.AbstractAutoDemanding
 import org.eclipse.jetty.websocket.client.ClientUpgradeRequest
 import org.eclipse.jetty.websocket.client.JettyUpgradeListener
@@ -121,9 +120,13 @@ class GuardSuite extends munit.FunSuite {
     * it. The server takes an ephemeral port and comes down with the test.
     */
   private def visiting(dev: Boolean): (Int, String) = {
-    val server = Eezo.start(port = 0, config = Config(RouteTable(Seq(unguarded)), dev = dev))
+    val server = HttpServer.start(
+      port = 0,
+      routes = RouteTable(Seq(unguarded)),
+      config = HttpConfig(dev = dev)
+    )
     try {
-      val port     = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      val port     = server.port
       val response = HttpClient
         .newHttpClient()
         .send(
@@ -236,8 +239,8 @@ class GuardSuite extends munit.FunSuite {
       request => Response.Ok(Html.text(request.currentUser.getOrElse("nobody")))
     )
 
-  /** What the endpoint of an upgrade reads, which is `Eezo`'s WebSocket creator in one line: the
-    * route looked up on the table, the handshake request named by the table before anything is
+  /** What the endpoint of an upgrade reads, which is `HttpServer`'s WebSocket creator in one line:
+    * the route looked up on the table, the handshake request named by the table before anything is
     * built, and the endpoint run on what came back.
     *
     * It reads inside the endpoint rather than off the named request, because the endpoint is the
@@ -566,11 +569,11 @@ class GuardSuite extends munit.FunSuite {
     val table  = RouteTable(
       Seq(handing(signedInSession(ann.id, since = stale)), guard.required[Any].through(socket))
     )
-    val server = Eezo.start(port = 0, config = Config(table))
+    val server = HttpServer.start(port = 0, routes = table)
     val client = new WebSocketClient()
     client.start()
     try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      val port = server.port
       assertEquals(upgrading(client, port, None), (403, None), "an upgrade nobody signed in for")
       val expired = planted(port)
       assertEquals(upgrading(client, port, Some(expired)), (403, None), "an expired sign in")

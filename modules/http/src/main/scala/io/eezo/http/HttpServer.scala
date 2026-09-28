@@ -8,6 +8,7 @@ import java.util.concurrent.TimeoutException
 import scala.jdk.CollectionConverters.*
 
 import org.eclipse.jetty.server.Handler as JettyHandler
+import org.eclipse.jetty.server.NetworkConnector
 import org.eclipse.jetty.server.Request as JettyRequest
 import org.eclipse.jetty.server.Response as JettyResponse
 import org.eclipse.jetty.server.Server
@@ -21,38 +22,36 @@ import org.eclipse.jetty.websocket.server.ServerUpgradeResponse
 import org.eclipse.jetty.websocket.server.WebSocketCreator
 import org.eclipse.jetty.websocket.server.WebSocketUpgradeHandler
 
-/** A size, so that a byte count in a signature reads as one.
+/** A running eezo server, as [[HttpServer.start]] hands it back: where it listens, and the way
+  * down.
   *
-  * The body cap and the WebSocket text message cap are deliberately the same number, so there is
-  * one limit to remember rather than two.
+  * Two members a holder outside `modules/http` can reach, and no more, because those are the two
+  * questions a holder has, and neither answer is a Jetty type. The `jetty` door below is the one
+  * exception, and it stays inside this module.
   */
-extension (n: Int) {
-  def MiB: Long = n.toLong * 1024 * 1024
-}
+private[eezo] final class HttpServer private (
+    /** The Jetty server underneath.
+      *
+      * A Jetty type never leaves `modules/http`: the handle exists so that nothing outside this
+      * module names one. This door is an accepted debt, kept for `EezoServerSuite` and
+      * `DrainSuite`, which check the configuration research asked for and time the drain against
+      * Jetty's own stop, two things no public behaviour shows.
+      */
+    private[http] val jetty: Server
+) {
 
-/** The server-wide set: the route table and the four settings that travel everywhere it is
-  * dispatched from, bundled so `run`, `start`, the WebSocket creator and `EezoHandler` take one
-  * value instead of five, and a new setting is a field here rather than a parameter at every hop.
-  */
-private[eezo] final case class Config(
-    routes: RouteTable,
-    maxBodySize: Long = Config.DefaultMaxBodySize,
-    dev: Boolean = Config.DefaultDev,
-    problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems,
-    secret: Secret = Config.DefaultSecret
-)
-
-private[eezo] object Config {
-
-  /** The one place each setting's default is stated: the case class's parameter defaults read off
-    * these, and so do `HttpApp`'s `maxBodySize` and `problems`. The secret is a `def`: a fresh
-    * throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with the
-    * configured one.
+  /** Read back rather than remembered, because a caller that asked for port 0 needs the one the
+    * kernel picked.
     */
-  private[http] val DefaultMaxBodySize: Long                             = 1.MiB
-  private[http] val DefaultDev: Boolean                                  = false
-  private[http] val DefaultProblems: PartialFunction[Throwable, Problem] = PartialFunction.empty
-  private[http] def DefaultSecret: Secret                                = Secret.throwaway()
+  def port: Int =
+    jetty.getConnectors.iterator
+      .collectFirst { case bound: NetworkConnector => bound.getLocalPort }
+      .getOrElse(throw new IllegalStateException("the server has no network connector"))
+
+  /** eezo's stop rather than Jetty's, so a holder can neither skip the drain nor meet the exception
+    * Jetty reports a cut short one with.
+    */
+  def stop(): Unit = HttpServer.drainAndStop(jetty)
 }
 
 /** Booting eezo.
@@ -66,11 +65,10 @@ private[eezo] object Config {
   * }
   * ```
   *
-  * `HttpApp.serve` is the one caller of [[run]], and [[run]] is `private[http]` so that stays true
-  * by visibility rather than by convention. The table is an abstract member of the trait rather
-  * than something found by reflection, because a route transformation such as `under("/admin")`
-  * needs somewhere to be applied, and because "the sbt plugin is not enabled" should be a compile
-  * error at the user's `Main` rather than a runtime message.
+  * The table is an abstract member of the trait rather than something found by reflection, because
+  * a route transformation such as `under("/admin")` needs somewhere to be applied, and because "the
+  * sbt plugin is not enabled" should be a compile error at the user's `Main` rather than a runtime
+  * message.
   *
   * The framework brings the server up and down. [[run]] blocks until the server stops, and the
   * server stops on the JVM's shutdown, so a SIGTERM unwinds `run`, `HttpApp.serve` returns, and
@@ -80,10 +78,10 @@ private[eezo] object Config {
   * under one still inside a transaction. [[stop]] is the same path, drain included, for a test that
   * started a server through `run` and wants it back down.
   */
-object Eezo {
+private[eezo] object HttpServer {
 
   /** The module's one logger, which [[Secret]] also writes to. */
-  private[http] val log = System.getLogger("io.eezo.http")
+  val log = System.getLogger("io.eezo.http")
 
   /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
     * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
@@ -102,7 +100,7 @@ object Eezo {
     * covers a request that is slow, not one that is stuck, and [[drainAndStop]] logs it when a stop
     * cuts one off.
     */
-  private[http] val StopTimeout: Duration = Duration.ofSeconds(3)
+  val StopTimeout: Duration = Duration.ofSeconds(3)
 
   /** How long a connection may sit silent once the drain has begun before it is closed.
     *
@@ -115,19 +113,20 @@ object Eezo {
     * gets a tenth of that. Silence does not fail a handler that computes without touching the
     * connection: a request is read whole before its handler runs.
     */
-  private[http] def shutdownIdleTimeout(dev: Boolean): Duration =
+  def shutdownIdleTimeout(dev: Boolean): Duration =
     if (dev) Duration.ofMillis(100) else Duration.ofSeconds(1)
 
   /** The server [[run]] is joining, if any, so that [[stop]] and the shutdown hook can reach it.
-    * One slot, not a set: `run` is what `main` ends in, once per process.
+    * One slot, not a set: `run` is what `main` ends in, once per process. A server from [[start]]
+    * never lands here: its holder stops it through the handle.
     */
-  @volatile private var running: Option[Server] = None
+  @volatile private var running: Option[HttpServer] = None
 
   /** The path prefix reserved for the framework's own routes: the reload endpoint here, and the dev
     * server's drift actions in `modules/eezo`. One spelling, so a new framework route is added
     * under it rather than beside it.
     */
-  private[eezo] val ReservedPrefix: String = "/eezo"
+  val ReservedPrefix: String = "/eezo"
 
   /** The health endpoint, answered by the framework on every eezo server, dev and production alike.
     * Deliberately the cheapest possible truth (the server is accepting and answering requests),
@@ -137,12 +136,15 @@ object Eezo {
     * endpoint: no route can shadow it, no mount rewrites it, and it never appears in the boot
     * listing.
     */
-  private[eezo] val HealthPath: String = s"$ReservedPrefix/health"
+  val HealthPath: String = s"$ReservedPrefix/health"
 
   private val healthy: Response =
     Response(200, Seq("Content-Type" -> "text/plain; charset=utf-8"), Body.Bytes("ok".getBytes))
 
   /** Boots the server and blocks until it stops.
+    *
+    * `HttpApp.serve` is its one production caller, by convention rather than by visibility: the
+    * object has one width, so the suites that drive `run` and the entry trait see the same member.
     *
     * The server comes down with the JVM: a shutdown hook stops it, draining the requests in flight
     * first, which returns `join`, and then waits up to [[UnwindTimeout]] for the calling thread to
@@ -151,12 +153,12 @@ object Eezo {
     * way, and the `IllegalStateException` the removal throws during a shutdown is the case where
     * the hook is what returned `join`.
     */
-  private[http] def run(port: Int, config: Config): Unit = {
-    val server = build(port, config)
+  def run(port: Int, routes: RouteTable, config: HttpConfig = HttpConfig()): Unit = {
+    val server = new HttpServer(build(port, routes, config))
     val caller = Thread.currentThread()
     val hook   = new Thread(
       () =>
-        try drainAndStop(server)
+        try server.stop()
         finally caller.join(UnwindTimeout.toMillis),
       "eezo-shutdown"
     )
@@ -164,8 +166,8 @@ object Eezo {
     // Published before the server starts, so a `stop` that races the first request finds it.
     running = Some(server)
     try {
-      server.start()
-      server.join()
+      server.jetty.start()
+      server.jetty.join()
     } finally {
       running = None
       try Runtime.getRuntime.removeShutdownHook(hook): Unit
@@ -173,10 +175,12 @@ object Eezo {
     }
   }
 
-  /** Stops the server [[run]] is joining, so that `run` returns. Nothing if none is running. */
-  private[eezo] def stop(): Unit = running.foreach(drainAndStop)
+  /** Stops the server [[run]] is joining, so that `run` returns. Nothing if none is running, which
+    * includes a server from [[start]]: that one is stopped through its handle.
+    */
+  def stop(): Unit = running.foreach(_.stop())
 
-  /** The one way eezo stops a server, for the hook and [[stop]] alike.
+  /** The one way eezo stops a server, for the hook, [[stop]] and the handle alike.
     *
     * Jetty brings the server down whatever the drain did, and only then reports a drain that
     * [[StopTimeout]] cut short, by throwing. That is a line for the log rather than a failure: the
@@ -193,12 +197,12 @@ object Eezo {
         )
     }
 
-  /** Boots the server and returns it, still running: [[build]] and then `start`, for a suite that
-    * holds the handle itself.
+  /** Boots the server and returns it, still running: [[build]] and then `start`, for a caller that
+    * holds the handle itself and stops it through that handle.
     */
-  private[eezo] def start(port: Int, config: Config): Server = {
-    val server = build(port, config)
-    server.start()
+  def start(port: Int, routes: RouteTable, config: HttpConfig = HttpConfig()): HttpServer = {
+    val server = new HttpServer(build(port, routes, config))
+    server.jetty.start()
     server
   }
 
@@ -209,7 +213,7 @@ object Eezo {
     * not virtual-thread-native, a 30 second WebSocket idle timeout, a 64 KiB text message cap, and
     * an unbounded outgoing frame queue that grew a single stalled connection to 293.6 MiB of heap.
     */
-  private def build(port: Int, config: Config): Server = {
+  private def build(port: Int, routes: RouteTable, config: HttpConfig): Server = {
     val pool = new VirtualThreadPool()
     // No semaphore ceiling. The pool's default caps concurrent tasks, which reintroduces the
     // queueing that virtual threads exist to remove.
@@ -229,10 +233,10 @@ object Eezo {
         // Exactly one mapping. eezo matches WebSocket paths with its own `PathPattern`, because
         // Jetty's path spec grammar cannot express a pattern mixing `:name` and a catch-all, and a
         // second matcher would disagree with the first in ways users find before tests do.
-        container.addMapping("/*", creator(config))
+        container.addMapping("/*", creator(routes, config))
       }
     )
-    upgrade.setHandler(new EezoHandler(config))
+    upgrade.setHandler(new EezoHandler(routes, config))
     // Outermost, so every request is counted from the start, and an upgrade that arrives during the
     // drain is refused like any other request. A socket stops counting once its handshake is
     // written, and Jetty closes the open ones with 1001 as the drain begins, so a live page never
@@ -242,7 +246,7 @@ object Eezo {
     server.setHandler(graceful)
     server.setStopTimeout(StopTimeout.toMillis)
 
-    announce(config)
+    announce(routes, config)
     server
   }
 
@@ -260,8 +264,8 @@ object Eezo {
     * a typo'd `derives Resorce` mounts nothing in silence, which makes an empty or short table the
     * only symptom a user ever sees.
     */
-  private def announce(config: Config): Unit = {
-    config.routes.overridden.foreach { route =>
+  private def announce(routes: RouteTable, config: HttpConfig): Unit = {
+    routes.overridden.foreach { route =>
       log.log(
         System.Logger.Level.WARNING,
         s"${route.describe} is written by hand and also derived; the handwritten route is " +
@@ -269,7 +273,7 @@ object Eezo {
       )
     }
 
-    config.routes.shadowed.foreach { case (earlier, later) =>
+    routes.shadowed.foreach { case (earlier, later) =>
       log.log(
         System.Logger.Level.WARNING,
         s"${earlier.describe} shadows ${later.describe}, which can never match. " +
@@ -277,7 +281,7 @@ object Eezo {
       )
     }
 
-    Resource.orphaned(config.routes).foreach { orphan =>
+    Resource.orphaned(routes).foreach { orphan =>
       log.log(
         System.Logger.Level.WARNING,
         s"${orphan.pageRoute} is mounted without ${orphan.targetRoute}: the page renders a form " +
@@ -287,12 +291,12 @@ object Eezo {
     }
 
     if (config.dev) {
-      val routes  = config.routes.routes
+      val listed  = routes.routes
       val listing =
-        if (routes.isEmpty) "no routes mounted"
+        if (listed.isEmpty) "no routes mounted"
         else {
-          val heading = if (routes.size == 1) "1 route:" else s"${routes.size} routes:"
-          routes.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
+          val heading = if (listed.size == 1) "1 route:" else s"${listed.size} routes:"
+          listed.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
         }
       log.log(System.Logger.Level.INFO, listing)
     }
@@ -304,7 +308,7 @@ object Eezo {
     * Resolved once: the log decision and the response both read off this single value, rather than
     * each re-matching the failure to ask its own question of it.
     */
-  private def answer(failure: Throwable, path: String, config: Config): Response = {
+  private def answer(failure: Throwable, path: String, config: HttpConfig): Response = {
     val resolution = Boundary.resolve(failure, path, config)
     if (Boundary.logsStackTrace(resolution.problem.status))
       log.log(System.Logger.Level.ERROR, s"${resolution.problem.status} on $path", failure)
@@ -326,7 +330,7 @@ object Eezo {
     * handler reads it, but with its flash stripped: see [[readHandshake]] for why. Nothing is
     * written back either way: an upgrade has no response a cookie could ride on.
     */
-  private def creator(config: Config): WebSocketCreator =
+  private def creator(routes: RouteTable, config: HttpConfig): WebSocketCreator =
     (request: ServerUpgradeRequest, response: ServerUpgradeResponse, callback: Callback) => {
       val path = JettyRequest.getPathInContext(request)
 
@@ -341,14 +345,14 @@ object Eezo {
         Reload
           .listenerFor(path, config)
           .orElse {
-            config.routes.dispatchWs(path).map { (route, params) =>
+            routes.dispatchWs(path).map { (route, params) =>
               // The table names the current user on the upgrade after the session has been read
               // and before the endpoint is built, which is the only order that works: the naming
               // reads `request.session`, so running it first would make every upgrade anonymous
               // with nothing to say so, and running it after the endpoint would be too late for
               // the endpoint to read.
               route.endpoint(
-                config.routes.identify(
+                routes.identify(
                   readHandshake(
                     requestOf(request, Method.GET, path, Array.emptyByteArray, params),
                     config.secret
@@ -389,7 +393,8 @@ object Eezo {
     * boundary writes no cookie, so an error page leaves the browser's session, flash included,
     * exactly as it was.
     */
-  private final class EezoHandler(config: Config) extends JettyHandler.Abstract {
+  private final class EezoHandler(routes: RouteTable, config: HttpConfig)
+      extends JettyHandler.Abstract {
 
     override def handle(
         request: JettyRequest,
@@ -406,7 +411,7 @@ object Eezo {
           if (incoming.method == Method.GET && path == HealthPath) healthy
           else {
             val read = SessionCookie.read(incoming, config.secret)
-            SessionCookie.write(read, config.routes.dispatch(read), config.secret)
+            SessionCookie.write(read, routes.dispatch(read), config.secret)
           }
         } catch {
           case failure: Throwable => answer(failure, path, config)
