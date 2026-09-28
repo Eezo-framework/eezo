@@ -9,7 +9,7 @@ import io.eezo.http.Route
   * unchanged: a `"command"` discriminator on every object, and shapes that are a contract for
   * tools.
   */
-object RenderJson {
+private[http] object RenderJson {
 
   private def route(r: Route): Json = {
     val (method, path) = r match {

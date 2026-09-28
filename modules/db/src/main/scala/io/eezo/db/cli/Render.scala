@@ -9,7 +9,7 @@ import io.eezo.db.schema.Change
   * because it is one front end among several (the JSON renderer is the same shape over the same
   * values), and because layer 1's rule is that nothing in it decides what a user sees.
   */
-object Render {
+private[eezo] object Render {
 
   private def flag(c: Change): String =
     if (c.destructive) "  [destructive]" else if (c.risky) "  [risky]" else ""

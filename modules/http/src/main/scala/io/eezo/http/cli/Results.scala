@@ -7,19 +7,23 @@ import io.eezo.http.{Action, Route}
   * page. The database edge's results are its own, in `io.eezo.db.cli`, in the same shape.
   */
 
-/** [[io.eezo.http.Resource]]'s `Orphan`, restated with cli owned visibility.
+/** [[io.eezo.http.Resource]]'s `Orphan`, restated as a cli result.
   *
-  * `Orphan` itself is `private[eezo]`, so a public result type cannot carry it; the fields are
-  * copied instead of the type being widened, because "a derived form page whose submit target is
-  * not mounted" is a warning eezo emits, not a vocabulary users build on.
+  * The fields are copied rather than the type carried so the value every front end folds over stays
+  * independent of the record `Resource` keeps for its own detection.
   */
-final case class OrphanedPage(page: Action, pageRoute: String, target: Action, targetRoute: String)
+private[http] final case class OrphanedPage(
+    page: Action,
+    pageRoute: String,
+    target: Action,
+    targetRoute: String
+)
 
 /** The assembled table, with everything boot warns about: the derived routes handwritten ones
   * replaced, the pairs where an earlier route swallows a later one, and the form pages whose submit
   * target is not mounted.
   */
-final case class RouteListing(
+private[http] final case class RouteListing(
     routes: Seq[Route],
     overridden: Seq[Route],
     shadowed: Seq[(Route, Route)],

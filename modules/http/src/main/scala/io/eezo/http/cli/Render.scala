@@ -8,7 +8,7 @@ import io.eezo.http.{Orphan, RouteReport}
   * the same shape over the same values), and because layer 1's rule is that nothing in `Commands`
   * decides what a user sees.
   */
-object Render {
+private[http] object Render {
 
   /** Boot's sentences, not a terminal's shorter cut of them: a warning read here and a warning read
     * in the boot log are one warning, and a user who meets both should recognise it. The mark is
