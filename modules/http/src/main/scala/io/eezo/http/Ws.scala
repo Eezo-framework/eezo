@@ -62,3 +62,36 @@ trait WsListener {
 
   def onError(cause: Throwable): Unit = ()
 }
+
+/** Jetty's listener, adapted to eezo's.
+  *
+  * The runtime demands the next event after each one is fully handled, so a listener that forgets
+  * to demand — a socket that silently stops — is not a mistake an application can make.
+  *
+  * It extends `Session.Listener.Abstract`, the class, rather than the interface. Scala emits a
+  * mixin forwarder for every default method an interface has, and Jetty binds its events by
+  * reflecting over the methods a listener declares, so implementing the interface directly makes
+  * Jetty see two handlers for the same event and refuse the connection. `Abstract` rather than
+  * `AbstractAutoDemanding`, because the demand below is eezo's read backpressure and not a
+  * formality.
+  */
+private[http] final class JettyListener(listener: WsListener) extends Session.Listener.Abstract {
+
+  private var session: Session = null
+
+  override def onWebSocketOpen(newSession: Session): Unit = {
+    session = newSession
+    listener.onOpen(WsConn(newSession))
+    newSession.demand()
+  }
+
+  override def onWebSocketText(text: String): Unit = {
+    listener.onText(WsConn(session), text)
+    session.demand()
+  }
+
+  override def onWebSocketClose(status: Int, reason: String): Unit =
+    listener.onClose(status, reason)
+
+  override def onWebSocketError(cause: Throwable): Unit = listener.onError(cause)
+}

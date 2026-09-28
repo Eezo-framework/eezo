@@ -7,7 +7,7 @@ import io.eezo.db.Schema
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.migrate.Decision
 import io.eezo.db.schema.Change
-import io.eezo.http.{Csrf, Handler, HttpServer, Method, PathPattern, Response, Route, RouteTable}
+import io.eezo.http.{Csrf, Handler, Method, PathPattern, Response, Route, RouteTable}
 
 import scala.util.control.NonFatal
 
@@ -50,11 +50,11 @@ import scala.util.control.NonFatal
   */
 private[eezo] object DriftGate {
 
-  /** The drift page's two reserved routes, under the prefix `HttpServer` keeps for the framework.
+  /** The drift page's two reserved routes, under the prefix `RouteTable` keeps for the framework.
     * Each is spelled once, so the form that posts and the route that answers cannot drift apart.
     */
-  private val SyncPath: String   = s"${HttpServer.ReservedPrefix}/sync"
-  private val FreezePath: String = s"${HttpServer.ReservedPrefix}/freeze"
+  private val SyncPath: String   = s"${RouteTable.ReservedPrefix}/sync"
+  private val FreezePath: String = s"${RouteTable.ReservedPrefix}/freeze"
 
   /** The refusal table when the drift blocks, `None` when the app may serve. Prints the banners
     * either way. Runs under the installed `Database`.

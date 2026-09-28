@@ -16,7 +16,6 @@ import org.eclipse.jetty.server.ServerConnector
 import org.eclipse.jetty.server.handler.GracefulHandler
 import org.eclipse.jetty.util.Callback
 import org.eclipse.jetty.util.thread.VirtualThreadPool
-import org.eclipse.jetty.websocket.api.Session
 import org.eclipse.jetty.websocket.server.ServerUpgradeRequest
 import org.eclipse.jetty.websocket.server.ServerUpgradeResponse
 import org.eclipse.jetty.websocket.server.WebSocketCreator
@@ -80,8 +79,7 @@ private[eezo] final class HttpServer private (
   */
 private[eezo] object HttpServer {
 
-  /** The module's one logger, which [[Secret]] also writes to. */
-  val log = System.getLogger("io.eezo.http")
+  private val log = System.getLogger("io.eezo.http")
 
   /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
     * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
@@ -122,21 +120,15 @@ private[eezo] object HttpServer {
     */
   @volatile private var running: Option[HttpServer] = None
 
-  /** The path prefix reserved for the framework's own routes: the reload endpoint here, and the dev
-    * server's drift actions in `modules/eezo`. One spelling, so a new framework route is added
-    * under it rather than beside it.
-    */
-  val ReservedPrefix: String = "/eezo"
-
   /** The health endpoint, answered by the framework on every eezo server, dev and production alike.
     * Deliberately the cheapest possible truth (the server is accepting and answering requests),
     * because a deploy platform's checker and `eezo deploy`'s post-deploy poll both ask it every few
     * seconds, and a health check that touches the database turns a database blip into a restart
-    * loop. It lives under [[ReservedPrefix]] and is asked before the user's table, like the reload
-    * endpoint: no route can shadow it, no mount rewrites it, and it never appears in the boot
-    * listing.
+    * loop. It lives under [[RouteTable.ReservedPrefix]] and is asked before the user's table, like
+    * the reload endpoint: no route can shadow it, no mount rewrites it, and it never appears in the
+    * boot listing.
     */
-  val HealthPath: String = s"$ReservedPrefix/health"
+  val HealthPath: String = s"${RouteTable.ReservedPrefix}/health"
 
   private val healthy: Response =
     Response(200, Seq("Content-Type" -> "text/plain; charset=utf-8"), Body.Bytes("ok".getBytes))
@@ -498,37 +490,4 @@ private[eezo] object HttpServer {
       .map(name => name -> headers.getValuesList(name).asScala.toSeq)
       .toMap
   }
-}
-
-/** Jetty's listener, adapted to eezo's.
-  *
-  * The runtime demands the next event after each one is fully handled, so a listener that forgets
-  * to demand — a socket that silently stops — is not a mistake an application can make.
-  *
-  * It extends `Session.Listener.Abstract`, the class, rather than the interface. Scala emits a
-  * mixin forwarder for every default method an interface has, and Jetty binds its events by
-  * reflecting over the methods a listener declares, so implementing the interface directly makes
-  * Jetty see two handlers for the same event and refuse the connection. `Abstract` rather than
-  * `AbstractAutoDemanding`, because the demand below is eezo's read backpressure and not a
-  * formality.
-  */
-private final class JettyListener(listener: WsListener) extends Session.Listener.Abstract {
-
-  private var session: Session = null
-
-  override def onWebSocketOpen(newSession: Session): Unit = {
-    session = newSession
-    listener.onOpen(WsConn(newSession))
-    newSession.demand()
-  }
-
-  override def onWebSocketText(text: String): Unit = {
-    listener.onText(WsConn(session), text)
-    session.demand()
-  }
-
-  override def onWebSocketClose(status: Int, reason: String): Unit =
-    listener.onClose(status, reason)
-
-  override def onWebSocketError(cause: Throwable): Unit = listener.onError(cause)
 }

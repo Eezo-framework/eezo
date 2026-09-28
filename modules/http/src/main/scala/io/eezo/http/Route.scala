@@ -271,6 +271,12 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
 
 object RouteTable {
 
+  /** The path prefix reserved for the framework's own routes: the reload endpoint, and the dev
+    * server's drift actions in `modules/eezo`. One spelling, so a new framework route is added
+    * under it rather than beside it.
+    */
+  private[eezo] val ReservedPrefix: String = "/eezo"
+
   /** A table over these routes, naming whoever `identify` names, and nobody when it is left out.
     *
     * The default is the one thing to be careful with, because it is silent. An application that

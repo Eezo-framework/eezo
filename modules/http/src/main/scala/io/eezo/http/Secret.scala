@@ -40,6 +40,8 @@ final class Secret private (private val bytes: Array[Byte]) {
 
 object Secret {
 
+  private val log = System.getLogger("io.eezo.http")
+
   private val Algorithm = "HmacSHA256"
 
   /** The variable the default reads: `EEZO_SECRET`, beside `EEZO_DB_URL`. */
@@ -84,7 +86,7 @@ object Secret {
     */
   def fromEnv(env: Map[String, String] = sys.env): Secret =
     env.get(EnvVar).map(parse).getOrElse {
-      HttpServer.log.log(
+      log.log(
         System.Logger.Level.WARNING,
         s"$EnvVar is not set; a throwaway secret was generated, so every session ends when this " +
           s"process does. Set $EnvVar in production."
