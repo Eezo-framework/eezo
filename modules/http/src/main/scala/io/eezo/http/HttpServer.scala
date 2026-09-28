@@ -257,41 +257,8 @@ private[eezo] object HttpServer {
     * only symptom a user ever sees.
     */
   private def announce(routes: RouteTable, config: HttpConfig): Unit = {
-    routes.overridden.foreach { route =>
-      log.log(
-        System.Logger.Level.WARNING,
-        s"${route.describe} is written by hand and also derived; the handwritten route is " +
-          "served and the derived one is not mounted."
-      )
-    }
-
-    routes.shadowed.foreach { case (earlier, later) =>
-      log.log(
-        System.Logger.Level.WARNING,
-        s"${earlier.describe} shadows ${later.describe}, which can never match. " +
-          "Routes are tried in table order; move the narrower route first."
-      )
-    }
-
-    Resource.orphaned(routes).foreach { orphan =>
-      log.log(
-        System.Logger.Level.WARNING,
-        s"${orphan.pageRoute} is mounted without ${orphan.targetRoute}: the page renders a form " +
-          "whose submit target is not mounted, so submitting it answers 405. Mount " +
-          s"${orphan.target}, or subtract ${orphan.page} as well."
-      )
-    }
-
-    if (config.dev) {
-      val listed  = routes.routes
-      val listing =
-        if (listed.isEmpty) "no routes mounted"
-        else {
-          val heading = if (listed.size == 1) "1 route:" else s"${listed.size} routes:"
-          listed.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
-        }
-      log.log(System.Logger.Level.INFO, listing)
-    }
+    RouteReport.warnings(routes).foreach(warning => log.log(System.Logger.Level.WARNING, warning))
+    if (config.dev) log.log(System.Logger.Level.INFO, RouteReport.listing(routes.routes))
   }
 
   /** What a failure is answered with, on the HTTP path and on a refused upgrade alike, so that a
