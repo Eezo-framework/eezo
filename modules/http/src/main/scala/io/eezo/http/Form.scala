@@ -72,9 +72,8 @@ trait Form[A] {
   /** The whole `<form>`, including its submit button, the CSRF token and, when the verb needs one,
     * `_method`.
     *
-    * `token` is the request's, `request.csrf` inside a handler and `Csrf.Token.gen()` in a test
-    * that renders outside one. It sits after `value` and before the defaulted parameters because it
-    * has no default: see the class comment.
+    * `token` is the request's, `request.csrf` inside a handler. It sits after `value` and before
+    * the defaulted parameters because it has no default: see the class comment.
     *
     * `raw` is submitted text, winning field by field over `value`. A rejected submission has no `A`
     * to render from, which is why it was rejected, so without `raw` the user gets an empty form

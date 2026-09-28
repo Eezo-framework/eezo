@@ -98,7 +98,7 @@ final case class Request(
       .getOrElse(
         throw new IllegalStateException(
           "this request has no CSRF token: dispatch mints one before a handler runs, so a " +
-            "request built by hand has to be dispatched, or the form given Csrf.Token.gen()"
+            "request built by hand has to be dispatched"
         )
       )
 

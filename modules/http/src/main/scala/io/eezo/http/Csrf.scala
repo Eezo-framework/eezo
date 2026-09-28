@@ -35,11 +35,8 @@ object Csrf {
     private val random  = new SecureRandom()
     private val encoder = Base64.getUrlEncoder.withoutPadding
 
-    /** 32 bytes from `SecureRandom`, as base64url. Public because a test that renders a form
-      * outside a request needs one, and a token minted outside a session protects nothing and
-      * reveals nothing.
-      */
-    def gen(): Token = {
+    /** 32 bytes from `SecureRandom`, as base64url. */
+    private[eezo] def gen(): Token = {
       val bytes = new Array[Byte](32)
       random.nextBytes(bytes)
       encoder.encodeToString(bytes)
