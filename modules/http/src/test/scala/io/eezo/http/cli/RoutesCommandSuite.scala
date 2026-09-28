@@ -19,20 +19,20 @@ class RoutesCommandSuite extends FunSuite {
   ): Route =
     Route.Http(method, PathPattern.parse(pattern), ok, provenance)
 
-  test("routes: reports the table, the overridden derived route, shadowing, and orphans") {
-    val table = RouteTable(
-      Seq(
-        // A handwritten route and its derived twin: the derived one is dropped, and reported.
-        http(Method.GET, "/posts"),
-        http(Method.GET, "/posts", Provenance.Derived),
-        // Declaration order makes the parameterised route swallow the literal one after it.
-        http(Method.GET, "/posts/:id"),
-        http(Method.GET, "/posts/latest"),
-        // A derived form page whose submit target is not mounted anywhere.
-        http(Method.GET, "/widgets/new", Provenance.Derived)
-      )
+  private val table = RouteTable(
+    Seq(
+      // A handwritten route and its derived twin: the derived one is dropped, and reported.
+      http(Method.GET, "/posts"),
+      http(Method.GET, "/posts", Provenance.Derived),
+      // Declaration order makes the parameterised route swallow the literal one after it.
+      http(Method.GET, "/posts/:id"),
+      http(Method.GET, "/posts/latest"),
+      // A derived form page whose submit target is not mounted anywhere.
+      http(Method.GET, "/widgets/new", Provenance.Derived)
     )
+  )
 
+  test("routes: reports the table, the overridden derived route, shadowing, and orphans") {
     val listing = Commands.routes(table)
 
     assertEquals(listing.routes.map(_.describe), table.routes.map(_.describe))
@@ -42,6 +42,26 @@ class RoutesCommandSuite extends FunSuite {
       Seq(("GET /posts/:id", "GET /posts/latest"))
     )
     assertEquals(listing.orphans.map(_.targetRoute), Seq("POST /widgets"))
+  }
+
+  test("routes: the text prints boot's own sentences, each marked, above the listing") {
+    assertEquals(
+      Render.routes(Commands.routes(table)),
+      Seq(
+        "⚠ GET /posts is written by hand and also derived; the handwritten route is served and " +
+          "the derived one is not mounted.",
+        "⚠ GET /posts/:id shadows GET /posts/latest, which can never match. Routes are tried in " +
+          "table order; move the narrower route first.",
+        "⚠ GET /widgets/new is mounted without POST /widgets: the page renders a form whose " +
+          "submit target is not mounted, so submitting it answers 405. Mount Create, or " +
+          "subtract New as well.",
+        "4 routes:",
+        "  GET /posts",
+        "  GET /posts/:id",
+        "  GET /posts/latest",
+        "  GET /widgets/new"
+      ).mkString("\n")
+    )
   }
 
   test("routes: a clean table has nothing to warn about") {
