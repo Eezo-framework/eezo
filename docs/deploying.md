@@ -147,7 +147,10 @@ fly postgres attach bookshelf-db --app <your-app-name>
 
 `attach` creates a database + user inside the cluster and sets the `DATABASE_URL` secret on your
 app. Do not save the printed URL anywhere — it lives in Fly's secret store, which is the point;
-eezo parses `DATABASE_URL` natively (it also understands `EEZO_DB_URL`/`_USER`/`_PASS`). Verify
+eezo parses `DATABASE_URL` natively (it also understands `EEZO_DB_URL`/`_USER`/`_PASS`). On a
+platform URL eezo requires TLS unless the URL says otherwise with its own `sslmode`, and Fly's
+attach says otherwise on purpose with `sslmode=disable`, so a database elsewhere that only speaks
+clear text needs `sslmode=disable` added to its URL or a raw JDBC url in `EEZO_DB_URL`. Verify
 without exposing anything:
 
 ```bash

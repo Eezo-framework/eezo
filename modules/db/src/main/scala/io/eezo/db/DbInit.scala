@@ -105,14 +105,22 @@ object DbInit {
 
   private[eezo] final case class Parsed(jdbcUrl: String, user: String, password: String)
 
-  /** `postgres://user:pass@host:5432/db?sslmode=require` → the JDBC url and credentials JDBC wants
-    * them as. `None` for anything that is not a postgres URL with a host and a database — a
-    * malformed value should fall through to the defaults and fail at connect time with the defaults
-    * in the message, not half-apply.
+  /** `None` for anything that is not a postgres URL with a host and a database, because a malformed
+    * platform value should fall through to the defaults and fail at connect time with the defaults
+    * in the message, not half apply.
     *
-    * User and password are percent-decoded: the platform encodes them (a password with `@` or `/`
-    * must be), and JDBC takes them decoded, as separate properties. The query string travels
-    * unchanged onto the JDBC url, where the Postgres driver reads the same parameter names.
+    * User and password come out of the URL and percent decoded, because JDBC takes them as separate
+    * properties, decoded, while the platform folds them into `postgres://user:pass@host/db` and
+    * encodes them (a password with `@` or `/` must be).
+    *
+    * TLS is required when the query names no `sslmode`, because the driver's own fallback is
+    * `prefer`, which quietly settles for clear text when the server refuses TLS, and Heroku and
+    * Render inject a URL with no `sslmode` while expecting the client to insist. An explicit
+    * `sslmode` wins with any value, and the query then travels byte for byte, because whoever wrote
+    * it meant it: Fly's attach writes `sslmode=disable` on purpose for its private network. Only
+    * the exact key the driver reads counts, so `foosslmode` does not, and a bare `sslmode` stays
+    * for the driver to refuse rather than being quietly overridden. `EEZO_DB_URL` is never edited,
+    * so it stays the way to hand the driver anything this does not allow.
     */
   private[eezo] def parseDatabaseUrl(url: String): Option[Parsed] =
     try {
@@ -131,10 +139,17 @@ object DbInit {
             }
         }
         val port  = if (uri.getPort == -1) "" else s":${uri.getPort}"
-        val query = Option(uri.getRawQuery).map("?" + _).getOrElse("")
+        val query = Option(uri.getRawQuery).filter(_.nonEmpty) match {
+          case None                       => "?sslmode=require"
+          case Some(q) if namesSslmode(q) => s"?$q"
+          case Some(q)                    => s"?$q&sslmode=require"
+        }
         Some(Parsed(s"jdbc:postgresql://${uri.getHost}$port${uri.getPath}$query", user, password))
       }
     } catch {
       case _: java.net.URISyntaxException => None
     }
+
+  private def namesSslmode(rawQuery: String): Boolean =
+    rawQuery.split('&').exists(_.takeWhile(_ != '=') == "sslmode")
 }
