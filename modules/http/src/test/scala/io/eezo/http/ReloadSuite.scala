@@ -10,8 +10,8 @@ import io.eezo.core.html.Tags.*
   */
 class ReloadSuite extends munit.FunSuite with ResourceFixtures {
 
-  private val dev  = Config(RouteTable(Seq.empty), dev = true)
-  private val prod = Config(RouteTable(Seq.empty), dev = false)
+  private val dev  = HttpConfig(dev = true)
+  private val prod = HttpConfig(dev = false)
 
   test("a full document gets the script as the last child of body when dev is on") {
     val page = Response.Ok(Html.doctype ++ html(head(title("t")), body(h1("hi"), p("x"))))

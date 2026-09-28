@@ -9,7 +9,7 @@ import io.eezo.core.html.Tags.{body, html, p}
 import io.eezo.core.support.Captured.captured
 import io.eezo.db.{Schema, SchemaError, Table}
 import io.eezo.db.engine.{ConnectionUnavailable, Installed}
-import io.eezo.http.{Eezo, Handler, Method, PathPattern, Response, Route, RouteTable}
+import io.eezo.http.{Handler, HttpServer, Method, PathPattern, Response, Route, RouteTable}
 
 /** The umbrella's entry trait: both edges stacked, `EezoApp extends HttpApp with DbApp`.
   *
@@ -54,9 +54,9 @@ class EezoAppSuite extends munit.FunSuite {
     }
   }
 
-  /** A port nobody is listening on right now. `Eezo.run` binds the application's `port` and hands
-    * back no handle, so a test cannot ask the server which ephemeral port it took and picks one up
-    * front instead.
+  /** A port nobody is listening on right now. `HttpServer.run` binds the application's `port` and
+    * hands back no handle, so a test cannot ask the server which ephemeral port it took and picks
+    * one up front instead.
     */
   private def freePort(): Int = {
     val socket = new ServerSocket(0)
@@ -66,11 +66,11 @@ class EezoAppSuite extends munit.FunSuite {
 
   /** Runs `dev` on `app` for real and hands `body` the answer to `GET /` once the server is up.
     *
-    * `serve` is final and `Eezo.run` blocks until the server stops, so the command runs on its own
-    * thread and `Eezo.stop` brings the server down afterwards: `run` returns, `serve` returns, and
-    * `withDatabase` uninstalls and closes on the way out, the same unwinding a SIGTERM causes
-    * through the shutdown hook. The thread ends normally, which is what the callers' "uninstalled
-    * once the dev server stops" assertions are about.
+    * `serve` is final and `HttpServer.run` blocks until the server stops, so the command runs on
+    * its own thread and `HttpServer.stop` brings the server down afterwards: `run` returns, `serve`
+    * returns, and `withDatabase` uninstalls and closes on the way out, the same unwinding a SIGTERM
+    * causes through the shutdown hook. The thread ends normally, which is what the callers'
+    * "uninstalled once the dev server stops" assertions are about.
     *
     * The join waits 15 s because closing a pool whose database is down is not quick: HikariCP's
     * shutdown waits for its connection adder, whose retry backoff sleeps up to its 5 s login
@@ -83,7 +83,7 @@ class EezoAppSuite extends munit.FunSuite {
     thread.start()
     try body(awaitPage(app.port))
     finally {
-      Eezo.stop()
+      HttpServer.stop()
       thread.join(15000)
       assert(!thread.isAlive, "dev did not return once the server was stopped")
     }

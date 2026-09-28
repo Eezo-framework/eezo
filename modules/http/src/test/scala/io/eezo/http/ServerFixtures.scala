@@ -7,9 +7,6 @@ import java.net.http.HttpResponse
 
 import scala.jdk.CollectionConverters.*
 
-import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.server.ServerConnector
-
 /** What a suite needs to drive a booted server the way a browser over the wire does: a server on an
   * ephemeral port, a session cookie carrying the CSRF token, and a `POST` under it that returns the
   * token the way a served form does.
@@ -31,13 +28,15 @@ trait ServerFixtures { self: munit.FunSuite =>
 
   /** Boots a server for one test and stops it afterwards. */
   protected def serving(routes: RouteTable, maxBodySize: Long = 1.MiB, dev: Boolean = false)(
-      body: (Server, Int) => Unit
+      body: (HttpServer, Int) => Unit
   ): Unit = {
-    val server = Eezo.start(port = 0, config = Config(routes, maxBodySize, dev, secret = secret))
-    try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
-      body(server, port)
-    } finally server.stop()
+    val server = HttpServer.start(
+      port = 0,
+      routes = routes,
+      config = HttpConfig(maxBodySize, dev, secret = secret)
+    )
+    try body(server, server.port)
+    finally server.stop()
   }
 
   /** A port nobody is listening on right now, for a server started through `run`, which binds the

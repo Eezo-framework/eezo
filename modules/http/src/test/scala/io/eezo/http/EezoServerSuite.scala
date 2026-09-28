@@ -38,7 +38,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     var returned = false
     val runner   = new Thread(
       () => {
-        Eezo.run(port, Config(hello))
+        HttpServer.run(port, hello)
         returned = true
       },
       "eezo-run"
@@ -47,7 +47,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     runner.start()
     try assertEquals(awaiting(port, "/hello").statusCode(), 200)
     finally {
-      Eezo.stop()
+      HttpServer.stop()
       runner.join(5000)
     }
     assert(returned, "run did not return after stop")
@@ -77,7 +77,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     var returned = false
     val runner   = new Thread(
       () => {
-        Eezo.run(port, Config(held, secret = secret))
+        HttpServer.run(port, held, HttpConfig(secret = secret))
         returned = true
       },
       "eezo-drain-run"
@@ -85,27 +85,27 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     runner.setDaemon(true)
     runner.start()
     try {
-      assertEquals(awaiting(port, Eezo.HealthPath).statusCode(), 200)
+      assertEquals(awaiting(port, HttpServer.HealthPath).statusCode(), 200)
       val _ = client.sendAsync(
         HttpRequest.newBuilder(URI.create(s"http://localhost:$port/held")).GET().build(),
         HttpResponse.BodyHandlers.ofString()
       )
       assert(entered.await(5, TimeUnit.SECONDS), "the held handler never started")
       val began = System.nanoTime()
-      Eezo.stop()
+      HttpServer.stop()
       val took = Duration.ofNanos(System.nanoTime() - began)
-      assert(clue(took).compareTo(Eezo.StopTimeout) >= 0, "stop did not wait on the drain")
-      assert(clue(took).compareTo(Eezo.StopTimeout.plusSeconds(1)) < 0, "stop overran")
+      assert(clue(took).compareTo(HttpServer.StopTimeout) >= 0, "stop did not wait on the drain")
+      assert(clue(took).compareTo(HttpServer.StopTimeout.plusSeconds(1)) < 0, "stop overran")
     } finally {
       release.countDown()
-      Eezo.stop()
+      HttpServer.stop()
       runner.join(5000)
     }
     assert(returned, "run did not return after stop")
   }
 
   test("stop with nothing running is a no-op") {
-    Eezo.stop()
+    HttpServer.stop()
   }
 
   test("a handwritten route renders HTML produced by the core DSL") {
@@ -137,7 +137,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
 
   test("the thread pool is a VirtualThreadPool with no semaphore ceiling") {
     serving(hello) { (server, _) =>
-      val pool = server.getThreadPool match {
+      val pool = server.jetty.getThreadPool match {
         case p: VirtualThreadPool => p
         case other => fail(s"expected a VirtualThreadPool, got ${other.getClass.getName}")
       }
@@ -147,7 +147,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
 
   test("the WebSocket container overrides the three defaults the research calls defects") {
     serving(hello) { (server, _) =>
-      val upgrade = Option(server.getDescendant(classOf[WebSocketUpgradeHandler]))
+      val upgrade = Option(server.jetty.getDescendant(classOf[WebSocketUpgradeHandler]))
         .getOrElse(fail("the handler tree has no WebSocketUpgradeHandler"))
       val container = upgrade.getServerWebSocketContainer
       assertEquals(container.getIdleTimeout, Duration.ofMinutes(5))

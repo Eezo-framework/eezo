@@ -3,7 +3,6 @@ package io.eezo.http.client
 import java.time.Duration
 
 import io.eezo.http.*
-import org.eclipse.jetty.server.ServerConnector
 
 /** The taxonomy, held against a real server: every arm reached by an endpoint built to provoke it,
   * nothing touching the network beyond the loopback.
@@ -36,9 +35,9 @@ class ClientSuite extends munit.FunSuite {
         }
       )
     )
-    val server = Eezo.start(port = 0, config = Config(routes))
+    val server = HttpServer.start(port = 0, routes = routes)
     try {
-      val port = server.getConnectors.head.asInstanceOf[ServerConnector].getLocalPort
+      val port = server.port
       body(s"http://localhost:$port")
     } finally server.stop()
   }

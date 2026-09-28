@@ -31,7 +31,7 @@ private[http] object Boundary {
     * set and outside the `problems` hook is wrapped in it and re-matched, so the boundary carries
     * the one 500 case rather than two.
     */
-  def resolve(failure: Throwable, path: String, config: Config): Resolution = failure match {
+  def resolve(failure: Throwable, path: String, config: HttpConfig): Resolution = failure match {
     case e: EezoException =>
       e match {
         case BadRequest(detail)        => Resolution(Problem(400, detail, path))
@@ -74,7 +74,7 @@ private[http] object Boundary {
   /** The response a failure becomes: one rendering path, and the `Allow` header in the one arm that
     * has the methods to put in it.
     */
-  def errorResponse(failure: Throwable, path: String, config: Config): Response =
+  def errorResponse(failure: Throwable, path: String, config: HttpConfig): Response =
     toResponse(resolve(failure, path, config))
 
   /** A stack trace is worth a log at ERROR when the server is at fault. A 4xx is a client mistake,

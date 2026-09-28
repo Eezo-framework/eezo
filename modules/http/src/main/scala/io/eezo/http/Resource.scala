@@ -463,9 +463,9 @@ object Resource {
   /** Every mounted page whose submit target is not mounted.
     *
     * #116 settled the defect and #118 settled the shape: a pure method over the value that holds
-    * the whole picture, logged in one place, `Eezo.start`'s `announce`. The value is the assembled
-    * [[RouteTable]] rather than an [[Actions]], because `Actions[A]` describes one model in
-    * isolation and the 405 is a property of the application. A user who subtracts `Update` and
+    * the whole picture, logged in one place, `HttpServer.start`'s `announce`. The value is the
+    * assembled [[RouteTable]] rather than an [[Actions]], because `Actions[A]` describes one model
+    * in isolation and the 405 is a property of the application. A user who subtracts `Update` and
     * writes `PUT /posts/:id` by hand under `app/` has mounted the target; decision 18 makes that
     * the ordinary way to take over one page and keep the rest, and a check reading `Actions[A]`
     * would warn them to mount what they mounted.

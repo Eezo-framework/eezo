@@ -153,16 +153,17 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
     * [[routes]] outright rather than left sitting behind the winner, which is what keeps it out of
     * the boot listing as well as out of dispatch.
     *
-    * Pure, and deliberately not a log call, for the reason [[shadowed]] gives: `Eezo.start` is the
-    * one site where the assembled table is the table the application actually serves.
+    * Pure, and deliberately not a log call, for the reason [[shadowed]] gives: `HttpServer.start`
+    * is the one site where the assembled table is the table the application actually serves.
     */
   val overridden: Seq[Route] = mounted.filter(losesToHandwritten)
 
   /** The routes served, in the order they are matched. */
   val routes: Seq[Route] = mounted.filterNot(losesToHandwritten)
 
-  /** The two kinds, split once. `Eezo.run` reads `wsRoutes` to build its single WebSocket mapping
-    * and hands `httpRoutes` to the Jetty handler, so neither walks past a route it cannot use.
+  /** The two kinds, split once. `HttpServer.run` reads `wsRoutes` to build its single WebSocket
+    * mapping and hands `httpRoutes` to the Jetty handler, so neither walks past a route it cannot
+    * use.
     */
   val httpRoutes: Seq[Route.Http] = routes.collect { case route: Route.Http => route }
 
@@ -218,9 +219,9 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
   /** Finds the first WebSocket route whose pattern matches, if any.
     *
     * The WebSocket half of `dispatch`: no method to disagree on, since an upgrade is always a
-    * `GET`, so one pass with no `Allow` bookkeeping is the whole job. The single caller, `Eezo`'s
-    * WebSocket creator, decides the 404 itself: Jetty requires that decision to complete a
-    * `Callback` rather than throw.
+    * `GET`, so one pass with no `Allow` bookkeeping is the whole job. The single caller,
+    * `HttpServer`'s WebSocket creator, decides the 404 itself: Jetty requires that decision to
+    * complete a `Callback` rather than throw.
     */
   def dispatchWs(path: String): Option[(Route.Ws, Map[String, String])] =
     wsRoutes.iterator
@@ -231,8 +232,8 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
     *
     * Pure, and deliberately not a log call: a warning in this constructor would fire in every test
     * that builds a shadowing table on purpose, and once more for each intermediate `++` produces.
-    * `Eezo.start` is the single site that emits, because the assembled table it serves is the only
-    * one where shadowing is a defect rather than a step.
+    * `HttpServer.start` is the single site that emits, because the assembled table it serves is the
+    * only one where shadowing is a defect rather than a step.
     *
     * Never an error. First-match order is what lets a handwritten `/widgets/new` beat a derived
     * `/widgets/:id`, so shadowing is legal by construction; only the duplicate the constructor

@@ -13,15 +13,15 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   * }}}
   *
   * The edge is declarative. The application names its [[routes]], and every knob of the server is
-  * an override beside [[port]]; nothing in user code calls `Eezo.run`. `main` is inherited from
-  * `Dispatch`: `sbt run` boots, `sbt "run dev"` (or the plugin's `eezoDev`) serves with the listing
-  * and the reload client on, `sbt "run routes"` prints the table, and any other first argument is
-  * unknown. The database edge's commands do not exist here: an application that needs them depends
-  * on `eezo` and extends `EezoApp`, which stacks both edges.
+  * an override beside [[port]]; nothing in user code calls `HttpServer.run`. `main` is inherited
+  * from `Dispatch`: `sbt run` boots, `sbt "run dev"` (or the plugin's `eezoDev`) serves with the
+  * listing and the reload client on, `sbt "run routes"` prints the table, and any other first
+  * argument is unknown. The database edge's commands do not exist here: an application that needs
+  * them depends on `eezo` and extends `EezoApp`, which stacks both edges.
   *
-  * [[serve]] is the only call site of `Eezo.run` in the entry traits, so [[boot]] and `dev` see the
-  * same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot` under
-  * the database, [[devServer]] to run the drift check first.
+  * [[serve]] is the only call site of `HttpServer.run` in the entry traits, so [[boot]] and `dev`
+  * see the same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot`
+  * under the database, [[devServer]] to run the drift check first.
   */
 trait HttpApp extends Dispatch {
 
@@ -34,7 +34,7 @@ trait HttpApp extends Dispatch {
   def port: Int = 8080
 
   /** The request body cap, and the WebSocket text message cap with it. */
-  def maxBodySize: Long = Config.DefaultMaxBodySize
+  def maxBodySize: Long = HttpConfig.DefaultMaxBodySize
 
   /** The key the session cookie is signed with. `EEZO_SECRET` by default. The sbt plugin's dev loop
     * sets it to one secret per sbt session, so a restart on edit keeps the developer signed in. A
@@ -47,7 +47,7 @@ trait HttpApp extends Dispatch {
   /** How the application's own failures are answered: a partial function from what a handler threw
     * to the problem the client sees. What it does not cover, the boundary answers as 500.
     */
-  def problems: PartialFunction[Throwable, Problem] = Config.DefaultProblems
+  def problems: PartialFunction[Throwable, Problem] = HttpConfig.DefaultProblems
 
   /** The application. The default serves [[routes]] on [[port]], which is what makes the minimal
     * application one override and nothing else. Override it for anything more: background work,
@@ -64,11 +64,15 @@ trait HttpApp extends Dispatch {
     */
   protected def frameworkRoutes: Seq[Route] = Nil
 
-  /** The only caller of `Eezo.run`: boots the server on this trait's overrides and blocks until it
-    * stops. `dev` turns the listing and the reload client on.
+  /** The only caller of `HttpServer.run`: boots the server on this trait's overrides and blocks
+    * until it stops. `dev` turns the listing and the reload client on.
     */
   protected final def serve(table: RouteTable, dev: Boolean = false): Unit =
-    Eezo.run(port, Config(table ++ RouteTable(frameworkRoutes), maxBodySize, dev, problems, secret))
+    HttpServer.run(
+      port,
+      table ++ RouteTable(frameworkRoutes),
+      HttpConfig(maxBodySize, dev, problems, secret)
+    )
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift
     * page when the check blocks.

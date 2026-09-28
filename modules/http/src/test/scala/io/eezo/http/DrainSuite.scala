@@ -55,7 +55,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     * the fixture's own stop would then wait out the whole stop timeout on it.
     */
   private def inFlight(held: Held)(
-      body: (Server, Int, java.util.concurrent.CompletableFuture[HttpResponse[String]]) => Unit
+      body: (HttpServer, Int, java.util.concurrent.CompletableFuture[HttpResponse[String]]) => Unit
   ): Unit =
     serving(held.routes) { (server, port) =>
       try {
@@ -103,12 +103,14 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
   test("a request in flight when stop begins still answers 200 with its whole body") {
     val held = new Held
     inFlight(held) { (server, _, answer) =>
-      val stopper = stopping(server)
+      val stopper = stopping(server.jetty)
       // Held past the silence that closes idle connections during the drain, which is not a race
       // but the point: a handler that is working rather than talking must not be cut by it.
       // Half as long again, and still well inside the stop timeout, so the silence is what is
       // tested rather than the timeout.
-      Thread.sleep(Eezo.shutdownIdleTimeout(dev = false).multipliedBy(3).dividedBy(2).toMillis)
+      Thread.sleep(
+        HttpServer.shutdownIdleTimeout(dev = false).multipliedBy(3).dividedBy(2).toMillis
+      )
       held.release.countDown()
       val response = answer.get(5, TimeUnit.SECONDS)
       assertEquals(response.statusCode(), 200)
@@ -121,14 +123,16 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
   test("a request that arrives once stop has begun is refused while the drain is still open") {
     val held = new Held
     inFlight(held) { (server, port, _) =>
-      val stopper = stopping(server)
+      val stopper = stopping(server.jetty)
       // A client with no connection to reuse, so the late request needs a new one, which is the
       // case a platform health check or a browser hitting a stopping machine is in.
       val late = java.net.http.HttpClient.newHttpClient()
       try
         intercept[java.net.ConnectException](
           late.send(
-            HttpRequest.newBuilder(URI.create(s"http://localhost:$port${Eezo.HealthPath}")).build(),
+            HttpRequest
+              .newBuilder(URI.create(s"http://localhost:$port${HttpServer.HealthPath}"))
+              .build(),
             HttpResponse.BodyHandlers.ofString()
           )
         )
@@ -140,14 +144,15 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
   test("a handler that never finishes holds stop for the stop timeout and no longer") {
     val held = new Held
     inFlight(held) { (server, _, _) =>
-      // Jetty stops everything anyway and then reports the drain it cut short by throwing.
-      val took = timed(intercept[java.util.concurrent.TimeoutException](server.stop()))
+      // Jetty stops everything anyway and then reports the drain it cut short by throwing. Jetty's
+      // own stop, through the door, because the handle's turns that throw into a log line.
+      val took = timed(intercept[java.util.concurrent.TimeoutException](server.jetty.stop()))
       assert(
-        clue(took).compareTo(Eezo.StopTimeout) >= 0,
+        clue(took).compareTo(HttpServer.StopTimeout) >= 0,
         "stop returned while the request was still in flight"
       )
       assert(
-        clue(took).compareTo(Eezo.StopTimeout.plusSeconds(1)) < 0,
+        clue(took).compareTo(HttpServer.StopTimeout.plusSeconds(1)) < 0,
         "stop waited past the stop timeout"
       )
     }
@@ -184,7 +189,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
         assert(opened.await(5, TimeUnit.SECONDS), "the socket never opened on the server")
         val took = timed(server.stop())
         assert(
-          clue(took).compareTo(Eezo.StopTimeout.dividedBy(3)) < 0,
+          clue(took).compareTo(HttpServer.StopTimeout.dividedBy(3)) < 0,
           "the open socket held the drain"
         )
         assertEquals(
@@ -200,7 +205,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     // A browser keeps its connection open between requests, so every stop of a server someone has
     // visited has one: the dev server's restart on every save, above all.
     serving(RouteTable.empty, dev = true) { (server, port) =>
-      assertEquals(get(port, Eezo.HealthPath).statusCode(), 200)
+      assertEquals(get(port, HttpServer.HealthPath).statusCode(), 200)
       val took = timed(server.stop())
       assert(clue(took).compareTo(Duration.ofMillis(500)) < 0, "the idle connection held stop")
     }
@@ -249,7 +254,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     serving(routes, dev = dev) { (server, port) =>
       val socket = new java.net.Socket("localhost", port)
       try
-        if (acceptedBy(server, socket)) {
+        if (acceptedBy(server.jetty, socket)) {
           socket.setSoTimeout(5000)
           val out = socket.getOutputStream
           out.write(
@@ -257,7 +262,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
               "Content-Length: 10\r\n\r\nhello").getBytes(StandardCharsets.US_ASCII)
           )
           out.flush()
-          val graceful = Option(server.getDescendant(classOf[GracefulHandler]))
+          val graceful = Option(server.jetty.getDescendant(classOf[GracefulHandler]))
             .getOrElse(fail("the handler tree has no GracefulHandler"))
           val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
           while (graceful.getCurrentRequestCount == 0) {
@@ -265,9 +270,9 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
               fail("the server took the upload but never handled it")
             Thread.onSpinWait()
           }
-          val stopper = stopping(server)
+          val stopper = stopping(server.jetty)
           // The pause is the scenario rather than a wait on something.
-          Thread.sleep(Eezo.shutdownIdleTimeout(dev = true).multipliedBy(3).toMillis)
+          Thread.sleep(HttpServer.shutdownIdleTimeout(dev = true).multipliedBy(3).toMillis)
           answer = Some(
             try {
               out.write("world".getBytes(StandardCharsets.US_ASCII))

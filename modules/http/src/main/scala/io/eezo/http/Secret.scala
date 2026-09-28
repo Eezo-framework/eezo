@@ -84,7 +84,7 @@ object Secret {
     */
   def fromEnv(env: Map[String, String] = sys.env): Secret =
     env.get(EnvVar).map(parse).getOrElse {
-      Eezo.log.log(
+      HttpServer.log.log(
         System.Logger.Level.WARNING,
         s"$EnvVar is not set; a throwaway secret was generated, so every session ends when this " +
           s"process does. Set $EnvVar in production."

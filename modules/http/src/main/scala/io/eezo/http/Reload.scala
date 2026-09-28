@@ -10,14 +10,14 @@ import io.eezo.core.html.Tags.*
   * server answers and refreshes the page. Whole page, no state kept. This is the reload contract
   * (issue 153). Both entry points read `config.dev` here, so the dev gate has one owner.
   *
-  * The endpoint sits under `Eezo.ReservedPrefix`. Today it is the only framework route dispatched
-  * before the user's table; the dev server's drift page mounts its actions under the same prefix as
-  * ordinary routes.
+  * The endpoint sits under `HttpServer.ReservedPrefix`. Today it is the only framework route
+  * dispatched before the user's table; the dev server's drift page mounts its actions under the
+  * same prefix as ordinary routes.
   */
 private[http] object Reload {
 
   /** The reserved endpoint. WebSocket only: an HTTP GET on it is an ordinary 404. */
-  private[http] val path: String = s"${Eezo.ReservedPrefix}/reload"
+  private[http] val path: String = s"${HttpServer.ReservedPrefix}/reload"
 
   /** The client, inline. About thirty lines held here rather than served from a second reserved
     * path, so there is no resource to locate and no caching question.
@@ -57,7 +57,7 @@ private[http] object Reload {
   /** The listener for an upgrade at `requested`: the reload listener when that is the reserved
     * endpoint and `dev` is on, `None` otherwise so the caller falls through to the user's table.
     */
-  private[http] def listenerFor(requested: String, config: Config): Option[WsListener] =
+  private[http] def listenerFor(requested: String, config: HttpConfig): Option[WsListener] =
     Option.when(config.dev && requested == path)(listener)
 
   /** The script tag every dev server page carries. */
@@ -69,7 +69,7 @@ private[http] object Reload {
     * and the walk descends through `Fragment` so that `Html.doctype ++ html(...)` works. No `body`,
     * no script: a fragment is not a document, and neither is `Html.raw`.
     */
-  private[http] def inject(response: Response, config: Config): Response =
+  private[http] def inject(response: Response, config: HttpConfig): Response =
     if (config.dev) response.copy(body = response.body.mapHtml(appendToBody)) else response
 
   /** The tree with the tag appended to its first `body`, or the tree unchanged when it has none. */
