@@ -30,7 +30,7 @@ import io.eezo.core.html.Html
   * the application-order contract `Patch` documents: within one child list, in-place updates first,
   * then removals highest index first, then the append.
   */
-object Differ {
+private[live] object Differ {
 
   /** The patches that carry a page from `before` to `after`. Both arguments are component renders:
     * exactly one root element, in canonical form, or [[NotCanonical]] says which rule was broken.
@@ -233,5 +233,5 @@ object Differ {
   /** The opt-out: an element carrying it keeps its children out of the differ's hands entirely.
     * `Live.ignore` mints it; the name lives here because the differ is the one that obeys it.
     */
-  private[live] val IgnoreAttr = "data-eezo-ignore"
+  val IgnoreAttr = "data-eezo-ignore"
 }

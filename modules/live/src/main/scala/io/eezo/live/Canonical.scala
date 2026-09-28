@@ -269,4 +269,5 @@ private[live] object Canonical {
 /** A tree the differ refuses: built by hand outside `Tag.apply`'s canonicalisation, or nested in a
   * way the HTML parser would restructure.
   */
-final case class NotCanonical(message: String) extends IllegalArgumentException(message)
+private[live] final case class NotCanonical(message: String)
+    extends IllegalArgumentException(message)

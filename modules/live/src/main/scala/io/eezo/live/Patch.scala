@@ -28,7 +28,7 @@ import io.eezo.core.html.Html
   * addressed at final positions — structural before content, so every content path is true by the
   * time it applies. `DiffSuite` pins both orders.
   */
-enum Patch {
+private[live] enum Patch {
 
   /** Sets a text node's content. `text` is the *unescaped* value: the client assigns `data`, which
     * is literal, so shipping the escaped form would print entities at the user.
