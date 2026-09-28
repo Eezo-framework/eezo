@@ -12,7 +12,7 @@ final case class ColumnSnap(
     checks: List[String],
     references: Option[String]
 ) {
-  def toJson: Json = Json.Obj(
+  private[eezo] def toJson: Json = Json.Obj(
     List(
       "name"       -> Json.Str(name),
       "type"       -> Json.Str(pgType),
@@ -25,7 +25,7 @@ final case class ColumnSnap(
 }
 
 final case class IndexSnap(name: String, columns: List[String], unique: Boolean) {
-  def toJson: Json = Json.Obj(
+  private[eezo] def toJson: Json = Json.Obj(
     List(
       "name"    -> Json.Str(name),
       "columns" -> Json.Arr(columns.map(Json.Str(_))),
@@ -35,7 +35,7 @@ final case class IndexSnap(name: String, columns: List[String], unique: Boolean)
 }
 
 final case class TableSnap(name: String, columns: List[ColumnSnap], indexes: List[IndexSnap]) {
-  def toJson: Json = Json.Obj(
+  private[eezo] def toJson: Json = Json.Obj(
     List(
       "name"    -> Json.Str(name),
       "columns" -> Json.Arr(columns.map(_.toJson)),
@@ -45,7 +45,7 @@ final case class TableSnap(name: String, columns: List[ColumnSnap], indexes: Lis
 }
 
 final case class SchemaSnap(tables: List[TableSnap]) {
-  def toJson: Json = Json.Obj(
+  private[eezo] def toJson: Json = Json.Obj(
     List(
       "version" -> Json.Num(1),
       "tables"  -> Json.Arr(tables.map(_.toJson))

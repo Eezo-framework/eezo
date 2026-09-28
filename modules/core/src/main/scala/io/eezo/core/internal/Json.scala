@@ -8,7 +8,7 @@ package io.eezo.core.internal
   * written escape in either would be the same code twice. It is not a JSON library, and
   * `derives Api` will not be built on it.
   */
-enum Json {
+private[eezo] enum Json {
   case Str(v: String)
   case Num(v: Long)
   case Bool(v: Boolean)
@@ -17,7 +17,7 @@ enum Json {
   case Obj(fields: List[(String, Json)])
 }
 
-object Json {
+private[eezo] object Json {
   def escape(s: String): String = s.flatMap {
     case '"'          => "\\\""
     case '\\'         => "\\\\"

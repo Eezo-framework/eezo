@@ -7,7 +7,7 @@ package io.eezo.core.internal
   * neither can see the other: `db` turns a class name into a table name, and `http` turns the same
   * class name into a route path. One camel case rule, or the two go wrong differently.
   */
-object util {
+private[eezo] object util {
 
   /** `BookReview` becomes `book_review`, `HTTPLog` becomes `http_log`. */
   def snake(s: String): String =
