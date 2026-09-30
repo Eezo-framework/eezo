@@ -1,7 +1,16 @@
 package io.eezo.http.cli
 
 import io.eezo.core.html.Tags.p
-import io.eezo.http.{Handler, Method, PathPattern, Provenance, Response, Route, RouteTable}
+import io.eezo.http.{
+  ApiRequest,
+  Handler,
+  Method,
+  PathPattern,
+  Provenance,
+  Response,
+  Route,
+  RouteTable
+}
 
 import munit.FunSuite
 
@@ -69,5 +78,18 @@ class RoutesCommandSuite extends FunSuite {
     assertEquals(listing.overridden, Seq.empty[Route])
     assertEquals(listing.shadowed, Seq.empty[(Route, Route)])
     assertEquals(listing.orphans, Seq.empty[OrphanedPage])
+  }
+
+  test("routes: the text marks an API route, and leaves a browser route's line alone") {
+    val mixed = RouteTable(
+      Seq(
+        http(Method.GET, "/"),
+        Route.handwritten(Method.POST, "/webhooks/stripe", (_: ApiRequest) => Response.status(200))
+      )
+    )
+    assertEquals(
+      Render.routes(Commands.routes(mixed)),
+      "2 routes:\n  GET /\n  POST /webhooks/stripe api"
+    )
   }
 }

@@ -21,9 +21,13 @@ import io.eezo.core.html.Tags.input
   * Both halves happen at dispatch, after a route has matched and before its handler runs, and
   * [[protect]] is where: it mints a token into a session that has none, so every request past
   * dispatch has one and reading it cannot fail, and it refuses a `POST`, `PUT`, `PATCH` or `DELETE`
-  * whose form does not return the session's token, derived and handwritten alike, with no way to
-  * opt out. The safe methods, `GET`, `HEAD` and `OPTIONS`, are never checked; a WebSocket upgrade
-  * is a `GET`. Only the form field is read: a header for JavaScript waits until an example fetches.
+  * whose form does not return the session's token, derived and handwritten alike. The one place the
+  * token does not apply is an API route, where no session takes part: a program holds no session to
+  * keep a token in and serves no page to embed one, and the route's `Guarded` says who may call it
+  * instead. A route is an API route only when its handler takes an `ApiRequest`, so a page that
+  * reads the session cannot drop the check without its type saying so. The safe methods, `GET`,
+  * `HEAD` and `OPTIONS`, are never checked; a WebSocket upgrade is a `GET`. Only the form field is
+  * read: a header for JavaScript waits until an example fetches.
   */
 object Csrf {
 

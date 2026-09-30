@@ -48,18 +48,19 @@ class EezoPluginSuite extends munit.FunSuite {
       "  private val handwritten: Seq[io.eezo.http.Route] =\n" +
       "    // from src/main/scala/app/eezoWitness/New.scala\n" +
       "    guardFor[app.eezoWitness.New.type].mounting(\n" +
-      "      io.eezo.http.Route.Http(\n" +
+      "      io.eezo.http.Route.page(\n" +
       "        io.eezo.http.Method.GET,\n" +
-      "        io.eezo.http.PathPattern.parse(\"/eezoWitness/new\"),\n" +
-      "        req => app.eezoWitness.New.`new`(req)\n" +
+      "        \"/eezoWitness/new\",\n" +
+      "        app.eezoWitness.New.`new`,\n" +
+      "        \"src/main/scala/app/eezoWitness/New.scala\"\n" +
       "      )\n" +
       "    ) ++\n" +
       "    // from src/main/scala/app/eezoWitness/_id/Show.scala\n" +
       "    guardFor[app.eezoWitness._id.Show.type].mounting(\n" +
-      "      io.eezo.http.Route.Http(\n" +
+      "      io.eezo.http.Route.handwritten(\n" +
       "        io.eezo.http.Method.GET,\n" +
-      "        io.eezo.http.PathPattern.parse(\"/eezoWitness/:id\"),\n" +
-      "        req => app.eezoWitness._id.Show.show(req)\n" +
+      "        \"/eezoWitness/:id\",\n" +
+      "        app.eezoWitness._id.Show.show\n" +
       "      )\n" +
       "    )\n" +
       "\n" +

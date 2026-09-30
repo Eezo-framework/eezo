@@ -345,12 +345,13 @@ private[eezo] object HttpServer {
     * always returns `true`, because an unmatched route throws `NotFound` here rather than falling
     * through to Jetty's own error page.
     *
-    * The session cookie is written here, once, on the success path: the session the response names,
-    * or else the one the request carried into the handler, and only when it differs from what
-    * arrived. Dispatch mints a CSRF token into a session that has none, so a first visit differs
-    * and writes one `Set-Cookie` even when the handler names no session. A failure that reached the
-    * boundary writes no cookie, so an error page leaves the browser's session, flash included,
-    * exactly as it was.
+    * The session cookie is read and written here, once, on the success path of a browser route: the
+    * session the response names, or else the one the request carried into the handler, and only
+    * when it differs from what arrived. An API route neither reads nor writes it, so the route is
+    * matched before the cookie is read. Dispatch mints a CSRF token into a session that has none,
+    * so a first visit differs and writes one `Set-Cookie` even when the handler names no session. A
+    * failure that reached the boundary writes no cookie, so an error page leaves the browser's
+    * session, flash included, exactly as it was.
     */
   private final class EezoHandler(routes: RouteTable, config: HttpConfig)
       extends JettyHandler.Abstract {
@@ -369,8 +370,15 @@ private[eezo] object HttpServer {
           // none back, and the endpoint's whole point is to cost nothing.
           if (incoming.method == Method.GET && path == HealthPath) healthy
           else {
-            val read = SessionCookie.read(incoming, config.secret)
-            SessionCookie.write(read, routes.dispatch(read), config.secret)
+            val (route, matched) = routes.matching(incoming)
+            // An API route is answered with the cookie left exactly as the browser holds it, when
+            // one is sent at all: no session takes part in it, so reading the cookie could only
+            // sweep a flash meant for the next page or expire a cookie the route never looked at.
+            if (route.kind.api) routes.running(route, matched)
+            else {
+              val read = SessionCookie.read(matched, config.secret)
+              SessionCookie.write(read, routes.running(route, read), config.secret)
+            }
           }
         } catch {
           case failure: Throwable => answer(failure, path, config)

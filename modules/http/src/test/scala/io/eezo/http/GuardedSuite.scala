@@ -17,8 +17,8 @@ class GuardedSuite extends munit.FunSuite with ResourceFixtures {
     * response rather than in a mutable flag a passing test could leave unset.
     */
   private val refuse: Route => Route = {
-    case Route.Http(method, pattern, _, provenance) =>
-      Route.Http(method, pattern, _ => Response.Redirect(Url.Mounted("/login")), provenance)
+    case Route.Http(method, pattern, _, provenance, kind) =>
+      Route.Http(method, pattern, _ => Response.Redirect(Url.Mounted("/login")), provenance, kind)
     case ws => ws
   }
 

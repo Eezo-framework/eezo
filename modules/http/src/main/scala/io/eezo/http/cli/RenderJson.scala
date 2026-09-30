@@ -11,16 +11,21 @@ import io.eezo.http.Route
   */
 object RenderJson {
 
+  /** `api` is on every route, `false` included, so a tool reads one field rather than inferring a
+    * browser route from a missing key. A boolean rather than a kind string, beside how the db edge
+    * renders its yes or no properties, and because a WebSocket upgrade has no kind of its own.
+    */
   private def route(r: Route): Json = {
-    val (method, path) = r match {
-      case Route.Http(m, pattern, _, _) => (m.toString, pattern.render)
-      case Route.Ws(pattern, _, _)      => ("WS", pattern.render)
+    val (method, path, api) = r match {
+      case Route.Http(m, pattern, _, _, kind) => (m.toString, pattern.render, kind.api)
+      case Route.Ws(pattern, _, _)            => ("WS", pattern.render, false)
     }
     Json.Obj(
       List(
         "method"     -> Json.Str(method),
         "path"       -> Json.Str(path),
-        "provenance" -> Json.Str(r.provenance.toString.toLowerCase)
+        "provenance" -> Json.Str(r.provenance.toString.toLowerCase),
+        "api"        -> Json.Bool(api)
       )
     )
   }
