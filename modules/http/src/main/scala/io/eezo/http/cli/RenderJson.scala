@@ -13,7 +13,7 @@ object RenderJson {
 
   private def route(r: Route): Json = {
     val (method, path) = r match {
-      case Route.Http(m, pattern, _, _) => (m.toString, pattern.render)
+      case Route.Http(m, pattern, _, _, _) => (m.toString, pattern.render)
       case Route.Ws(pattern, _, _)      => ("WS", pattern.render)
     }
     Json.Obj(

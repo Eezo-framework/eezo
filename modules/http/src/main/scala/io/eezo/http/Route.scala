@@ -33,7 +33,8 @@ enum Route {
       method: Method,
       pattern: PathPattern,
       handler: Handler,
-      provenance: Provenance = Provenance.Handwritten
+      provenance: Provenance = Provenance.Handwritten,
+      api: Boolean = false // SPIKE: an API route, no session takes part
   )
 
   /** The seam to `modules/live`. The payload is an eezo type rather than Jetty's
@@ -53,8 +54,8 @@ enum Route {
     * already builds.
     */
   def describe: String = this match {
-    case Http(method, pattern, _, _) => s"$method ${pattern.render}"
-    case Ws(pattern, _, _)           => s"WS ${pattern.render}"
+    case Http(method, pattern, _, _, api) => s"$method ${pattern.render}" + (if (api) " api" else "")
+    case Ws(pattern, _, _)                => s"WS ${pattern.render}"
   }
 }
 
@@ -66,6 +67,26 @@ object Route {
     */
   private[eezo] def derived(method: Method, path: String, handler: Handler): Route =
     Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+
+  // SPIKE: the generated row for a handwritten file. The compiler picks the kind of route from the
+  // type the handler takes.
+  def handwritten(method: Method, path: String, handler: Request => Response): Route =
+    Http(method, PathPattern.parse(path), handler)
+
+  @scala.annotation.targetName("handwrittenApi")
+  def handwritten(method: Method, path: String, handler: ApiRequest => Response): Route =
+    Http(method, PathPattern.parse(path), request => handler(ApiRequest.of(request)), api = true)
+
+  // SPIKE: the row for a `New` or `Edit` file, which shows a form and so cannot be an API route.
+  def page(method: Method, path: String, handler: Request => Response, @scala.annotation.unused source: String): Route =
+    Http(method, PathPattern.parse(path), handler)
+
+  @scala.annotation.targetName("pageApi")
+  inline def page(method: Method, path: String, handler: ApiRequest => Response, inline source: String): Route =
+    scala.compiletime.error(
+      source + " takes an ApiRequest, but a New or Edit file shows a form and an API route " +
+        "has no form to show: take a Request there, or name the file Show or a name of its own"
+    )
 
   /** Mounts a set of routes under a prefix: the paths they answer on, and the URLs they emit.
     *
@@ -109,8 +130,8 @@ object Route {
     if (mount == "/") routes
     else
       routes.map {
-        case Http(method, pattern, handler, provenance) =>
-          Http(method, moved(pattern), mounting(handler), provenance)
+        case Http(method, pattern, handler, provenance, api) =>
+          Http(method, moved(pattern), mounting(handler), provenance, api)
         case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
       }
   }
@@ -201,14 +222,23 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
         route.pattern.matchPath(request.path) match {
           case None         => None
           case Some(params) =>
-            if (route.method == request.method) Some(route.handler -> params)
+            if (route.method == request.method) Some(route -> params)
             else { allowed += route.method; None }
         }
       }
       .nextOption()
 
     matched match {
-      case Some((handler, params)) => Csrf.protect(handler)(request.copy(pathParams = params))
+      // SPIKE: an API route reads no cookie, mints no token, checks no token and sends no cookie.
+      case Some((route, params)) if route.api =>
+        val response = route.handler(request.copy(pathParams = params, session = Session.empty))
+        if (response.session.isDefined)
+          throw new IllegalStateException(
+            s"${route.describe} is an API route and named a session on its response; " +
+              "no session takes part in an API route, so nothing would carry it"
+          )
+        response
+      case Some((route, params)) => Csrf.protect(route.handler)(request.copy(pathParams = params))
       case None                    =>
         val methods = allowed.result().distinct
         if (methods.isEmpty) throw NotFound(request.path)
@@ -253,7 +283,7 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
   }
 
   private def shadows(earlier: Route, later: Route): Boolean = (earlier, later) match {
-    case (Route.Http(method, pattern, _, _), Route.Http(otherMethod, otherPattern, _, _)) =>
+    case (Route.Http(method, pattern, _, _, _), Route.Http(otherMethod, otherPattern, _, _, _)) =>
       method == otherMethod && pattern.subsumes(otherPattern)
     case (Route.Ws(pattern, _, _), Route.Ws(otherPattern, _, _)) => pattern.subsumes(otherPattern)
     case _                                                       => false

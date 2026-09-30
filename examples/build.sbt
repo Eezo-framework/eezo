@@ -50,7 +50,8 @@ lazy val hello = (project in file("hello"))
   .settings(commonSettings)
   .settings(
     name := "hello",
-    libraryDependencies += edge("eezo-http")
+    libraryDependencies += edge("eezo-http"),
+    libraryDependencies += "org.scalameta" %% "munit" % "1.3.4" % Test // SPIKE
   )
 
 // The database edge alone: one model deriving `Table`, an `AppSchema`, and a `boot` that is a job

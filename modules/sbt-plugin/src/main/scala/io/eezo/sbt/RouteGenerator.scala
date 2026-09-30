@@ -403,12 +403,16 @@ object RouteGenerator {
       dbOnClasspath: Boolean,
       authDeclared: Boolean = false
   ): String = {
-    def built(route: HandwrittenRoute, indent: String): String =
-      s"""io.eezo.http.Route.Http(
+    // SPIKE: the compiler picks the kind of route from the type the handler takes. A `New` or
+    // `Edit` file goes through `page`, which refuses an API handler at compile time.
+    def built(route: HandwrittenRoute, indent: String): String = {
+      val row = if (route.source.endsWith("/New.scala") || route.source.endsWith("/Edit.scala")) "page" else "handwritten"
+      s"""io.eezo.http.Route.$row(
          |$indent  io.eezo.http.Method.${route.method},
-         |$indent  io.eezo.http.PathPattern.parse("${route.path}"),
-         |$indent  req => ${route.target}(req)
+         |$indent  "${route.path}",
+         |$indent  ${route.target}${if (row == "page") s""",\n$indent  "${route.source}\"""" else ""}
          |$indent)""".stripMargin
+    }
 
     // The name a helper is called with, which only the strict helper takes: it is the one thing
     // that has to reach `compiletime.error`, and the lenient helper has no error to raise. An
