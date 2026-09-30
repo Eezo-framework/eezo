@@ -51,7 +51,13 @@ class ApiPagesSuite extends FunSuite {
       out.indexOf("""<nav class="site-links"""") < out.indexOf("""header-container-right"""),
       out
     )
-    assert(out.contains("""<a href="/api/" aria-current="page">API</a>"""), out)
+    assert(
+      out.contains(
+        """<a onclick="event.stopImmediatePropagation()" href="/api/" aria-current="page">API</a>"""
+      ),
+      out
+    )
+    assert(out.contains("""<a class="logo" href="/" aria-label="eezo home" onclick="""), out)
     assert(out.contains("<main>content</main>"), out)
   }
 

@@ -48,15 +48,17 @@ object Layout {
     )
 
   /** The mark: a rounded tile with a wink of an `e`, and the wordmark beside it. Inline, so it
-    * takes the page's colours and needs no request of its own.
+    * takes the page's colours and needs no request of its own. `mods` is for a host that needs
+    * another attribute on the anchor, as the API pages do.
     */
-  def logo: Html =
+  def logo(mods: Attr*): Html =
     a(
       Attrs.cls                := "logo",
       Attrs.href               := "/",
       Attrs.attr("aria-label") := "eezo home",
       Html.raw(LogoMark),
-      span(Attrs.cls := "wordmark", "eezo")
+      span(Attrs.cls := "wordmark", "eezo"),
+      mods
     )
 
   private val LogoMark: String =
@@ -77,7 +79,7 @@ object Layout {
       Attrs.cls := "topbar",
       div(
         Attrs.cls := "topbar-inner",
-        logo,
+        logo(),
         nav(
           Attrs.attr("aria-label") := "Site",
           ul(

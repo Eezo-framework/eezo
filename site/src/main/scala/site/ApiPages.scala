@@ -20,6 +20,13 @@ object ApiPages {
 
   private val ThemeScript = """<script type="text/javascript" src="([^"]*scripts/theme\.js)">""".r
 
+  /** scaladoc's script takes over every same-origin link on the page and loads its target as if it
+    * were another scaladoc page, which a docs page is not. It offers no opt-out, but listeners fire
+    * in the order they were added, and an attribute handler is added when the element is parsed,
+    * before the deferred script runs: stopping there leaves the browser to follow the link.
+    */
+  private val Plain: Attr = Attrs.attr("onclick") := "event.stopImmediatePropagation()"
+
   def dress(page: String, request: Request): String = {
     val stylesheet =
       s"""<link rel="stylesheet" href="${Assets.url("api.css")}">"""
@@ -38,7 +45,10 @@ object ApiPages {
     val withHead  = page.replace("</head>", stylesheet + "</head>")
     val withTheme = ThemeScript.replaceAllIn(withHead, m => seed + m.matched)
     val withLogo  =
-      Logo.replaceFirstIn(withTheme, java.util.regex.Matcher.quoteReplacement(Layout.logo.render))
+      Logo.replaceFirstIn(
+        withTheme,
+        java.util.regex.Matcher.quoteReplacement(Layout.logo(Plain).render)
+      )
     withLogo.replace(
       """<div class="header-container-right">""",
       links + """<div class="header-container-right">"""
@@ -50,10 +60,10 @@ object ApiPages {
     Tags.nav(
       Attrs.cls                := "site-links",
       Attrs.attr("aria-label") := "Site",
-      a(Attrs.href := "/docs", "Docs"),
-      a(Attrs.href := "/docs/examples/hello", "Examples"),
-      a(Attrs.href := "/api/", Attrs.attr("aria-current") := "page", "API"),
-      a(Attrs.href := Pages.Repository, Attrs.rel         := "noopener", "GitHub"),
+      a(Plain, Attrs.href := "/docs", "Docs"),
+      a(Plain, Attrs.href := "/docs/examples/hello", "Examples"),
+      a(Plain, Attrs.href := "/api/", Attrs.attr("aria-current") := "page", "API"),
+      a(Plain, Attrs.href := Pages.Repository, Attrs.rel         := "noopener", "GitHub"),
       Theme.toggle(request)
     )
 }
