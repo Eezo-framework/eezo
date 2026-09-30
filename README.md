@@ -88,7 +88,7 @@ libraryDependencies += "ch.qos.logback" % "logback-classic" % logbackVersion
 ## Failures
 
 How a handler refuses a request, what a programming mistake becomes, and what each boundary
-answers is one page: [docs/failures.md](docs/failures.md).
+answers is one page: [docs/explanation/failures.md](docs/explanation/failures.md).
 
 ## Licence
 

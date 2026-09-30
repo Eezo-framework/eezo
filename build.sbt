@@ -204,12 +204,32 @@ lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
   .aggregate(core, http, db, live, auth, testkit, eezo, sbtEezo)
+  .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
     // The name `eezo` belongs to the published umbrella module above; the root is the unpublished
     // aggregate.
     name           := "eezo-root",
-    publish / skip := true
+    publish / skip := true,
+    // The API reference: one scaladoc over the published Scala 3 modules, written to
+    // `target/unidoc`, which `site/` copies into its jar and serves under `/api`. The sbt plugin
+    // is a 2.12 cross build and the demo is not an API, so neither is documented here.
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(core, http, db, live, auth, testkit, eezo),
+    ScalaUnidoc / unidoc / target              := baseDirectory.value / "target" / "unidoc",
+    ScalaUnidoc / unidoc / scalacOptions := Seq(
+      "-project",
+      "eezo",
+      "-project-version",
+      version.value,
+      "-project-footer",
+      "eezo is released under the MIT License.",
+      "-social-links:github::https://github.com/Eezo-framework/eezo",
+      s"-source-links:github://Eezo-framework/eezo/main",
+      "-doc-root-content",
+      (baseDirectory.value / "site" / "api-root.md").getPath,
+      "-skip-by-regex:io\\.eezo\\..*\\.internal.*",
+      "-external-mappings:.*java.*::javadoc::https://docs.oracle.com/en/java/javase/25/docs/api/"
+    )
   )
 
 // What the examples build needs in order to resolve eezo from the local ivy cache, and to stay on

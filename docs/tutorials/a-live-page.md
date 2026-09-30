@@ -12,7 +12,7 @@ reconnect loop, or a serializer.
 
 ## 0. Prerequisites
 
-- The same setup as `docs/deploying.md` §0: a local eezo publish and the `eezo` alias. If you
+- The same setup as [the deploy walkthrough](deploy-to-fly.md) §0: a local eezo publish and the `eezo` alias. If you
   are deploying at the end, the Fly CLI too.
 - No database is needed for this walkthrough: a live component's state lives in memory, on the
   server, per page. (Components that *want* the database use `transact`/`read` inside `handle`
@@ -209,7 +209,7 @@ is bound; leave it public, and it is not.
 
 ## 8. Deploy
 
-Nothing live-specific to configure: `eezo deploy` from `docs/deploying.md` ships it, and the
+Nothing live-specific to configure: `eezo deploy` from [the deploy walkthrough](deploy-to-fly.md) ships it, and the
 page works over `wss://` because the client derives the socket scheme from the page's. One
 setting matters:
 

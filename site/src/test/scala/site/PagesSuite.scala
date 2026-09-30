@@ -44,8 +44,9 @@ class PagesSuite extends FunSuite {
       .filter(d => Files.isRegularFile(d.resolve("README.md")))
       .map(d => s"examples/${d.getFileName}/README.md")
       .toSet
-    under("docs", recursive = true) ++ under("research", recursive = false) ++ examples ++
-      Set("README.md", "CONTEXT.md")
+    under("docs", recursive = true).filterNot(f =>
+      f.startsWith("docs/adr/") || f.startsWith("docs/research/")
+    ) ++ examples ++ Set("README.md", "CONTEXT.md")
   }
 
   test("every Markdown file the build ships is a page, and every page has a file") {
@@ -58,28 +59,55 @@ class PagesSuite extends FunSuite {
     pages.all.foreach(page => assert(page.title.trim.nonEmpty, page.source))
   }
 
-  test("the overview is the README at /docs") {
-    assertEquals(pages.bySlug("").source, "README.md")
-    assertEquals(pages.bySlug("").path, "/docs")
+  test("the overview is the README, and the four pillars each have an index") {
+    assertEquals(pages.bySlug("overview").source, "README.md")
+    assertEquals(
+      pages.pillars.map(_.slug),
+      Vector(Some("tutorials"), Some("how-to"), Some("explanation"), Some("reference"))
+    )
+    assert(pages.knows("/docs"))
+    assert(pages.knows("/docs/how-to"))
+    assert(pages.knows("/docs/tutorials/getting-started"))
+    assert(!pages.knows("/docs/nothing"))
+  }
+
+  test("a tutorial's order is the listed one, and a placeholder is a draft") {
+    val tutorials = pages.pillar("tutorials").get.pages
+    assertEquals(tutorials.head.slug, "tutorials/getting-started")
+    assert(tutorials.head.draft)
+    assert(!pages.bySlug("tutorials/deploy-to-fly").draft)
+    assertEquals(
+      tutorials.map(_.group).distinct,
+      Vector(None, Some("The example applications"))
+    )
+  }
+
+  test("an ADR is not a page, and a link to one goes to GitHub") {
+    assert(!pages.all.exists(_.source.startsWith("docs/adr/")))
+    assert(!pages.all.exists(_.source.startsWith("research/")))
+    val failures = pages.bySource("docs/explanation/failures.md")
+    assert(
+      pages
+        .resolve(failures, "../adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md")
+        .startsWith(s"${Pages.Repository}/blob/main/docs/adr/0006")
+    )
   }
 
   test("a link to another Markdown file resolves to its page, a repository file to GitHub") {
     val readme = pages.bySource("README.md")
-    assertEquals(pages.resolve(readme, "docs/failures.md"), "/docs/failures")
+    assertEquals(
+      pages.resolve(readme, "docs/explanation/failures.md"),
+      "/docs/explanation/failures"
+    )
     assertEquals(pages.resolve(readme, "LICENSE"), s"${Pages.Repository}/blob/main/LICENSE")
-    val failures = pages.bySource("docs/failures.md")
+    val live = pages.bySource("docs/tutorials/a-live-page.md")
     assertEquals(
-      pages.resolve(failures, "adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md"),
-      "/docs/adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it"
+      pages.resolve(live, "deploy-to-fly.md#0-prerequisites"),
+      "/docs/tutorials/deploy-to-fly#0-prerequisites"
     )
-    val adr =
-      pages.bySource("docs/adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md")
-    assertEquals(
-      pages.resolve(adr, "0001-x.md#why"),
-      s"${Pages.Repository}/blob/main/docs/adr/0001-x.md#why"
-    )
-    assertEquals(pages.resolve(adr, "#consequences"), "#consequences")
-    assertEquals(pages.resolve(adr, "https://fly.io"), "https://fly.io")
+    assertEquals(pages.resolve(live, "../x.md#why"), s"${Pages.Repository}/blob/main/docs/x.md#why")
+    assertEquals(pages.resolve(live, "#consequences"), "#consequences")
+    assertEquals(pages.resolve(live, "https://fly.io"), "https://fly.io")
   }
 
   /** Through the table rather than `Docs.render` directly, because dispatch is what mints the CSRF
@@ -95,6 +123,31 @@ class PagesSuite extends FunSuite {
     }
 
   private val Href = """href="([^"]*)"""".r
+
+  private def renderedAt(path: String): String =
+    Routes
+      .table()
+      .dispatch(Request(Method.GET, path, Map.empty, Map.empty, Array.empty, Map.empty))
+      .body match {
+      case Body.Html(html) => html.render
+      case other           => fail(s"$path answered with $other")
+    }
+
+  test("the hub and every pillar index render and link only to known pages") {
+    val hub = renderedAt("/docs")
+    pages.pillars.foreach(p => assert(hub.contains(s"""href="${p.path.get}""""), p.name))
+    (Vector("/docs") ++ pages.pillars.flatMap(_.path)).foreach { path =>
+      Href.findAllMatchIn(renderedAt(path)).map(_.group(1)).filter(_.startsWith("/docs")).foreach {
+        href => assert(pages.knows(href), s"$path links $href")
+      }
+      Href.findAllMatchIn(renderedAt(path)).map(_.group(1)).filter(_.startsWith("/api/")).foreach {
+        href => assert(ApiDocs.linkOk(href), s"$path links $href, which the API docs do not hold")
+      }
+    }
+    val reference = renderedAt("/docs/reference")
+    assert(reference.contains("chip-draft"), "the reference index marks its drafts")
+    assert(reference.contains("Vocabulary"), reference)
+  }
 
   test("every page renders with its title and every internal link resolves") {
     val documents = pages.all.map(page => page -> rendered(page)).toMap
@@ -117,18 +170,24 @@ class PagesSuite extends FunSuite {
         }
         if (bare.startsWith("/assets/"))
           assert(Assets.read(bare.stripPrefix("/assets/")).isDefined, s"${page.path} links $href")
+        else if (bare.startsWith("/api/") || bare == "/api") ()
         else if (bare == "/") ()
         else {
-          assert(
-            pages.bySlug.contains(bare.stripPrefix("/docs").stripPrefix("/")),
-            s"${page.path} links $href"
-          )
+          assert(pages.knows(bare), s"${page.path} links $href")
           fragment.foreach { id =>
-            assert(anchors(bare).contains(id), s"${page.path} links $href, and $bare has no #$id")
+            assert(
+              anchors.get(bare).forall(_.contains(id)),
+              s"${page.path} links $href, and $bare has no #$id"
+            )
           }
         }
       }
     }
+  }
+
+  test("a draft page carries the banner, a written one does not") {
+    assert(rendered(pages.bySlug("how-to/deploy")).contains("draft-banner"))
+    assert(!rendered(pages.bySlug("tutorials/deploy-to-fly")).contains("draft-banner"))
   }
 
   test("a slug with no page is a 404") {
@@ -145,7 +204,7 @@ class PagesSuite extends FunSuite {
     markdownFiles.foreach { path =>
       assertEquals(jar.read(path), content.read(path), path)
     }
-    assertEquals(jar.list("docs/adr"), content.list("docs/adr"))
-    assertEquals(jar.list("research"), content.list("research"))
+    assertEquals(jar.list("docs/adr"), Vector.empty)
+    assertEquals(jar.list("docs/how-to"), content.list("docs/how-to"))
   }
 }

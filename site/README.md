@@ -2,9 +2,41 @@
 
 The documentation site, an eezo application on the http edge with the live layer on it. It
 renders the repository's own Markdown: the README, `CONTEXT.md`, everything under `docs/`, the
-research notes and the example READMEs, so the site is never a second copy of anything. Which
-files make pages, and in what order, is `src/main/scala/site/Pages.scala`; a new ADR or research
-note is a page with no change there.
+research notes and the example READMEs, so the site is never a second copy of anything.
+
+## The four pillars
+
+The docs are organised the Diátaxis way, and `docs/` has a directory per pillar:
+
+| directory           | pillar        | answers                                   |
+|---------------------|---------------|-------------------------------------------|
+| `docs/tutorials/`   | Tutorials     | take me through building something        |
+| `docs/how-to/`      | How-to guides | get this one thing done                   |
+| `docs/explanation/` | Explanation   | how does this part work, and why          |
+| `docs/reference/`   | Reference     | what exactly is the API, command, setting |
+
+Every `.md` under a pillar's directory is a page of that pillar; the order is the list in
+`src/main/scala/site/Pages.scala`, and a file not on the list follows alphabetically, so a new
+page is served before anyone lists it. The example READMEs are grouped at the end of Tutorials
+and `CONTEXT.md` is the vocabulary at the end of Reference. `/docs` is the hub and
+`/docs/<pillar>` each pillar's index. The ADRs under `docs/adr` and the research notes are the
+repository's own record and are not pages; a link to one goes to GitHub.
+
+The Reference pillar is mostly generated. `sbt unidoc` at the repository root writes one scaladoc
+over the framework modules to `target/unidoc`, the site's build copies it into the jar, and it is
+served under `/api` with its own search. A page goes out dressed in the site's chrome, see
+`src/main/scala/site/ApiPages.scala`: the logo, the top links and the theme toggle replace
+scaladoc's header, and `assets/api.css` restyles scaladoc's own variables with the site's fonts
+and colours; the markup underneath stays scaladoc's, because its scripts expect it. The
+hand-written reference pages are what scaladoc
+cannot say: the command line, the sbt plugin's tasks, the environment, the routing conventions,
+the type mappings, the file formats, the wire protocol, and the vocabulary. The scaladoc options
+(logo, footer, source links, the skipped internal packages) are on the root project in the root
+`build.sbt`, and `site/api-root.md` is its front page.
+
+A page whose first line is `<!-- draft -->` is a placeholder: the site shows a draft banner on
+it, a chip beside it in the index, and a dot after it in the tree. Write the page and remove the
+marker. The test suite fails on a Markdown file that no pillar reaches.
 
 ## Local development
 
@@ -13,7 +45,9 @@ You need JDK 25 and sbt, nothing else: no database, no Docker, no Node.
 ```bash
 # 1. At the repository root, once, and again whenever the framework changes. eezo is not
 #    released yet, so the site resolves it from the local ivy cache at the version this records.
-sbt publishLocalForExample
+#    `unidoc` writes the API reference the site serves under /api; without it the site still
+#    runs and /api says what to do, and the API tests are skipped rather than failed.
+sbt publishLocalForExample unidoc
 
 # 2. In this directory.
 cd site

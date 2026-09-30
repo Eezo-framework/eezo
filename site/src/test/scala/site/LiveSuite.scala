@@ -11,7 +11,7 @@ import munit.FunSuite
 class LiveSuite extends FunSuite {
 
   private val pages  = Pages.load(Content.current)
-  private val drawer = new Drawer(pages, pages.bySlug("live"))
+  private val drawer = new Drawer(pages, Some(pages.bySlug("tutorials/a-live-page")))
 
   test("the drawer opens on toggle, closes on close, and ignores what it does not know") {
     assertEquals(drawer.handle(Event("toggle"), false), true)
@@ -23,8 +23,11 @@ class LiveSuite extends FunSuite {
   test("the drawer renders every section, marks the current page, and says whether it is open") {
     val closed = drawer.render(false).render
     val open   = drawer.render(true).render
-    pages.sections.foreach(section => assert(closed.contains(s"<h2>${section.name}</h2>")))
-    assert(closed.contains("""href="/docs/live" aria-current="page""""), closed)
+    pages.sections.foreach(section => assert(closed.contains(section.name), section.name))
+    assert(closed.contains("""href="/docs/tutorials/a-live-page" aria-current="page""""), closed)
+    assert(closed.contains("""<h2><a href="/docs/how-to">How-to guides</a></h2>"""), closed)
+    assert(closed.contains("""<h3 class="nav-group">The example applications</h3>"""), closed)
+    assert(closed.contains("""href="/api/""""), closed)
     assert(closed.contains("""class="drawer""""), closed)
     assert(closed.contains("""aria-expanded="false""""), closed)
     assert(open.contains("""class="drawer open""""), open)

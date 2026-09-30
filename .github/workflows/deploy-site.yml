@@ -39,9 +39,10 @@ jobs:
       - name: Set up the Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # The site resolves eezo from the local ivy cache, like the examples, until eezo is released.
-      - name: Publish eezo locally
-        run: sbt -batch publishLocalForExample
+      # The site resolves eezo from the local ivy cache, like the examples, until eezo is released,
+      # and serves the scaladoc `unidoc` writes at the root as its API reference.
+      - name: Publish eezo locally and generate the API docs
+        run: sbt -batch publishLocalForExample unidoc
 
       # `bin/eezo deploy` stages the jars and a Dockerfile, hands them to Fly's remote builder,
       # and waits for `/eezo/health`. `fly.toml` is committed, so this is never a first deploy and

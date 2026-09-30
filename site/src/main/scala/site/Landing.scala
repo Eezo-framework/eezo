@@ -86,6 +86,7 @@ object Landing {
         Attrs.id  := "content",
         Attrs.cls := "landing-main",
         hero(request),
+        pillars,
         steps,
         features,
         edges,
@@ -135,6 +136,35 @@ object Landing {
           }
         ),
         Live.mount(request, new Clicks)
+      )
+    )
+
+  private val Pillars: Vector[(String, String, String, String)] = Vector(
+    ("tutorials", "Tutorials", "/docs/tutorials", "Build something, step by step, from nothing."),
+    ("how-to", "How-to guides", "/docs/how-to", "Get one thing done: the steps and the code."),
+    (
+      "explanation",
+      "Explanation",
+      "/docs/explanation",
+      "How the parts work, and why they are shaped so."
+    ),
+    (
+      "reference",
+      "Reference",
+      "/docs/reference",
+      "The raw APIs, every type and command, stated once."
+    )
+  )
+
+  private def pillars: Html =
+    section(
+      Attrs.cls := "pillars",
+      h2("Four ways into the docs"),
+      ul(
+        Attrs.cls := "pillar-cards",
+        Pillars.map { case (slug, name, href, blurb) =>
+          li(Attrs.cls := s"pillar pillar-$slug", a(Attrs.href := href, h3(name), p(blurb)))
+        }
       )
     )
 

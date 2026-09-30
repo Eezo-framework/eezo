@@ -12,8 +12,10 @@ import io.eezo.live.Live
   * the tree it opens are one subtree, because a component patches its own root and nothing outside
   * it; the stylesheet puts the button in the top bar. On a wide screen the same tree is the left
   * column and the button is not shown.
+  *
+  * `current` is the page being read, or nothing on the hub and a pillar's index.
   */
-final class Drawer(tree: Pages, current: Page) extends Component[Boolean] {
+final class Drawer(tree: Pages, current: Option[Page]) extends Component[Boolean] {
 
   def init(ctx: Init[Boolean]): Boolean = false
 
@@ -39,26 +41,39 @@ final class Drawer(tree: Pages, current: Page) extends Component[Boolean] {
       aside(
         Attrs.id  := "sidebar",
         Attrs.cls := "sidebar",
-        nav(
-          Attrs.attr("aria-label") := "Documentation",
-          tree.sections.map { section =>
-            div(
-              Attrs.cls := "nav-section",
-              h2(section.name),
-              ul(
-                section.pages.map { page =>
-                  li(
-                    a(
-                      Attrs.href := page.path,
-                      if (page == current) Seq(Attrs.attr("aria-current") := "page") else Nil,
-                      page.title
-                    )
-                  )
-                }
-              )
-            )
-          }
+        nav(Attrs.attr("aria-label") := "Documentation", tree.sections.map(section))
+      )
+    )
+
+  /** A section: its heading, linked to the pillar's index when it has one, then its pages with a
+    * sub-heading wherever a group starts.
+    */
+  private def section(section: Section): Html =
+    div(
+      Attrs.cls := "nav-section",
+      section.path match {
+        case Some(path) => h2(a(Attrs.href := path, section.name))
+        case None       => h2(section.name)
+      },
+      // The generated API is served beside the tree rather than out of it, so its door is here.
+      Html.when(section.slug.contains("reference"))(
+        ul(li(Attrs.cls := "nav-api", a(Attrs.href := "/api/", "The API, from the sources")))
+      ),
+      section.grouped.map { case (group, pages) =>
+        Html.Fragment(
+          group.map(name => h3(Attrs.cls := "nav-group", name)).toVector :+
+            ul(pages.map(link))
         )
+      }
+    )
+
+  private def link(page: Page): Html =
+    li(
+      if (page.draft) Seq(Attrs.cls := "draft") else Nil,
+      a(
+        Attrs.href := page.path,
+        if (current.contains(page)) Seq(Attrs.attr("aria-current") := "page") else Nil,
+        page.title
       )
     )
 }

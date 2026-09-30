@@ -4,7 +4,7 @@
 A **refusal** is the caller's fault and is expected: a missing row, a stale form, a foreign owner.
 A **defect** means the application is built wrong, and the fix is a code change. A database or a
 socket gone travels like a defect. The reasons are in
-[ADR 0006](adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md).
+[ADR 0006](../adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md).
 
 ## The three boundaries
 

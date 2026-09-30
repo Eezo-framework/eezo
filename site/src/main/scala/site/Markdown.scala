@@ -28,11 +28,17 @@ object Markdown {
   final class Doc private[Markdown] (
       private[Markdown] val root: Node,
       val headings: Vector[Heading],
-      private[Markdown] val ids: Map[Node, String]
+      private[Markdown] val ids: Map[Node, String],
+      draft: Boolean
   ) {
 
     /** The page's own title: its first level one heading. */
     def title: Option[String] = headings.find(_.level == 1).map(_.text)
+
+    /** Whether the source opened with the draft marker: a placeholder whose outline is all there
+      * is.
+      */
+    val isDraft: Boolean = draft
 
     /** The first paragraph, plain, for the page's description. */
     def description: Option[String] =
@@ -56,7 +62,7 @@ object Markdown {
     }
     val byNode   = ids.toMap
     val headings = headingNodes.map(h => Heading(h.getLevel, byNode(h), plain(h)))
-    new Doc(root, headings, byNode)
+    new Doc(root, headings, byNode, markdown.startsWith(Pages.DraftMarker))
   }
 
   /** The article. `link` says where a link's destination goes, which is the page's question rather

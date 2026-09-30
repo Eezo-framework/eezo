@@ -30,21 +30,18 @@ class RoutesSuite extends FunSuite {
   }
 
   test("a docs page mounts the drawer and posts its theme toggle with a token") {
-    val html = page(get("/docs"))
+    val html = page(get("/docs/overview"))
     assert(html.contains("""class="drawer""""), html)
     assert(html.contains("""data-eezo-click="toggle""""), html)
     assert(html.contains("""<form class="theme-form" method="post" action="/theme">"""), html)
     assert(html.contains("""name="_csrf""""), html)
   }
 
-  test("the overview and a page under docs") {
-    assert(page(get("/docs")).contains("<h1"))
-    assert(page(get("/docs/live")).contains("live walkthrough"))
-    assert(
-      page(get("/docs/adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it")).contains(
-        "<h1"
-      )
-    )
+  test("the hub, a pillar index, the overview and a page under docs") {
+    assert(page(get("/docs")).contains("pillar-cards"))
+    assert(page(get("/docs/tutorials")).contains("page-list"))
+    assert(page(get("/docs/overview")).contains("<h1"))
+    assert(page(get("/docs/tutorials/a-live-page")).contains("live walkthrough"))
   }
 
   test("an unknown page is a 404") {
@@ -63,6 +60,35 @@ class RoutesSuite extends FunSuite {
     assertEquals(versioned.header("Cache-Control"), Some("public, max-age=31536000, immutable"))
 
     assertEquals(get("/assets/fonts/nunito.woff2").header("Content-Type"), Some("font/woff2"))
+  }
+
+  test("the API docs are served under /api, and /api itself is sent to the directory") {
+    val bare = get("/api")
+    assertEquals(bare.status, 303)
+    assertEquals(bare.header("Location"), Some("/api/"))
+    if (ApiDocs.present) {
+      val index = get("/api/")
+      assertEquals(index.status, 200)
+      assertEquals(index.header("Content-Type"), Some("text/html; charset=utf-8"))
+      assertEquals(index.header("Cache-Control"), Some("no-cache"))
+      val html = index.body match {
+        case Body.Bytes(bytes) => new String(bytes, "UTF-8")
+        case other             => fail(s"expected bytes, got $other")
+      }
+      assert(html.contains("""class="site-links""""), "the site's links are in scaladoc's header")
+      assert(html.contains("""class="logo""""), "the site's logo replaces the project name")
+      assert(html.contains("api.css?v="), "the site's stylesheet is linked")
+      assert(html.contains("use-dark-theme"), "the theme is seeded")
+      assert(html.contains("""name="_csrf""""), "the theme toggle carries a token")
+      assertEquals(
+        get("/api/styles/theme/bundle.css").header("Cache-Control"),
+        Some("public, max-age=3600")
+      )
+      assertEquals(get("/api/io/eezo/http.html").status, 200)
+      assertEquals(get("/api/io/eezo/http/Request.html").status, 200)
+      intercept[NotFound](get("/api/io/eezo/http/Nope.html"))
+      intercept[NotFound](get("/api/../assets/site.css"))
+    } else assume(ApiDocs.present, "run `sbt unidoc` at the repository root to test the API docs")
   }
 
   test("an asset path cannot leave the directory, and an unknown type is not served") {

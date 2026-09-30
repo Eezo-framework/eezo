@@ -61,7 +61,8 @@ Test / javaOptions += s"-Dsite.root=${repoRoot.value}"
 /** The Markdown the site serves, copied into the jar under `content/<repository path>`, and an
   * index of those paths beside it, because a jar cannot list a directory. The set is spelled here
   * once: the site's `Pages` names sections out of these files, and its test suite fails on a file
-  * here that no section reaches.
+  * here that no section reaches. The ADRs and the research notes are deliberately absent: they
+  * are the repository's own record and stay there.
   */
 Compile / resourceGenerators += Def.task {
   val root = repoRoot.value
@@ -72,8 +73,9 @@ Compile / resourceGenerators += Def.task {
 
   val files: Seq[(File, String)] =
     Seq(root / "README.md" -> "README.md", root / "CONTEXT.md" -> "CONTEXT.md") ++
-      (root / "docs" ** "*.md").get().map(f => f -> under("docs", f)) ++
-      (root / "research" * "*.md").get().map(f => f -> under("research", f)) ++
+      (root / "docs" ** "*.md").get().map(f => f -> under("docs", f)).filterNot { case (_, rel) =>
+        rel.startsWith("docs/adr/") || rel.startsWith("docs/research/")
+      } ++
       (root / "examples" * DirectoryFilter / "README.md").get().map(f => f -> under("examples", f))
 
   IO.delete(out)
@@ -85,6 +87,24 @@ Compile / resourceGenerators += Def.task {
   val index = out / "index.txt"
   IO.writeLines(index, files.map(_._2).sorted)
   copied :+ index
+}.taskValue
+
+/** The API reference: the scaladoc `sbt unidoc` wrote at the root of the repository, copied into
+  * the jar under `api/` and served under `/api`. Generated at the root rather than here because
+  * the sources are there and this build sees only the published jars. Absent when `unidoc` has
+  * not run, which the site tolerates in development and the test suite refuses in CI.
+  */
+Compile / resourceGenerators += Def.task {
+  val source = repoRoot.value / "target" / "unidoc"
+  val out    = (Compile / resourceManaged).value / "api"
+  IO.delete(out)
+  if (!source.isDirectory) {
+    streams.value.log.warn(s"no API docs at $source: run `sbt unidoc` at the repository root")
+    Seq.empty[File]
+  } else {
+    IO.copyDirectory(source, out)
+    (out ** "*").get().filter(_.isFile)
+  }
 }.taskValue
 
 /** What the site says about the eezo it was built against, generated so that it cannot drift from

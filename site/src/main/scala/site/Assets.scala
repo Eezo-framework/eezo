@@ -12,10 +12,16 @@ import java.security.MessageDigest
 object Assets {
 
   private val ContentTypes: Map[String, String] = Map(
+    "html"        -> "text/html; charset=utf-8",
     "css"         -> "text/css; charset=utf-8",
     "js"          -> "text/javascript; charset=utf-8",
     "svg"         -> "image/svg+xml",
     "woff2"       -> "font/woff2",
+    "woff"        -> "font/woff",
+    "ttf"         -> "font/ttf",
+    "eot"         -> "application/vnd.ms-fontobject",
+    "json"        -> "application/json",
+    "map"         -> "application/json",
     "png"         -> "image/png",
     "ico"         -> "image/x-icon",
     "txt"         -> "text/plain; charset=utf-8",
@@ -29,23 +35,26 @@ object Assets {
   /** The file's bytes, or nothing: for a path that is not a plain descent into `assets/`, and for a
     * file that is not there. Both are the same 404 to the client.
     */
-  def read(path: String): Option[Array[Byte]] = {
+  def read(path: String): Option[Array[Byte]] = readUnder("assets", path)
+
+  /** The same, under another directory of the jar: `api` for the generated scaladoc. */
+  def readUnder(root: String, path: String): Option[Array[Byte]] = {
     val segments = path.split('/').toVector
     val safe     = segments.nonEmpty && segments.forall(s => s.nonEmpty && s != "." && s != "..")
     if (!safe) None
     else
-      Option(getClass.getClassLoader.getResourceAsStream(s"assets/$path")).map { in =>
+      Option(getClass.getClassLoader.getResourceAsStream(s"$root/$path")).map { in =>
         try in.readAllBytes()
         finally in.close()
       }
   }
 
-  /** A short digest of the stylesheet, spelled into every asset URL, so that a change to it is a
+  /** A short digest of the stylesheets, spelled into every asset URL, so that a change to it is a
     * new address and a year long cache is safe.
     */
   lazy val version: String = {
     val digest = MessageDigest.getInstance("SHA-256")
-    Vector("site.css").flatMap(read).foreach(digest.update)
+    Vector("site.css", "api.css").flatMap(read).foreach(digest.update)
     digest.digest().take(6).map(b => f"$b%02x").mkString
   }
 

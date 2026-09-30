@@ -1027,6 +1027,23 @@ button {
   margin-bottom: 22px;
 }
 
+.sidebar h2 a {
+  color: inherit;
+  text-decoration: none;
+}
+
+.sidebar h2 a:hover {
+  color: var(--grape-ink);
+}
+
+.sidebar h3.nav-group {
+  font-family: var(--font-body);
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: var(--muted);
+  margin: 14px 0 4px 12px;
+}
+
 .sidebar ul,
 .outline ul {
   list-style: none;
@@ -1353,6 +1370,202 @@ button {
 .tk-key { color: var(--tk-key); }
 .tk-section { color: var(--tk-section); font-weight: 600; }
 
+/* ---------- the hub, the pillar indexes, drafts ---------- */
+
+.pillar-cards {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.landing-main .pillar-cards {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.pillar a {
+  display: block;
+  height: 100%;
+  padding: 22px 22px 18px;
+  border-radius: var(--radius);
+  border: 2px solid var(--line);
+  background: var(--surface);
+  text-decoration: none;
+  color: var(--ink);
+  border-top-width: 8px;
+  transition: transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.pillar a:hover {
+  transform: translateY(-4px) rotate(-0.4deg);
+  box-shadow: var(--shadow);
+  color: var(--ink);
+}
+
+.pillar-tutorials a { border-top-color: var(--sun); }
+.pillar-how-to a { border-top-color: var(--mint); }
+.pillar-explanation a { border-top-color: var(--sky); }
+.pillar-reference a { border-top-color: var(--grape); }
+
+.pillar h2,
+.pillar h3 {
+  font-size: 1.35rem;
+  margin: 0 0 8px;
+}
+
+.prose .pillar h2 {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.prose .pillar h2::after {
+  display: none;
+}
+
+.pillar p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.98rem;
+}
+
+.pillar small {
+  display: block;
+  margin-top: 14px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.hub .lede,
+.pillar-index .lede {
+  font-size: 1.15rem;
+  max-width: 40rem;
+}
+
+.page-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.page-list li {
+  padding: 14px 0;
+  border-bottom: 1.5px solid var(--line);
+}
+
+.page-list li + li {
+  margin-top: 0;
+}
+
+.page-list li > a {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 1.15rem;
+  text-decoration: none;
+}
+
+.page-list li > p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.module-cards {
+  list-style: none;
+  margin: 0 0 8px;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.module-cards li + li {
+  margin-top: 0;
+}
+
+.module-cards a {
+  display: block;
+  padding: 14px 16px;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  text-decoration: none;
+  color: var(--ink);
+  transition: transform 0.15s ease, border-color 0.15s ease;
+}
+
+.module-cards a:hover {
+  transform: translateY(-2px);
+  border-color: var(--grape);
+  color: var(--ink);
+}
+
+.module-cards code {
+  font-weight: 600;
+  color: var(--code-inline-ink);
+}
+
+.module-cards .chip {
+  margin-left: 8px;
+}
+
+.module-cards p {
+  margin: 6px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.sidebar li.nav-api a {
+  font-weight: 800;
+  color: var(--grape-ink);
+}
+
+.chip-draft {
+  margin-left: 10px;
+  background: var(--coral);
+  color: var(--ink-fixed);
+  vertical-align: middle;
+}
+
+.chip-link {
+  text-decoration: none;
+}
+
+.chip-link:hover {
+  background: var(--sun);
+  color: var(--ink-fixed);
+}
+
+.chip-quiet {
+  margin-left: 6px;
+  background: transparent;
+  border: 1.5px solid var(--line-strong);
+  color: var(--muted);
+}
+
+.draft-banner {
+  padding: 12px 16px;
+  border-radius: var(--radius-sm);
+  border: 2px dashed var(--coral);
+  background: color-mix(in srgb, var(--coral) 10%, transparent);
+  font-size: 0.95rem;
+}
+
+.sidebar li.draft a {
+  color: var(--muted);
+}
+
+.sidebar li.draft a::after {
+  content: "·";
+  margin-left: 6px;
+  color: var(--coral);
+  font-weight: 900;
+}
+
 /* ---------- pager ---------- */
 
 .pager {
@@ -1416,7 +1629,8 @@ button {
   }
 
   .features ul,
-  .steps ol {
+  .steps ol,
+  .landing-main .pillar-cards {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
@@ -1497,7 +1711,10 @@ button {
   }
 
   .features ul,
-  .steps ol {
+  .steps ol,
+  .pillar-cards,
+  .landing-main .pillar-cards,
+  .module-cards {
     grid-template-columns: 1fr;
   }
 
