@@ -1,0 +1,29 @@
+# The Fly app behind https://eezo.io. Written by hand rather than by `eezo deploy`, for the one
+# difference from the launcher's file: no `release_command`. The site has no database, so there
+# is nothing to migrate before the new version takes traffic, and an application on the http
+# edge alone does not answer `migrate`.
+app = 'eezo-site'
+primary_region = 'fra'
+
+[http_service]
+  # Must match the app's `port` (HttpApp default: 8080).
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = 'stop'
+  auto_start_machines = true
+  # One machine stays up: a docs site that answers its first visitor with a JVM cold start is a
+  # poor first impression of the framework it documents.
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    grace_period = '10s'
+    interval = '15s'
+    timeout = '5s'
+    method = 'GET'
+    path = '/eezo/health'
+
+[[vm]]
+  # Jetty on virtual threads is comfortable here; 256mb leaves the JVM too little headroom.
+  memory = '512mb'
+  cpu_kind = 'shared'
+  cpus = 1

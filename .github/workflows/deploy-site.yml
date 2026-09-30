@@ -1,0 +1,52 @@
+name: Deploy the site
+
+# eezo.io is the documentation site under `site/`, deployed the way any eezo application is:
+# `eezo deploy`. Every push to main ships it, because the site is built on eezo itself and renders
+# the repository's own Markdown, so a change to either is a change to the site. CI has already
+# compiled and tested the same commit by the time this runs; a deploy that fails here leaves the
+# previous version serving, which is what `fly deploy` guarantees.
+on:
+  push:
+    branches: [main]
+
+# One deploy at a time, in order. A cancelled deploy is a half applied one, so later pushes wait.
+concurrency:
+  group: deploy-site
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+
+    steps:
+      # The full history, because sbt-dynver derives the version the site's footer shows from the
+      # git tags, and a shallow clone has none.
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 25
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "25"
+          cache: sbt
+
+      - name: Set up sbt
+        uses: sbt/setup-sbt@v1
+
+      - name: Set up the Fly CLI
+        uses: superfly/flyctl-actions/setup-flyctl@master
+
+      # The site resolves eezo from the local ivy cache, like the examples, until eezo is released.
+      - name: Publish eezo locally
+        run: sbt -batch publishLocalForExample
+
+      # `bin/eezo deploy` stages the jars and a Dockerfile, hands them to Fly's remote builder,
+      # and waits for `/eezo/health`. `fly.toml` is committed, so this is never a first deploy and
+      # nothing is created; the token is a deploy token scoped to the one app.
+      - name: Deploy
+        run: cd site && ../bin/eezo deploy
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

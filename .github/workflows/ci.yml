@@ -79,3 +79,10 @@ jobs:
         run: |
           sbt -batch publishLocalForExample
           cd examples && sbt -batch test
+
+      # The documentation site is an eezo application too, and it is built the way the examples
+      # are: a build of its own against the eezo the step above published. Its suite renders every
+      # page out of the repository's Markdown and follows every link, so a doc edit that breaks a
+      # cross reference, or a new file no section lists, fails here rather than on eezo.io.
+      - name: Build the documentation site
+        run: cd site && sbt -batch scalafmtCheckAll compile test
