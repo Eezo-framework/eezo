@@ -228,3 +228,11 @@ page once the request is gone: a malformed frame as an error frame, a socket ope
 origin, by the wrong user or for an unknown or taken page by closing it with a 44xx code, a defect
 as a generic error frame and a log line, a dead connection by closing.
 _Avoid_: handler, catch, error handler, middleware
+
+### Outbound client
+
+**Content**:
+Bytes that know their media type: what a request body is once it has been encoded for the wire. An
+application never builds one; it gets one from an encoder such as `Http.form` and hands it to
+`post`.
+_Avoid_: body, payload, entity
