@@ -494,8 +494,8 @@ object Resource {
 
     def isMounted(method: Method, target: PathPattern): Boolean =
       table.routes.exists {
-        case Route.Http(other, pattern, _, _) => other == method && pattern.subsumes(target)
-        case _                                => false
+        case Route.Http(other, pattern, _, _, _) => other == method && pattern.subsumes(target)
+        case _                                   => false
       }
 
     table.httpRoutes

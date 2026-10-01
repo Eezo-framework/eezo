@@ -1,5 +1,7 @@
 package io.eezo.http
 
+import scala.annotation.targetName
+
 import io.eezo.core.html.Url
 
 /** Where a route came from, which is all decision 18's precedence rule needs to know.
@@ -15,11 +17,41 @@ enum Provenance {
   case Handwritten, Derived
 }
 
-/** A route, in the two kinds eezo serves.
+/** Who calls an HTTP route: a browser, which carries a session and so a CSRF token, or a program,
+  * which carries neither.
+  *
+  * Not an enum, because neither value is named outside eezo, and an enum's cases cannot be hidden.
+  * Every route an application builds by hand is a browser route by leaving the field out, and the
+  * way eezo mints an API route is a handler that takes an [[ApiRequest]], through the generated
+  * row. A kind an application could name would be a way to turn off the CSRF check on a page that
+  * reads the session, with nothing in the handler's type to say so.
+  *
+  * Naming is all this closes, not holding: `kind` is a public field, so an application can copy it
+  * from an existing API route onto a page whose handler takes a [[Request]]. What keeps such a page
+  * harmless is that `RouteTable.running` empties the session on every API route whatever handler it
+  * runs, and the server reads no cookie for one, so a forged request reaches the page as nobody
+  * rather than as the signed in user.
+  */
+final class RouteKind private (private[eezo] val api: Boolean) {
+  override def toString: String = if (api) "Api" else "Browser"
+}
+
+object RouteKind {
+
+  /** A route a browser calls: the session is read and written, and the CSRF token is checked. */
+  private[eezo] val Browser: RouteKind = new RouteKind(false)
+
+  /** A route a program calls, in which no session takes part. */
+  private[eezo] val Api: RouteKind = new RouteKind(true)
+}
+
+/** A route, in the two shapes eezo serves.
   *
   * A sealed enum rather than one record with a kind field, because a WebSocket route has no
   * `Method`: the upgrade is always a `GET` and eezo never dispatches on it. Neither case carries a
-  * field it does not use.
+  * field it does not use. Who calls an HTTP route is a field of `Http` rather than a third case,
+  * [[RouteKind]], because a browser route and an API route share every other field and every rule
+  * the table applies to them: the match, the order, the override and the duplicate check.
   */
 enum Route {
 
@@ -33,7 +65,8 @@ enum Route {
       method: Method,
       pattern: PathPattern,
       handler: Handler,
-      provenance: Provenance = Provenance.Handwritten
+      provenance: Provenance = Provenance.Handwritten,
+      kind: RouteKind = RouteKind.Browser
   )
 
   /** The seam to `modules/live`. The payload is an eezo type rather than Jetty's
@@ -47,14 +80,15 @@ enum Route {
 
   /** A route named the way a human reads it: `GET /widgets/:id`, `WS /live`.
     *
-    * The shadow warning and the `dev = true` boot print both name routes and neither can reach for
-    * the source text, so the one rendering lives here rather than being written twice. `WS` stands
-    * in for the method a WebSocket route does not have, matching the key the duplicate check
-    * already builds.
+    * The warnings name routes and none can reach for the source text, and the table deduplicates
+    * and overrides on the same name, so it lives here rather than being written at each site. It
+    * carries method and path only: two routes that differ in kind alone must still collide, which
+    * is why the listing adds the API mark on top of it in `RouteReport.listing` and not here. `WS`
+    * stands in for the method a WebSocket route does not have.
     */
   def describe: String = this match {
-    case Http(method, pattern, _, _) => s"$method ${pattern.render}"
-    case Ws(pattern, _, _)           => s"WS ${pattern.render}"
+    case Http(method, pattern, _, _, _) => s"$method ${pattern.render}"
+    case Ws(pattern, _, _)              => s"WS ${pattern.render}"
   }
 }
 
@@ -66,6 +100,64 @@ object Route {
     */
   private[eezo] def derived(method: Method, path: String, handler: Handler): Route =
     Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+
+  /** The generated row for a file under `app/` whose handler takes a [[Request]]: a browser route.
+    *
+    * Overloaded on the handler's type, with the API route's row beside it, so the compiler picks
+    * the kind from the type the author's `def` takes and the generator, which reads text, never has
+    * to. The row passes the `def` itself rather than a lambda around it, since a lambda's parameter
+    * would have to be typed by the generator, which is the guess this avoids.
+    */
+  private[eezo] def handwritten(method: Method, path: String, handler: Request => Response): Route =
+    Http(method, PathPattern.parse(path), handler)
+
+  /** The generated row for a file under `app/` whose handler takes an [[ApiRequest]]: an API route.
+    *
+    * The handler is handed its request only once dispatch has emptied the session, which is why the
+    * conversion sits in the route's handler and not in front of it: a guard's wrapper runs between
+    * the two, and it reads the same empty session the handler would.
+    */
+  @targetName("handwrittenApi")
+  private[eezo] def handwritten(
+      method: Method,
+      path: String,
+      handler: ApiRequest => Response
+  ): Route =
+    Http(
+      method,
+      PathPattern.parse(path),
+      request => handler(ApiRequest.of(request)),
+      kind = RouteKind.Api
+    )
+
+  /** The generated row for a `New` or an `Edit` file, which serves a form page and so can only be a
+    * browser route: a handler that takes an [[ApiRequest]] there does not compile.
+    *
+    * A compile error rather than a boot failure because the mistake is in the author's file and the
+    * compiler is the first to see it. The error has to name that file, since the row it points at
+    * is generated code nobody edits, so `source` is an inline literal: `compiletime.error` accepts
+    * only a message it can fold to a constant at the call site. One method that matches on the
+    * handler's type rather than two overloads, so `source` is read in the one branch that needs it
+    * and no overload carries a parameter it never uses.
+    */
+  private[eezo] inline def page[H](
+      method: Method,
+      path: String,
+      handler: H,
+      inline source: String
+  ): Route =
+    inline handler match {
+      case browser: (Request => Response) => handwritten(method, path, browser)
+      case _: (ApiRequest => Response)    =>
+        scala.compiletime.error(
+          source + " takes an ApiRequest, but a New or Edit file serves a form page and an API " +
+            "route has no form to serve: take a Request there, or rename the file"
+        )
+      case _ =>
+        scala.compiletime.error(
+          source + " must define its handler as taking a Request and returning a Response"
+        )
+    }
 
   /** Mounts a set of routes under a prefix: the paths they answer on, and the URLs they emit.
     *
@@ -109,8 +201,8 @@ object Route {
     if (mount == "/") routes
     else
       routes.map {
-        case Http(method, pattern, handler, provenance) =>
-          Http(method, moved(pattern), mounting(handler), provenance)
+        case Http(method, pattern, handler, provenance, kind) =>
+          Http(method, moved(pattern), mounting(handler), provenance, kind)
         case Ws(pattern, endpoint, provenance) => Ws(moved(pattern), endpoint, provenance)
       }
   }
@@ -184,16 +276,24 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
 
   /** Runs the first HTTP route whose method and pattern both match.
     *
+    * Matching and running are two steps, [[matching]] then [[running]], because the server has to
+    * know which route matched before it reads the session cookie: an API route reads none.
+    */
+  def dispatch(request: Request): Response = {
+    val (route, matched) = matching(request)
+    running(route, matched)
+  }
+
+  /** The first HTTP route whose method and pattern both match, and the request with its path
+    * parameters.
+    *
     * One pass. If no route matched but some route's pattern matched the path, their methods are
     * already in hand, so the failure is a [[MethodNotAllowed]] carrying exactly what `Allow` needs;
     * otherwise it is a [[NotFound]]. Only a single pass can populate that header, which RFC 9110
-    * makes mandatory on a 405.
-    *
-    * Between the match and the handler sits the CSRF token, [[Csrf.protect]]: after the match, so a
-    * 404 stays a 404 and a 405 a 405; before the handler and before any wrapper a guard puts around
-    * it, so a forged `POST` to a guarded route is refused as forged, never redirected to login.
+    * makes mandatory on a 405. Nothing about the kind of route is asked here, so a 404 and a 405
+    * read the same whoever the caller is.
     */
-  def dispatch(request: Request): Response = {
+  private[http] def matching(request: Request): (Route.Http, Request) = {
     val allowed = Seq.newBuilder[Method]
 
     val matched = httpRoutes.iterator
@@ -201,20 +301,51 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
         route.pattern.matchPath(request.path) match {
           case None         => None
           case Some(params) =>
-            if (route.method == request.method) Some(route.handler -> params)
+            if (route.method == request.method) Some(route -> params)
             else { allowed += route.method; None }
         }
       }
       .nextOption()
 
     matched match {
-      case Some((handler, params)) => Csrf.protect(handler)(request.copy(pathParams = params))
-      case None                    =>
+      case Some((route, params)) => (route, request.copy(pathParams = params))
+      case None                  =>
         val methods = allowed.result().distinct
         if (methods.isEmpty) throw NotFound(request.path)
         else throw MethodNotAllowed(methods)
     }
   }
+
+  /** Runs a route [[matching]] found.
+    *
+    * On a browser route the CSRF token, [[Csrf.protect]], sits between the match and the handler:
+    * after the match, so a 404 stays a 404 and a 405 a 405; before the handler and before any
+    * wrapper a guard puts around it, so a forged `POST` to a guarded route is refused as forged,
+    * never redirected to login.
+    *
+    * On an API route no session takes part, so there is no token to mint or to check. The session
+    * is emptied rather than trusted to be absent, because a browser can call an API URL and bring
+    * its cookie along: a guard or a handler that read it would let a forged request act as the
+    * signed in user. A response that names a session is a defect rather than a session to drop,
+    * because nothing will carry it, and a handler that meant to sign someone in or leave a flash
+    * would otherwise find out only when the next page shows nothing. The message names the guard as
+    * well as the handler because the response checked is the wrapped one: a sign in guard mounted
+    * here sees nobody and answers with a session of its own, and an author sent to look only in the
+    * handler would find no withSession there.
+    */
+  private[http] def running(route: Route.Http, request: Request): Response =
+    if (!route.kind.api) Csrf.protect(route.handler)(request)
+    else {
+      val response = route.handler(request.copy(session = Session.empty))
+      if (response.session.isDefined)
+        throw new IllegalStateException(
+          s"${route.describe} is an API route and the response of its handler or a guard around " +
+            "it names a session, but no session takes part in an API route, so no cookie would " +
+            "carry it: drop the withSession, guard this route with a Guarded that does not read " +
+            "the session, or take a Request in the handler if a browser calls this route"
+        )
+      response
+    }
 
   /** Finds the first WebSocket route whose pattern matches, if any.
     *
@@ -253,7 +384,7 @@ final class RouteTable(mounted: Seq[Route], val identify: Request => Request) {
   }
 
   private def shadows(earlier: Route, later: Route): Boolean = (earlier, later) match {
-    case (Route.Http(method, pattern, _, _), Route.Http(otherMethod, otherPattern, _, _)) =>
+    case (Route.Http(method, pattern, _, _, _), Route.Http(otherMethod, otherPattern, _, _, _)) =>
       method == otherMethod && pattern.subsumes(otherPattern)
     case (Route.Ws(pattern, _, _), Route.Ws(otherPattern, _, _)) => pattern.subsumes(otherPattern)
     case _                                                       => false

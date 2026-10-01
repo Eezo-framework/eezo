@@ -137,9 +137,16 @@ _Avoid_: authenticate, authenticator, user lookup
 **CSRF token**:
 The value a form carries and an unsafe request must return, proving the submission came from a
 page this application served to this browser and not from a stranger's. One per session, minted
-the first time a browser is seen, verified before any handler runs, on every application whether
-or not anyone can sign in.
+the first time a browser is seen, verified before any handler runs, on every browser route of
+every application whether or not anyone can sign in. An API route has none, because no session
+takes part in it.
 _Avoid_: authenticity token, anti forgery token, form token, nonce
+
+**API route**:
+A route called by a program and not by a browser. No session takes part in it, so it carries no
+CSRF token, and who may call it is said by its Guarded like on any other route. A page is one
+when its handler takes an ApiRequest rather than a Request; nothing else declares it.
+_Avoid_: endpoint, webhook route, REST route, stateless route, CSRF exempt route
 
 **Mount**:
 The prefix a set of routes is addressed under, and everything that moves with it: the pages, the

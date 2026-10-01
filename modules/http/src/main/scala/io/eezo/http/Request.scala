@@ -41,8 +41,10 @@ object FromPath {
   * untyped `attachment: AnyRef` bag. A capability arrives through the handler's `using` list, where
   * its absence is a compile error rather than a `sys.error` on the first request that needs it.
   *
-  * The session is read for the handler, before dispatch, out of the signed cookie: a request built
-  * by hand carries the empty one, and a test that wants a session says so with `copy`.
+  * The session is read for the handler out of the signed cookie once the route has matched, and
+  * only on a browser route: no session takes part in an API route, so a request there carries the
+  * empty one whatever cookie it sent, and so does a request built by hand until a test says
+  * otherwise with `copy`.
   *
   * `secure` is whether the browser reached the application over HTTPS, which is what decides a
   * cookie's `Secure` attribute. A request built by hand is not.
@@ -75,8 +77,8 @@ final case class Request(
   def queryParam(name: String): Option[String] = query.get(name).flatMap(_.headOption)
 
   /** The `Cookie` header, split into pairs, decoded once and remembered. Every header of that name
-    * counts, and the first of a repeated name wins. What a handler reads for its own cookies; the
-    * session cookie is read for it, into [[session]], before dispatch.
+    * counts, and the first of a repeated name wins. What a handler reads for its own cookies; on a
+    * browser route the session cookie is read for it, into [[session]], once the route has matched.
     */
   lazy val cookies: Map[String, String] =
     Cookie.parse(Request.headerValues(headers, "Cookie"))
@@ -85,9 +87,9 @@ final case class Request(
   def cookie(name: String): Option[String] = cookies.get(name)
 
   /** The CSRF token this browser's forms must carry: what a handler hands to `Form.render` and
-    * `Csrf.hidden`. Dispatch mints one into the session before any handler runs, so inside a route
-    * this cannot fail; a request built by hand and never dispatched has none, and asking is a bug
-    * in the caller rather than a bad request.
+    * `Csrf.hidden`. Dispatch mints one into the session before any handler on a browser route runs,
+    * so inside one this cannot fail; a request built by hand and never dispatched has none, and
+    * asking is a bug in the caller rather than a bad request.
     *
     * @throws IllegalStateException
     *   on a request dispatch has never seen, which has no token to hand out.
@@ -124,15 +126,7 @@ final case class Request(
     header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded"))
 
   /** A path parameter, converted. Throws [[BadRequest]], which the boundary maps to a 400. */
-  def param[A](name: String)(using from: FromPath[A]): A =
-    paramOpt[A](name).getOrElse(
-      throw BadRequest(
-        pathParams.get(name) match {
-          case Some(value) => s"path parameter '$name' cannot be read from '$value'"
-          case None        => s"path parameter '$name' is not part of this route"
-        }
-      )
-    )
+  def param[A](name: String)(using from: FromPath[A]): A = Request.param(pathParams, name)
 
   /** The non throwing form of [[param]]. */
   def paramOpt[A](name: String)(using from: FromPath[A]): Option[A] =
@@ -154,6 +148,21 @@ object Request {
   private[http] def isSecure(tls: Boolean, headers: Map[String, Seq[String]]): Boolean =
     tls || headerValues(headers, "X-Forwarded-Proto").headOption
       .exists(_.split(',').head.trim.equalsIgnoreCase("https"))
+
+  /** A path parameter, converted, or the [[BadRequest]] that says why not. Over the bare map
+    * because an [[ApiRequest]] reads its path the same way, and a program calling an API route and
+    * a browser calling a page have to be refused in the same words for the same mistake.
+    */
+  private[http] def param[A](pathParams: Map[String, String], name: String)(using
+      from: FromPath[A]
+  ): A =
+    pathParams.get(name) match {
+      case None        => throw BadRequest(s"path parameter '$name' is not part of this route")
+      case Some(value) =>
+        from(value).getOrElse(
+          throw BadRequest(s"path parameter '$name' cannot be read from '$value'")
+        )
+    }
 
   /** Every value of a header, case insensitively, in order. Over the bare map rather than a
     * [[Request]], because [[isSecure]] is asked before there is one.
