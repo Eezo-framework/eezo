@@ -49,12 +49,14 @@ object Assets {
       }
   }
 
-  /** A short digest of the stylesheets, spelled into every asset URL, so that a change to it is a
-    * new address and a year long cache is safe.
+  /** A short digest of the stylesheets and scripts, spelled into every asset URL, so that a change
+    * to it is a new address and a year long cache is safe.
     */
   lazy val version: String = {
     val digest = MessageDigest.getInstance("SHA-256")
-    Vector("site.css", "api.css").flatMap(read).foreach(digest.update)
+    Vector("site.css", "api.css", "hljs/highlight.min.js", "hljs/scala.min.js", "hljs/nginx.min.js")
+      .flatMap(read)
+      .foreach(digest.update)
     digest.digest().take(6).map(b => f"$b%02x").mkString
   }
 

@@ -75,13 +75,15 @@ If 8080 is taken, add `override def port: Int = 8090` to `Main`.
 Five handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
 by its address, the catch-all that serves the stylesheet, the fonts and the icons out of the jar,
 and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
-nodes, so a page is one tree from the header to the footer; the code blocks are coloured on the
-server.
+nodes, so a page is one tree from the header to the footer. Code blocks are coloured by
+highlight.js in the browser: the build takes its bundle and the Scala and nginx grammars out of
+the webjar, the page loads them at the end of the body, and `hljs.highlightAll()` is the one line
+of script the site has of its own. The palette for its classes is in `site.css`.
 
-The site ships no script of its own. What moves on a page is the live layer: the navigation
-drawer on a narrow screen is a `Component[Boolean]`, and the front page's counter is a
-`Component[Int]`, both patched over the framework's one socket. The theme toggle is a plain form,
-because a choice that has to outlive the page belongs in the session, not in a live page's state.
+Everything else that moves on a page is the live layer: the navigation drawer on a narrow screen
+is a `Component[Boolean]`, and the front page's counter is a `Component[Int]`, both patched over
+the framework's one socket. The theme toggle is a plain form, because a choice that has to outlive
+the page belongs in the session, not in a live page's state.
 
 ## Deploying
 

@@ -1007,9 +1007,17 @@ button {
   position: sticky;
   top: calc(var(--topbar-h) + 20px);
   max-height: calc(100vh - var(--topbar-h) - 20px);
+  /* Vertical only: with `overflow-y` alone the other axis turns to `auto` as well, and the hover
+     nudge on a link or a long title is enough to grow a horizontal scrollbar. */
   overflow-y: auto;
+  overflow-x: hidden;
   padding-bottom: 20px;
   scrollbar-width: thin;
+}
+
+.sidebar a,
+.outline a {
+  overflow-wrap: anywhere;
 }
 
 .sidebar h2,
@@ -1356,19 +1364,41 @@ button {
   color: inherit;
 }
 
-.tk-comment { color: var(--tk-comment); font-style: italic; }
-.tk-str { color: var(--tk-str); }
-.tk-num { color: var(--tk-num); }
-.tk-kw { color: var(--tk-kw); font-weight: 600; }
-.tk-type { color: var(--tk-type); }
-.tk-punct { color: var(--tk-punct); }
-.tk-ann { color: var(--tk-ann); }
-.tk-cmd { color: var(--tk-cmd); font-weight: 600; }
-.tk-var { color: var(--tk-var); }
-.tk-flag { color: var(--tk-flag); }
-.tk-prompt { color: var(--tk-prompt); user-select: none; }
-.tk-key { color: var(--tk-key); }
-.tk-section { color: var(--tk-section); font-weight: 600; }
+/* highlight.js's classes, on the site's palette */
+
+.hljs-comment,
+.hljs-doctag,
+.hljs-quote { color: var(--tk-comment); font-style: italic; }
+.hljs-string,
+.hljs-regexp { color: var(--tk-str); }
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-variable,
+.hljs-symbol,
+.hljs-addition { color: var(--tk-num); }
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-section { color: var(--tk-kw); font-weight: 600; }
+.hljs-type,
+.hljs-title.class_,
+.hljs-built_in { color: var(--tk-type); }
+.hljs-title,
+.hljs-title.function_,
+.hljs-function .hljs-title,
+.hljs-name { color: var(--tk-cmd); }
+.hljs-meta,
+.hljs-meta .hljs-keyword,
+.hljs-attr,
+.hljs-attribute,
+.hljs-property { color: var(--tk-key); }
+.hljs-params { color: inherit; }
+.hljs-operator,
+.hljs-punctuation { color: var(--tk-punct); }
+.hljs-deletion { color: #ff6b6b; }
+.hljs-emphasis { font-style: italic; }
+.hljs-strong { font-weight: 700; }
+.language-bash .hljs-built_in { color: var(--tk-cmd); font-weight: 600; }
 
 /* ---------- the hub, the pillar indexes, drafts ---------- */
 

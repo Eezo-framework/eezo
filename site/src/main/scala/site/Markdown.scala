@@ -14,7 +14,7 @@ import org.commonmark.parser.Parser
   *
   * The walk rather than the library's HTML renderer and a `Html.raw` around its output, because the
   * page then stays one tree from the header to the footer: headings get their anchors, code blocks
-  * their highlighting and links their resolution in the same place everything else on the page is
+  * their language class and links their resolution in the same place everything else on the page is
   * built, and the outline on the right is read off the same headings the article renders.
   */
 object Markdown {
@@ -100,8 +100,8 @@ object Markdown {
       case s: StrongEmphasis => strong(inner(s))
       case c: Code           => code(c.getLiteral)
 
-      case f: FencedCodeBlock   => Highlight.block(Option(f.getInfo).getOrElse(""), f.getLiteral)
-      case i: IndentedCodeBlock => Highlight.block("", i.getLiteral)
+      case f: FencedCodeBlock   => CodeBlock.render(Option(f.getInfo).getOrElse(""), f.getLiteral)
+      case i: IndentedCodeBlock => CodeBlock.render("", i.getLiteral)
 
       case l: Link =>
         val href     = link(l.getDestination)

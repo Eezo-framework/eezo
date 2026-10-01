@@ -45,8 +45,8 @@ final class Clicks extends Component[Int] {
         Attrs.cls := "live-note",
         "This box is a live component: ",
         code("Component[Int]"),
-        " on the server, events up and patches down over one socket. ",
-        "The site ships no script of its own."
+        " on the server, events up and patches down over one socket, ",
+        "with no JavaScript of ours."
       )
     )
 }

@@ -27,6 +27,27 @@ class RoutesSuite extends FunSuite {
     assert(html.contains("data-eezo-page="), html)
     assert(html.contains("""<script src="/eezo/live.js" defer>"""), html)
     assert(!html.contains("site.js"), html)
+    assert(html.contains("hljs/highlight.min.js?v="), html)
+    assert(html.contains("hljs/scala.min.js?v="), html)
+    assert(html.contains("<script>hljs.highlightAll()</script>"), html)
+  }
+
+  test("highlight.js is served out of the jar") {
+    val core = get("/assets/hljs/highlight.min.js")
+    assertEquals(core.status, 200)
+    assertEquals(core.header("Content-Type"), Some("text/javascript; charset=utf-8"))
+    val scala = get("/assets/hljs/scala.min.js")
+    assertEquals(scala.status, 200)
+    val grammar = scala.body match {
+      case Body.Bytes(bytes) => new String(bytes, "UTF-8")
+      case other             => fail(s"expected bytes, got $other")
+    }
+    assert(grammar.contains("extends with derives"), "the Scala grammar knows derives in a class")
+    assert(
+      grammar.contains("transparent derives opaque infix open using as"),
+      "and the Scala 3 soft keywords"
+    )
+    assertEquals(get("/assets/hljs/nginx.min.js").status, 200)
   }
 
   test("a docs page mounts the drawer and posts its theme toggle with a token") {

@@ -32,12 +32,27 @@ class MarkdownSuite extends FunSuite {
     assert(description.stripSuffix("…").split(" ").forall(_ == "word"), description)
   }
 
-  test("a fenced block is highlighted and its markup escaped") {
+  test("a fenced block names its language for highlight.js and its markup is escaped") {
     val out = html("```scala\nval x = \"<b>\"\n```\n")
     assert(out.contains("""class="codeblock" data-lang="scala""""), out)
-    assert(out.contains("""<span class="tk-kw">val</span>"""), out)
-    assert(out.contains("&lt;b&gt;"), out)
+    assert(
+      out.contains(
+        """<pre><code class="language-scala">val x = &quot;&lt;b&gt;&quot;</code></pre>"""
+      ),
+      out
+    )
     assert(!out.contains("<b>"), out)
+  }
+
+  test("a fence's name is mapped to the grammar highlight.js has, or left alone") {
+    assertEquals(CodeBlock.cls("sh"), "language-bash")
+    assertEquals(CodeBlock.cls("toml"), "language-ini")
+    assertEquals(CodeBlock.cls("scala"), "language-scala")
+    assertEquals(CodeBlock.cls(""), "nohighlight")
+    assertEquals(CodeBlock.cls("brainfuck"), "nohighlight")
+    assert(html("```\n9 routes:\n```\n").contains("""data-lang="text""""))
+    assert(html("```\n9 routes:\n```\n").contains("""<code class="nohighlight">"""))
+    assert(html("```toml\na = 1\n```\n").contains("""data-lang="toml""""))
   }
 
   test("a table renders with a head, a body and its alignment") {

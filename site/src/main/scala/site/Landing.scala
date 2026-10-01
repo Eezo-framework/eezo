@@ -122,7 +122,7 @@ object Landing {
       ),
       div(
         Attrs.cls := "hero-code",
-        Highlight.block("scala", Model),
+        CodeBlock.render("scala", Model),
         ul(
           Attrs.cls                := "routes-pop",
           Attrs.attr("aria-label") := "The seven routes the model mounts",

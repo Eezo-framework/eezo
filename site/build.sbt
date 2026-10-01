@@ -10,6 +10,8 @@
 name         := "eezo-site"
 scalaVersion := EezoVersion.scalaVersion
 
+lazy val HighlightJs = "11.11.1"
+
 enablePlugins(EezoPlugin)
 
 libraryDependencies ++= Seq(
@@ -22,7 +24,10 @@ libraryDependencies ++= Seq(
   // dependency, BSD licensed.
   "org.commonmark"  % "commonmark"                % "0.30.0",
   "org.commonmark"  % "commonmark-ext-gfm-tables" % "0.30.0",
-  "org.scalameta"  %% "munit"                     % "1.3.4" % Test
+  // highlight.js, the browser bundle, for the code blocks. `Provided`: the generator below takes
+  // the three files the pages load out of the jar at build time, so the jar itself never ships.
+  "org.webjars"     % "highlightjs"               % HighlightJs % Provided,
+  "org.scalameta"  %% "munit"                     % "1.3.4"     % Test
 )
 
 scalacOptions ++= Seq(
@@ -87,6 +92,46 @@ Compile / resourceGenerators += Def.task {
   val index = out / "index.txt"
   IO.writeLines(index, files.map(_._2).sorted)
   copied :+ index
+}.taskValue
+
+/** highlight.js, served as the site's own assets under `assets/hljs/`: the core bundle, and the two
+  * languages the docs use that its default bundle leaves out. Taken out of the webjar here rather
+  * than committed, so a version bump is one line above.
+  */
+Compile / resourceGenerators += Def.task {
+  val jar = (Compile / dependencyClasspath).value.files
+    .find(_.getName.startsWith("highlightjs-"))
+    .getOrElse(sys.error("the highlight.js webjar is not on the compile classpath"))
+  val out    = (Compile / resourceManaged).value / "assets" / "hljs"
+  val prefix = s"META-INF/resources/webjars/highlightjs/$HighlightJs/"
+  val wanted = Seq(
+    "highlight.min.js"       -> "highlight.min.js",
+    "languages/scala.min.js" -> "scala.min.js",
+    "languages/nginx.min.js" -> "nginx.min.js"
+  )
+  IO.delete(out)
+  IO.createDirectory(out)
+  val unpacked = IO.createTemporaryDirectory
+  IO.unzip(jar, unpacked, (name: String) => wanted.exists { case (from, _) => name == prefix + from })
+  val files = wanted.map { case (from, to) =>
+    val file = out / to
+    IO.copyFile(unpacked / prefix / from, file)
+    file
+  }
+  // The Scala grammar predates Scala 3: `derives` reads as a type name, and the newer soft
+  // keywords are plain. Two edits to its keyword lists, each required to land, so that a grammar
+  // that changed shape on an upgrade fails the build here rather than quietly losing them.
+  val scala   = out / "scala.min.js"
+  val patched = Seq(
+    "beginKeywords:\"extends with\"" -> "beginKeywords:\"extends with derives\"",
+    "export enum given transparent\"" -> "export enum given transparent derives opaque infix open using as\""
+  ).foldLeft(IO.read(scala)) { case (text, (from, to)) =>
+    if (!text.contains(from))
+      sys.error(s"highlight.js $HighlightJs: the Scala grammar no longer contains `$from`; revisit the patch")
+    text.replace(from, to)
+  }
+  IO.write(scala, patched)
+  files
 }.taskValue
 
 /** The API reference: the scaladoc `sbt unidoc` wrote at the root of the repository, copied into

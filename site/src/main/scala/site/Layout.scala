@@ -43,7 +43,13 @@ object Layout {
         a(Attrs.cls := "skip", Attrs.href := "#content", "Skip to content"),
         header(request, meta.path),
         content,
-        footer
+        footer,
+        // highlight.js colours the code blocks after the page is parsed. These are the site's only
+        // scripts: the library, the two grammars its bundle leaves out, and the one call.
+        script(Attrs.src := Assets.url("hljs/highlight.min.js")),
+        script(Attrs.src := Assets.url("hljs/scala.min.js")),
+        script(Attrs.src := Assets.url("hljs/nginx.min.js")),
+        script(Html.raw("hljs.highlightAll()"))
       )
     )
 
