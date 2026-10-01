@@ -104,7 +104,9 @@ final class Http(timeout: Duration) {
 
   def post(url: String, content: Content, headers: (String, String)*): Reply =
     send(url, headers) {
-      _.header("Content-Type", content.contentType)
+      // setHeader replaces: the caller's headers are applied first, and a second Content-Type
+      // beside the Content's own would let a receiver read the bytes under the wrong type.
+      _.setHeader("Content-Type", content.contentType)
         .POST(HttpRequest.BodyPublishers.ofByteArray(content.bytes))
     }
 

@@ -171,6 +171,22 @@ class ClientSuite extends munit.FunSuite {
     }
   }
 
+  test(
+    "a Content's type is the only Content-Type that goes out, whatever the caller's headers say"
+  ) {
+    serving { base =>
+      val form = Http.form("amount" -> "10")
+      Http.post(s"$base/api/capture", form, "Content-Type" -> "application/json") match {
+        case Reply.Ok(_) =>
+          val sent = captured.get.headers.collect {
+            case (name, values) if name.equalsIgnoreCase("Content-Type") => values
+          }.flatten
+          assertEquals(sent.toList, List("application/x-www-form-urlencoded"))
+        case other => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
   test("a name given twice arrives twice, in the order given, through the server's decoder") {
     serving { base =>
       Http.post(
