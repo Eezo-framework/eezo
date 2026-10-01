@@ -74,7 +74,7 @@ class PagesSuite extends FunSuite {
   test("a tutorial's order is the listed one, and a placeholder is a draft") {
     val tutorials = pages.pillar("tutorials").get.pages
     assertEquals(tutorials.head.slug, "tutorials/getting-started")
-    assert(tutorials.head.draft)
+    assert(pages.bySlug("how-to/deploy").draft)
     assert(!pages.bySlug("tutorials/deploy-to-fly").draft)
     assertEquals(
       tutorials.map(_.group).distinct,
