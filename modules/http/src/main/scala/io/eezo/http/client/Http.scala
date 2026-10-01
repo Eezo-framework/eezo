@@ -1,6 +1,6 @@
 package io.eezo.http.client
 
-import java.net.{Proxy, ProxySelector, SocketAddress, URI}
+import java.net.{Proxy, ProxySelector, SocketAddress, URI, URLEncoder}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.time.Duration
@@ -48,6 +48,16 @@ final case class Received(status: Int, headers: Map[String, List[String]], body:
     headers.collectFirst { case (k, v) if k.equalsIgnoreCase(name) => v }.flatMap(_.headOption)
 }
 
+/** A request body once it has been encoded for the wire: bytes that know their media type.
+  *
+  * The two travel together because a body and its `Content-Type` written apart can disagree, and
+  * the server reads the bytes by the type it is told. The constructor is closed for the same
+  * reason: an application gets a Content from an encoder such as [[Http.form]] and hands it to
+  * `post`, so the type it carries is always the one its bytes were written in. The bytes are the
+  * array that will be sent, so two Contents are not compared by what they hold.
+  */
+final case class Content private[client] (contentType: String, bytes: Array[Byte])
+
 /** Request-side credentials, as the header pair they are. */
 object Auth {
 
@@ -66,8 +76,10 @@ object Auth {
   * `Async[S]` supplies the thread, and everything else calls from wherever it already is.
   *
   * Redirects follow the JDK's `NORMAL` policy: followed, never from HTTPS down to HTTP, and the JDK
-  * strips `Authorization` when a redirect changes origin. Bodies are text or bytes; the JSON story
-  * belongs to the future public `derives Json` design, not here (design/live.md M6).
+  * strips `Authorization` when a redirect changes origin. A body is either text the caller has
+  * already written, sent under the type the caller names, or a [[Content]] an encoder made, which
+  * carries its own type so the two cannot disagree. A JSON encoder belongs to the future public
+  * `derives Json` design, not here (design/live.md M6).
   */
 final class Http(timeout: Duration) {
 
@@ -88,6 +100,12 @@ final class Http(timeout: Duration) {
     send(url, headers) {
       _.header("Content-Type", contentType)
         .POST(HttpRequest.BodyPublishers.ofString(body, StandardCharsets.UTF_8))
+    }
+
+  def post(url: String, content: Content, headers: (String, String)*): Reply =
+    send(url, headers) {
+      _.header("Content-Type", content.contentType)
+        .POST(HttpRequest.BodyPublishers.ofByteArray(content.bytes))
     }
 
   def put(url: String, body: String, contentType: String, headers: (String, String)*): Reply =
@@ -146,6 +164,9 @@ object Http {
   ): Reply =
     default.post(url, body, contentType, headers*)
 
+  def post(url: String, content: Content, headers: (String, String)*): Reply =
+    default.post(url, content, headers*)
+
   def put(
       url: String,
       body: String,
@@ -153,6 +174,19 @@ object Http {
       headers: (String, String)*
   ): Reply =
     default.put(url, body, contentType, headers*)
+
+  /** A form body, as an API such as Stripe's expects one, so no application encodes it by hand.
+    *
+    * The pairs go out in the order given and a repeated name is sent each time, because a form is a
+    * list and not a map: the receiving side reads repeats as one field with several values, in the
+    * order they arrived. Bracketed names such as `line_items[0][quantity]` are the caller's to
+    * spell, since what the brackets mean is the receiving API's convention and not the encoding's.
+    */
+  def form(fields: (String, String)*): Content = {
+    def encode(text: String) = URLEncoder.encode(text, StandardCharsets.UTF_8)
+    val encoded = fields.map((name, value) => s"${encode(name)}=${encode(value)}").mkString("&")
+    Content("application/x-www-form-urlencoded", encoded.getBytes(StandardCharsets.UTF_8))
+  }
 
   /** The same calls under another deadline, for the caller who knows better. */
   def withTimeout(timeout: Duration): Http = new Http(timeout)
