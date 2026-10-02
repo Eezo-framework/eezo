@@ -72,18 +72,27 @@ If 8080 is taken, add `override def port: Int = 8090` to `Main`.
 
 ## How it is put together
 
-Five handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
+Six handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
 by its address, the catch-all that serves the stylesheet, the fonts and the icons out of the jar,
-and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
+`/search`, and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
 nodes, so a page is one tree from the header to the footer. Code blocks are coloured by
 highlight.js in the browser: the build takes its bundle and the Scala and nginx grammars out of
-the webjar, the page loads them at the end of the body, and `hljs.highlightAll()` is the one line
-of script the site has of its own. The palette for its classes is in `site.css`.
+the webjar, the page loads them at the end of the body, and `hljs.highlightAll()` is one of the
+two scripts the site has of its own. The palette for its classes is in `site.css`. The other is a
+few lines for the keyboard, which the live layer cannot hear: Ctrl-K or Cmd-K presses the search
+button, Escape presses its close button, and the search input is focused once it has been patched
+in.
 
-Everything else that moves on a page is the live layer: the navigation drawer on a narrow screen
-is a `Component[Boolean]`, and the front page's counter is a `Component[Int]`, both patched over
-the framework's one socket. The theme toggle is a plain form, because a choice that has to outlive
-the page belongs in the session, not in a live page's state.
+Everything else that moves on a page is the live layer, as one component per page: `Chrome`
+renders the header with its search button, the search dialog, the navigation drawer on a docs
+page and the counter on the front page, because the live layer drives one mount per page and the
+button in the header has to sit in the same tree as the dialog it opens. The page's own content
+is a function of that state, built once and compared on every patch. The search is `Search`, an
+index of every page cut at its headings, built from the same Markdown the pages render, rebuilt
+per query under the dev loop and once in production; `/search` is the hub with the dialog open,
+for the API pages, whose chrome is injected into scaladoc's markup and holds no component. The
+theme toggle is a plain form, because a choice that has to outlive the page belongs in the
+session, not in a live page's state.
 
 ## Deploying
 

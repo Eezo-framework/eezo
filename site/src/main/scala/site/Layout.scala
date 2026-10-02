@@ -2,6 +2,7 @@ package site
 
 import io.eezo.core.html.*
 import io.eezo.http.Request
+import io.eezo.live.Live
 
 /** The chrome every page shares: the document, the header, the footer. */
 object Layout {
@@ -11,10 +12,16 @@ object Layout {
 
   val SiteName: String = "eezo"
 
-  /** A whole document around `content`. The request is what the header needs: the theme this
-    * browser chose, and the token its toggle posts with.
+  /** A whole document around `content`, which is a function of the live state the page shares with
+    * its chrome: see [[Chrome]]. The request is what the header needs: the theme this browser
+    * chose, and the token its toggle posts with.
     */
-  def page(request: Request, meta: Meta, bodyClass: String)(content: Html): Html =
+  def page(
+      request: Request,
+      meta: Meta,
+      bodyClass: String,
+      initial: Chrome.State = Chrome.State.initial
+  )(content: Chrome.State => Html): Html =
     Html.doctype ++ html(
       Attrs.lang := "en",
       Theme.current(request).map(Attrs.data("theme") := _),
@@ -40,18 +47,46 @@ object Layout {
       ),
       body(
         Attrs.cls := bodyClass,
-        a(Attrs.cls := "skip", Attrs.href := "#content", "Skip to content"),
-        header(request, meta.path),
-        content,
-        footer,
-        // highlight.js colours the code blocks after the page is parsed. These are the site's only
-        // scripts: the library, the two grammars its bundle leaves out, and the one call.
+        Live.mount(
+          request,
+          new Chrome(meta.path, Theme.toggle(request), content, () => Search.current, initial)
+        ),
+        // highlight.js colours the code blocks after the page is parsed: the library, the two
+        // grammars its bundle leaves out, and the one call.
         script(Attrs.src := Assets.url("hljs/highlight.min.js")),
         script(Attrs.src := Assets.url("hljs/scala.min.js")),
         script(Attrs.src := Assets.url("hljs/nginx.min.js")),
-        script(Html.raw("hljs.highlightAll()"))
+        script(Html.raw("hljs.highlightAll()")),
+        // The keyboard: the one thing the live layer cannot hear. Ctrl-K or Cmd-K presses the
+        // search button, Escape presses its close button, and the input is focused once the
+        // dialog has been patched in; everything else about the search is the component's.
+        script(Html.raw(Keys))
       )
     )
+
+  private val Keys: String =
+    """(function () {
+      |  if (/Mac|iPhone|iPad/.test(navigator.platform || "")) document.documentElement.classList.add("mac");
+      |  function focusSearch(tries) {
+      |    var input = document.querySelector("[data-search-input]");
+      |    if (input) { input.focus(); input.select(); return; }
+      |    if (tries > 0) setTimeout(function () { focusSearch(tries - 1); }, 50);
+      |  }
+      |  document.addEventListener("click", function (e) {
+      |    if (e.target.closest && e.target.closest("[data-search-open]")) focusSearch(40);
+      |  });
+      |  document.addEventListener("keydown", function (e) {
+      |    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
+      |      e.preventDefault();
+      |      var open = document.querySelector("[data-search-open]");
+      |      if (document.querySelector("[data-search-input]")) focusSearch(0);
+      |      else if (open) open.click();
+      |    } else if (e.key === "Escape") {
+      |      var close = document.querySelector("[data-search-close]");
+      |      if (close) close.click();
+      |    }
+      |  });
+      |})();""".stripMargin
 
   /** The mark: a rounded tile with a wink of an `e`, and the wordmark beside it. Inline, so it
     * takes the page's colours and needs no request of its own. `mods` is for a host that needs
@@ -75,12 +110,12 @@ object Layout {
       |<rect x="20" y="18" width="12" height="4.5" rx="2" fill="var(--ink-fixed)"/>
       |</svg>""".stripMargin.replace("\n", "")
 
-  private def header(request: Request, path: String): Html = {
+  /** The top bar, rendered inside [[Chrome]] so the search button can open the dialog. */
+  private[site] def header(path: String, theme: Html): Html = {
     def item(href: String, label: String, active: Boolean): Html =
       li(
         a(Attrs.href := href, if (active) Seq(Attrs.attr("aria-current") := "page") else Nil, label)
       )
-
     Tags.header(
       Attrs.cls := "topbar",
       div(
@@ -94,12 +129,29 @@ object Layout {
             li(a(Attrs.href := Pages.Repository, Attrs.rel := "noopener", "GitHub"))
           )
         ),
-        Theme.toggle(request)
+        searchButton,
+        theme
       )
     )
   }
 
-  private def footer: Html =
+  /** The way into the search dialog, with the shortcut beside it. Both spellings of the shortcut
+    * are rendered and the stylesheet shows the one for the keyboard at hand.
+    */
+  private val searchButton: Html =
+    button(
+      Attrs.cls                 := "search-button",
+      Attrs.tpe                 := "button",
+      Attrs.attr("aria-label")  := "Search the documentation",
+      Attrs.data("search-open") := "",
+      Live.onClick("search-open"),
+      Icons.search,
+      span(Attrs.cls       := "search-label", "Search"),
+      Chrome.Kbd(Attrs.cls := "shortcut mac", "⌘K"),
+      Chrome.Kbd(Attrs.cls := "shortcut other", "Ctrl K")
+    )
+
+  private[site] val footer: Html =
     Tags.footer(
       Attrs.cls := "site-footer",
       div(

@@ -2,7 +2,6 @@ package site
 
 import io.eezo.core.html.*
 import io.eezo.http.Request
-import io.eezo.live.Live
 
 /** The front page: what eezo is, in one screen, and the way into the docs. */
 object Landing {
@@ -81,11 +80,11 @@ object Landing {
         path = "/"
       ),
       "landing"
-    )(
+    )(state =>
       main(
         Attrs.id  := "content",
         Attrs.cls := "landing-main",
-        hero(request),
+        hero(state.clicks),
         pillars,
         steps,
         features,
@@ -94,7 +93,7 @@ object Landing {
       )
     )
 
-  private def hero(request: Request): Html =
+  private def hero(clicks: Int): Html =
     section(
       Attrs.cls := "hero",
       div(
@@ -135,7 +134,7 @@ object Landing {
             )
           }
         ),
-        Live.mount(request, new Clicks)
+        Clicks.render(clicks)
       )
     )
 

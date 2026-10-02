@@ -62,6 +62,7 @@ object ApiPages {
       Attrs.attr("aria-label") := "Site",
       a(Plain, Attrs.href := "/docs", "Docs"),
       a(Plain, Attrs.href := "/docs/examples/hello", "Examples"),
+      a(Plain, Attrs.href := "/search", "Search"),
       a(Plain, Attrs.href := "/api/", Attrs.attr("aria-current") := "page", "API"),
       a(Plain, Attrs.href := Pages.Repository, Attrs.rel         := "noopener", "GitHub"),
       Theme.toggle(request)

@@ -4,7 +4,6 @@ import io.eezo.core.html.*
 import io.eezo.http.NotFound
 import io.eezo.http.Request
 import io.eezo.http.Response
-import io.eezo.live.Live
 
 /** The documentation: the hub at `/docs`, an index per pillar, and the pages themselves, each with
   * the tree on the left and its own outline on the right.
@@ -41,28 +40,42 @@ object Docs {
   /** The chrome every docs address shares: the drawer on the left, the article in the middle, and
     * whatever the right column holds.
     */
-  private def shell(request: Request, tree: Pages, current: Option[Page], meta: Layout.Meta)(
+  private def shell(
+      request: Request,
+      tree: Pages,
+      current: Option[Page],
+      meta: Layout.Meta,
+      initial: Chrome.State = Chrome.State.initial
+  )(
       article: Html,
       right: Html
   ): Html =
-    Layout.page(request, meta, "docs")(
+    Layout.page(request, meta, "docs", initial)(state =>
       div(
         Attrs.cls := "docs-shell",
-        // The tree and its drawer are one live component, mounted where the left column goes.
-        Live.mount(request, new Drawer(tree, current)),
+        // The tree and its drawer are a slice of the page's one live component, placed where the
+        // left column goes; the article is built once, above, and only compared from then on.
+        Drawer.render(state.drawer, tree, current),
         main(Attrs.id := "content", Attrs.cls := "docs-main", article),
         right
       )
     )
 
+  /** `/search`: the hub, with the search dialog open. */
+  def searching(request: Request): Html = hub(request, pages, Chrome.State.searching)
+
   /** `/docs`: the four pillars, and the way into each. */
-  private def hub(request: Request, tree: Pages): Html = {
+  private def hub(
+      request: Request,
+      tree: Pages,
+      initial: Chrome.State = Chrome.State.initial
+  ): Html = {
     val meta = Layout.Meta(
       "Documentation",
       "The eezo documentation: tutorials, how-to guides, explanation and reference.",
       "/docs"
     )
-    shell(request, tree, None, meta)(
+    shell(request, tree, None, meta, initial)(
       Tags.article(
         Attrs.cls := "prose hub",
         h1("Documentation"),

@@ -19,6 +19,13 @@ class RoutesSuite extends FunSuite {
     case other           => fail(s"expected a page, got $other")
   }
 
+  test("the search page opens the dialog, and every page offers the shortcut") {
+    val html = page(get("/search"))
+    assert(html.contains("search-input"), html)
+    assert(html.contains("""data-search-open"""), html)
+    assert(page(get("/")).contains("""class="shortcut other""""))
+  }
+
   test("the front page, with its live demo mounted") {
     val response = get("/")
     assertEquals(response.status, 200)

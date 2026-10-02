@@ -2,8 +2,8 @@ package site
 
 import io.eezo.core.html.*
 
-/** The three icons, as inline SVG built with the DSL so they can sit inside a live tree like any
-  * other element.
+/** The icons, as inline SVG built with the DSL so they can sit inside a live tree like any other
+  * element.
   */
 object Icons {
 
@@ -32,6 +32,15 @@ object Icons {
   val close: Html =
     icon(22, Attrs.attr("stroke-width") := "2.5")(path(Attrs.attr("d") := "M6 6l12 12M18 6L6 18"))
 
+  val search: Html =
+    icon(20, Attrs.attr("stroke-width") := "2.4")(
+      new Tag("circle")(
+        Attrs.attr("cx") := "11",
+        Attrs.attr("cy") := "11",
+        Attrs.attr("r")  := "6.5"
+      ),
+      path(Attrs.attr("d") := "M16 16l4.5 4.5")
+    )
   val sun: Html =
     icon(20)(
       new Tag("circle")(

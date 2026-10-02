@@ -1,23 +1,18 @@
 package site
 
 import io.eezo.core.html.*
-import io.eezo.live.Component
 import io.eezo.live.Event
-import io.eezo.live.Init
 import io.eezo.live.Live
 
 /** The documentation tree, and the drawer it slides in as on a narrow screen.
   *
-  * A live component with one bit of state: whether the drawer is open. The button that opens it and
-  * the tree it opens are one subtree, because a component patches its own root and nothing outside
-  * it; the stylesheet puts the button in the top bar. On a wide screen the same tree is the left
-  * column and the button is not shown.
+  * One bit of state, owned by [[Chrome]]: whether the drawer is open. The button that opens it and
+  * the tree it opens are one subtree, and the stylesheet puts the button in the top bar. On a wide
+  * screen the same tree is the left column and the button is not shown.
   *
   * `current` is the page being read, or nothing on the hub and a pillar's index.
   */
-final class Drawer(tree: Pages, current: Option[Page]) extends Component[Boolean] {
-
-  def init(ctx: Init[Boolean]): Boolean = false
+object Drawer {
 
   def handle(event: Event, open: Boolean): Boolean = event.name match {
     case "toggle" => !open
@@ -25,7 +20,7 @@ final class Drawer(tree: Pages, current: Option[Page]) extends Component[Boolean
     case _        => open
   }
 
-  def render(open: Boolean): Html =
+  def render(open: Boolean, tree: Pages, current: Option[Page]): Html =
     div(
       Attrs.cls := (if (open) "drawer open" else "drawer"),
       button(
@@ -41,14 +36,14 @@ final class Drawer(tree: Pages, current: Option[Page]) extends Component[Boolean
       aside(
         Attrs.id  := "sidebar",
         Attrs.cls := "sidebar",
-        nav(Attrs.attr("aria-label") := "Documentation", tree.sections.map(section))
+        nav(Attrs.attr("aria-label") := "Documentation", tree.sections.map(section(_, current)))
       )
     )
 
   /** A section: its heading, linked to the pillar's index when it has one, then its pages with a
     * sub-heading wherever a group starts.
     */
-  private def section(section: Section): Html =
+  private def section(section: Section, current: Option[Page]): Html =
     div(
       Attrs.cls := "nav-section",
       section.path match {
@@ -62,12 +57,12 @@ final class Drawer(tree: Pages, current: Option[Page]) extends Component[Boolean
       section.grouped.map { case (group, pages) =>
         Html.Fragment(
           group.map(name => h3(Attrs.cls := "nav-group", name)).toVector :+
-            ul(pages.map(link))
+            ul(pages.map(link(_, current)))
         )
       }
     )
 
-  private def link(page: Page): Html =
+  private def link(page: Page, current: Option[Page]): Html =
     li(
       if (page.draft) Seq(Attrs.cls := "draft") else Nil,
       a(

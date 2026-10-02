@@ -148,6 +148,37 @@ object Markdown {
     }
   }
 
+  /** The page cut at its headings: the text above the first, then the text under each. The level
+    * one heading is the page's title and opens no passage of its own. Code blocks count as text,
+    * because a name in one is what a search is most often for.
+    */
+  def passages(doc: Doc): Vector[Search.Passage] = {
+    def text(n: Node): String =
+      (n +: descendants(n)).collect {
+        case t: Text              => t.getLiteral
+        case c: Code              => c.getLiteral
+        case f: FencedCodeBlock   => f.getLiteral
+        case i: IndentedCodeBlock => i.getLiteral
+        case _: Paragraph         => " "
+        case _: ListItem          => " "
+        case _: TableCell         => " "
+        case _: SoftLineBreak     => " "
+        case _: HardLineBreak     => " "
+      }.mkString
+    val cut = children(doc.root).foldLeft(Vector.empty[(Option[Heading], Vector[String])]) {
+      case (acc, h: org.commonmark.node.Heading) =>
+        val heading = Option.when(h.getLevel > 1)(Heading(h.getLevel, doc.ids(h), plain(h)))
+        acc :+ (heading, Vector.empty)
+      case (init :+ ((heading, texts)), block) => init :+ (heading, texts :+ text(block))
+      case (_, block)                          => Vector((None, Vector(text(block))))
+    }
+    cut
+      .map { case (heading, texts) =>
+        Search.Passage(heading, texts.mkString(" ").replaceAll("\\s+", " ").trim)
+      }
+      .filter(passage => passage.text.nonEmpty || passage.heading.isDefined)
+  }
+
   private def children(n: Node): Vector[Node] =
     Iterator.iterate(n.getFirstChild)(_.getNext).takeWhile(_ != null).toVector
 
