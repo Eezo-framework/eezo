@@ -74,7 +74,7 @@ class PagesSuite extends FunSuite {
   test("a tutorial's order is the listed one, and a placeholder is a draft") {
     val tutorials = pages.pillar("tutorials").get.pages
     assertEquals(tutorials.head.slug, "tutorials/getting-started")
-    assert(pages.bySlug("how-to/deploy").draft)
+    assert(pages.bySlug("explanation/edges").draft)
     assert(!pages.bySlug("tutorials/deploy-to-fly").draft)
     assertEquals(
       tutorials.map(_.group).distinct,
@@ -186,7 +186,7 @@ class PagesSuite extends FunSuite {
   }
 
   test("a draft page carries the banner, a written one does not") {
-    assert(rendered(pages.bySlug("how-to/deploy")).contains("draft-banner"))
+    assert(rendered(pages.bySlug("explanation/edges")).contains("draft-banner"))
     assert(!rendered(pages.bySlug("tutorials/deploy-to-fly")).contains("draft-banner"))
   }
 
