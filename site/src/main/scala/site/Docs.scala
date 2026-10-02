@@ -171,7 +171,7 @@ object Docs {
   private def summary(page: Page): Option[String] =
     Content.current.read(page.source).flatMap(text => Markdown.parse(text).description)
 
-  private def document(request: Request, tree: Pages, page: Page, doc: Markdown.Doc): Html = {
+  private[site] def document(request: Request, tree: Pages, page: Page, doc: Markdown.Doc): Html = {
     val title = doc.title.getOrElse(page.title)
     val meta  = Layout.Meta(
       title = title,

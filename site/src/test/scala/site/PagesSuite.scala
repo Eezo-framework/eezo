@@ -7,9 +7,11 @@ import scala.jdk.CollectionConverters.*
 
 import io.eezo.generated.Routes
 import io.eezo.http.Body
+import io.eezo.http.Csrf
 import io.eezo.http.Method
 import io.eezo.http.NotFound
 import io.eezo.http.Request
+import io.eezo.http.Session
 import munit.FunSuite
 
 /** The site over the repository it documents: every Markdown file is a page, every page renders,
@@ -74,7 +76,7 @@ class PagesSuite extends FunSuite {
   test("a tutorial's order is the listed one, and a placeholder is a draft") {
     val tutorials = pages.pillar("tutorials").get.pages
     assertEquals(tutorials.head.slug, "tutorials/getting-started")
-    assert(pages.bySlug("reference/cli").draft)
+    assert(Pages.load(withDraft("docs/reference/cli.md")).bySlug("reference/cli").draft)
     assert(!pages.bySlug("tutorials/deploy-to-fly").draft)
     assertEquals(
       tutorials.map(_.group).distinct,
@@ -145,7 +147,7 @@ class PagesSuite extends FunSuite {
       }
     }
     val reference = renderedAt("/docs/reference")
-    assert(reference.contains("chip-draft"), "the reference index marks its drafts")
+    assert(!reference.contains("chip-draft"), "the reference index has no drafts left")
     assert(reference.contains("Vocabulary"), reference)
   }
 
@@ -186,8 +188,33 @@ class PagesSuite extends FunSuite {
   }
 
   test("a draft page carries the banner, a written one does not") {
-    assert(rendered(pages.bySlug("reference/cli")).contains("draft-banner"))
-    assert(!rendered(pages.bySlug("tutorials/deploy-to-fly")).contains("draft-banner"))
+    val page    = pages.bySlug("reference/cli")
+    val text    = content.read(page.source).get
+    val request = Request(
+      Method.GET,
+      page.path,
+      Map.empty,
+      Map.empty,
+      Array.empty,
+      Map.empty,
+      session = Csrf.rotated(Session.empty)
+    )
+    val draft = Docs.document(
+      request,
+      pages,
+      page.copy(draft = true),
+      Markdown.parse(Pages.DraftMarker + "\n" + text)
+    )
+    val written = Docs.document(request, pages, page, Markdown.parse(text))
+    assert(draft.render.contains("draft-banner"))
+    assert(!written.render.contains("draft-banner"))
+  }
+
+  /** The repository, with one file turned into a placeholder, since no page is one any more. */
+  private def withDraft(source: String): Content = new Content {
+    def read(path: String): Option[String] =
+      content.read(path).map(text => if (path == source) Pages.DraftMarker + "\n" + text else text)
+    def list(directory: String): Vector[String] = content.list(directory)
   }
 
   test("a slug with no page is a 404") {
