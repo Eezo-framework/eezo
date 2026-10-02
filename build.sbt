@@ -214,8 +214,16 @@ lazy val root = (project in file("."))
     // The API reference: one scaladoc over the published Scala 3 modules, written to
     // `target/unidoc`, which `site/` copies into its jar and serves under `/api`. The sbt plugin
     // is a 2.12 cross build and the demo is not an API, so neither is documented here.
-    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(core, http, db, live, auth, testkit, eezo),
-    ScalaUnidoc / unidoc / target              := baseDirectory.value / "target" / "unidoc",
+    ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
+      core,
+      http,
+      db,
+      live,
+      auth,
+      testkit,
+      eezo
+    ),
+    ScalaUnidoc / unidoc / target        := baseDirectory.value / "target" / "unidoc",
     ScalaUnidoc / unidoc / scalacOptions := Seq(
       "-project",
       "eezo",
