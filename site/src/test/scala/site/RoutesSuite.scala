@@ -24,6 +24,8 @@ class RoutesSuite extends FunSuite {
     assert(html.contains("search-input"), html)
     assert(html.contains("""data-search-open"""), html)
     assert(page(get("/")).contains("""class="shortcut other""""))
+    assert(page(get("/")).contains("/assets/keys.js?v="))
+    assertEquals(get("/assets/keys.js").status, 200)
   }
 
   test("the front page, with its live demo mounted") {

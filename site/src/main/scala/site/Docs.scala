@@ -43,9 +43,9 @@ object Docs {
   private def shell(
       request: Request,
       tree: Pages,
-      current: Option[Page],
+      current: Option[Article],
       meta: Layout.Meta,
-      initial: Chrome.State = Chrome.State.initial
+      initial: Page.State = Page.State.initial
   )(
       article: Html,
       right: Html
@@ -62,13 +62,13 @@ object Docs {
     )
 
   /** `/search`: the hub, with the search dialog open. */
-  def searching(request: Request): Html = hub(request, pages, Chrome.State.searching)
+  def searching(request: Request): Html = hub(request, pages, Page.State.searching)
 
   /** `/docs`: the four pillars, and the way into each. */
   private def hub(
       request: Request,
       tree: Pages,
-      initial: Chrome.State = Chrome.State.initial
+      initial: Page.State = Page.State.initial
   ): Html = {
     val meta = Layout.Meta(
       "Documentation",
@@ -181,10 +181,15 @@ object Docs {
   /** A page's first paragraph, for the index. Parsed here rather than at load, so that listing a
     * tree costs nothing and only the pillar being shown is read whole.
     */
-  private def summary(page: Page): Option[String] =
+  private def summary(page: Article): Option[String] =
     Content.current.read(page.source).flatMap(text => Markdown.parse(text).description)
 
-  private[site] def document(request: Request, tree: Pages, page: Page, doc: Markdown.Doc): Html = {
+  private[site] def document(
+      request: Request,
+      tree: Pages,
+      page: Article,
+      doc: Markdown.Doc
+  ): Html = {
     val title = doc.title.getOrElse(page.title)
     val meta  = Layout.Meta(
       title = title,
@@ -224,9 +229,9 @@ object Docs {
     )
   }
 
-  private def editUrl(page: Page): String = s"${Pages.Repository}/blob/main/${page.source}"
+  private def editUrl(page: Article): String = s"${Pages.Repository}/blob/main/${page.source}"
 
-  private def sourceLink(page: Page): Html =
+  private def sourceLink(page: Article): Html =
     a(
       Attrs.cls  := "source-link",
       Attrs.href := editUrl(page),
@@ -252,7 +257,7 @@ object Docs {
     )
   }
 
-  private def pager(previous: Option[Page], next: Option[Page]): Html =
+  private def pager(previous: Option[Article], next: Option[Article]): Html =
     nav(
       Attrs.cls                := "pager",
       Attrs.attr("aria-label") := "Previous and next page",

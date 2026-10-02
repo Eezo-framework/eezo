@@ -54,7 +54,14 @@ object Assets {
     */
   lazy val version: String = {
     val digest = MessageDigest.getInstance("SHA-256")
-    Vector("site.css", "api.css", "hljs/highlight.min.js", "hljs/scala.min.js", "hljs/nginx.min.js")
+    Vector(
+      "site.css",
+      "api.css",
+      "keys.js",
+      "hljs/highlight.min.js",
+      "hljs/scala.min.js",
+      "hljs/nginx.min.js"
+    )
       .flatMap(read)
       .foreach(digest.update)
     digest.digest().take(6).map(b => f"$b%02x").mkString

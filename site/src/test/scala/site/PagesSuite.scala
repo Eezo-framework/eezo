@@ -115,7 +115,7 @@ class PagesSuite extends FunSuite {
   /** Through the table rather than `Docs.render` directly, because dispatch is what mints the CSRF
     * token the theme toggle in the header posts with.
     */
-  private def rendered(page: Page): String =
+  private def rendered(page: Article): String =
     Routes
       .table()
       .dispatch(Request(Method.GET, page.path, Map.empty, Map.empty, Array.empty, Map.empty))

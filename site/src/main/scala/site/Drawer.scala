@@ -6,7 +6,7 @@ import io.eezo.live.Live
 
 /** The documentation tree, and the drawer it slides in as on a narrow screen.
   *
-  * One bit of state, owned by [[Chrome]]: whether the drawer is open. The button that opens it and
+  * One bit of state, owned by [[Page]]: whether the drawer is open. The button that opens it and
   * the tree it opens are one subtree, and the stylesheet puts the button in the top bar. On a wide
   * screen the same tree is the left column and the button is not shown.
   *
@@ -20,7 +20,7 @@ object Drawer {
     case _        => open
   }
 
-  def render(open: Boolean, tree: Pages, current: Option[Page]): Html =
+  def render(open: Boolean, tree: Pages, current: Option[Article]): Html =
     div(
       Attrs.cls := (if (open) "drawer open" else "drawer"),
       button(
@@ -43,7 +43,7 @@ object Drawer {
   /** A section: its heading, linked to the pillar's index when it has one, then its pages with a
     * sub-heading wherever a group starts.
     */
-  private def section(section: Section, current: Option[Page]): Html =
+  private def section(section: Section, current: Option[Article]): Html =
     div(
       Attrs.cls := "nav-section",
       section.path match {
@@ -62,7 +62,7 @@ object Drawer {
       }
     )
 
-  private def link(page: Page, current: Option[Page]): Html =
+  private def link(page: Article, current: Option[Article]): Html =
     li(
       if (page.draft) Seq(Attrs.cls := "draft") else Nil,
       a(

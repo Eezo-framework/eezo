@@ -18,10 +18,15 @@ object Search {
   /** The text under one heading, or above the first. */
   final case class Passage(heading: Option[Markdown.Heading], text: String)
 
-  final case class Entry(page: Page, passages: Vector[Passage])
+  final case class Entry(page: Article, passages: Vector[Passage])
 
   /** One result: a page, the section of it that matched, and the excerpt to show. */
-  final case class Hit(page: Page, heading: Option[Markdown.Heading], excerpt: Html, score: Int) {
+  final case class Hit(
+      page: Article,
+      heading: Option[Markdown.Heading],
+      excerpt: Html,
+      score: Int
+  ) {
 
     /** The page, at the section when there is one. */
     def href: String = heading.fold(page.path)(h => s"${page.path}#${h.id}")

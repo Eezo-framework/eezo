@@ -13,15 +13,15 @@ object Layout {
   val SiteName: String = "eezo"
 
   /** A whole document around `content`, which is a function of the live state the page shares with
-    * its chrome: see [[Chrome]]. The request is what the header needs: the theme this browser
-    * chose, and the token its toggle posts with.
+    * its chrome: see [[Page]]. The request is what the header needs: the theme this browser chose,
+    * and the token its toggle posts with.
     */
   def page(
       request: Request,
       meta: Meta,
       bodyClass: String,
-      initial: Chrome.State = Chrome.State.initial
-  )(content: Chrome.State => Html): Html =
+      initial: Page.State = Page.State.initial
+  )(content: Page.State => Html): Html =
     Html.doctype ++ html(
       Attrs.lang := "en",
       Theme.current(request).map(Attrs.data("theme") := _),
@@ -49,7 +49,7 @@ object Layout {
         Attrs.cls := bodyClass,
         Live.mount(
           request,
-          new Chrome(meta.path, Theme.toggle(request), content, () => Search.current, initial)
+          new Page(meta.path, Theme.toggle(request), content, () => Search.current, initial)
         ),
         // highlight.js colours the code blocks after the page is parsed: the library, the two
         // grammars its bundle leaves out, and the one call.
@@ -60,33 +60,9 @@ object Layout {
         // The keyboard: the one thing the live layer cannot hear. Ctrl-K or Cmd-K presses the
         // search button, Escape presses its close button, and the input is focused once the
         // dialog has been patched in; everything else about the search is the component's.
-        script(Html.raw(Keys))
+        script(Attrs.src := Assets.url("keys.js"))
       )
     )
-
-  private val Keys: String =
-    """(function () {
-      |  if (/Mac|iPhone|iPad/.test(navigator.platform || "")) document.documentElement.classList.add("mac");
-      |  function focusSearch(tries) {
-      |    var input = document.querySelector("[data-search-input]");
-      |    if (input) { input.focus(); input.select(); return; }
-      |    if (tries > 0) setTimeout(function () { focusSearch(tries - 1); }, 50);
-      |  }
-      |  document.addEventListener("click", function (e) {
-      |    if (e.target.closest && e.target.closest("[data-search-open]")) focusSearch(40);
-      |  });
-      |  document.addEventListener("keydown", function (e) {
-      |    if ((e.ctrlKey || e.metaKey) && !e.altKey && (e.key === "k" || e.key === "K")) {
-      |      e.preventDefault();
-      |      var open = document.querySelector("[data-search-open]");
-      |      if (document.querySelector("[data-search-input]")) focusSearch(0);
-      |      else if (open) open.click();
-      |    } else if (e.key === "Escape") {
-      |      var close = document.querySelector("[data-search-close]");
-      |      if (close) close.click();
-      |    }
-      |  });
-      |})();""".stripMargin
 
   /** The mark: a rounded tile with a wink of an `e`, and the wordmark beside it. Inline, so it
     * takes the page's colours and needs no request of its own. `mods` is for a host that needs
@@ -110,7 +86,7 @@ object Layout {
       |<rect x="20" y="18" width="12" height="4.5" rx="2" fill="var(--ink-fixed)"/>
       |</svg>""".stripMargin.replace("\n", "")
 
-  /** The top bar, rendered inside [[Chrome]] so the search button can open the dialog. */
+  /** The top bar, rendered inside [[Page]] so the search button can open the dialog. */
   private[site] def header(path: String, theme: Html): Html = {
     def item(href: String, label: String, active: Boolean): Html =
       li(
@@ -146,9 +122,9 @@ object Layout {
       Attrs.data("search-open") := "",
       Live.onClick("search-open"),
       Icons.search,
-      span(Attrs.cls       := "search-label", "Search"),
-      Chrome.Kbd(Attrs.cls := "shortcut mac", "⌘K"),
-      Chrome.Kbd(Attrs.cls := "shortcut other", "Ctrl K")
+      span(Attrs.cls     := "search-label", "Search"),
+      Page.Kbd(Attrs.cls := "shortcut mac", "⌘K"),
+      Page.Kbd(Attrs.cls := "shortcut other", "Ctrl K")
     )
 
   private[site] val footer: Html =

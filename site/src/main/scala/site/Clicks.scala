@@ -7,7 +7,7 @@ import io.eezo.live.Live
 /** The front page's small proof that the live layer is real: a number that lives on the server.
   *
   * Every click is an event up the socket; the new number comes back as one patch. The count is a
-  * slice of [[Chrome]]'s state and so of this page's alone: a second tab starts from zero, which is
+  * slice of [[Page]]'s state and so of this page's alone: a second tab starts from zero, which is
   * the point being made.
   */
 object Clicks {

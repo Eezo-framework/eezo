@@ -18,7 +18,7 @@ package site
   * @param draft
   *   whether the file is a placeholder still to be written, which it says with a `draft` marker
   */
-final case class Page(
+final case class Article(
     slug: String,
     source: String,
     title: String,
@@ -38,7 +38,7 @@ final case class Section(
     name: String,
     slug: Option[String],
     description: String,
-    pages: Vector[Page]
+    pages: Vector[Article]
 ) {
 
   def path: Option[String] = slug.map(s => s"/docs/$s")
@@ -46,8 +46,8 @@ final case class Section(
   /** The pages in order, cut where the group changes, so a sidebar or an index can head each run
     * once.
     */
-  def grouped: Vector[(Option[String], Vector[Page])] =
-    pages.foldLeft(Vector.empty[(Option[String], Vector[Page])]) {
+  def grouped: Vector[(Option[String], Vector[Article])] =
+    pages.foldLeft(Vector.empty[(Option[String], Vector[Article])]) {
       case (acc :+ ((group, run)), page) if group == page.group => acc :+ (group, run :+ page)
       case (acc, page)                                          => acc :+ (page.group, Vector(page))
     }
@@ -60,14 +60,14 @@ final case class Section(
   */
 final class Pages(val sections: Vector[Section]) {
 
-  val all: Vector[Page] = sections.flatMap(_.pages)
+  val all: Vector[Article] = sections.flatMap(_.pages)
 
   /** The four pillars: the sections with an index page. */
   val pillars: Vector[Section] = sections.filter(_.slug.isDefined)
 
-  val bySlug: Map[String, Page] = all.map(page => page.slug -> page).toMap
+  val bySlug: Map[String, Article] = all.map(page => page.slug -> page).toMap
 
-  val bySource: Map[String, Page] = all.map(page => page.source -> page).toMap
+  val bySource: Map[String, Article] = all.map(page => page.source -> page).toMap
 
   def pillar(slug: String): Option[Section] = pillars.find(_.slug.contains(slug))
 
@@ -79,7 +79,7 @@ final class Pages(val sections: Vector[Section]) {
       bySlug.contains(path.stripPrefix("/docs/"))
 
   /** The page before and the page after, in navigation order across sections. */
-  def neighbours(page: Page): (Option[Page], Option[Page]) = {
+  def neighbours(page: Article): (Option[Article], Option[Article]) = {
     val index = all.indexOf(page)
     (all.lift(index - 1), all.lift(index + 1))
   }
@@ -91,7 +91,7 @@ final class Pages(val sections: Vector[Section]) {
     * a page, `LICENSE` or a source file, points at that file on GitHub, which is what the reader
     * was promised. An absolute address and a fragment on the same page are left as written.
     */
-  def resolve(from: Page, destination: String): String =
+  def resolve(from: Article, destination: String): String =
     if (Pages.isAbsolute(destination) || destination.startsWith("#")) destination
     else {
       val (path, fragment) = destination.indexOf('#') match {
@@ -129,7 +129,7 @@ object Pages {
 
     def page(source: String, section: String, title: Option[String], group: Option[String]) = {
       val text = read(source)
-      Page(
+      Article(
         slugOf(source),
         source,
         title.orElse(firstHeading(text)).getOrElse(source),
@@ -145,7 +145,7 @@ object Pages {
         section: String,
         first: Vector[String],
         group: Option[String] = None
-    )(title: String => String = identity): Vector[Page] = {
+    )(title: String => String = identity): Vector[Article] = {
       val present = content.list(directory)
       val named   = first.map(name => s"$directory/$name.md").filter(present.contains)
       (named ++ present.filterNot(named.contains)).map { source =>
@@ -156,7 +156,7 @@ object Pages {
 
     def fixed(section: String, group: Option[String] = None)(
         entries: (String, String)*
-    ): Vector[Page] =
+    ): Vector[Article] =
       entries.toVector.map { case (source, title) => page(source, section, Some(title), group) }
 
     new Pages(

@@ -6,8 +6,9 @@ import io.eezo.live.Event
 import io.eezo.live.Init
 import io.eezo.live.Live
 
-/** Everything live on a page, as one component: the header with its search button, the search
-  * dialog, the navigation drawer on a docs page, the counter on the front page.
+/** The page, as the one live component every address is served through: the header with its search
+  * button, the search dialog, the navigation drawer on a docs page, the counter on the front page,
+  * and the address's own content between them.
   *
   * One component rather than one per concern, because the live layer drives one mount per page, and
   * the search button in the header has to sit in the same tree as the dialog it opens and the
@@ -16,15 +17,15 @@ import io.eezo.live.Live
   * function of the state, so a docs page can place the drawer and the front page its counter while
   * the rest of their content is rendered once and compared by value on every patch.
   */
-final class Chrome(
+final class Page(
     path: String,
     theme: Html,
-    content: Chrome.State => Html,
+    content: Page.State => Html,
     index: () => Search.Index,
-    initial: Chrome.State
-) extends Component[Chrome.State] {
+    initial: Page.State
+) extends Component[Page.State] {
 
-  import Chrome.State
+  import Page.State
 
   def init(ctx: Init[State]): State = initial
 
@@ -34,7 +35,7 @@ final class Chrome(
       search = event.name match {
         case "search-open"  => Some(state.search.getOrElse(""))
         case "search-close" => None
-        case "search"       => Some(event.payload.getOrElse("value", "").take(Chrome.QueryLimit))
+        case "search"       => Some(event.payload.getOrElse("value", "").take(Page.QueryLimit))
         case _              => state.search
       },
       clicks = Clicks.handle(event, state.clicks)
@@ -96,7 +97,7 @@ final class Chrome(
       p(
         Attrs.cls := "search-hint",
         "Type to search every page of the documentation. ",
-        Chrome.Kbd("Esc"),
+        Page.Kbd("Esc"),
         " closes."
       )
     else {
@@ -123,7 +124,7 @@ final class Chrome(
     }
 }
 
-object Chrome {
+object Page {
 
   /** The three slices: the drawer open or not, the search dialog with its query when it is open,
     * and the front page's count.

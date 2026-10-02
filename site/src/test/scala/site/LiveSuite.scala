@@ -44,10 +44,10 @@ class LiveSuite extends FunSuite {
 
   private val index  = Search.build(pages, Content.current)
   private val chrome =
-    new Chrome("/docs", Html.empty, _ => main("content"), () => index, Chrome.State.initial)
+    new Page("/docs", Html.empty, _ => main("content"), () => index, Page.State.initial)
 
   test("the chrome moves one slice per event and leaves the others alone") {
-    val start = Chrome.State.initial
+    val start = Page.State.initial
     assertEquals(chrome.handle(Event("toggle"), start), start.copy(drawer = true))
     assertEquals(chrome.handle(Event("inc"), start), start.copy(clicks = 1))
     val open = chrome.handle(Event("search-open"), start)
@@ -58,21 +58,21 @@ class LiveSuite extends FunSuite {
     assertEquals(chrome.handle(Event("search-close"), typed), start)
     assertEquals(
       chrome.handle(Event("search", Map("value" -> "x" * 500)), open).search.map(_.length),
-      Some(Chrome.QueryLimit)
+      Some(Page.QueryLimit)
     )
   }
 
   test("the chrome renders the header's search button, and the dialog only when it is open") {
-    val closed = chrome.render(Chrome.State.initial).render
+    val closed = chrome.render(Page.State.initial).render
     assert(closed.contains("""data-eezo-click="search-open""""), closed)
     assert(!closed.contains("search-panel"), closed)
-    val empty = chrome.render(Chrome.State.searching).render
+    val empty = chrome.render(Page.State.searching).render
     assert(empty.contains("search-input"), empty)
     assert(empty.contains("Type to search"), empty)
-    val found = chrome.render(Chrome.State.searching.copy(search = Some("derives"))).render
+    val found = chrome.render(Page.State.searching.copy(search = Some("derives"))).render
     assert(found.contains("<mark>derives</mark>"), found)
     assert(found.contains("""href="/docs/tutorials/first-model"""), found.take(3000))
-    val none = chrome.render(Chrome.State.searching.copy(search = Some("zzzzqqq"))).render
+    val none = chrome.render(Page.State.searching.copy(search = Some("zzzzqqq"))).render
     assert(none.contains("No page mentions"), none)
   }
 
