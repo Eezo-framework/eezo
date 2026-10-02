@@ -74,7 +74,7 @@ class PagesSuite extends FunSuite {
   test("a tutorial's order is the listed one, and a placeholder is a draft") {
     val tutorials = pages.pillar("tutorials").get.pages
     assertEquals(tutorials.head.slug, "tutorials/getting-started")
-    assert(pages.bySlug("explanation/edges").draft)
+    assert(pages.bySlug("reference/cli").draft)
     assert(!pages.bySlug("tutorials/deploy-to-fly").draft)
     assertEquals(
       tutorials.map(_.group).distinct,
@@ -82,14 +82,14 @@ class PagesSuite extends FunSuite {
     )
   }
 
-  test("an ADR is not a page, and a link to one goes to GitHub") {
+  test("a design note is not a page, and a link to a repository file goes to GitHub") {
     assert(!pages.all.exists(_.source.startsWith("docs/adr/")))
     assert(!pages.all.exists(_.source.startsWith("research/")))
     val failures = pages.bySource("docs/explanation/failures.md")
     assert(
       pages
-        .resolve(failures, "../adr/0006-a-failure-travels-to-the-nearest-boundary-that-owns-it.md")
-        .startsWith(s"${Pages.Repository}/blob/main/docs/adr/0006")
+        .resolve(failures, "../../modules/http/src/main/scala/io/eezo/http/Errors.scala")
+        .startsWith(s"${Pages.Repository}/blob/main/modules/http/")
     )
   }
 
@@ -186,7 +186,7 @@ class PagesSuite extends FunSuite {
   }
 
   test("a draft page carries the banner, a written one does not") {
-    assert(rendered(pages.bySlug("explanation/edges")).contains("draft-banner"))
+    assert(rendered(pages.bySlug("reference/cli")).contains("draft-banner"))
     assert(!rendered(pages.bySlug("tutorials/deploy-to-fly")).contains("draft-banner"))
   }
 
