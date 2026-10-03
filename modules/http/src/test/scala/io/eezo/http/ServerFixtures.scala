@@ -27,17 +27,28 @@ trait ServerFixtures { self: munit.FunSuite =>
   protected val secret: Secret = Secret.parse("server secret, at least thirty two bytes")
 
   /** Boots a server for one test and stops it afterwards. */
-  protected def serving(routes: RouteTable, maxBodySize: Long = 1.MiB, dev: Boolean = false)(
+  protected def serving(
+      routes: RouteTable,
+      maxBodySize: Long = 1.MiB,
+      dev: Boolean = false,
+      layout: Layout = Layout.plain
+  )(
       body: (HttpServer, Int) => Unit
   ): Unit = {
     val server = HttpServer.start(
       port = 0,
       routes = routes,
-      config = HttpConfig(maxBodySize, dev, secret = secret)
+      config = HttpConfig(maxBodySize, dev, secret = secret, layout = layout)
     )
     try body(server, server.port)
     finally server.stop()
   }
+
+  /** What a route's `content` goes out as in eezo's own frame, which is what every page that is not
+    * a whole document comes back in when the application names no layout.
+    */
+  protected def plainly(content: String): String =
+    s"""<!DOCTYPE html><html><head><meta charset="utf-8"></head><body>$content</body></html>"""
 
   /** A port nobody is listening on right now, for a server started through `run`, which binds the
     * port it is given and hands back nothing to ask.

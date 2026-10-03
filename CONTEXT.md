@@ -59,6 +59,14 @@ derivation belongs to one edge: Table to the database edge, Form and Resource to
 Deriving for an edge the application does not have is a compile error.
 _Avoid_: half, side, layer, backend, runtime
 
+**Layout**:
+The one frame every HTML reply comes back in, the derived pages, the login page and the error page
+included. A trait with one method, from the request, the lifted title and the content to the
+document. An application writes one and names it in Main. A route returns its content with a title
+element beside it; the title is lifted out and handed to the layout, which builds the document
+around the rest. A route that returns a whole document steps outside it.
+_Avoid_: template, shell, envelope, wrapper, master page
+
 ### Session
 
 **Session**:

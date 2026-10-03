@@ -7,6 +7,7 @@ import java.util.concurrent.TimeoutException
 
 import scala.jdk.CollectionConverters.*
 
+import io.eezo.core.html.Html
 import org.eclipse.jetty.server.Handler as JettyHandler
 import org.eclipse.jetty.server.NetworkConnector
 import org.eclipse.jetty.server.Request as JettyRequest
@@ -295,8 +296,11 @@ private[eezo] object HttpServer {
 
       // The reload endpoint is asked first, before the user's table, so no route can shadow it, no
       // mount rewrites it, and it never appears in the boot listing. `Reload` owns the dev gate.
+      // A refusal is not a page an application serves, so it keeps eezo's own document and never
+      // meets the application's layout, which could only read a handshake as if it were a page.
       def refuse(failure: Throwable): Null = {
-        write(response, answer(failure, path, config), callback)
+        val refusal = answer(failure, path, config)
+        write(response, refusal.copy(body = refusal.body.mapHtml(Layout.plainly)), callback)
         null
       }
 
@@ -339,11 +343,18 @@ private[eezo] object HttpServer {
 
   /** eezo's HTTP handler: one completion site, reached unconditionally.
     *
-    * `readRequest` sits inside the `try` because it is what throws `PayloadTooLarge` and
-    * `NotImplemented`; `Boundary.errorResponse` is total by construction, so it has nothing left to
+    * `readRequest` has a `try` of its own because it is what throws `PayloadTooLarge` and
+    * `NotImplemented`, and a request it refuses is one there is no request to frame for, so its
+    * error page goes out in eezo's plain frame whatever the application's layout. The route and
+    * then the frame each run under a `try` that answers through the boundary; the plain frame and
+    * `Boundary.errorResponse` are total by construction, so the last answer has nothing left to
     * throw; and `write` is the only function in eezo that touches Jetty's `Callback`. `handle`
     * always returns `true`, because an unmatched route throws `NotFound` here rather than falling
     * through to Jetty's own error page.
+    *
+    * The layout is handed the request with its session read, whatever the route was, so that a
+    * frame can show who is signed in on a page, an API reply or a 404 alike. Reading the cookie has
+    * no effect of its own: only `SessionCookie.write` sends one back.
     *
     * The session cookie is read and written here, once, on the success path of a browser route: the
     * session the response names, or else the one the request carried into the handler, and only
@@ -363,33 +374,55 @@ private[eezo] object HttpServer {
     ): Boolean = {
       val path = JettyRequest.getPathInContext(request)
 
-      val result =
-        try {
-          val incoming = readRequest(request, path, config.maxBodySize)
-          // Health is answered before the session is read: a probe carries no cookie and wants
-          // none back, and the endpoint's whole point is to cost nothing.
-          if (incoming.method == Method.GET && path == HealthPath) healthy
-          else {
-            val (route, matched) = routes.matching(incoming)
-            // An API route is answered with the cookie left exactly as the browser holds it, when
-            // one is sent at all: no session takes part in it, so reading the cookie could only
-            // sweep a flash meant for the next page or expire a cookie the route never looked at.
-            if (route.kind.api) routes.running(route, matched)
-            else {
-              val read = SessionCookie.read(matched, config.secret)
-              SessionCookie.write(read, routes.running(route, read), config.secret)
-            }
-          }
-        } catch {
-          case failure: Throwable => answer(failure, path, config)
-        }
+      val parsed =
+        try Right(readRequest(request, path, config.maxBodySize))
+        catch { case failure: Throwable => Left(answer(failure, path, config)) }
 
-      // Every HTTP response passes here, success or failure, so this is where the dev server adds
-      // the reload client: `Boundary` stays the failure boundary and does not grow a response
-      // filter. A refused upgrade is answered in `creator` and is not a page, so it skips this.
-      write(response, Reload.inject(result, config), callback)
+      val reply = parsed match {
+        case Left(refused)   => framed(refused)(Layout.plainly)
+        case Right(incoming) =>
+          val result =
+            try respond(incoming, path)
+            catch { case failure: Throwable => answer(failure, path, config) }
+          // A layout that throws is the application's mistake and is answered as one, and its
+          // error page is framed plainly, so that the frame cannot fail a second time.
+          try
+            framed(result)(
+              Layout.wrap(config.layout, SessionCookie.read(incoming, config.secret), _)
+            )
+          catch { case failure: Throwable => framed(answer(failure, path, config))(Layout.plainly) }
+      }
+
+      // Every HTTP response passes here, success or failure, so this is where the frame goes on and
+      // where the dev server adds the reload client, in that order, so the script lands in the
+      // frame's body: `Boundary` stays the failure boundary and does not grow a response filter. A
+      // refused upgrade is answered in `creator` and is not a page, so it skips both and keeps
+      // eezo's own document.
+      write(response, Reload.inject(reply, config), callback)
       true
     }
+
+    /** Apart from `handle` because it is the part a route's own failure escapes from: the parse
+      * before it and the frame after it each answer their failures under a frame of their own.
+      */
+    private def respond(incoming: Request, path: String): Response =
+      // Health is answered before the session is read: a probe carries no cookie and wants none
+      // back, and the endpoint's whole point is to cost nothing.
+      if (incoming.method == Method.GET && path == HealthPath) healthy
+      else {
+        val (route, matched) = routes.matching(incoming)
+        // An API route is answered with the cookie left exactly as the browser holds it, when one
+        // is sent at all: no session takes part in it, so reading the cookie could only sweep a
+        // flash meant for the next page or expire a cookie the route never looked at.
+        if (route.kind.api) routes.running(route, matched)
+        else {
+          val read = SessionCookie.read(matched, config.secret)
+          SessionCookie.write(read, routes.running(route, read), config.secret)
+        }
+      }
+
+    private def framed(response: Response)(frame: Html => Html): Response =
+      response.copy(body = response.body.mapHtml(frame))
   }
 
   /** Reads one request, whole, with the body capped.

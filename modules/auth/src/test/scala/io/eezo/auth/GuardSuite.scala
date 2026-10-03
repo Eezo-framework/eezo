@@ -8,7 +8,9 @@ import java.time.{Clock, Duration, Instant}
 import java.util.concurrent.atomic.AtomicReference
 
 import io.eezo.core.Id
+import io.eezo.core.html.Attrs
 import io.eezo.core.html.Html
+import io.eezo.core.html.Tags
 import io.eezo.core.html.Url
 import io.eezo.http.*
 import org.eclipse.jetty.client.Request as HandshakeRequest
@@ -92,9 +94,8 @@ class GuardSuite extends munit.FunSuite {
   private def stampless(who: Id[User], path: String = "/posts") =
     browser(Method.GET, path).copy(session = stamplessSession(who))
 
-  /** A public page that offers the way out, which is where an application has to put one: the
-    * screens behind a guard are the derived ones, and a derived page renders a plain envelope with
-    * nothing to hang a control on.
+  /** A public page that offers the way out, the way a handwritten page or an application's layout
+    * puts one on every screen it frames.
     */
   private def frontPage(g: Guard[User]): Route =
     Route.Http(
@@ -637,6 +638,56 @@ class GuardSuite extends munit.FunSuite {
     assert(html.contains("""type="password""""), html)
     assert(html.contains("""name="password""""), html)
     assert(html.contains(Csrf.Field), html)
+  }
+
+  test("the login page and its refusal come back in the application's layout, titled Sign in") {
+    // Over the wire, because the frame goes on where the server writes, and the guard never learns
+    // that a layout exists.
+    val framing: Layout = (_, title, content) =>
+      Tags.html(
+        Tags.head(title.fold(Html.empty)(Tags.title(_))),
+        Tags.body(Attrs.cls := "framed", content)
+      )
+    val server = HttpServer.start(
+      port = 0,
+      routes = app(guard.required[Any]),
+      config = HttpConfig(layout = framing)
+    )
+    try {
+      val client                                = HttpClient.newHttpClient()
+      def sending(request: HttpRequest.Builder) =
+        client.send(request.build(), HttpResponse.BodyHandlers.ofString())
+      val address = URI.create(s"http://localhost:${server.port}/login")
+      val page    = sending(HttpRequest.newBuilder(address).GET())
+      assert(
+        clue(page.body()).startsWith("<!DOCTYPE html><html><head><title>Sign in</title></head>")
+      )
+      assert(clue(page.body()).contains("""<body class="framed"><h1>Sign in</h1><form"""))
+
+      val cookie = page.headers().firstValue("Set-Cookie").orElseThrow().takeWhile(_ != ';')
+      val token  = s"""name="${Csrf.Field}"\\s+value="([^"]*)"""".r
+        .findFirstMatchIn(page.body())
+        .map(_.group(1))
+        .getOrElse(fail("the login page carries no token"))
+      val refused = sending(
+        HttpRequest
+          .newBuilder(address)
+          .header("Cookie", cookie)
+          .header("Content-Type", "application/x-www-form-urlencoded")
+          .POST(
+            HttpRequest.BodyPublishers.ofString(
+              s"email=ann%40example.com&password=wrong&${Csrf.Field}=$token"
+            )
+          )
+      )
+      assertEquals(refused.statusCode(), 422)
+      assert(
+        clue(refused.body()).startsWith("<!DOCTYPE html><html><head><title>Sign in</title></head>")
+      )
+      assert(
+        clue(refused.body()).contains("""<body class="framed"><h1>Sign in</h1><p class="error">""")
+      )
+    } finally server.stop()
   }
 
   // ------------------------------------------------------------ the round trip

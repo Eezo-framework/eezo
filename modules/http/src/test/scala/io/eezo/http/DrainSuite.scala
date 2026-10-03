@@ -114,7 +114,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
       held.release.countDown()
       val response = answer.get(5, TimeUnit.SECONDS)
       assertEquals(response.statusCode(), 200)
-      assertEquals(response.body(), "finished")
+      assertEquals(response.body(), plainly("finished"))
       stopper.join(5000)
       assert(!stopper.isAlive, "stop did not return once the in flight request finished")
     }
@@ -296,7 +296,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     // much in flight as one whose handler is busy: a deploy owes it the same answer.
     val answer = pausedUpload(dev = false)
     assert(clue(answer).startsWith("HTTP/1.1 200"), "the paused upload was cut by the drain")
-    assert(answer.endsWith("helloworld"), "the answer lost its body")
+    assert(answer.endsWith(plainly("helloworld")), "the answer lost its body")
   }
 
   test("the same pause during a dev drain is cut, the price of a restart the browser cannot hold") {

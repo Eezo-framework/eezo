@@ -49,6 +49,12 @@ trait HttpApp extends Dispatch {
     */
   def problems: PartialFunction[Throwable, Problem] = HttpConfig.DefaultProblems
 
+  /** The frame every HTML reply comes back in, the derived pages, the login page and the error page
+    * included. eezo's plain one unless the application names its own here, which is the one place a
+    * frame can be chosen, so that no route has to remember to ask for it.
+    */
+  def layout: Layout = Layout.plain
+
   /** The application. The default serves [[routes]] on [[port]], which is what makes the minimal
     * application one override and nothing else. Override it for anything more: background work,
     * another setup, no server at all.
@@ -71,7 +77,7 @@ trait HttpApp extends Dispatch {
     HttpServer.run(
       port,
       table ++ RouteTable(frameworkRoutes),
-      HttpConfig(maxBodySize, dev, problems, secret)
+      HttpConfig(maxBodySize, dev, problems, secret, layout)
     )
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift

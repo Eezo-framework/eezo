@@ -65,7 +65,10 @@ class ApiRouteServerSuite extends munit.FunSuite with ServerFixtures {
       assertEquals(response.statusCode(), 200)
       assertEquals(sessionCookie(response), None, "the API route wrote the session cookie")
       // The flash was not consumed by the API call: the next page the browser visits still has it.
-      assertEquals(send(port, "GET", "/me", Some(cookie)).body(), "<p>user=42 notice=welcome</p>")
+      assertEquals(
+        send(port, "GET", "/me", Some(cookie)).body(),
+        plainly("<p>user=42 notice=welcome</p>")
+      )
     }
   }
 
