@@ -7,6 +7,7 @@ import io.eezo.db.*
 import io.eezo.db.Scopes.transact
 import io.eezo.http.{ApiRequest, Guarded, Response}
 
+import components.Sales
 import models.Order
 import stripe.Stripe
 
@@ -19,6 +20,7 @@ object Create {
       for (order <- orders.findById(Id[Order](ref))) {
         val sale = order.copy(paid = true, at = Instant.now())
         orders.update(sale)
+        Sales.paid.publish(sale)
       }
     }
     Response.status(200)
