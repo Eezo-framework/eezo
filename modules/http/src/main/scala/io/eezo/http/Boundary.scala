@@ -82,22 +82,14 @@ private[http] object Boundary {
     */
   def logsStackTrace(status: Int): Boolean = status >= 500
 
-  /** eezo's own error page. Deliberately plain: whether an application can replace it is an open
-    * question on the map, and shipping a layout seam before it is answered risks shipping the wrong
-    * one and then having two.
+  /** eezo's own error page, as content with its title beside it, so that it comes back in the
+    * application's layout like any other page.
     */
   private def render(problem: Problem): Html =
-    Html.doctype ++ html(
-      head(
-        meta(Attrs.charset := "utf-8"),
-        title(s"${problem.status} ${problem.title}")
-      ),
-      body(
-        h1(s"${problem.status} ${problem.title}"),
-        p(problem.detail),
-        p(small(problem.instance))
-      )
-    )
+    title(s"${problem.status} ${problem.title}") ++
+      h1(s"${problem.status} ${problem.title}") ++
+      p(problem.detail) ++
+      p(small(problem.instance))
 
   private def messageOf(cause: Throwable): String =
     Option(cause.getMessage).getOrElse(cause.toString)

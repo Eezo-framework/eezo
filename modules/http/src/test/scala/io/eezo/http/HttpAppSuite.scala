@@ -85,5 +85,6 @@ class HttpAppSuite extends munit.FunSuite {
     assertEquals(app.port, 8080)
     assertEquals(app.maxBodySize, HttpConfig.DefaultMaxBodySize)
     assert(!app.problems.isDefinedAt(new RuntimeException("anything")))
+    assertEquals(app.layout, Layout.plain)
   }
 }

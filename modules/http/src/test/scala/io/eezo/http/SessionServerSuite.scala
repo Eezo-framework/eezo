@@ -42,7 +42,7 @@ class SessionServerSuite extends munit.FunSuite with ServerFixtures {
   ) {
     serving(routes) { (_, port) =>
       val anonymous = send(port, "GET", "/me", None)
-      assertEquals(anonymous.body(), "<p>user=nobody notice=-</p>")
+      assertEquals(anonymous.body(), plainly("<p>user=nobody notice=-</p>"))
       val seen = visit(port, "/me")
       assertEquals(
         sessionCookie(send(port, "GET", "/me", Some(seen.cookie))),
@@ -63,11 +63,11 @@ class SessionServerSuite extends munit.FunSuite with ServerFixtures {
       assert(!header.contains("Secure"), header)
 
       val first = send(port, "GET", "/me", Some(cookie))
-      assertEquals(first.body(), "<p>user=42 notice=welcome</p>")
+      assertEquals(first.body(), plainly("<p>user=42 notice=welcome</p>"))
       val swept = sessionCookie(first).getOrElse(fail("the delivered flash was not written away"))
 
       val second = send(port, "GET", "/me", Some(swept))
-      assertEquals(second.body(), "<p>user=42 notice=-</p>")
+      assertEquals(second.body(), plainly("<p>user=42 notice=-</p>"))
       assertEquals(sessionCookie(second), None)
     }
   }
@@ -90,7 +90,7 @@ class SessionServerSuite extends munit.FunSuite with ServerFixtures {
       val cookie   = sessionCookie(submit(port, "/login", visit(port, "/me"))).get
       val tampered = cookie.replaceFirst("\\.", "x.")
       val response = send(port, "GET", "/me", Some(tampered))
-      assertEquals(response.body(), "<p>user=nobody notice=-</p>")
+      assertEquals(response.body(), plainly("<p>user=nobody notice=-</p>"))
       // Not expired: the page was served, so dispatch minted a token into the empty session it
       // read, and that fresh session is what goes out, signed, in the tampered one's place.
       val fresh = sessionCookie(response).getOrElse(fail("the tampered cookie was left standing"))

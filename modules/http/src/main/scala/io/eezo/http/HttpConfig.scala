@@ -12,7 +12,8 @@ private[eezo] final case class HttpConfig(
     maxBodySize: Long = HttpConfig.DefaultMaxBodySize,
     dev: Boolean = HttpConfig.DefaultDev,
     problems: PartialFunction[Throwable, Problem] = HttpConfig.DefaultProblems,
-    secret: Secret = HttpConfig.DefaultSecret
+    secret: Secret = HttpConfig.DefaultSecret,
+    layout: Layout = Layout.plain
 )
 
 private[eezo] object HttpConfig {
@@ -20,7 +21,8 @@ private[eezo] object HttpConfig {
   /** The one place each setting's default is stated: the case class's parameter defaults read off
     * these, and so do `HttpApp`'s `maxBodySize` and `problems`. The secret is a `def`: a fresh
     * throwaway per call, which is what a test wants and what `HttpApp.secret` replaces with the
-    * configured one.
+    * configured one. The layout has no entry here: its default is `Layout.plain`, a public value an
+    * application can name itself, so a second name for it would be one more thing to keep equal.
     */
   private[http] val DefaultMaxBodySize: Long                             = 1.MiB
   private[http] val DefaultDev: Boolean                                  = false

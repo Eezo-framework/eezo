@@ -27,9 +27,10 @@ import io.eezo.http.{
   *
   * `mount` runs `init`, registers the page, and returns a fragment of two nodes: the anchor
   * `<div data-eezo-page=…>` holding the first render, and the `<script src="/eezo/live.js">` that
-  * brings it to life. Carrying the script *in the fragment* is what keeps the promise that the
-  * framework never builds the page (design/live.md §2.3) without http ever scanning a response for
-  * markers: the app owns the whole document, and the mount is just a value in it. The script's
+  * brings it to life. Carrying the script *in the fragment* is what lets http stay blind to live
+  * (design/live.md §2.3): it never scans a response for markers, because the mount is just a value
+  * in whatever the handler returns. A whole document goes out as written and content comes back
+  * inside the application's Layout; the script travels with the mount either way. The script's
   * address is a plain string on purpose — the socket and the script are served unmounted under the
   * reserved prefix, so a mounted page must not have them rewritten.
   *
