@@ -105,3 +105,17 @@ lazy val todo = (project in file("todo"))
     libraryDependencies += edge("eezo"),
     runInProjectDir
   )
+
+lazy val shop = (project in file("shop"))
+  .enablePlugins(EezoPlugin)
+  .settings(commonSettings)
+  .settings(
+    name := "shop",
+    libraryDependencies ++= Seq(
+      edge("eezo"),
+      edge("eezo-auth"),
+      "com.lihaoyi" %% "upickle" % "4.4.3"
+    ),
+    Compile / run / mainClass := Some("Main"),
+    runInProjectDir
+  )
