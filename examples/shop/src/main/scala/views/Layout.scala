@@ -3,6 +3,8 @@ package views
 import io.eezo.core.html.*
 import io.eezo.http.Request
 
+import models.User
+
 /** The shop's frame: the nav and the stylesheet around every page, the derived admin pages, the
   * login page and the error page included. Named in `Main`. A link appears in the nav in the step
   * that mounts its route: admin and sign out at step 1, board at step 5.
@@ -21,7 +23,11 @@ object Layout extends io.eezo.http.Layout {
         link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("shop.css"))
       ),
       body(
-        nav(a(Attrs.href := "/", "shop")),
+        nav(
+          a(Attrs.href := "/", "shop"),
+          a(Attrs.href := "/products", "admin"),
+          User.guard.logoutForm(request, Url.Absolute("/logout"))
+        ),
         main(content)
       )
     )
