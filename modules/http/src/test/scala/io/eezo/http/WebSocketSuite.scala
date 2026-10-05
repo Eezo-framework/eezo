@@ -1,6 +1,7 @@
 package io.eezo.http
 
 import java.net.URI
+import java.nio.charset.StandardCharsets
 import java.util.concurrent.LinkedBlockingQueue
 import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicReference
@@ -88,6 +89,47 @@ class WebSocketSuite extends munit.FunSuite {
     )
     Option(answered.get)
       .getOrElse(fail(s"the upgrade at $path never reached the listener, failing with $failure"))
+  }
+
+  /** The body the refused upgrade at `path` was answered with.
+    *
+    * Written over a bare socket because Jetty's client keeps a refused handshake's body to itself,
+    * and the body is what a person sees when they open a socket URL in a browser by hand.
+    */
+  private def refusalBody(port: Int, path: String): String = {
+    val socket = new java.net.Socket("localhost", port)
+    try {
+      socket.setSoTimeout(5000)
+      val out = socket.getOutputStream
+      out.write(
+        (s"GET $path HTTP/1.1\r\nHost: localhost:$port\r\nUpgrade: websocket\r\n" +
+          "Connection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\n" +
+          "Sec-WebSocket-Version: 13\r\n\r\n").getBytes(StandardCharsets.US_ASCII)
+      )
+      out.flush()
+      val in      = new java.io.DataInputStream(socket.getInputStream)
+      val headers = Iterator
+        .continually {
+          val line = new StringBuilder
+          var c    = in.read()
+          while (c != '\n') {
+            if (c == -1) fail(s"the refusal at $path ended inside its headers: $line")
+            if (c != '\r') line.append(c.toChar)
+            c = in.read()
+          }
+          line.toString
+        }
+        .takeWhile(_.nonEmpty)
+        .toVector
+      val length = headers
+        .collectFirst {
+          case h if h.toLowerCase.startsWith("content-length:") => h.drop(15).trim.toInt
+        }
+        .getOrElse(fail(s"the refused upgrade at $path carried no length: $headers"))
+      val bytes = new Array[Byte](length)
+      in.readFully(bytes)
+      new String(bytes, StandardCharsets.UTF_8)
+    } finally socket.close()
   }
 
   test("a WebSocket route receives the open event and every message, with its path parameters") {
@@ -211,6 +253,20 @@ class WebSocketSuite extends munit.FunSuite {
   test("an upgrade matching no WebSocket route is refused, not left hanging") {
     serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
       (client, port) => refused(client, port, "/nope")
+    }
+  }
+
+  test("a refused upgrade is answered with eezo's own error page, never the application's frame") {
+    // A refusal is answered outside the HTTP handler and is not a page an application serves, so
+    // it keeps the whole document it always had rather than coming back as bare content.
+    serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
+      (_, port) =>
+        assert(
+          clue(refusalBody(port, "/nope")).startsWith(
+            """<!DOCTYPE html><html><head><meta charset="utf-8"><title>404 Not Found</title>""" +
+              "</head><body><h1>404 Not Found</h1>"
+          )
+        )
     }
   }
 

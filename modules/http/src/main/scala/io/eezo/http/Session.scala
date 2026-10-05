@@ -174,7 +174,9 @@ private[http] object SessionCookie {
       }
     } catch { case NonFatal(_) => Session.empty }
 
-  /** The request with its session read: what the adapter does before dispatch. */
+  /** The request with its session read: what the adapter does once a browser route has matched, and
+    * never on an API route, where no session takes part.
+    */
   def read(request: Request, secret: Secret): Request =
     request.copy(session = request.cookie(Name).map(decode(_, secret)).getOrElse(Session.empty))
 

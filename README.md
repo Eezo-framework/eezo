@@ -38,8 +38,11 @@ application names as its `routes`.
 The plugin writes that table to `target/scala-3.8.4/src_managed/main/io/eezo/generated/Routes.scala`
 under `examples/hello`, and every row there carries a `// from <source>` comment naming the file it
 came from, such as `// from src/main/scala/app/Hello.scala`. A compile error on a row for a file
-under `app/` means the `def` on that row does not take a `Request` and return a `Response`, so the
-fix belongs in the file the comment names, never in `Routes.scala`.
+under `app/` means the `def` on that row does not take a `Request`, or an `ApiRequest` for an API
+route, and return a `Response`, or that it is overloaded or has a default parameter: the row hands
+the compiler the `def` itself, and a name with two meanings, or a parameter list longer than one
+request, is not a handler it can pick. The fix belongs in the file the comment names, never in
+`Routes.scala`.
 
 `examples/reminders` is one case class deriving `Table` and a `boot` that is a nightly job over its
 rows: deliver what is due, mark it sent. No server, no plugin; `sbt run` runs the job once with a

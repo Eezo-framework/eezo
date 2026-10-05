@@ -104,6 +104,29 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     assert(returned, "run did not return after stop")
   }
 
+  // Here for the same reason: `serve` ends in `run`, and `run` owns the one slot.
+  test("the layout an application names is the one its server frames content in") {
+    val chosen = freePort()
+    val app    = new HttpApp {
+      override def routes: RouteTable =
+        RouteTable(Seq(Route.Http(Method.GET, PathPattern.parse("/"), _ => Response.Ok(p("hi")))))
+      override def port: Int      = chosen
+      override def layout: Layout = (_, _, content) => html(body(div(content)))
+    }
+    val runner = new Thread(() => { val _ = app.run(Nil) }, "eezo-layout-run")
+    runner.setDaemon(true)
+    runner.start()
+    try
+      assertEquals(
+        awaiting(chosen, "/").body(),
+        "<!DOCTYPE html><html><body><div><p>hi</p></div></body></html>"
+      )
+    finally {
+      HttpServer.stop()
+      runner.join(5000)
+    }
+  }
+
   test("stop with nothing running is a no-op") {
     HttpServer.stop()
   }
@@ -131,7 +154,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
       )
     )
     serving(routes) { (_, port) =>
-      assertEquals(get(port, "/thread").body(), "virtual=true")
+      assertEquals(get(port, "/thread").body(), plainly("virtual=true"))
     }
   }
 
@@ -217,7 +240,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     )
     serving(routes) { (_, port) =>
       val response = submit(port, "/widgets/7?q=hi", handed(), "name=Tom+%26+Jerry")
-      assertEquals(response.body(), "7|hi|Tom &amp; Jerry")
+      assertEquals(response.body(), plainly("7|hi|Tom &amp; Jerry"))
     }
   }
 
@@ -283,7 +306,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     )
     serving(routes) { (_, port) =>
       val response = submit(port, "/widgets/7", handed(), "_method=DELETE")
-      assertEquals(response.body(), "destroyed 7")
+      assertEquals(response.body(), plainly("destroyed 7"))
     }
   }
 

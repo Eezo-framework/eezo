@@ -1,6 +1,8 @@
 package io.eezo.http.client
 
+import java.nio.charset.StandardCharsets
 import java.time.Duration
+import java.util.concurrent.atomic.AtomicReference
 
 import io.eezo.http.*
 
@@ -14,6 +16,13 @@ class ClientSuite extends munit.FunSuite {
 
   private def text(status: Int, body: String): Response =
     Response(status, Seq("Content-Type" -> "text/plain; charset=utf-8"), Body.Bytes(body.getBytes))
+
+  /** What the API capture route last received. An API route, because no session takes part in a
+    * program's post, so no CSRF token comes with it; the test thread reads it once the reply is in.
+    */
+  private val captured = new AtomicReference[ApiRequest]()
+
+  private def capturedText: String = new String(captured.get.body, StandardCharsets.UTF_8)
 
   private def serving(body: String => Unit): Unit = {
     val routes = RouteTable(
@@ -32,7 +41,15 @@ class ClientSuite extends munit.FunSuite {
         route(Method.GET, "/token")(request => text(200, request.csrf.value)),
         route(Method.POST, "/echo") { request =>
           text(200, s"${request.header("Content-Type").getOrElse("?")}:${new String(request.body)}")
-        }
+        },
+        Route.handwritten(
+          Method.POST,
+          "/api/capture",
+          (request: ApiRequest) => {
+            captured.set(request)
+            text(200, "kept")
+          }
+        )
       )
     )
     val server = HttpServer.start(port = 0, routes = routes)
@@ -125,6 +142,85 @@ class ClientSuite extends munit.FunSuite {
       ) match {
         case Reply.Ok(r) => assertEquals(r.text, s"application/x-www-form-urlencoded:$form")
         case other       => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
+  test("a form keeps its pairs in the order given, repeats included, each side encoded") {
+    val content = Http.form("b" -> "x y", "a" -> "1&2", "b" -> "z", "line_items[0]" -> "é")
+    assertEquals(content.contentType, "application/x-www-form-urlencoded")
+    assertEquals(
+      new String(content.bytes, StandardCharsets.UTF_8),
+      "b=x+y&a=1%262&b=z&line_items%5B0%5D=%C3%A9"
+    )
+  }
+
+  test("post sends a form's bytes unchanged, under the form's content type") {
+    serving { base =>
+      val form = Http.form("mode" -> "payment", "line_items[0][quantity]" -> "2")
+      Http.post(s"$base/api/capture", form) match {
+        case Reply.Ok(_) =>
+          assertEquals(
+            captured.get.header("Content-Type"),
+            Some("application/x-www-form-urlencoded")
+          )
+          assert(captured.get.body.sameElements(form.bytes), capturedText)
+          assert(capturedText.contains("line_items%5B0%5D%5Bquantity%5D=2"), capturedText)
+        case other => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
+  test(
+    "a Content's type is the only Content-Type that goes out, whatever the caller's headers say"
+  ) {
+    serving { base =>
+      val form = Http.form("amount" -> "10")
+      Http.post(s"$base/api/capture", form, "Content-Type" -> "application/json") match {
+        case Reply.Ok(_) =>
+          val sent = captured.get.headers.collect {
+            case (name, values) if name.equalsIgnoreCase("Content-Type") => values
+          }.flatten
+          assertEquals(sent.toList, List("application/x-www-form-urlencoded"))
+        case other => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
+  test("a name given twice arrives twice, in the order given, through the server's decoder") {
+    serving { base =>
+      Http.post(
+        s"$base/api/capture",
+        Http.form("tag" -> "zeta", "n" -> "1", "tag" -> "alpha")
+      ) match {
+        case Reply.Ok(_) =>
+          assertEquals(capturedText, "tag=zeta&n=1&tag=alpha")
+          assertEquals(Request.decodeForm(capturedText).get("tag"), Some(Seq("zeta", "alpha")))
+        case other => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
+  test("a value with a space and an ampersand decodes on the server to exactly itself") {
+    serving { base =>
+      Http.post(s"$base/api/capture", Http.form("note" -> "a b&c", "next" -> "x")) match {
+        case Reply.Ok(_) =>
+          assertEquals(
+            Request.decodeForm(capturedText),
+            Map("note" -> Seq("a b&c"), "next" -> Seq("x"))
+          )
+        case other => fail(s"expected Ok, got $other")
+      }
+    }
+  }
+
+  test("a String post with no content type still goes as JSON") {
+    serving { base =>
+      Http.post(s"$base/api/capture", """{"n":1}""") match {
+        case Reply.Ok(_) =>
+          assertEquals(captured.get.header("Content-Type"), Some("application/json"))
+          assertEquals(capturedText, """{"n":1}""")
+        case other => fail(s"expected Ok, got $other")
       }
     }
   }

@@ -588,16 +588,12 @@ object Guard {
       !path.contains('\\') &&
       !path.exists(c => c.isControl)
 
-  /** The page the login form and its refusal come back in, matching the plain envelope `Resource`
-    * and `Boundary` already render into.
+  /** The login form and its refusal, as content with its title beside it, so that the page comes
+    * back in the application's layout without the guard knowing there is one.
     */
   private[auth] def page(rendered: Html, error: Option[String]): Html =
-    Html.doctype ++ html(
-      head(meta(Attrs.charset := "utf-8"), title("Sign in")),
-      body(
-        h1("Sign in"),
-        error.map(message => p(Attrs.cls := "error", message)).toSeq,
-        rendered
-      )
-    )
+    title("Sign in") ++
+      h1("Sign in") ++
+      error.fold(Html.empty)(message => p(Attrs.cls := "error", message)) ++
+      rendered
 }

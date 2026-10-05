@@ -19,13 +19,17 @@ import scala.util.matching.Regex
   *   second spelling of a rule this file already applies once. It is what a handwritten route's
   *   `Guarded` is declared about: there is no model behind such a route, so the page's own object
   *   is the thing that says who may reach it.
+  * @param form
+  *   whether the page is a form a browser fills in, `New` or `Edit`. Carried for the same reason as
+  *   [[owner]]: the file name that decides it is read once, where the verb table reads it.
   */
 final case class HandwrittenRoute(
     method: String,
     path: String,
     target: String,
     source: String,
-    owner: String
+    owner: String,
+    form: Boolean
 )
 
 /** A case class the generator will ask the compiler about, by name.
@@ -68,6 +72,11 @@ object RouteGenerator {
     "Update"  -> (("PUT", "update", "")),
     "Destroy" -> (("DELETE", "destroy", ""))
   )
+
+  /** The verbs whose page is a form a browser fills in, and so the only ones that refuse an API
+    * handler: a form posts with the session and its token, which an API route never has.
+    */
+  private val FormVerbs = Set("New", "Edit")
 
   /** Scala's own keywords that a `def` name has to be backticked to use. `new` is the one the verb
     * table actually reaches.
@@ -292,7 +301,8 @@ object RouteGenerator {
           path = path,
           target = target,
           source = "src/main/scala/app/" + relative,
-          owner = owner
+          owner = owner,
+          form = FormVerbs(fileName)
         )
       )
     }
@@ -403,12 +413,29 @@ object RouteGenerator {
       dbOnClasspath: Boolean,
       authDeclared: Boolean = false
   ): String = {
+    // The row hands the `def` itself to a helper overloaded on the handler's type, so the compiler
+    // picks a browser route or an API route from what the author's `def` takes; a lambda would
+    // need its parameter typed here, by a generator that reads text and cannot know. The price is
+    // that the `def` must be one handler and nothing more: overloaded, the compiler cannot choose
+    // which one the row means, and with a default parameter it is not a function of one request,
+    // so a handler under `app/` has neither, and the README says so where an author reads it. A
+    // `using` clause is fine, since it is resolved where the row names the `def`. A form page,
+    // `New` or `Edit`, goes through the one helper that refuses an API handler, and carries its
+    // source as a literal because the refusal has to name the author's file, not this one.
     def built(route: HandwrittenRoute, indent: String): String =
-      s"""io.eezo.http.Route.Http(
-         |$indent  io.eezo.http.Method.${route.method},
-         |$indent  io.eezo.http.PathPattern.parse("${route.path}"),
-         |$indent  req => ${route.target}(req)
-         |$indent)""".stripMargin
+      if (route.form)
+        s"""io.eezo.http.Route.page(
+           |$indent  io.eezo.http.Method.${route.method},
+           |$indent  "${route.path}",
+           |$indent  ${route.target},
+           |$indent  "${route.source}"
+           |$indent)""".stripMargin
+      else
+        s"""io.eezo.http.Route.handwritten(
+           |$indent  io.eezo.http.Method.${route.method},
+           |$indent  "${route.path}",
+           |$indent  ${route.target}
+           |$indent)""".stripMargin
 
     // The name a helper is called with, which only the strict helper takes: it is the one thing
     // that has to reach `compiletime.error`, and the lenient helper has no error to raise. An

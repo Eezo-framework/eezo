@@ -5,7 +5,7 @@ import scala.compiletime.{constValue, erasedValue, error, summonFrom}
 import scala.deriving.Mirror
 
 import io.eezo.core.{Id, Store}
-import io.eezo.core.html.{Attrs, Html, Mod, Url}
+import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
 import io.eezo.core.internal.util.snake
 
@@ -449,16 +449,14 @@ object Resource {
     }
   }
 
-  /** The document every derived page comes back in, matching the envelope `Boundary` already
-    * renders errors into. Deliberately plain and deliberately not a `Layout`: whether an
-    * application can replace eezo's own pages is an open question, and shipping a seam before it is
-    * answered risks shipping the wrong one and then having two.
+  /** A derived page: its title beside its content, so that it comes back in the application's
+    * layout like a handwritten one, and the layout puts the title in the head.
     */
-  private def page(heading: String, content: Mod*): Html =
-    Html.doctype ++ html(
-      head(meta(Attrs.charset := "utf-8"), title(heading)),
-      body(content*)
-    )
+  private def page(heading: String, content: (Html | Seq[Html])*): Html =
+    content.foldLeft(title(heading)) {
+      case (page, node: Html)       => page ++ node
+      case (page, nodes: Seq[Html]) => nodes.foldLeft(page)(_ ++ _)
+    }
 
   /** Every mounted page whose submit target is not mounted.
     *
@@ -494,8 +492,8 @@ object Resource {
 
     def isMounted(method: Method, target: PathPattern): Boolean =
       table.routes.exists {
-        case Route.Http(other, pattern, _, _) => other == method && pattern.subsumes(target)
-        case _                                => false
+        case Route.Http(other, pattern, _, _, _) => other == method && pattern.subsumes(target)
+        case _                                   => false
       }
 
     table.httpRoutes

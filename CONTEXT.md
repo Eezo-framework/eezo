@@ -59,6 +59,14 @@ derivation belongs to one edge: Table to the database edge, Form and Resource to
 Deriving for an edge the application does not have is a compile error.
 _Avoid_: half, side, layer, backend, runtime
 
+**Layout**:
+The one frame every HTML reply comes back in, the derived pages, the login page and the error page
+included. A trait with one method, from the request, the lifted title and the content to the
+document. An application writes one and names it in Main. A route returns its content with a title
+element beside it; the title is lifted out and handed to the layout, which builds the document
+around the rest. A route that returns a whole document steps outside it.
+_Avoid_: template, shell, envelope, wrapper, master page
+
 ### Session
 
 **Session**:
@@ -137,9 +145,16 @@ _Avoid_: authenticate, authenticator, user lookup
 **CSRF token**:
 The value a form carries and an unsafe request must return, proving the submission came from a
 page this application served to this browser and not from a stranger's. One per session, minted
-the first time a browser is seen, verified before any handler runs, on every application whether
-or not anyone can sign in.
+the first time a browser is seen, verified before any handler runs, on every browser route of
+every application whether or not anyone can sign in. An API route has none, because no session
+takes part in it.
 _Avoid_: authenticity token, anti forgery token, form token, nonce
+
+**API route**:
+A route called by a program and not by a browser. No session takes part in it, so it carries no
+CSRF token, and who may call it is said by its Guarded like on any other route. A page is one
+when its handler takes an ApiRequest rather than a Request; nothing else declares it.
+_Avoid_: endpoint, webhook route, REST route, stateless route, CSRF exempt route
 
 **Mount**:
 The prefix a set of routes is addressed under, and everything that moves with it: the pages, the
@@ -221,3 +236,11 @@ page once the request is gone: a malformed frame as an error frame, a socket ope
 origin, by the wrong user or for an unknown or taken page by closing it with a 44xx code, a defect
 as a generic error frame and a log line, a dead connection by closing.
 _Avoid_: handler, catch, error handler, middleware
+
+### Outbound client
+
+**Content**:
+Bytes that know their media type: what a request body is once it has been encoded for the wire. An
+application never builds one; it gets one from an encoder such as `Http.form` and hands it to
+`post`.
+_Avoid_: body, payload, entity

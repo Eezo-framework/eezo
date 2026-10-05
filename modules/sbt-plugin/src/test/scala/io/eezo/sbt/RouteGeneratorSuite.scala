@@ -34,6 +34,15 @@ class RouteGeneratorSuite extends munit.FunSuite {
     assertEquals(route("widgets/_id/Destroy.scala").path, "/widgets/:id")
   }
 
+  test("only New and Edit are form pages, read off the file name") {
+    assert(route("widgets/New.scala").form)
+    assert(route("widgets/_id/Edit.scala").form)
+    assert(!route("widgets/Index.scala").form)
+    assert(!route("widgets/Create.scala").form)
+    assert(!route("webhooks/Stripe.scala").form)
+    assert(!route("new/Index.scala").form)
+  }
+
   test("a catch-all directory becomes a catch-all segment") {
     assertEquals(route("files/__path/Index.scala").path, "/files/*path")
   }
@@ -84,8 +93,9 @@ class RouteGeneratorSuite extends munit.FunSuite {
     assert(clue(emitted).contains("package io.eezo.generated"))
     assert(clue(emitted).contains("object Routes"))
     assert(clue(emitted).contains("// from src/main/scala/app/Health.scala"))
-    assert(clue(emitted).contains("io.eezo.http.PathPattern.parse(\"/health\")"))
-    assert(clue(emitted).contains("req => app.Health.health(req)"))
+    assert(clue(emitted).contains("io.eezo.http.Route.handwritten("))
+    assert(clue(emitted).contains("\"/health\""))
+    assert(clue(emitted).contains("app.Health.health\n"))
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
   }
 
@@ -102,9 +112,77 @@ class RouteGeneratorSuite extends munit.FunSuite {
     assert(clue(emitted).contains("object Routes"))
     assert(clue(emitted).contains("// from src/main/scala/app/Hello.scala"))
     assert(clue(emitted).contains("io.eezo.http.Method.GET"))
-    assert(clue(emitted).contains("io.eezo.http.PathPattern.parse(\"/hello\")"))
-    assert(clue(emitted).contains("req => app.Hello.hello(req)"))
+    assert(clue(emitted).contains("\"/hello\""))
+    assert(clue(emitted).contains("app.Hello.hello\n"))
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
+  }
+
+  test("a row hands the def itself to the helper, so the compiler picks the kind from its type") {
+    val emitted = RouteGenerator.render(
+      Seq(route("webhooks/stripe/Create.scala"), route("widgets/_id/Show.scala")),
+      Seq.empty,
+      dbOnClasspath = false
+    )
+    assert(
+      clue(emitted).contains(
+        """    guardFor[app.webhooks.stripe.Create.type].mounting(
+          |      io.eezo.http.Route.handwritten(
+          |        io.eezo.http.Method.POST,
+          |        "/webhooks/stripe",
+          |        app.webhooks.stripe.Create.create
+          |      )
+          |    )""".stripMargin
+      )
+    )
+    assert(
+      clue(emitted).contains(
+        """      io.eezo.http.Route.handwritten(
+          |        io.eezo.http.Method.GET,
+          |        "/widgets/:id",
+          |        app.widgets._id.Show.show
+          |      )""".stripMargin
+      )
+    )
+    // A lambda would need its parameter typed by the generator, which reads text and cannot know.
+    assert(!clue(emitted).contains("req =>"), emitted)
+  }
+
+  test("a New or Edit row goes through the form page helper, carrying its source as a literal") {
+    val emitted = RouteGenerator.render(
+      Seq(route("widgets/New.scala"), route("widgets/_id/Edit.scala"), route("New.scala")),
+      Seq.empty,
+      dbOnClasspath = false
+    )
+    assert(
+      clue(emitted).contains(
+        """      io.eezo.http.Route.page(
+          |        io.eezo.http.Method.GET,
+          |        "/widgets/new",
+          |        app.widgets.New.`new`,
+          |        "src/main/scala/app/widgets/New.scala"
+          |      )""".stripMargin
+      )
+    )
+    assert(
+      clue(emitted).contains(
+        """      io.eezo.http.Route.page(
+          |        io.eezo.http.Method.GET,
+          |        "/widgets/:id/edit",
+          |        app.widgets._id.Edit.edit,
+          |        "src/main/scala/app/widgets/_id/Edit.scala"
+          |      )""".stripMargin
+      )
+    )
+    assert(
+      clue(emitted).contains(
+        """      io.eezo.http.Route.page(
+          |        io.eezo.http.Method.GET,
+          |        "/new",
+          |        app.New.`new`,
+          |        "src/main/scala/app/New.scala"
+          |      )""".stripMargin
+      )
+    )
   }
 
   test("a file under app missing its expected def warns at generation time") {

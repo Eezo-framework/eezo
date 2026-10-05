@@ -42,11 +42,21 @@ private[eezo] object RouteReport {
 
   /** A sentence rather than an empty heading when nothing is mounted, because a typo'd
     * `derives Resorce` mounts nothing in silence and this line is the only symptom a user sees.
+    *
+    * An API route is marked here and not in [[Route.describe]], because `describe` is the key the
+    * table deduplicates on: a mark there would let an API route and a browser route share a method
+    * and a path, and stop a handwritten API route from overriding its derived twin. The listing is
+    * where a reader asks which routes skip the CSRF check, so the mark is shown where it is read.
     */
   def listing(routes: Seq[Route]): String =
     if (routes.isEmpty) "no routes mounted"
     else {
       val heading = if (routes.sizeIs == 1) "1 route:" else s"${routes.size} routes:"
-      routes.map(route => s"  ${route.describe}").mkString(s"$heading\n", "\n", "")
+      routes.map(route => s"  ${listed(route)}").mkString(s"$heading\n", "\n", "")
     }
+
+  private def listed(route: Route): String = route match {
+    case http: Route.Http if http.kind.api => s"${http.describe} api"
+    case other                             => other.describe
+  }
 }

@@ -201,12 +201,14 @@ object Html {
     * once, and a context sensitive split is a rule that eventually gets applied to the wrong
     * context.
     */
-  /** The inverse of [[escape]], for the one reader of escaped text outside rendering: the differ in
-    * `modules/live` ships a text change as the *unescaped* value, because the client applies it
-    * with `data`, which is literal, not parsed. It lives here beside [[escape]] because the five
-    * entities are this file's choice, and an inverse maintained elsewhere is the pair drifting
-    * apart. `&amp;` is decoded last for the reason it is encoded first: every other entity's
-    * ampersand must not be re-read.
+  /** The inverse of [[escape]], for the two readers of escaped text outside rendering. The differ
+    * in `modules/live` ships a text change as the *unescaped* value, because the client applies it
+    * with `data`, which is literal, not parsed. The layout's title lifting in `modules/http` hands
+    * the plain text to a `title` tag that escapes it again, so the text must leave escaped form
+    * once or it is escaped twice. It lives here beside [[escape]] because the five entities are
+    * this file's choice, and an inverse maintained elsewhere is the pair drifting apart. `&amp;` is
+    * decoded last for the reason it is encoded first: every other entity's ampersand must not be
+    * read again.
     */
   private[eezo] def unescape(escaped: String): String =
     if (!escaped.contains('&')) escaped
