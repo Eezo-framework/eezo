@@ -1,0 +1,127 @@
+{
+  "version": 1,
+  "tables": [
+    {
+      "name": "order",
+      "columns": [
+        {
+          "name": "at",
+          "type": "timestamptz",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "paid",
+          "type": "boolean",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "price",
+          "type": "integer",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "product",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "product",
+      "columns": [
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "name",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "price",
+          "type": "integer",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        }
+      ],
+      "indexes": []
+    },
+    {
+      "name": "user",
+      "columns": [
+        {
+          "name": "email",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "id",
+          "type": "uuid",
+          "nullable": false,
+          "primaryKey": true,
+          "checks": [],
+          "references": null
+        },
+        {
+          "name": "password",
+          "type": "text",
+          "nullable": false,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
+        }
+      ],
+      "indexes": [
+        {
+          "name": "uq_user_email",
+          "columns": [
+            "email"
+          ],
+          "unique": true
+        }
+      ]
+    }
+  ]
+}
