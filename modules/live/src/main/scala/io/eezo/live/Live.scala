@@ -91,8 +91,8 @@ object Live {
     *
     * `request` is the request being answered, and the one thing read off it is `currentUser`: a
     * page rendered behind a guarded route is bound to that user and admits only their socket
-    * (docs/live.md §7). There is no request free overload, because a page that forgot to say who
-    * rendered it would quietly stay unbound, and that has to be a compile error.
+    * (docs/tutorials/a-live-page.md §7). There is no request free overload, because a page that
+    * forgot to say who rendered it would quietly stay unbound, and that has to be a compile error.
     */
   def mount[S](request: Request, component: Component[S]): Html =
     mount(request, (_: Async[S]) => component)

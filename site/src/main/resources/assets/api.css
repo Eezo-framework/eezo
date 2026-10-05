@@ -1,0 +1,248 @@
+/* The site's dress for the generated API pages. Loaded after scaladoc's own stylesheets, so it
+   wins; it restyles scaladoc's variables and the header, and leaves the rest to scaladoc. */
+
+@font-face {
+  font-family: "Fredoka";
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url("fonts/fredoka.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "Nunito";
+  font-style: normal;
+  font-weight: 200 1000;
+  font-display: swap;
+  src: url("fonts/nunito.woff2") format("woff2");
+}
+
+@font-face {
+  font-family: "JetBrains Mono";
+  font-style: normal;
+  font-weight: 100 800;
+  font-display: swap;
+  src: url("fonts/jetbrainsmono.woff2") format("woff2");
+}
+
+:root {
+  --sun: #ffd84d;
+  --ink-fixed: #1d1b3a;
+  --line: #ece7f8;
+  --line-strong: #d9d2f0;
+  --grape-ink: #4630c9;
+  --site-bg: #fffbf2;
+  --site-ink: #1d1b3a;
+  --site-muted: #5f5c7d;
+  --site-surface-2: #fff3cf;
+  --show-to-dark: inline-flex;
+  --show-to-light: none;
+
+  /* scaladoc's own variables, which its rules read */
+  --header-height: 66px;
+  --background-default: #fffbf2;
+  --background-subtle: #fff7e3;
+  --background-neutral: #f6efe0;
+  --background-header: #fffbf2;
+  --background-nav: #fffbf2;
+  --background-main: #fffbf2;
+  --text-primary: #1d1b3a;
+  --text-secondary: #5f5c7d;
+  --border-default: #ece7f8;
+  --border-strong: #d9d2f0;
+  --action-primary-content-default: #4a4770;
+  --action-primary-content-hover: #1d1b3a;
+  --action-primary-content-active: #1d1b3a;
+  --action-primary-content-selected: #1d1b3a;
+  --action-primary-background-default-solid: #fff3cf;
+  --action-primary-background-hover: #fff3cf;
+  --action-primary-background-active: #ffe9a8;
+  --action-primary-background-selected: #ffd84d;
+  --action-primary-border-default: #ece7f8;
+}
+
+:root.theme-dark {
+  --line: #2e2a62;
+  --line-strong: #3e3980;
+  --grape-ink: #c9b9ff;
+  --site-bg: #14122b;
+  --site-ink: #f2f0ff;
+  --site-muted: #b3aed6;
+  --site-surface-2: #2a2660;
+  --show-to-dark: none;
+  --show-to-light: inline-flex;
+
+  --background-default: #14122b;
+  --background-subtle: #1e1b4b;
+  --background-neutral: #2a2660;
+  --background-header: #14122b;
+  --background-nav: #14122b;
+  --background-main: #14122b;
+  --text-primary: #f2f0ff;
+  --text-secondary: #b3aed6;
+  --border-default: #2e2a62;
+  --border-strong: #3e3980;
+  --action-primary-content-default: #b3aed6;
+  --action-primary-content-hover: #f2f0ff;
+  --action-primary-content-active: #f2f0ff;
+  /* Not the sun here: scaladoc paints its expanded tree headings with the selected content
+     colour too, so a dark highlight keeps light text readable in both places. */
+  --action-primary-content-selected: #f2f0ff;
+  --action-primary-background-default-solid: #1e1b4b;
+  --action-primary-background-hover: #2a2660;
+  --action-primary-background-active: #3e3980;
+  --action-primary-background-selected: #3e3980;
+  --action-primary-border-default: #2e2a62;
+}
+
+/* type */
+
+body,
+.body-small,
+.body-medium,
+.body-large,
+.body-small-bold,
+.body-medium-bold,
+.body-large-bold {
+  font-family: "Nunito", system-ui, sans-serif;
+}
+
+.h100,
+.h200,
+.h300,
+.h400,
+.h500,
+.h600,
+.project-name {
+  font-family: "Fredoka", "Nunito", system-ui, sans-serif;
+  letter-spacing: -0.01em;
+}
+
+.mono-small,
+.mono-small-block,
+.mono-medium,
+.mono-medium-block,
+.signature,
+.documentableName,
+code,
+pre,
+.hljs {
+  font-family: "JetBrains Mono", ui-monospace, monospace;
+}
+
+/* the header: the site's bar, in scaladoc's slot */
+
+#header {
+  border-bottom: 2px solid var(--line);
+}
+
+#dropdown-trigger,
+#version-dropdown,
+#theme-toggle,
+#mobile-theme-toggle {
+  display: none !important;
+}
+
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  text-decoration: none;
+  color: var(--site-ink);
+  font-family: "Fredoka", "Nunito", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1.55rem;
+  letter-spacing: -0.02em;
+}
+
+.logo .mark {
+  transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+.logo:hover .mark {
+  transform: rotate(-10deg) scale(1.06);
+}
+
+.site-links {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-left: auto;
+  margin-right: 12px;
+}
+
+.site-links a {
+  display: inline-block;
+  padding: 8px 14px;
+  border-radius: 999px;
+  text-decoration: none;
+  font-family: "Nunito", system-ui, sans-serif;
+  font-weight: 700;
+  font-size: 1rem;
+  color: var(--site-ink);
+  transition: background 0.15s ease, color 0.15s ease;
+}
+
+.site-links a:hover {
+  background: var(--site-surface-2);
+}
+
+.site-links a[aria-current="page"] {
+  background: var(--site-ink);
+  color: var(--site-bg);
+}
+
+.theme-form {
+  display: contents;
+}
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 42px;
+  height: 42px;
+  margin-left: 8px;
+  border-radius: 999px;
+  border: 2px solid var(--line-strong);
+  background: var(--background-subtle);
+  color: var(--site-ink);
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.theme-toggle:hover {
+  transform: rotate(-12deg);
+}
+
+.theme-toggle.to-dark {
+  display: var(--show-to-dark);
+}
+
+.theme-toggle.to-light {
+  display: var(--show-to-light);
+}
+
+@media (max-width: 1000px) {
+  .site-links {
+    display: none;
+  }
+}
+
+/* content */
+
+.cover .doc a,
+.documentableBrief a,
+.doc a {
+  color: var(--grape-ink);
+}
+
+#leftColumn .switcher-container .switcher.selected {
+  background: var(--sun);
+  color: var(--ink-fixed);
+}
+
+:root.theme-dark #leftColumn .switcher-container .switcher.selected {
+  background: #3e3980;
+  color: #f2f0ff;
+}
