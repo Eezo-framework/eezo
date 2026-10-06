@@ -1,5 +1,5 @@
 <p align="center">
-  <img src=".github/assets/eezo-mark.svg" width="112" height="112" alt="">
+  <img src="https://eezo.io/assets/mascot.png" width="112" height="112" alt="">
 </p>
 <h1 align="center">eezo</h1>
 <p align="center">
