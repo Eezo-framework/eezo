@@ -1,16 +1,26 @@
-# eezo
+<p align="center">
+  <img src=".github/assets/eezo-mark.svg" width="112" height="112" alt="">
+</p>
+<h1 align="center">eezo</h1>
+<p align="center">
+  A Scala 3 web framework where the case class is the source of truth.<br>
+  Direct style on virtual threads. Deploy with one command.
+</p>
+<p align="center">
+  <img src="https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white" alt="Made for Scala 3">
+  <a href="https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml"><img src="https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
+  <a href="https://central.sonatype.com/artifact/io.eezo/eezo_3"><img src="https://img.shields.io/maven-central/v/io.eezo/eezo_3.svg?label=maven%20central" alt="Maven Central"></a>
+  <a href="https://javadoc.io/doc/io.eezo/eezo_3"><img src="https://javadoc.io/badge2/io.eezo/eezo_3/javadoc.svg" alt="javadoc"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+</p>
+<p align="center">
+  <a href="https://eezo.io">eezo.io</a> ·
+  <a href="https://eezo.io/docs/tutorials">Tutorials</a> ·
+  <a href="https://eezo.io/docs">Docs</a> ·
+  <a href="https://eezo.io/api/">API</a>
+</p>
 
-![Made for Scala 3](https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white)
-[![CI](https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml/badge.svg)](https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml)
-[![Maven Central](https://img.shields.io/maven-central/v/io.eezo/eezo_3.svg?label=maven%20central)](https://central.sonatype.com/artifact/io.eezo/eezo_3)
-[![javadoc](https://javadoc.io/badge2/io.eezo/eezo_3/javadoc.svg)](https://javadoc.io/doc/io.eezo/eezo_3)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-
-
-A Scala 3 web framework where the case class is the source of truth. Direct style on virtual
-threads. Deploy with one command.
-
-Homepage and documentation: [eezo.io](https://eezo.io)
+---
 
 ## What eezo is
 
