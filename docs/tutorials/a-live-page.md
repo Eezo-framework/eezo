@@ -118,6 +118,13 @@ Per-page state diverges; a `Topic[A]` is how pages converge. The blog example's 
 (`examples/blog`, `GET /live`) is the complete pattern; the heart of it:
 
 ```scala
+/** The state of one page: the form being typed, and the entries this page has seen. */
+final case class GuestbookState(
+    name: String,
+    message: String,
+    entries: Vector[Guestbook.Entry]
+)
+
 object Guestbook {
   final case class Entry(id: Long, name: String, message: String)
   val signed: Topic[Entry] = new Topic[Entry]
@@ -127,7 +134,7 @@ final class Guestbook extends Component[GuestbookState] {
 
   def init(ctx: Init[GuestbookState]): GuestbookState = {
     ctx.subscribe(Guestbook.signed)((entry, s) => s.copy(entries = s.entries :+ entry))
-    GuestbookState.empty
+    GuestbookState("", "", Vector.empty)
   }
 
   def handle(event: Event, s: GuestbookState): GuestbookState = event.name match {
@@ -137,6 +144,9 @@ final class Guestbook extends Component[GuestbookState] {
   }
 }
 ```
+
+(The example's real state has two more fields, a per-page click count and a sort toggle; they
+are left out here.)
 
 The discipline that keeps two browsers honest: **`handle` publishes and leaves the shared
 state alone.** The signer's own page updates through its subscription, the same path as

@@ -58,6 +58,10 @@ object Assets {
       "site.css",
       "api.css",
       "keys.js",
+      "mascot.png",
+      "favicon-32.png",
+      "apple-touch-icon.png",
+      "og-image.png",
       "hljs/highlight.min.js",
       "hljs/scala.min.js",
       "hljs/nginx.min.js"

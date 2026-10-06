@@ -72,6 +72,11 @@ If 8080 is taken, add `override def port: Int = 8090` to `Main`.
 
 ## How it is put together
 
+The mascot is `design/logo.png`, the source the served images are made from: `mascot.png` for the
+header at three times its shown size, `favicon-32.png`, `apple-touch-icon.png`, and the 1200 by
+630 `og-image.png` the pages name in their Open Graph tags. The served copies are under
+`src/main/resources/assets/` and in the asset digest, so a new one busts the cache.
+
 Six handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
 by its address, the catch-all that serves the stylesheet, the fonts and the icons out of the jar,
 `/search`, and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
