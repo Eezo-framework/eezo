@@ -50,7 +50,7 @@ object Layout {
         Tags.meta(Attrs.attr("property") := "og:image:height", Attrs.content := "630"),
         Tags.meta(
           Attrs.attr("property") := "og:image:alt",
-          Attrs.content          := "The eezo mascot beside the words: a Scala 3 web framework, the data model is the source of truth."
+          Attrs.content := "The eezo mascot beside the words: a Scala 3 web framework, the data model is the source of truth."
         ),
         Tags.meta(Attrs.name := "twitter:card", Attrs.content := "summary_large_image"),
         link(
