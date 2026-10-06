@@ -140,11 +140,12 @@ Compile / resourceGenerators += Def.task {
   * not run, which the site tolerates in development and the test suite refuses in CI.
   */
 Compile / resourceGenerators += Def.task {
+  val log    = streams.value.log
   val source = repoRoot.value / "target" / "unidoc"
   val out    = (Compile / resourceManaged).value / "api"
   IO.delete(out)
   if (!source.isDirectory) {
-    streams.value.log.warn(s"no API docs at $source: run `sbt unidoc` at the repository root")
+    log.warn(s"no API docs at $source: run `sbt unidoc` at the repository root")
     Seq.empty[File]
   } else {
     IO.copyDirectory(source, out)

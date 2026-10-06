@@ -12,6 +12,9 @@ object Layout {
 
   val SiteName: String = "eezo"
 
+  /** Where the site lives, for the addresses a social card needs to be absolute. */
+  val Origin: String = "https://eezo.io"
+
   /** A whole document around `content`, which is a function of the live state the page shares with
     * its chrome: see [[Page]]. The request is what the header needs: the theme this browser chose,
     * and the token its toggle posts with.
@@ -38,12 +41,26 @@ object Layout {
         Tags.meta(Attrs.attr("property") := "og:description", Attrs.content := meta.description),
         Tags.meta(Attrs.attr("property") := "og:type", Attrs.content        := "website"),
         Tags.meta(Attrs.attr("property") := "og:site_name", Attrs.content   := SiteName),
-        link(
-          Attrs.rel  := "icon",
-          Attrs.tpe  := "image/svg+xml",
-          Attrs.href := Assets.url("favicon.svg")
+        Tags.meta(Attrs.attr("property") := "og:url", Attrs.content         := Origin + meta.path),
+        Tags.meta(
+          Attrs.attr("property") := "og:image",
+          Attrs.content          := Origin + Assets.url("og-image.png")
         ),
-        link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("site.css"))
+        Tags.meta(Attrs.attr("property") := "og:image:width", Attrs.content  := "1200"),
+        Tags.meta(Attrs.attr("property") := "og:image:height", Attrs.content := "630"),
+        Tags.meta(
+          Attrs.attr("property") := "og:image:alt",
+          Attrs.content := "The eezo mascot beside the words: a Scala 3 web framework, the data model is the source of truth."
+        ),
+        Tags.meta(Attrs.name := "twitter:card", Attrs.content := "summary_large_image"),
+        link(
+          Attrs.rel           := "icon",
+          Attrs.tpe           := "image/png",
+          Attrs.attr("sizes") := "32x32",
+          Attrs.href          := Assets.url("favicon-32.png")
+        ),
+        link(Attrs.rel := "apple-touch-icon", Attrs.href := Assets.url("apple-touch-icon.png")),
+        link(Attrs.rel := "stylesheet", Attrs.href       := Assets.url("site.css"))
       ),
       body(
         Attrs.cls := bodyClass,
@@ -64,27 +81,26 @@ object Layout {
       )
     )
 
-  /** The mark: a rounded tile with a wink of an `e`, and the wordmark beside it. Inline, so it
-    * takes the page's colours and needs no request of its own. `mods` is for a host that needs
-    * another attribute on the anchor, as the API pages do.
+  /** The mascot and the wordmark beside it. The image is served three times the size it is shown
+    * at, so it stays crisp on a dense screen; its dimensions are on the tag so the header does not
+    * shift while it loads. `mods` is for a host that needs another attribute on the anchor, as the
+    * API pages do.
     */
   def logo(mods: Attr*): Html =
     a(
       Attrs.cls                := "logo",
       Attrs.href               := "/",
       Attrs.attr("aria-label") := "eezo home",
-      Html.raw(LogoMark),
+      img(
+        Attrs.cls    := "mark",
+        Attrs.src    := Assets.url("mascot.png"),
+        Attrs.alt    := "",
+        Attrs.width  := 38,
+        Attrs.height := 36
+      ),
       span(Attrs.cls := "wordmark", "eezo"),
       mods
     )
-
-  private val LogoMark: String =
-    """<svg class="mark" viewBox="0 0 40 40" width="36" height="36" aria-hidden="true">
-      |<rect x="2" y="2" width="36" height="36" rx="11" fill="var(--sun)"/>
-      |<circle cx="20" cy="20" r="9.5" fill="none" stroke="var(--ink-fixed)" stroke-width="4.5"/>
-      |<rect x="19" y="18" width="14" height="4.5" rx="2" fill="var(--sun)"/>
-      |<rect x="20" y="18" width="12" height="4.5" rx="2" fill="var(--ink-fixed)"/>
-      |</svg>""".stripMargin.replace("\n", "")
 
   /** The top bar, rendered inside [[Page]] so the search button can open the dialog. */
   private[site] def header(path: String, theme: Html): Html = {
