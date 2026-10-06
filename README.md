@@ -1,8 +1,11 @@
 # eezo
 
-[![Maven Central](https://img.shields.io/maven-central/v/io.eezo/eezo_3.svg?label=maven%20central)](https://central.sonatype.com/artifact/io.eezo/eezo_3)
+![Made for Scala 3](https://img.shields.io/badge/Scala%203-%23de3423.svg?logo=scala&logoColor=white)
 [![CI](https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml/badge.svg)](https://github.com/Eezo-framework/eezo/actions/workflows/ci.yml)
+[![Maven Central](https://img.shields.io/maven-central/v/io.eezo/eezo_3.svg?label=maven%20central)](https://central.sonatype.com/artifact/io.eezo/eezo_3)
+[![javadoc](https://javadoc.io/badge2/io.eezo/eezo_3/javadoc.svg)](https://javadoc.io/doc/io.eezo/eezo_3)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
 
 A Scala 3 web framework where the case class is the source of truth. Direct style on virtual
 threads. Deploy with one command.
