@@ -96,7 +96,6 @@ Every artifact is published at one version, under the `io.eezo` group:
 | `eezo-db` | the database edge: the pool, the `sql` interpolator, transactions, `Table`, schema commands and migrations, `DbApp` |
 | `eezo-auth` | sessions, email and password sign in, CSRF, route guards and row ownership |
 | `eezo-live` | state held on the server and a thin browser: the diff and patch protocol, the client runtime, PubSub |
-| `eezo-testkit` | a real server against a real database, driven over HTTP and WebSocket from a test |
 | `eezo-core` | what the others build on: configuration, the HTML tree and DSL, the model key `Id[T]` |
 | `sbt-eezo` | the sbt plugin that generates the route table, for sbt 1 and sbt 2 |
 
