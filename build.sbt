@@ -49,11 +49,11 @@ Global / onLoad := {
 addCommandAlias("check", "db/testOnly -- --exclude-tags=backlog")
 addCommandAlias("backlog", "db/testOnly io.eezo.db.BacklogSuite")
 
-/** Two facts about a release that no artifact otherwise states, written into every module's POM
-  * as properties: the JDK floor the modules were compiled for, and the sbt version an
-  * application on this release is built with. The installer at https://eezo.io/install reads
-  * them off Maven Central, beside the version and the Scala version the POM already carries, so
-  * nothing about a release is spelled twice.
+/** Two facts about a release that no artifact otherwise states, written into every module's POM as
+  * properties: the JDK floor the modules were compiled for, and the sbt version an application on
+  * this release is built with. The installer at https://eezo.io/install reads them off Maven
+  * Central, beside the version and the Scala version the POM already carries, so nothing about a
+  * release is spelled twice.
   */
 lazy val pomFacts: Setting[?] = pomPostProcess := { node =>
   import scala.xml.{Elem, Node}

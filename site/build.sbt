@@ -22,12 +22,12 @@ libraryDependencies ++= Seq(
   // CommonMark, parsed to an AST the site walks into eezo's own `Html` nodes. The one third party
   // dependency of the site, and one the framework does not take: two small jars, no transitive
   // dependency, BSD licensed.
-  "org.commonmark"  % "commonmark"                % "0.30.0",
-  "org.commonmark"  % "commonmark-ext-gfm-tables" % "0.30.0",
+  "org.commonmark" % "commonmark"                % "0.30.0",
+  "org.commonmark" % "commonmark-ext-gfm-tables" % "0.30.0",
   // highlight.js, the browser bundle, for the code blocks. `Provided`: the generator below takes
   // the three files the pages load out of the jar at build time, so the jar itself never ships.
-  "org.webjars"     % "highlightjs"               % HighlightJs % Provided,
-  "org.scalameta"  %% "munit"                     % "1.3.4"     % Test
+  "org.webjars"    % "highlightjs" % HighlightJs % Provided,
+  "org.scalameta" %% "munit"       % "1.3.4"     % Test
 )
 
 scalacOptions ++= Seq(
@@ -64,18 +64,19 @@ Test / fork := true
 Test / javaOptions += s"-Dsite.root=${repoRoot.value}"
 
 /** The Markdown the site serves, and the launcher, copied into the jar under
-  * `content/<repository path>`, and an
-  * index of those paths beside it, because a jar cannot list a directory. The set is spelled here
-  * once: the site's `Pages` names sections out of these files, and its test suite fails on a file
-  * here that no section reaches. The ADRs and the research notes are deliberately absent: they
-  * are the repository's own record and stay there.
+  * `content/<repository path>`, and an index of those paths beside it, because a jar cannot list a
+  * directory. The set is spelled here once: the site's `Pages` names sections out of these files,
+  * and its test suite fails on a file here that no section reaches. The ADRs and the research notes
+  * are deliberately absent: they are the repository's own record and stay there.
   */
 Compile / resourceGenerators += Def.task {
   val root = repoRoot.value
   val out  = (Compile / resourceManaged).value / "content"
 
   def under(directory: String, file: File): String =
-    directory + "/" + IO.relativize(root / directory, file).getOrElse(sys.error(s"$file is not under $directory"))
+    directory + "/" + IO
+      .relativize(root / directory, file)
+      .getOrElse(sys.error(s"$file is not under $directory"))
 
   val files: Seq[(File, String)] =
     Seq(
@@ -118,7 +119,11 @@ Compile / resourceGenerators += Def.task {
   IO.delete(out)
   IO.createDirectory(out)
   val unpacked = IO.createTemporaryDirectory
-  IO.unzip(jar, unpacked, (name: String) => wanted.exists { case (from, _) => name == prefix + from })
+  IO.unzip(
+    jar,
+    unpacked,
+    (name: String) => wanted.exists { case (from, _) => name == prefix + from }
+  )
   val files = wanted.map { case (from, to) =>
     val file = out / to
     IO.copyFile(unpacked / prefix / from, file)
@@ -133,7 +138,9 @@ Compile / resourceGenerators += Def.task {
     "export enum given transparent\"" -> "export enum given transparent derives opaque infix open using as\""
   ).foldLeft(IO.read(scala)) { case (text, (from, to)) =>
     if (!text.contains(from))
-      sys.error(s"highlight.js $HighlightJs: the Scala grammar no longer contains `$from`; revisit the patch")
+      sys.error(
+        s"highlight.js $HighlightJs: the Scala grammar no longer contains `$from`; revisit the patch"
+      )
     text.replace(from, to)
   }
   IO.write(scala, patched)
@@ -141,9 +148,9 @@ Compile / resourceGenerators += Def.task {
 }.taskValue
 
 /** The API reference: the scaladoc `sbt unidoc` wrote at the root of the repository, copied into
-  * the jar under `api/` and served under `/api`. Generated at the root rather than here because
-  * the sources are there and this build sees only the published jars. Absent when `unidoc` has
-  * not run, which the site tolerates in development and the test suite refuses in CI.
+  * the jar under `api/` and served under `/api`. Generated at the root rather than here because the
+  * sources are there and this build sees only the published jars. Absent when `unidoc` has not run,
+  * which the site tolerates in development and the test suite refuses in CI.
   */
 Compile / resourceGenerators += Def.task {
   val log    = streams.value.log
