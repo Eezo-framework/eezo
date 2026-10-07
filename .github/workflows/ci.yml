@@ -80,12 +80,12 @@ jobs:
           sbt -batch publishLocalForExample
           cd examples && sbt -batch test
 
-      # The documentation site is an eezo application too, and it is built the way the examples
-      # are: a build of its own against the eezo the step above published. Its suite renders every
-      # page out of the repository's Markdown and follows every link, so a doc edit that breaks a
-      # cross reference, or a new file no section lists, fails here rather than on eezo.io. The
-      # API reference it serves is the scaladoc `unidoc` writes at the root, so that runs first;
-      # under `CI` the suite refuses a build without it.
+      # The documentation site is an eezo application too, with a build of its own against the
+      # released eezo on Maven Central, the way a user's application is built. Its suite renders
+      # every page out of the repository's Markdown and follows every link, so a doc edit that
+      # breaks a cross reference, or a new file no section lists, fails here rather than on
+      # eezo.io. The API reference it serves is the scaladoc `unidoc` writes at the root, so that
+      # runs first; under `CI` the suite refuses a build without it.
       - name: Build the documentation site
         run: |
           sbt -batch unidoc

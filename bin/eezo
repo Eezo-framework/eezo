@@ -5,9 +5,10 @@
 # an sbt-eezo task, so this script can stay a page long and never needs the user's classpath.
 #
 # `new` is the one command that cannot forward, because nothing exists yet to forward to. The
-# scaffold takes its versions from the `.eezo-version` file that `sbt publishLocalForExample`
-# writes at the repository root, the same source the examples build reads, so a scaffolded app
-# resolves the locally published eezo rather than a release on Maven Central.
+# scaffold takes its versions from a file: `.eezo-version` at the repository root when this script
+# runs from a checkout (written by `sbt publishLocalForExample`, so a scaffold resolves the locally
+# published eezo), and otherwise `~/.eezo/eezo-version`, which the installer at
+# https://eezo.io/install writes with the released version.
 
 set -euo pipefail
 
@@ -328,16 +329,28 @@ MSG
 }
 
 read_version_file() {
-  VERSION_FILE="$ROOT/.eezo-version"
-  [ -f "$VERSION_FILE" ] || {
-    echo "eezo: no .eezo-version at $ROOT." >&2
-    echo "Run \`sbt publishLocalForExample\` at the eezo repository root first." >&2
+  local installed="${EEZO_HOME:-$HOME/.eezo}/eezo-version"
+  if [ -f "$ROOT/.eezo-version" ]; then
+    # A checkout: the locally published version, and the sbt the examples build pins.
+    VERSION_FILE="$ROOT/.eezo-version"
+    SBT_VERSION="$(grep '^sbt.version=' "$ROOT/examples/project/build.properties" | cut -d= -f2-)"
+  elif [ -f "$installed" ]; then
+    # An installed launcher: the released version the installer recorded.
+    VERSION_FILE="$installed"
+    SBT_VERSION="$(grep '^sbt.version=' "$VERSION_FILE" | cut -d= -f2-)"
+  else
+    echo "eezo: no version file at $ROOT/.eezo-version or $installed." >&2
+    echo "Install the command line with \`curl -fsSL https://eezo.io/install | bash\`, or run" >&2
+    echo "\`sbt publishLocalForExample\` at the eezo repository root and use bin/eezo from there." >&2
     exit 1
-  }
+  fi
   EEZO_VERSION="$(grep '^version=' "$VERSION_FILE" | cut -d= -f2-)"
   SCALA_VERSION="$(grep '^scalaVersion=' "$VERSION_FILE" | cut -d= -f2-)"
   JDK_FLOOR="$(grep '^jdkFloor=' "$VERSION_FILE" | cut -d= -f2-)"
-  SBT_VERSION="$(grep '^sbt.version=' "$ROOT/examples/project/build.properties" | cut -d= -f2-)"
+  [ -n "$EEZO_VERSION" ] && [ -n "$SCALA_VERSION" ] && [ -n "$JDK_FLOOR" ] && [ -n "$SBT_VERSION" ] || {
+    echo "eezo: $VERSION_FILE is missing one of version, scalaVersion, jdkFloor, sbt.version." >&2
+    exit 1
+  }
 }
 
 scaffold() {

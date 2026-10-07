@@ -19,7 +19,7 @@ shadow it. No arguments runs the application.
 
 | command | layer | needs | what it does |
 |---|---|---|---|
-| `new <name>` | launcher | `.eezo-version` | scaffolds `./<name>` |
+| `new <name>` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>` |
 | `dev` | sbt task | | serves with restart on save, the route listing and the reload client |
 | `routes [--json]` | http edge | | the mounted table and boot's warnings |
 | `status [--json]` | database edge | a database | the model against the live database |
@@ -112,10 +112,11 @@ the command's answer and not a build failure:
 
 ## What the launcher reads
 
-- **`.eezo-version`** at the repository root, written by `sbt publishLocalForExample`: the
-  `version`, `scalaVersion` and `jdkFloor` that `new` writes into a scaffold. `sbt.version`
-  comes from `examples/project/build.properties`. The scaffold resolves that version from the
-  local ivy cache, not a release on Maven Central.
+- **`~/.eezo/eezo-version`**, written by the installer: the `version`, `scalaVersion`,
+  `jdkFloor` and `sbt.version` that `new` writes into a scaffold. In a checkout of the
+  repository, `.eezo-version` at its root wins, written by `sbt publishLocalForExample` with
+  the locally published version, and `sbt.version` comes from
+  `examples/project/build.properties`.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
   sbt itself runs with `-error -batch`, so only compile errors and the application's output

@@ -63,7 +63,8 @@ Compile / run / forkOptions := (Compile / run / forkOptions).value
 Test / fork := true
 Test / javaOptions += s"-Dsite.root=${repoRoot.value}"
 
-/** The Markdown the site serves, copied into the jar under `content/<repository path>`, and an
+/** The Markdown the site serves, and the launcher, copied into the jar under
+  * `content/<repository path>`, and an
   * index of those paths beside it, because a jar cannot list a directory. The set is spelled here
   * once: the site's `Pages` names sections out of these files, and its test suite fails on a file
   * here that no section reaches. The ADRs and the research notes are deliberately absent: they
@@ -77,7 +78,12 @@ Compile / resourceGenerators += Def.task {
     directory + "/" + IO.relativize(root / directory, file).getOrElse(sys.error(s"$file is not under $directory"))
 
   val files: Seq[(File, String)] =
-    Seq(root / "README.md" -> "README.md", root / "CONTEXT.md" -> "CONTEXT.md") ++
+    Seq(
+      root / "README.md"  -> "README.md",
+      root / "CONTEXT.md" -> "CONTEXT.md",
+      // The launcher, served at `/install/eezo` for the installer to download.
+      root / "bin" / "eezo" -> "bin/eezo"
+    ) ++
       (root / "docs" ** "*.md").get().map(f => f -> under("docs", f)).filterNot { case (_, rel) =>
         rel.startsWith("docs/adr/") || rel.startsWith("docs/research/")
       } ++

@@ -43,11 +43,11 @@ marker. The test suite fails on a Markdown file that no pillar reaches.
 You need JDK 25 and sbt, nothing else: no database, no Docker, no Node.
 
 ```bash
-# 1. At the repository root, once, and again whenever the framework changes. eezo is not
-#    released yet, so the site resolves it from the local ivy cache at the version this records.
-#    `unidoc` writes the API reference the site serves under /api; without it the site still
-#    runs and /api says what to do, and the API tests are skipped rather than failed.
-sbt publishLocalForExample unidoc
+# 1. At the repository root, once, and again whenever the framework's sources change: `unidoc`
+#    writes the API reference the site serves under /api. Without it the site still runs and
+#    /api says what to do, and the API tests are skipped rather than failed. The site itself
+#    resolves the released eezo from Maven Central, pinned in project/project/EezoVersion.scala.
+sbt unidoc
 
 # 2. In this directory.
 cd site
@@ -77,9 +77,11 @@ header at three times its shown size, `favicon-32.png`, `apple-touch-icon.png`, 
 630 `og-image.png` the pages name in their Open Graph tags. The served copies are under
 `src/main/resources/assets/` and in the asset digest, so a new one busts the cache.
 
-Six handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
+Seven handwritten routes and no model: the front page, `/docs`, the catch-all that serves a page
 by its address, the catch-all that serves the stylesheet, the fonts and the icons out of the jar,
-`/search`, and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
+`/search`, `/install`, which serves `assets/install.sh` for `curl -fsSL https://eezo.io/install |
+bash`, `/install/eezo`, which serves the repository's `bin/eezo` for that installer to download,
+and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
 nodes, so a page is one tree from the header to the footer. Code blocks are coloured by
 highlight.js in the browser: the build takes its bundle and the Scala and nginx grammars out of
 the webjar, the page loads them at the end of the body, and `hljs.highlightAll()` is one of the

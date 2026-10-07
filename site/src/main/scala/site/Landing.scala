@@ -70,6 +70,9 @@ object Landing {
     )
   )
 
+  /** The one command the front page shows, spelled here so a test can hold the page to it. */
+  val InstallCommand: String = "curl -fsSL https://eezo.io/install | bash"
+
   def page(request: Request): Html =
     Layout.page(
       request,
@@ -109,6 +112,21 @@ object Landing {
           Attrs.cls := "cta",
           a(Attrs.cls := "btn btn-primary", Attrs.href := "/docs", "Read the docs"),
           a(Attrs.cls := "btn btn-ghost", Attrs.href   := "/docs/examples/hello", "See an example")
+        ),
+        div(
+          Attrs.cls := "install",
+          p(Attrs.cls   := "install-label", "Install the command line"),
+          pre(Attrs.cls := "install-cmd", code(Landing.InstallCommand)),
+          p(
+            Attrs.cls := "install-note",
+            "Needs JDK 25 and sbt. Puts ",
+            code("eezo"),
+            " in ",
+            code("~/.local/bin"),
+            "; ",
+            a(Attrs.href := "/install", "read the script"),
+            " first if you like."
+          )
         ),
         ul(
           Attrs.cls := "facts",

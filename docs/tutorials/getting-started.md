@@ -7,17 +7,14 @@ No database is involved yet; that's the next tutorial.
 
 ## Before you start
 
-You need JDK 25 or newer and sbt.
-
-eezo 0.1.0 is on Maven Central, but the launcher scaffolds against the version a local publish
-records, so run it from a clone of the repository and alias it:
+You need JDK 25 or newer and sbt. Then install the `eezo` command:
 
 ```bash
-git clone https://github.com/Eezo-framework/eezo
-cd eezo
-sbt publishLocalForExample
-alias eezo=$PWD/bin/eezo
+curl -fsSL https://eezo.io/install | bash
 ```
+
+It puts the launcher at `~/.local/bin/eezo` and records the eezo version a new application is
+written with. eezo itself comes from Maven Central the first time an application builds.
 
 ## Scaffold
 
@@ -28,15 +25,13 @@ eezo new bookshelf
 ```
 
 ```
-created ./bookshelf (eezo 0.0.0+105-756d1ed0+20260929-1242-SNAPSHOT, Scala 3.8.4, sbt 1.12.14)
+created ./bookshelf (eezo 0.1.0, Scala 3.8.4, sbt 1.12.14)
 
 next:
   cd bookshelf
   sbt eezoDev        # serve on :8080, restart on save
   sbt "run routes"   # what is mounted
 ```
-
-(Your version string will differ; it comes from the commit you published.)
 
 Here's everything it wrote:
 
@@ -59,7 +54,7 @@ scalaVersion := "3.8.4"
 
 enablePlugins(EezoPlugin)
 
-libraryDependencies += "io.eezo" %% "eezo" % "0.0.0+105-756d1ed0+20260929-1242-SNAPSHOT"
+libraryDependencies += "io.eezo" %% "eezo" % "0.1.0"
 
 scalacOptions ++= Seq("-release", "25", "-deprecation", "-feature", "-unchecked", "-no-indent")
 
@@ -79,7 +74,7 @@ written in indentation syntax is a compile error.
 ### project/plugins.sbt
 
 ```scala
-addSbtPlugin("io.eezo" % "sbt-eezo" % "0.0.0+105-756d1ed0+20260929-1242-SNAPSHOT")
+addSbtPlugin("io.eezo" % "sbt-eezo" % "0.1.0")
 ```
 
 The plugin, at the same version as the framework.
