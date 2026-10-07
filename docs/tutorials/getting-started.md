@@ -9,7 +9,8 @@ No database is involved yet; that's the next tutorial.
 
 You need JDK 25 or newer and sbt.
 
-eezo isn't published yet, so publish it from a clone of the repository, and alias the launcher:
+eezo 0.1.0 is on Maven Central, but the launcher scaffolds against the version a local publish
+records, so run it from a clone of the repository and alias it:
 
 ```bash
 git clone https://github.com/Eezo-framework/eezo

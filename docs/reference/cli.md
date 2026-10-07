@@ -114,8 +114,8 @@ the command's answer and not a build failure:
 
 - **`.eezo-version`** at the repository root, written by `sbt publishLocalForExample`: the
   `version`, `scalaVersion` and `jdkFloor` that `new` writes into a scaffold. `sbt.version`
-  comes from `examples/project/build.properties`. Until eezo is released, the scaffold resolves
-  eezo from the local ivy cache.
+  comes from `examples/project/build.properties`. The scaffold resolves that version from the
+  local ivy cache, not a release on Maven Central.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
   sbt itself runs with `-error -batch`, so only compile errors and the application's output

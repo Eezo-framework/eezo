@@ -4,10 +4,10 @@
 # everything except `new` is a forward to the application's own dispatch (`sbt "run <cmd>"`) or to
 # an sbt-eezo task, so this script can stay a page long and never needs the user's classpath.
 #
-# `new` is the one command that cannot forward, because nothing exists yet to forward to. While
-# eezo is unreleased, the scaffold takes its versions from the `.eezo-version` file that
-# `sbt publishLocalForExample` writes at the repository root — the same source the examples build
-# reads — so a scaffolded app resolves the locally published eezo.
+# `new` is the one command that cannot forward, because nothing exists yet to forward to. The
+# scaffold takes its versions from the `.eezo-version` file that `sbt publishLocalForExample`
+# writes at the repository root, the same source the examples build reads, so a scaffolded app
+# resolves the locally published eezo rather than a release on Maven Central.
 
 set -euo pipefail
 
