@@ -49,7 +49,29 @@ Global / onLoad := {
 addCommandAlias("check", "db/testOnly -- --exclude-tags=backlog")
 addCommandAlias("backlog", "db/testOnly io.eezo.db.BacklogSuite")
 
+/** Two facts about a release that no artifact otherwise states, written into every module's POM
+  * as properties: the JDK floor the modules were compiled for, and the sbt version an
+  * application on this release is built with. The installer at https://eezo.io/install reads
+  * them off Maven Central, beside the version and the Scala version the POM already carries, so
+  * nothing about a release is spelled twice.
+  */
+lazy val pomFacts: Setting[?] = pomPostProcess := { node =>
+  import scala.xml.{Elem, Node}
+  import scala.xml.transform.{RewriteRule, RuleTransformer}
+  val facts = Seq(
+    <eezo.jdkFloor>{Toolchain.JdkFloor}</eezo.jdkFloor>,
+    <eezo.sbtVersion>{sbtVersion.value}</eezo.sbtVersion>
+  )
+  new RuleTransformer(new RewriteRule {
+    override def transform(n: Node): Seq[Node] = n match {
+      case e: Elem if e.label == "properties" => e.copy(child = e.child ++ facts)
+      case other                              => other
+    }
+  }).transform(node).head
+}
+
 lazy val commonSettings = Seq(
+  pomFacts,
   scalacOptions ++= Seq(
     "-release",
     Toolchain.JdkFloor.toString,
@@ -160,6 +182,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
   .enablePlugins(SbtPlugin)
   .settings(
     name := "sbt-eezo",
+    pomFacts,
     // The build level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
     // would fail.
     scalaVersion       := Toolchain.PluginScalaVersion,

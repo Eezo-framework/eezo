@@ -25,6 +25,8 @@ eezo — the framework launcher
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
       --app <name>      Fly app name (first deploy; required when non-interactive)
+  eezo upgrade          move to the latest eezo on Maven Central: this command, what
+                        `new` scaffolds, and the project in the current directory
 
 forwarded to the application (run from the project directory):
   eezo routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help
@@ -328,6 +330,58 @@ MSG
   exit 1
 }
 
+# ---------------------------------------------------------------------------------------------
+# upgrade — the installer again, which asks Maven Central for the latest release, records it and
+# replaces this script; then the project in the current directory, if there is one, is moved to
+# that release. The installer swaps the script in with a rename, so the bash reading this file
+# keeps the old inode and finishes cleanly.
+# ---------------------------------------------------------------------------------------------
+
+EEZO_SITE="${EEZO_SITE:-https://eezo.io}"
+
+upgrade() {
+  if [ -f "$ROOT/.eezo-version" ]; then
+    echo "eezo: this launcher runs from a checkout of the repository, and its version is whatever" >&2
+    echo "\`sbt publishLocalForExample\` published last. Run that at $ROOT to move it." >&2
+    exit 1
+  fi
+  local before after
+  before="$(grep '^version=' "${EEZO_HOME:-$HOME/.eezo}/eezo-version" 2> /dev/null | cut -d= -f2-)"
+  curl -fsSL "$EEZO_SITE/install" | bash
+  after="$(grep '^version=' "${EEZO_HOME:-$HOME/.eezo}/eezo-version" | cut -d= -f2-)"
+  [ -n "$after" ] || { echo "eezo: the installer recorded no version" >&2; exit 1; }
+  if [ -f build.sbt ] && grep -q '"io.eezo"' build.sbt; then
+    bump_project "$after"
+  fi
+  if [ "$before" = "$after" ]; then
+    echo "eezo $after is the latest release; the command line is up to date."
+  else
+    echo "eezo ${before:-?} -> $after"
+  fi
+}
+
+# Rewrites the version on every eezo dependency and on the sbt plugin line in the current
+# project. Only lines that name an io.eezo artifact with a quoted version are touched, written
+# through a temporary file because sed -i is spelled differently on macOS and Linux.
+bump_project() { # <version>
+  local version="$1" file changed=0
+  for file in build.sbt project/plugins.sbt; do
+    [ -f "$file" ] || continue
+    sed -E \
+      -e "s/(\"io\.eezo\" *%% *\"eezo[a-z-]*\" *% *)\"[^\"]+\"/\1\"$version\"/g" \
+      -e "s/(\"io\.eezo\" *% *\"sbt-eezo\" *% *)\"[^\"]+\"/\1\"$version\"/g" \
+      "$file" > "$file.eezo-upgrade"
+    if cmp -s "$file" "$file.eezo-upgrade"; then
+      rm -f "$file.eezo-upgrade"
+    else
+      mv "$file.eezo-upgrade" "$file"
+      echo "updated $file to eezo $version"
+      changed=1
+    fi
+  done
+  [ "$changed" -eq 1 ] || echo "the project in $PWD is already on eezo $version"
+}
+
 read_version_file() {
   local installed="${EEZO_HOME:-$HOME/.eezo}/eezo-version"
   if [ -f "$ROOT/.eezo-version" ]; then
@@ -472,6 +526,9 @@ case "$cmd" in
   deploy)
     shift
     deploy "$@"
+    ;;
+  upgrade)
+    upgrade
     ;;
   # `freeze` bypasses the spinner: it prompts on destructive changes, and a prompt behind a
   # spinner is a hang with good intentions. `dev` (above) keeps sbt's normal output entirely: the
