@@ -757,6 +757,44 @@ html:not(.mac) .shortcut.mac {
   margin-bottom: 28px;
 }
 
+.install {
+  margin: 26px 0 6px;
+}
+
+.install-label {
+  margin: 0 0 8px;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--muted);
+}
+
+.install-cmd {
+  margin: 0;
+  padding: 12px 16px;
+  border: 2.5px solid var(--sticker-border);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  box-shadow: var(--shadow-sticker);
+  font-family: var(--font-mono);
+  font-size: 0.98rem;
+  overflow-x: auto;
+  user-select: all;
+  -webkit-user-select: all;
+}
+
+.install-cmd code {
+  background: none;
+  padding: 0;
+  color: var(--ink);
+}
+
+.install-note {
+  margin: 10px 0 0;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
 .facts {
   list-style: none;
   padding: 0;

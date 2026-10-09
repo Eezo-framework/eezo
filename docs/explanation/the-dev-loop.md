@@ -5,8 +5,8 @@ compile is not an outage.
 
 ## The loop
 
-`eezo dev` forwards to `sbt eezoDev`, and `eezoDev` is an alias for `~eezoRestart`: sbt's own
-watch, over the source tree, around one task. On every change the task does three things, in
+`eezo dev` is sbt's own watch, over the source tree, around one task of the plugin,
+`eezoRestart`. On every change the task does three things, in
 this order:
 
 1. **Compile.** The task asks for the project's full classpath, and asking for it compiles the

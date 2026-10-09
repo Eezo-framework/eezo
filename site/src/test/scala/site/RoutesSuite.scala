@@ -28,6 +28,29 @@ class RoutesSuite extends FunSuite {
     assertEquals(get("/assets/keys.js").status, 200)
   }
 
+  test("the installer is served at /install, and the front page shows the command") {
+    val response = get("/install")
+    assertEquals(response.status, 200)
+    val script = response.body match {
+      case Body.Bytes(bytes) => new String(bytes, "UTF-8")
+      case other             => fail(s"/install answered with $other")
+    }
+    assert(script.startsWith("#!/usr/bin/env bash"), script.take(40))
+    assert(script.contains("/install/eezo"), "the installer downloads the launcher from the site")
+    assert(script.contains("maven-metadata.xml"), "the release is asked of Maven Central")
+    assert(!script.contains("publishLocalForExample"), "nothing is built from source")
+    assert(page(get("/")).contains(Landing.InstallCommand), "the command on the front page")
+    val launcher = get("/install/eezo")
+    assertEquals(launcher.status, 200)
+    val text = launcher.body match {
+      case Body.Bytes(bytes) => new String(bytes, "UTF-8")
+      case other             => fail(s"/install/eezo answered with $other")
+    }
+    assert(text.startsWith("#!/usr/bin/env bash"), text.take(40))
+    assert(text.contains("eezo-version"), "the launcher reads the installer's version file")
+    assert(text.contains("  upgrade)"), "the launcher answers upgrade")
+  }
+
   test("the front page, with its live demo mounted") {
     val response = get("/")
     assertEquals(response.status, 200)

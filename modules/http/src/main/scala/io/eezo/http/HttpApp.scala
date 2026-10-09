@@ -14,10 +14,10 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   *
   * The edge is declarative. The application names its [[routes]], and every knob of the server is
   * an override beside [[port]]; nothing in user code calls `HttpServer.run`. `main` is inherited
-  * from `Dispatch`: `sbt run` boots, `sbt "run dev"` (or the plugin's `eezoDev`) serves with the
-  * listing and the reload client on, `sbt "run routes"` prints the table, and any other first
-  * argument is unknown. The database edge's commands do not exist here: an application that needs
-  * them depends on `eezo` and extends `EezoApp`, which stacks both edges.
+  * from `Dispatch`: `sbt run` boots, `eezo dev` (the plugin's `eezoDev`, or `sbt "run dev"` without
+  * the restart on save) serves with the listing and the reload client on, `eezo routes` prints the
+  * table, and any other first argument is unknown. The database edge's commands do not exist here:
+  * an application that needs them depends on `eezo` and extends `EezoApp`, which stacks both edges.
   *
   * [[serve]] is the only call site of `HttpServer.run` in the entry traits, so [[boot]] and `dev`
   * see the same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot`

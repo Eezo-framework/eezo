@@ -19,7 +19,7 @@ shadow it. No arguments runs the application.
 
 | command | layer | needs | what it does |
 |---|---|---|---|
-| `new <name>` | launcher | `.eezo-version` | scaffolds `./<name>` |
+| `new <name>` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>` |
 | `dev` | sbt task | | serves with restart on save, the route listing and the reload client |
 | `routes [--json]` | http edge | | the mounted table and boot's warnings |
 | `status [--json]` | database edge | a database | the model against the live database |
@@ -32,6 +32,7 @@ shadow it. No arguments runs the application.
 | `ddl [--json]` | database edge | | prints the full DDL, one statement per line |
 | `build` | launcher | | stages `target/eezo/stage/` |
 | `deploy [--app <name>] [--target fly]` | launcher | the Fly CLI | builds, deploys, migrates, waits for health |
+| `upgrade` | launcher | Maven Central | moves the command line, what `new` scaffolds, and the project in the current directory to the latest release |
 | `help` | both edges | | the command table |
 
 `freeze` takes everything after it that isn't a flag as the migration's name, joined with
@@ -112,10 +113,15 @@ the command's answer and not a build failure:
 
 ## What the launcher reads
 
-- **`.eezo-version`** at the repository root, written by `sbt publishLocalForExample`: the
-  `version`, `scalaVersion` and `jdkFloor` that `new` writes into a scaffold. `sbt.version`
-  comes from `examples/project/build.properties`. The scaffold resolves that version from the
-  local ivy cache, not a release on Maven Central.
+- **`~/.eezo/eezo-version`**, written by the installer: the `version`, `scalaVersion`,
+  `jdkFloor` and `sbt.version` that `new` writes into a scaffold. The installer reads all four
+  off Maven Central: the latest release from the artifact's metadata, the Scala version from
+  the release's POM, and the JDK floor and sbt version from two properties the POM carries.
+  `upgrade` runs the installer again and then rewrites the versions in the `build.sbt` and
+  `project/plugins.sbt` of the current directory, when they name an eezo artifact. In a
+  checkout of the repository, `.eezo-version` at its root wins, written by
+  `sbt publishLocalForExample` with the locally published version, and `sbt.version` comes from
+  `examples/project/build.properties`; `upgrade` refuses to run there.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
   sbt itself runs with `-error -batch`, so only compile errors and the application's output

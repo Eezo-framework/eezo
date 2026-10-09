@@ -12,15 +12,8 @@ migration SQL by hand, or SSH into anything.
 
 - **Fly account + CLI.** `curl -L https://fly.io/install.sh | sh`, add `~/.fly/bin` to `PATH`,
   then `fly auth signup` (or `fly auth login`).
-- **A local eezo publish.** The launcher scaffolds against the version a local publish records,
-  so at the repo root:
-  ```bash
-  sbt publishLocalForExample
-  ```
-- A convenient alias for this shell:
-  ```bash
-  alias eezo=/path/to/eezo/bin/eezo
-  ```
+- **The eezo command line:** `curl -fsSL https://eezo.io/install | bash`, as in
+  [your first application](getting-started.md).
 
 ## 1. Scaffold
 
