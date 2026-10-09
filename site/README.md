@@ -51,7 +51,7 @@ sbt unidoc
 
 # 2. In this directory.
 cd site
-sbt eezoDev                     # http://localhost:8080, restarts on every save
+../bin/eezo dev                 # http://localhost:8080, restarts on every save
 ```
 
 `eezoDev` recompiles and restarts the site when a Scala file changes, and the open tab reloads

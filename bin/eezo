@@ -20,7 +20,7 @@ usage() {
 eezo — the framework launcher
 
   eezo new <name>       scaffold a new application in ./<name>
-  eezo dev              serve, restarting on every save (runs `sbt eezoDev`)
+  eezo dev              serve, restarting on every save
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -447,8 +447,8 @@ import io.eezo.generated.Routes
 import io.eezo.http.RouteTable
 
 /** The whole entry point. `main` is inherited and dispatches: `sbt run` serves on port 8080,
-  * `sbt "run dev"` (or `sbt eezoDev`) adds the drift check and restart-on-save, and
-  * `sbt "run status|sync|freeze|migrate"` are the schema commands.
+  * `eezo dev` adds the drift check and restart-on-save, and `eezo status|sync|freeze|migrate`
+  * are the schema commands.
   *
   * `schema` is abstract on `EezoApp`, so an application on the umbrella always says what it has,
   * and a new one has no tables yet. When you add a model with `derives Table`, declare it in a
@@ -502,8 +502,8 @@ EOF
   echo
   echo "next:"
   echo "  cd $name"
-  echo "  sbt eezoDev        # serve on :8080, restart on save"
-  echo "  sbt \"run routes\"   # what is mounted"
+  echo "  eezo dev           # serve on :8080, restart on save"
+  echo "  eezo routes        # what is mounted"
 }
 
 cmd="${1:-}"

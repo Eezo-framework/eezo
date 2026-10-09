@@ -29,8 +29,8 @@ created ./bookshelf (eezo 0.1.0, Scala 3.8.4, sbt 1.12.14)
 
 next:
   cd bookshelf
-  sbt eezoDev        # serve on :8080, restart on save
-  sbt "run routes"   # what is mounted
+  eezo dev           # serve on :8080, restart on save
+  eezo routes        # what is mounted
 ```
 
 Here's everything it wrote:

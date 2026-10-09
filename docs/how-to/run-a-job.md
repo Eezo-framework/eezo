@@ -13,7 +13,7 @@ libraryDependencies += "io.eezo" %% "eezo-db" % eezoVersion
 ```
 
 With only `eezo-db` on the classpath, `derives Form` and `derives Resource` don't compile, and
-`sbt "run dev"` is an unknown command. That's the point of opting into one edge.
+`dev` is a command the application doesn't know. That's the point of opting into one edge.
 
 ## `boot` is the job
 

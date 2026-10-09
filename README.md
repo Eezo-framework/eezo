@@ -146,8 +146,8 @@ with it:
 
 ```bash
 sbt run              # serves on http://localhost:8080
-sbt eezoDev          # serves, restarting on every save, with the route listing
-sbt "run routes"     # prints the table
+eezo dev             # serves, restarting on every save, with the route listing
+eezo routes          # prints the table
 ```
 
 [Your first eezo application](docs/tutorials/getting-started.md) walks through this in twenty
