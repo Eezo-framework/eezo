@@ -1,0 +1,43 @@
+# `sourceGenerators` runs every generator on every evaluation of `compile`, so a generator that
+# rewrites its output when nothing changed invalidates the compile that follows it, on every
+# keystroke of a watch loop. Nothing guarded that until this file existed. See build.sbt here for
+# what these steps can and cannot tell apart.
+
+# A first run writes the table, with the handwritten row and the derived line both in it.
+> Compile/eezoGenerateRoutes
+> assertRoutesExist
+> assertTableHasIndex
+> assertTableHasWidget
+> recordRoutes
+
+# Nothing changed, so nothing may move.
+> Compile/eezoGenerateRoutes
+> assertRoutesUntouched
+
+# A file outside `app/` carrying neither a route nor a model. The whole source tree is a hashed
+# input, so the cache misses and the body does run; the table must still not move. This is the step
+# that guards `writeIfChanged`, and the only one where the two defences disagree.
+$ copy-file changes/Note.scala src/main/scala/Note.scala
+> Compile/eezoGenerateRoutes
+> assertRoutesUntouched
+
+# A new file under `app/` must reach the table.
+$ copy-file changes/Show.scala src/main/scala/app/widgets/_id/Show.scala
+> Compile/eezoGenerateRoutes
+> assertRoutesRewritten
+> assertTableHasShow
+> recordRoutes
+
+# Deleting the output regenerates it, because the cache tracks the output as well as the inputs.
+# Without that, a `clean` would leave a project unable to compile until a source was touched.
+> deleteRoutes
+> Compile/eezoGenerateRoutes
+> assertRoutesExist
+> assertTableHasShow
+> recordRoutes
+
+# Emptying it repairs it, because the output is tracked by content hash rather than by existence,
+# so a hand-edited table is not left standing.
+> truncateRoutes
+> Compile/eezoGenerateRoutes
+> assertTableHasShow

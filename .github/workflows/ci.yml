@@ -70,11 +70,25 @@ jobs:
       - name: Test
         run: sbt -batch +test
 
+      # The plugin as a plugin. A plugin defined in a build cannot be enabled by that same build, so
+      # `scripted` launches a throwaway build per test directory under
+      # `modules/sbt-plugin/src/sbt-test`, with `sbt-eezo`, `eezo-core` and `eezo-http` published to
+      # the local ivy cache first. `eezo/generator-cache` guards that the generated file does not
+      # move when nothing that reaches it changed, which is what keeps a watch loop from
+      # recompiling on every keystroke; `eezo/generated-compiles` guards that what the generator
+      # writes is a Scala program eezo can serve, which no unit test in `sbtEezo` can reach.
+      #
+      # Not `+scripted`. The sbt 2 axis needs test builds written in sbt 2's own dialect, and this
+      # repository has no sbt 2 application to write them against; `+compile` above is what covers
+      # that axis today.
+      - name: Scripted tests
+        run: sbt -batch sbtEezo/scripted
+
       # The walking skeletons, built the way a user builds one: eezo published to the local ivy
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.
-      # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
-      # a build cannot be enabled by that same build. `blog` is what covers the derived half: its
-      # seven routes exist only in the file the generator writes.
+      # `scripted` above covers the plugin in isolation; these two are the applications a reader of
+      # the repository actually opens. `blog` is what covers the derived half: its seven routes
+      # exist only in the file the generator writes.
       - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample

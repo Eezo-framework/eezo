@@ -217,6 +217,41 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         case "2.12" => Toolchain.Sbt1Floor
         case _      => Toolchain.Sbt2Version
       }
+    },
+    // The scripted tests are the only place the plugin is exercised as a plugin. `SbtPlugin`
+    // brings the framework in for free; everything below is what it needs to reach eezo.
+    //
+    // `scriptedSbt` defaults to `pluginCrossBuild / sbtVersion`, which is the 1.5.8 floor on the
+    // sbt 1 axis. An sbt that old cannot compile a Scala 3.8.4 application, which is what a
+    // generated table is, so that axis runs on the sbt this repository itself runs on and the
+    // floor stays a compile-against promise rather than a run-under one. The sbt 2 axis keeps the
+    // default: overriding it there asks Maven Central for `scripted-sbt_3` at an sbt 1 version,
+    // which does not exist, and no scripted test is written in sbt 2's dialect yet anyway.
+    scriptedSbt := {
+      scalaBinaryVersion.value match {
+        case "2.12" => Toolchain.rootSbtVersion((ThisBuild / baseDirectory).value)
+        case _      => (pluginCrossBuild / sbtVersion).value
+      }
+    },
+    // A scripted test's build resolves eezo from the local ivy cache, exactly as `examples/` does.
+    // It cannot read `Toolchain`, and the version is derived from the git state by sbt-dynver, so
+    // all three travel as system properties instead of the `.eezo-version` file: scripted has a
+    // channel for this and the examples build does not.
+    scriptedLaunchOpts ++= Seq(
+      "-Xmx1024M",
+      s"-Dplugin.version=${version.value}",
+      s"-Deezo.scalaVersion=${Toolchain.ScalaVersion}",
+      s"-Deezo.jdkFloor=${Toolchain.JdkFloor}"
+    ),
+    // `scriptedDependencies` defaults to publishing the plugin alone. A test that compiles what the
+    // generator writes also needs `eezo-http` and, through it, `eezo-core`: the emitted file names
+    // `io.eezo.http.Route`, `RouteTable` and `Resource`. Both are published even for the tests that
+    // only read the generated text, because scripted has one dependency task for all of them.
+    scriptedDependencies := {
+      val publishedCore = (core / publishLocal).value
+      val publishedHttp = (http / publishLocal).value
+      val _             = (publishedCore, publishedHttp)
+      scriptedDependencies.value
     }
   )
 
