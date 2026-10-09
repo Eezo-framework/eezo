@@ -8,7 +8,7 @@ import io.eezo.http.{Resource, RouteTable}
   * One command today. The database edge's are in `io.eezo.db.cli.Commands`, in the same shape, and
   * the entry trait of each edge is the only front end that prints.
   */
-object Commands {
+private[http] object Commands {
 
   /** The assembled table and everything boot warns about, as one value. Needs no server. */
   def routes(table: RouteTable): RouteListing =

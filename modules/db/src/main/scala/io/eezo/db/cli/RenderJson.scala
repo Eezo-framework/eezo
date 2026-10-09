@@ -18,7 +18,7 @@ import io.eezo.db.schema.{Change, Ddl, SchemaSnap}
   * Every change carries its `sql` alongside the classification, because the reader most likely to
   * be here is deciding whether to run it.
   */
-object RenderJson {
+private[eezo] object RenderJson {
 
   private def change(c: Change): Json = Json.Obj(
     List(

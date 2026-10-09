@@ -9,7 +9,7 @@ import io.eezo.http.Route
   * unchanged: a `"command"` discriminator on every object, and shapes that are a contract for
   * tools.
   */
-object RenderJson {
+private[http] object RenderJson {
 
   /** `api` is on every route, `false` included, so a tool reads one field rather than inferring a
     * browser route from a missing key. A boolean rather than a kind string, beside how the db edge

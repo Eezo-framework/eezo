@@ -12,7 +12,7 @@ import java.nio.file.Path
   */
 
 /** The model/database diff. Empty means in sync. */
-final case class StatusResult(changes: List[Change]) {
+private[eezo] final case class StatusResult(changes: List[Change]) {
   def inSync: Boolean = changes.isEmpty
 }
 
@@ -22,20 +22,24 @@ final case class StatusResult(changes: List[Change]) {
   * the caller knows which flags it passed, so the distinction is the front end's to render rather
   * than a field's to carry.
   */
-final case class SyncResult(changes: List[Change], blocked: List[Change], applied: Boolean)
+private[eezo] final case class SyncResult(
+    changes: List[Change],
+    blocked: List[Change],
+    applied: Boolean
+)
 
 /** The migration written, if there was drift to write. `resolutions` records what `decide` answered
   * per change, so a front end can echo what was accepted, skipped, or hand written.
   */
-final case class FreezeResult(migration: Option[Path], resolutions: List[Resolution])
+private[eezo] final case class FreezeResult(migration: Option[Path], resolutions: List[Resolution])
 
 /** One on disk migration the ledger has not seen, as `Migrator.status` reports it. */
-final case class PendingMigration(number: Int, file: String, statements: List[String])
+private[eezo] final case class PendingMigration(number: Int, file: String, statements: List[String])
 
 /** The four ways `migrate` ends. `drift` is `DeployCheck`'s answer after the ledger is settled:
   * empty means the database matches the model.
   */
-enum MigrateResult {
+private[eezo] enum MigrateResult {
   case Tampered(problems: List[String])
   case UpToDate(drift: List[Change])
   case Pending(pending: List[PendingMigration])
@@ -45,6 +49,6 @@ enum MigrateResult {
 /** What `drop` removed, by table name. The ledger is dropped too but not listed: `Introspect` hides
   * it from every snapshot, so listing it here would name a table no other command admits exists.
   */
-final case class DropResult(tables: List[String])
+private[eezo] final case class DropResult(tables: List[String])
 
-final case class ResetResult(dropped: List[String], ddl: List[String])
+private[eezo] final case class ResetResult(dropped: List[String], ddl: List[String])

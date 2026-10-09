@@ -20,7 +20,7 @@ import java.nio.file.Path
   * and the live database is deliberately not consulted (that is `sync`'s job). Front ends must not
   * install a `Database` to run it.
   */
-object Commands {
+private[eezo] object Commands {
 
   /** The live database against the model, as a diff. */
   def status(schema: Schema, dbSchema: String = "public")(using DB): StatusResult =
