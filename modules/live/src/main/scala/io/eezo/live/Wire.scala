@@ -16,13 +16,13 @@ import io.eezo.core.internal.Json
   * is the node name or null (null only at the anchor), and node payloads are always under `html` —
   * the applier reads one shape, not seven.
   */
-object Wire {
+private[live] object Wire {
 
   /** What a browser may say, after validation. Everything else is a `Left` with the reason, which
     * the socket answers with an error frame and survives: every inbound frame is untrusted input
     * (design/live.md §1.1), and a malformed one must never take down the page loop.
     */
-  private[live] enum ClientMessage {
+  enum ClientMessage {
 
     /** The first message after the socket opens: the client is ready to apply patches, and reports
       * the rendered `data-eezo-base` so a mounted page's re-renders can follow the same prefix the
@@ -44,7 +44,7 @@ object Wire {
   /** More entries than any real form; fewer than a hostile client would like. */
   private val MaxPayloadEntries = 64
 
-  private[live] def read(text: String): Either[String, ClientMessage] =
+  def read(text: String): Either[String, ClientMessage] =
     Json.parse(text).flatMap {
       case Json.Obj(fields) =>
         val map = fields.toMap
@@ -90,10 +90,10 @@ object Wire {
       case _                      => Left("an event carries a non-empty string 'name'")
     }
 
-  private[live] val pong: String =
+  val pong: String =
     Json.render(Json.Obj(List("kind" -> Json.Str("pong"))))
 
-  private[live] def error(message: String): String =
+  def error(message: String): String =
     Json.render(Json.Obj(List("kind" -> Json.Str("error"), "message" -> Json.Str(message))))
 
   def patches(patches: List[Patch]): String =
