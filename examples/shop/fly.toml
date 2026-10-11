@@ -6,7 +6,7 @@ primary_region = 'fra'
   # Runs in a one-off machine with the NEW image, before any app machine is updated. A nonzero
   # exit stops the deployment and the old version keeps serving — this is eezo's migration
   # ordering: the schema converges before new code takes traffic.
-  release_command = 'migrate --apply'
+  release_command = 'db migrate --apply'
 
 [http_service]
   # Must match the app's `port` (EezoApp default: 8080).

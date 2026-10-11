@@ -57,8 +57,8 @@ and exits. The query is the typed layer: `where` on a field, `orderBy`, `list()`
 application, so the table is created the same way:
 
 ```bash
-sbt "run freeze initial schema"
-sbt "run migrate --apply"
+sbt "run db freeze initial schema"
+sbt "run db migrate --apply"
 sbt run
 ```
 

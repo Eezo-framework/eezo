@@ -24,10 +24,14 @@ import scala.io.StdIn
   * The edge is declarative. The application names its [[schema]] and says what [[boot]] does; the
   * framework builds the `Database` from `DbInit`'s overrides, installs it around the program, and
   * closes it after. `main` is inherited from `Dispatch`: `sbt run` runs the program once with a
-  * database installed, and `sbt "run status|sync|freeze|migrate|reset|drop|dump|ddl"` are the
-  * schema commands (design/cli.md §4). `dev` and `routes` are the http edge's and do not exist
-  * here: `eezoDev` on a database only application prints the unknown command line on every save,
-  * and a rerun on save loop for a job is sbt's own `~run`.
+  * database installed, and `eezo db status|sync|freeze|migrate|reset|drop|dump|ddl` are the schema
+  * commands (design/cli.md §4), one namespace so that `help` reads as the application's commands
+  * and then the database's. `db` alone, or `db help`, lists that namespace by itself. The bare
+  * spellings (`migrate --apply` without `db`) are still answered, silently: a deploy's release
+  * command written before the namespace existed must keep running in the image that carries this
+  * code. `dev` and `routes` are the http edge's and do not exist here: `eezoDev` on a database only
+  * application prints the unknown command line on every save, and a rerun on save loop for a job is
+  * sbt's own `~run`.
   *
   * A `Database` is installed only around what needs one. `ddl`, `dump`, `freeze` and `help` never
   * touch it, so they work with the database down; the program and the other commands get one for
@@ -77,12 +81,29 @@ trait DbApp extends Dispatch with DbInit {
 
   override protected def commands: PartialFunction[List[String], Int] = guarded.unsafeAssumePure
 
-  /** This edge's arms, the eight schema commands. The patterns are the one list of what this edge
-    * answers; `isDefinedAt` over them runs no body. The capture annotation is `^` spelled the way
-    * scalafmt can parse: the literal closes over `this`, and [[guarded]] is where that is asserted
-    * away.
+  /** This edge's arms: the `db` namespace over [[schemaArms]], its own `help`, its own unknown
+    * command answer, and the bare spellings as an alias (see the trait's note). The capture
+    * annotation is `^` spelled the way scalafmt can parse: the literal closes over `this`, and
+    * [[guarded]] is where that is asserted away.
     */
   private def arms: PartialFunction[List[String], Int] @retainsCap = {
+    val bare = schemaArms
+
+    {
+      case "db" :: Nil                            => println(dbHelp); 0
+      case "db" :: "help" :: _                    => println(dbHelp); 0
+      case "db" :: rest if bare.isDefinedAt(rest) => bare(rest)
+      case "db" :: rest                           =>
+        fail(rest, s"unknown db command: ${rest.mkString(" ")}. Run `db help` for the list.")
+        2
+      case rest if bare.isDefinedAt(rest) => bare(rest)
+    }
+  }
+
+  /** The eight schema commands, spelled without the namespace. The patterns are the one list of
+    * what this edge answers; `isDefinedAt` over them runs no body.
+    */
+  private def schemaArms: PartialFunction[List[String], Int] @retainsCap = {
     // Read once, outside every closure below. `read` and `transact` take a pure body under capture
     // checking, and a closure over `this` is not pure, while these two values are. The same lines
     // compiled on `main` because they lived in the umbrella, which is not capture checked.
@@ -110,7 +131,7 @@ trait DbApp extends Dispatch with DbInit {
         // the migration "add isbn to book" without the caller having to fight sbt's
         // space splitting argument parser with quotes.
         val name = rest.filterNot(_.startsWith("--")).mkString(" ")
-        if (name.isEmpty) throw SchemaError("freeze needs a name: eezo freeze add isbn to book")
+        if (name.isEmpty) throw SchemaError("freeze needs a name: eezo db freeze add isbn to book")
         val result = Commands.freeze(schema, name, freezePolicy(rest))
         emit(rest)(RenderJson.freeze(result), Render.freeze(result))
         0
@@ -152,7 +173,10 @@ trait DbApp extends Dispatch with DbInit {
     }
   }
 
-  override protected def usage: List[Usage] = List(
+  /** The namespace's rows, spelled as `db help` prints them; [[usage]] prefixes each with `db` for
+    * the application's own table.
+    */
+  private val schemaUsage: List[Usage] = List(
     Usage("status", "code vs live database"),
     Usage("sync [--apply] [--force]", "apply the code/db diff directly (dev only)"),
     Usage("freeze <name>", "write a migration from schema.json -> code"),
@@ -161,12 +185,21 @@ trait DbApp extends Dispatch with DbInit {
     Usage("drop", "drop everything"),
     Usage("dump", "print the derived snapshot"),
     Usage("ddl", "print full DDL")
-  ) ++ super.usage
+  )
 
-  override protected def notes: List[String] = List(
-    "freeze takes --accept-all / --skip-destructive in place of the prompt",
+  private val schemaNotes: List[String] = List(
+    "db freeze takes --accept-all / --skip-destructive in place of the prompt",
     "(bare --json implies --skip-destructive)"
-  ) ++ super.notes
+  )
+
+  /** What `db` and `db help` print: the namespace's own table and its notes. */
+  private def dbHelp: String =
+    (("eezo db <command>" :: usageTable(schemaUsage)) ++ ("" :: schemaNotes)).mkString("\n")
+
+  override protected def usage: List[Usage] =
+    schemaUsage.map(row => row.copy(command = s"db ${row.command}")) ++ super.usage
+
+  override protected def notes: List[String] = schemaNotes ++ super.notes
 
   /** [[arms]], and the rest of the chain after them, behind the `SchemaError` catch. The catch is
     * here and not in `core`, which cannot see the type; the http edge has nothing that throws it,

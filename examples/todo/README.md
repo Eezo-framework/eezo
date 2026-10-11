@@ -83,7 +83,7 @@ derived ones. This command never opens a database connection — stop Postgres a
 The `todo` Postgres schema starts empty, so the model *is* the drift:
 
 ```
-sbt:examples> todo/run status
+sbt:examples> todo/run db status
 ```
 
 ```
@@ -100,7 +100,7 @@ Freeze it as the first migration. Everything after `freeze` that is not a flag i
 quoting needed:
 
 ```
-sbt:examples> todo/run freeze initial schema
+sbt:examples> todo/run db freeze initial schema
 ```
 
 ```
@@ -120,7 +120,7 @@ it by hand and `migrate` will refuse, telling you to change the model and re-fre
 Preview, then apply:
 
 ```
-sbt:examples> todo/run migrate
+sbt:examples> todo/run db migrate
 ```
 
 ```
@@ -130,7 +130,7 @@ sbt:examples> todo/run migrate
 ```
 
 ```
-sbt:examples> todo/run migrate --apply
+sbt:examples> todo/run db migrate --apply
 ```
 
 ```
@@ -141,7 +141,7 @@ database matches model ✓
 ```
 
 ```
-sbt:examples> todo/run status
+sbt:examples> todo/run db status
 ```
 
 ```
@@ -149,7 +149,7 @@ in sync ✓
 ```
 
 `todo/eezoFreeze initial schema` and `todo/eezoMigrate --apply` are the same commands as sbt
-tasks; `sync --apply` is the no-migration-file shortcut for throwaway prototyping.
+tasks; `db sync --apply` is the no-migration-file shortcut for throwaway prototyping.
 
 ## 4. Serve it
 
@@ -200,7 +200,7 @@ nothing until code touches it:
   + todo.priority integer null
 ```
 
-Keep it: `todo/run freeze add priority` then `todo/run migrate --apply` from a second terminal
+Keep it: `todo/run db freeze add priority` then `todo/run db migrate --apply` from a second terminal
 (or the drift page below does both in one submit). Next restart boots clean.
 
 ## 7. Destructive drift: the interactive refusal page
@@ -226,7 +226,7 @@ shares stdin with sbt's watch — a console prompt would race it for every keyst
 ## 8. Start over
 
 ```
-sbt:examples> todo/run drop          # drops the todo tables and the migration ledger
+sbt:examples> todo/run db drop          # drops the todo tables and the migration ledger
 ```
 
 then delete `todo/db/` and revert your model edits. (`reset` is the one-step alternative to
@@ -239,22 +239,22 @@ drop + sync when you don't care about migrations.)
 | `todo/run` | no* | serve on 8090 |
 | `todo/run dev` / `eezoDev` | no* | serve + drift check + listing; `eezoDev` adds restart-on-save |
 | `todo/run routes` / `eezoRoutes` | no | the table, with shadow/override/orphan warnings |
-| `todo/run status` / `eezoStatus` | yes | model vs database diff; exit 1 on drift |
-| `todo/run sync --apply [--force]` / `eezoSync` | yes | apply the diff directly; destructive needs `--force` |
-| `todo/run freeze <name>` / `eezoFreeze <name>` | no | write drift-since-last-freeze as a migration |
-| `todo/run migrate [--apply]` / `eezoMigrate` | yes | list/apply pending migrations, then verify |
-| `todo/run drop` / `reset` | yes | drop everything / drop and recreate from the model |
-| `todo/run dump` / `ddl` | no | the derived snapshot / full DDL |
+| `todo/run db status` / `eezoStatus` | yes | model vs database diff; exit 1 on drift |
+| `todo/run db sync --apply [--force]` / `eezoSync` | yes | apply the diff directly; destructive needs `--force` |
+| `todo/run db freeze <name>` / `eezoFreeze <name>` | no | write drift-since-last-freeze as a migration |
+| `todo/run db migrate [--apply]` / `eezoMigrate` | yes | list/apply pending migrations, then verify |
+| `todo/run db drop` / `reset` | yes | drop everything / drop and recreate from the model |
+| `todo/run db dump` / `ddl` | no | the derived snapshot / full DDL |
 | `todo/run help` | no | the list above |
 
 \* serves without Postgres; the dev drift check just logs "skipped, database unreachable".
 
 **The launcher:** `bin/eezo` (at the repo root) wraps all of this for a standalone project:
 `eezo new myapp` scaffolds one against the locally published eezo, and inside it `eezo routes`,
-`eezo status --json`, `eezo dev` forward to the same dispatch these `todo/run ...` commands hit.
+`eezo db status --json`, `eezo dev` forward to the same dispatch these `todo/run ...` commands hit.
 
 **For agents and scripts:** every command takes `--json` — same exit codes, machine-readable
 body, each change carrying its `sql` alongside the `destructive`/`risky` classification. Try
-`todo/run status --json`. `freeze` swaps its prompt for a policy flag: `--accept-all` or
+`todo/run db status --json`. `freeze` swaps its prompt for a policy flag: `--accept-all` or
 `--skip-destructive` (bare `--json` implies the latter, so a machine caller never hangs on a
 prompt).

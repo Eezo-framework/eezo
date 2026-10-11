@@ -89,15 +89,21 @@ trait Dispatch {
     2
   }
 
-  /** The command table, padded once to the widest spelling, then the edges' notes, then the footer.
-    * `help` itself is a row of the same table, so it lines up with whatever the edges brought.
+  /** Rows laid out as one table, every spelling padded to the widest. `help` uses it over every
+    * edge's rows together; an edge with a namespace of its own (`db`) uses it for that namespace's
+    * own list, so the two read alike.
+    */
+  protected final def usageTable(rows: List[Usage]): List[String] = {
+    val width = rows.map(_.command.length).max
+    rows.map(row => s"  ${row.command.padTo(width, ' ')}  ${row.description}")
+  }
+
+  /** The command table, then the edges' notes, then the footer. `help` itself is a row of the same
+    * table, so it lines up with whatever the edges brought.
     */
   private def help: String = {
-    val rows  = usage :+ Usage("help", "this list")
-    val width = rows.map(_.command.length).max
-    val table = rows.map(row => s"  ${row.command.padTo(width, ' ')}  ${row.description}")
     val extra = if (notes.isEmpty) Nil else "" :: notes
-    (("eezo" :: table) ++ extra ++
+    (("eezo" :: usageTable(usage :+ Usage("help", "this list"))) ++ extra ++
       List(
         "",
         "every command takes --json for machine-readable output (same exit codes);",

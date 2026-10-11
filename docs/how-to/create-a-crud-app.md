@@ -69,14 +69,14 @@ override def schema: Schema = AppSchema
 For a database you'll throw away:
 
 ```bash
-eezo sync --apply
+eezo db sync --apply
 ```
 
 For one you'll keep, write the migration and apply it:
 
 ```bash
-eezo freeze initial schema
-eezo migrate --apply
+eezo db freeze initial schema
+eezo db migrate --apply
 ```
 
 ## 6. Run

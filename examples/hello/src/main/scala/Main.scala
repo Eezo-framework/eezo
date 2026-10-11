@@ -7,7 +7,7 @@ import io.eezo.http.RouteTable
   * This application has the http edge only. It depends on `eezo-http`, not on the umbrella, so
   * `HttpApp` is the trait it extends and `routes` is the one thing it has to name. There is no
   * `schema` to name, because there is no database edge: `derives Table` does not compile here
-  * (`io.eezo.db` is not on the classpath), and `sbt "run status"` is an unknown command.
+  * (`io.eezo.db` is not on the classpath), and `sbt "run db status"` is an unknown command.
   *
   * `Routes.table()` is an ordinary call: eezo does not find the table by reflection, which is what
   * leaves room for a route transformation such as `Route.under("/admin")` and makes a missing

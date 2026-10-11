@@ -58,19 +58,19 @@ them:
 
 ```
 eezo
-  status                    code vs live database
-  sync [--apply] [--force]  apply the code/db diff directly (dev only)
-  freeze <name>             write a migration from schema.json -> code
-  migrate [--apply]         apply pending migrations, then verify
-  reset                     drop everything and recreate from the model
-  drop                      drop everything
-  dump                      print the derived snapshot
-  ddl                       print full DDL
-  dev                       serve with the route listing and the reload client on
-  routes                    the mounted table, with boot's warnings
-  help                      this list
+  db status                    code vs live database
+  db sync [--apply] [--force]  apply the code/db diff directly (dev only)
+  db freeze <name>             write a migration from schema.json -> code
+  db migrate [--apply]         apply pending migrations, then verify
+  db reset                     drop everything and recreate from the model
+  db drop                      drop everything
+  db dump                      print the derived snapshot
+  db ddl                       print full DDL
+  dev                          serve with the route listing and the reload client on
+  routes                       the mounted table, with boot's warnings
+  help                         this list
 
-freeze takes --accept-all / --skip-destructive in place of the prompt
+db freeze takes --accept-all / --skip-destructive in place of the prompt
 (bare --json implies --skip-destructive)
 
 every command takes --json for machine-readable output (same exit codes);
@@ -78,7 +78,7 @@ no arguments runs the application
 ```
 
 The first eight are the database edge's, the next two are the http edge's. On `eezo-http`
-alone, `status` is an unknown command, and on `eezo-db` alone so is `dev`. Every command takes
+alone, `db status` is an unknown command, and on `eezo-db` alone so is `dev`. Every command takes
 `--json`, with the same exit codes, so a script gates on the code and parses the body.
 
 ## Stacking the two

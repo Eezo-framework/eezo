@@ -26,7 +26,7 @@ docker run -d --name eezo-pg -p 5442:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=eezo postgres:17   # skip if it already runs
 sbt publishLocalForExample      # once, at the repository root
 cd examples
-sbt "blog/run sync --apply"     # the two tables have to exist before the first request
+sbt "blog/run db sync --apply"     # the two tables have to exist before the first request
 ```
 
 The first user comes next, since there is no sign up page. Run this line on its own and type the
@@ -42,10 +42,10 @@ EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
 unset EEZO_BLOG_PASSWORD        # the server below has no use for it
 sbt blog/run                    # http://localhost:8080, posts at /admin/posts
 sbt "blog/run routes"           # 11 routes: GET /, the three the guard carries, and the seven
-sbt "blog/run status"           # in sync ✓
+sbt "blog/run db status"           # in sync ✓
 ```
 
-An existing blog database predates the `users` table, so `sync --apply` is not optional on one:
+An existing blog database predates the `users` table, so `db sync --apply` is not optional on one:
 without it the first sign in fails on a table that is not there.
 
 ## Signing in and out
@@ -73,18 +73,18 @@ who is signed in, on `create` and on `update` both, so a hand-crafted `POST` car
 `author=<somebody else>` writes a post attributed to whoever sent it.
 
 Adding `author` is drift against a blog database that predates it, and on one already holding posts
-`sync --apply` alone is not enough: `author` is `not null` with no default, and Postgres refuses to
+`db sync --apply` alone is not enough: `author` is `not null` with no default, and Postgres refuses to
 add such a column to a table that already has rows. On a database with nothing worth keeping, `sbt
-"blog/run reset"` drops every table and recreates them from the model in one pass, at the price of
+"blog/run db reset"` drops every table and recreates them from the model in one pass, at the price of
 every `user` row too, so create the first user again afterward. To keep the existing posts, add the
 column nullable first and give each one an owner by hand, then let sync narrow it: `alter table
 blog."post" add column "author" uuid;` then `update blog."post" set "author" = (select "id" from
-blog."user" limit 1);` then `sbt "blog/run sync --apply --force"`. The update hands every existing
+blog."user" limit 1);` then `sbt "blog/run db sync --apply --force"`. The update hands every existing
 post to one user, whichever the database returns first, and it needs a user to be there: on an empty
 `user` table it writes null into every row and the forced sync then fails on the nulls, so create
 the first user before running it. `--force` is what lets the `not null` through, since narrowing a
 column is a change sync blocks on purpose, but it is not selective: it applies every change sync
-was blocking, dropped tables and columns included, so read what `sbt "blog/run sync"` lists before
+was blocking, dropped tables and columns included, so read what `sbt "blog/run db sync"` lists before
 forcing it. Either way, a second user is what it takes to see the effect.
 
 Visiting `/admin/posts` while signed out answers a 303 to `/admin/login` and remembers where you

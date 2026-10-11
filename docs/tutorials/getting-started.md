@@ -148,13 +148,15 @@ cd bookshelf
 eezo dev
 ```
 
-Give sbt a minute the first time. Then eezo announces what it serves:
+A spinner runs while sbt loads and compiles, a minute the first time. Then eezo announces what
+it serves:
 
 ```
-INFO: 3 routes:
+3 routes:
   GET /
   WS /eezo/live/:page
   GET /eezo/live.js
+serving on http://localhost:8080
 ```
 
 The routes under `/eezo` are the framework's: the live layer's socket and client script.

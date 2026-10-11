@@ -65,8 +65,8 @@ private[eezo] object DriftGate {
       println(Render.status(StatusResult(drift)))
       println("""
         |serving the drift page instead of the app; resolve it there, or here:
-        |  sync --apply     apply this to your dev database
-        |  freeze <name>    write it as a migration""".stripMargin)
+        |  eezo db sync --apply     apply this to your dev database
+        |  eezo db freeze <name>    write it as a migration""".stripMargin)
       Some(driftTable(schema, databaseSchema))
     } else {
       if (drift.nonEmpty) {
@@ -121,7 +121,7 @@ private[eezo] object DriftGate {
           )
       }
 
-    // The prototyping path: the terminal's `sync --apply --force`, one button. Force, because
+    // The prototyping path: the terminal's `db sync --apply --force`, one button. Force, because
     // this page only exists when the drift is destructive or risky; an unforced sync would
     // refuse by construction, and the button *is* the review.
     val syncAction: Handler = request =>
@@ -130,8 +130,8 @@ private[eezo] object DriftGate {
         println("[eezo] drift applied to the dev database from the drift page")
       }
 
-    // The keeping path: `freeze <name>` with the page's per change decisions standing in for the
-    // terminal prompt, then `migrate --apply` so the database converges in the same submit.
+    // The keeping path: `db freeze <name>` with the page's per change decisions standing in for the
+    // terminal prompt, then `db migrate --apply` so the database converges in the same submit.
     val freezeAction: Handler = request => {
       request.form.get("name").flatMap(_.headOption).map(_.trim).filter(_.nonEmpty) match {
         case None =>

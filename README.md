@@ -217,12 +217,13 @@ final class Board extends Component[List[Order]] {
 eezo new <name>       scaffold a new application in ./<name>
 eezo dev              serve, restarting on every save
 eezo routes           what is mounted
-eezo status           the drift between the models and the database
-eezo sync             apply that drift to the development database
-eezo freeze           write the drift as a migration
-eezo migrate          run the migrations
+eezo db status        the drift between the models and the database
+eezo db sync          apply that drift to the development database
+eezo db freeze        write the drift as a migration
+eezo db migrate       run the migrations
 eezo build            stage the jars, the migrations and a Dockerfile
 eezo deploy           build, deploy to Fly.io, migrate, wait for health
+eezo upgrade          move to the latest release on Maven Central
 ```
 
 The launcher is [`bin/eezo`](bin/eezo) in this repository. Every command but `new` forwards to
@@ -248,7 +249,7 @@ sbt publishLocalForExample      # publishes eezo and sbt-eezo locally and record
 cd examples
 sbt hello/run                   # http://localhost:8080/hello
 sbt reminders/run               # runs the job once against the development Postgres
-sbt "blog/run sync --apply"     # creates the tables, then:
+sbt "blog/run db sync --apply"     # creates the tables, then:
 sbt blog/run                    # http://localhost:8080, posts under /admin/posts
 ```
 

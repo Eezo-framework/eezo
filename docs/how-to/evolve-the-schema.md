@@ -8,9 +8,9 @@ application runs against.
 Every schema change is the same three commands:
 
 ```bash
-eezo status                  # what differs between the model and the database
-eezo freeze <name>           # write the difference as a migration file
-eezo migrate --apply         # run the pending migrations, then verify
+eezo db status                  # what differs between the model and the database
+eezo db freeze <name>           # write the difference as a migration file
+eezo db migrate --apply         # run the pending migrations, then verify
 ```
 
 `status` exits 1 when there's drift, so a CI job can gate on it. `freeze` never opens the
@@ -32,7 +32,7 @@ case class Book(
 ```
 
 ```
-$ eezo status
+$ eezo db status
 
 1 difference(s) between model and database:
 
@@ -40,7 +40,7 @@ $ eezo status
 ```
 
 ```
-$ eezo freeze add notes
+$ eezo db freeze add notes
 
 1 change(s) since last freeze:
 
@@ -50,7 +50,7 @@ wrote db/migrations/0002_add_notes.sql
 ```
 
 ```
-$ eezo migrate --apply
+$ eezo db migrate --apply
 
   0002  0002_add_notes.sql  (1 statements)
 
@@ -66,7 +66,7 @@ database lacks breaks nothing until code touches it.
 Remove the field and `status` flags the change as destructive:
 
 ```
-$ eezo status
+$ eezo db status
 
 1 difference(s) between model and database:
 
@@ -82,7 +82,7 @@ policy:
 - `--accept-all`: the drop is written into the migration and the data goes with it on apply.
 
 ```
-$ eezo freeze drop notes --skip-destructive
+$ eezo db freeze drop notes --skip-destructive
 
 1 change(s) since last freeze:
 
@@ -105,7 +105,7 @@ Adding `owner: Id[User]` to a table that already has rows is the one additive ch
 refuses, because the existing rows have nothing to put in the column. `status` classes it as
 risky. Two ways through:
 
-- On a database with nothing worth keeping: delete the rows, or `eezo reset`, which drops every
+- On a database with nothing worth keeping: delete the rows, or `eezo db reset`, which drops every
   table and recreates them from the model.
 - To keep the rows: add the column as `Option[Id[User]]` first, freeze and migrate, fill it with
   SQL by hand, then change it to `Id[User]`, and freeze and migrate again. The second migration
@@ -121,18 +121,18 @@ SQL by hand first, then freeze, and the diff will be empty.
 ## sync, for databases you don't keep
 
 ```bash
-eezo sync --apply            # apply the diff directly, no migration file
-eezo sync --apply --force    # include the destructive changes too
+eezo db sync --apply            # apply the diff directly, no migration file
+eezo db sync --apply --force    # include the destructive changes too
 ```
 
 `--force` isn't selective: it applies every change `sync` was blocking, dropped tables and
-columns included, so read what a plain `eezo sync` lists first.
+columns included, so read what a plain `eezo db sync` lists first.
 
 ## Starting over
 
 ```bash
-eezo drop     # drops the tables and the migration ledger
-eezo reset    # drop, then recreate everything from the model
+eezo db drop     # drops the tables and the migration ledger
+eezo db reset    # drop, then recreate everything from the model
 ```
 
 Then delete `db/` if you want the migration history gone too.

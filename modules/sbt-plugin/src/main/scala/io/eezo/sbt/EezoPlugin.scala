@@ -44,24 +44,24 @@ object EezoPlugin extends AutoPlugin {
       taskKey[Seq[File]]("Generates io.eezo.generated.Routes from src/main/scala/app/.")
 
     // The command tasks. Each is one forward to `run <command>`, so `sbt eezoStatus` and
-    // `sbt "run status"` are the same code path (the dispatch the entry trait inherits) and the
+    // `sbt "run db status"` are the same code path (the dispatch the entry trait inherits) and the
     // plugin stays sugar rather than mechanism (design/cli.md §4). `@transient` for the same
     // reason as above: these are effectful forwards, and sbt 2 must never satisfy one from a
     // task cache.
     @transient val eezoStatus: TaskKey[Unit] =
-      taskKey[Unit]("Forwards to `run status`: code vs live database.")
+      taskKey[Unit]("Forwards to `run db status`: code vs live database.")
 
     @transient val eezoRoutes: TaskKey[Unit] =
       taskKey[Unit]("Forwards to `run routes`: the mounted table, with boot's warnings.")
 
     @transient val eezoSync: InputKey[Unit] =
-      inputKey[Unit]("Forwards to `run sync`; pass --apply and --force through.")
+      inputKey[Unit]("Forwards to `run db sync`; pass --apply and --force through.")
 
     @transient val eezoMigrate: InputKey[Unit] =
-      inputKey[Unit]("Forwards to `run migrate`; pass --apply through.")
+      inputKey[Unit]("Forwards to `run db migrate`; pass --apply through.")
 
     @transient val eezoFreeze: InputKey[Unit] =
-      inputKey[Unit]("Forwards to `run freeze <name>`: writes a migration from the model diff.")
+      inputKey[Unit]("Forwards to `run db freeze <name>`: writes a migration from the model diff.")
 
     // The dev loop's two halves. `eezoRestart` is the kernel: kill the app's JVM, fork it again
     // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev`, the
@@ -102,11 +102,11 @@ object EezoPlugin extends AutoPlugin {
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
     // inherits everything the build already decided about running (fork, working directory,
     // javaOptions) instead of restating it.
-    eezoStatus  := unit((Compile / run).toTask(" status")).value,
+    eezoStatus  := unit((Compile / run).toTask(" db status")).value,
     eezoRoutes  := unit((Compile / run).toTask(" routes")).value,
-    eezoSync    := forward("sync").evaluated,
-    eezoMigrate := forward("migrate").evaluated,
-    eezoFreeze  := forward("freeze").evaluated,
+    eezoSync    := forward("db sync").evaluated,
+    eezoMigrate := forward("db migrate").evaluated,
+    eezoFreeze  := forward("db freeze").evaluated,
     // `freeze` prompts on destructive changes, and a forked `run` reads nothing unless the build
     // forwards stdin. Set here rather than left to every application's build, because a prompt
     // that hangs on unforwarded input looks like a hang, not like a setting.
@@ -114,28 +114,34 @@ object EezoPlugin extends AutoPlugin {
     // The restart kernel. `fullClasspath` is what makes it compile first: asking for the
     // classpath compiles the project, so a broken edit fails here and the previous process keeps
     // serving; the dev loop never kills a working server for a compile error.
-    eezoRestart := {
-      val log  = streams.value.log
-      val main = (Compile / run / mainClass).value
-        .getOrElse(
-          sys.error(
-            "eezoRestart: no main class. Define an `object Main` extending `EezoApp`, `HttpApp` or `DbApp`."
+    // Two steps in sequence, because the first is a marker line that has to precede the compile,
+    // and the compile is what asking for the classpath does. The markers are the dev loop's
+    // contract with the launcher: `eezo dev` runs sbt at its warn level and builds the console
+    // out of these two lines, sbt's [error] lines and the application's own output. They are
+    // printed, not logged, so that the level sbt runs at never hides them.
+    eezoRestart := Def
+      .sequential(
+        Def.task(println("eezo dev: building")),
+        Def.task {
+          val main = (Compile / run / mainClass).value
+            .getOrElse(
+              sys.error(
+                "eezoRestart: no main class. Define an `object Main` extending `EezoApp`, `HttpApp` or `DbApp`."
+              )
+            )
+          DevProcess.restart(
+            javaHome = (Compile / run / javaHome).value,
+            jvmOptions = (Compile / run / javaOptions).value,
+            classpath = EezoClasspath.files.value,
+            mainClass = main,
+            args = Seq("dev"),
+            workingDirectory = baseDirectory.value,
+            log = message => println(message)
           )
-        )
-      DevProcess.restart(
-        javaHome = (Compile / run / javaHome).value,
-        jvmOptions = (Compile / run / javaOptions).value,
-        classpath = EezoClasspath.files.value,
-        mainClass = main,
-        args = Seq("dev"),
-        workingDirectory = baseDirectory.value,
-        log = message => log.info(message)
+        }
       )
-    },
-    eezoStop := {
-      val log = streams.value.log
-      DevProcess.stop(quiet = false, log = message => log.info(message))
-    },
+      .value,
+    eezoStop        := DevProcess.stop(quiet = false, log = message => println(message)),
     eezoJavaVersion := "25",
     // The staged layout is the whole deployment contract: lib/ holds every runtime jar (this
     // project's own classes via packageBin, so directory classpath entries are not shipped raw),
@@ -193,8 +199,8 @@ object EezoPlugin extends AutoPlugin {
   override lazy val globalSettings: Seq[Setting[?]] =
     addCommandAlias("eezoDev", "~eezoRestart")
 
-  /** `eezoSync --apply` → `run sync --apply`: the task's own arguments, appended after the command.
-    * One helper so the three input tasks cannot drift apart.
+  /** `eezoSync --apply` → `run db sync --apply`: the task's own arguments, appended after the
+    * command. One helper so the three input tasks cannot drift apart.
     */
   private def forward(command: String): Def.Initialize[InputTask[Unit]] =
     Def.inputTaskDyn {

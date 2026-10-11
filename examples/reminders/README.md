@@ -24,13 +24,13 @@ cd examples
 ```
 
 ```
-$ sbt "reminders/run status"
+$ sbt "reminders/run db status"
 2 difference(s) between model and database:
 
   create table reminder
   + index idx_reminder_due_on on reminder
 
-$ sbt "reminders/run sync --apply"
+$ sbt "reminders/run db sync --apply"
   create table reminder
   + index idx_reminder_due_on on reminder
 

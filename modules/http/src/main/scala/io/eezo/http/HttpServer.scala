@@ -160,6 +160,9 @@ private[eezo] object HttpServer {
     running = Some(server)
     try {
       server.jetty.start()
+      // The dev console's last boot line, after the bind so that it is never printed for a port
+      // that was taken. `println` like the listing: this is the developer's console, not the log.
+      if (config.dev) println(s"serving on http://localhost:$port")
       server.jetty.join()
     } finally {
       running = None
@@ -255,11 +258,13 @@ private[eezo] object HttpServer {
     * replacement, so a route named in the override warning is deliberately absent from it. The
     * listing is not unconditional: it is a development convenience, and it earns its place because
     * a typo'd `derives Resorce` mounts nothing in silence, which makes an empty or short table the
-    * only symptom a user ever sees.
+    * only symptom a user ever sees. It goes to stdout as plain lines rather than through the
+    * logger, the way the drift banner does: under `dev` the console is the developer's, and a
+    * `java.util.logging` record would wrap the table in a timestamp and a class name.
     */
   private def announce(routes: RouteTable, config: HttpConfig): Unit = {
     RouteReport.warnings(routes).foreach(warning => log.log(System.Logger.Level.WARNING, warning))
-    if (config.dev) log.log(System.Logger.Level.INFO, RouteReport.listing(routes.routes))
+    if (config.dev) println(RouteReport.listing(routes.routes))
   }
 
   /** What a failure is answered with, on the HTTP path and on a refused upgrade alike, so that a

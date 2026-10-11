@@ -53,7 +53,7 @@ object Landing {
     (
       "sky",
       "Migrations from the model",
-      "eezo freeze, then eezo migrate",
+      "eezo db freeze, then eezo db migrate",
       "The schema diff becomes committed SQL with a fingerprint. On deploy it runs before the new code takes traffic, and a failure keeps the old version serving."
     ),
     (

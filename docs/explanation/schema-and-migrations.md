@@ -42,14 +42,14 @@ Each change is one of three kinds:
 - **Risky.** A change that can fail on the rows already there: `set not null` over a column
   with nulls, a type change, a new check constraint.
 
-The class decides what happens next. `sync --apply` runs additive changes directly and refuses
+The class decides what happens next. `db sync --apply` runs additive changes directly and refuses
 to run the other two without `--force`. `freeze` asks you about each destructive change, and
 accepts the rest. The dev server banners additive drift and refuses to serve over the other
 two.
 
 ## Freeze: the snapshot and the file
 
-`freeze <name>` doesn't look at the database at all. It diffs the model against
+`db freeze <name>` doesn't look at the database at all. It diffs the model against
 `db/schema.json`, the snapshot from the last freeze, and writes two files: the next numbered
 migration under `db/migrations/`, and the new snapshot. So you can freeze on a plane, and so
 two developers who both froze get two files whose numbers collide in the merge, which is the
@@ -97,7 +97,7 @@ that catches a migration written by hand that didn't do what the model says.
 
 ## Sync: the shortcut
 
-`sync --apply` runs the diff straight into the database and writes no file. It's for a database
+`db sync --apply` runs the diff straight into the database and writes no file. It's for a database
 you don't care about: a prototype, a throwaway. It blocks on destructive and risky changes
 unless you say `--force`, and `--force` isn't selective. It applies everything sync was
 blocking, so read the list first.
@@ -128,7 +128,7 @@ application that shares a Postgres with something else.
 
 ## On deploy
 
-`eezo deploy` writes `release_command = 'migrate --apply'` into `fly.toml`. Fly runs that in a
+`eezo deploy` writes `release_command = 'db migrate --apply'` into `fly.toml`. Fly runs that in a
 one-off machine with the new image before any serving machine is touched. A failed migration
 exits nonzero, the deploy stops, and the old version keeps serving. So the schema converges
 before new code takes traffic, and the ordering comes from the platform, which is better at it than a

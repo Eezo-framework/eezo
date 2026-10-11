@@ -29,7 +29,7 @@ fly postgres attach myapp-db --app <your-app>
 1. `eezo build` stages `target/eezo/stage/`: every runtime jar, your `db/migrations`, and a
    generated JRE-only Dockerfile. No Docker runs on your machine.
 2. `fly deploy` builds the image remotely and starts a one-off machine running
-   `migrate --apply` with the new image, before any serving machine is touched. A failed
+   `db migrate --apply` with the new image, before any serving machine is touched. A failed
    migration stops the deploy and the old version keeps serving.
 3. The new machines come up, the old ones drain, and eezo waits for `/eezo/health`.
 
@@ -87,7 +87,7 @@ docker build -t myapp target/eezo/stage
 docker run -e DATABASE_URL=... -e EEZO_SECRET=... -p 8080:8080 myapp
 ```
 
-Run the migrations first with the same image: `docker run ... myapp migrate --apply`. The
+Run the migrations first with the same image: `docker run ... myapp db migrate --apply`. The
 entrypoint is the application's own `main`, so any eezo command works as the container's
 arguments.
 

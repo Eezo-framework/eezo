@@ -29,8 +29,11 @@ eezo — the framework launcher
                         `new` scaffolds, and the project in the current directory
 
 forwarded to the application (run from the project directory):
-  eezo routes | status | sync | freeze | migrate | reset | drop | dump | ddl | help
-  every command takes --json; see `eezo help` inside a project for details
+  eezo routes           what is mounted
+  eezo db <command>     the schema commands: status | sync | freeze | migrate |
+                        reset | drop | dump | ddl; `eezo db` alone lists them
+  eezo help             every command the application answers
+  every forwarded command takes --json
 EOF
 }
 
@@ -86,10 +89,12 @@ spin_stop() {
 }
 trap spin_stop EXIT
 
-sbt_cmd() {
+sbt_at() { # <level flag> <sbt args...>: sbt with its own JVM's warnings off, at the given level
   SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow" \
-    sbt -error -batch "$@"
+    sbt "$1" -batch "${@:2}"
 }
+
+sbt_cmd() { sbt_at -error "$@"; }
 
 # Runs a command under the spinner, streams captured separately (stdout must stay machine-pure),
 # replayed by replay_captured afterwards. Returns the command's code.
@@ -145,8 +150,112 @@ forward_live() {
 }
 
 # ---------------------------------------------------------------------------------------------
+# dev — the console. sbt runs the watch loop (`eezoDev`, the plugin's `~eezoRestart`) at its warn
+# level, so compile warnings and errors come through and sbt's own narration does not. The
+# console is built here from three sources: the plugin's two marker lines ("eezo dev: building"
+# before each compile, "eezo dev: started <Main>" after each fork), sbt's [error] lines, and the
+# application's own output, which the forked JVM inherits into this same pipe. A spinner stands
+# in for sbt's loading and the compile; the application's boot lines (the drift banner, the route
+# table, the address) and anything it logs pass through; the java.util.logging records Jetty and
+# HikariCP write at INFO are dropped, because they are the only lines nobody asked for.
+# ---------------------------------------------------------------------------------------------
+
+DEV_STATUS=""
+DEV_WATCHING="watching for changes; Ctrl-C stops"
+
+# One line to the console, under the status line when one is showing. The clear and the line go
+# out in one write, so the spinner, which redraws every 100 ms, can seldom land between them.
+dev_say() {
+  if [ -t 2 ]; then printf '\r\033[2K' >&2; fi
+  printf '%s\n' "$1"
+  if [ -n "$DEV_STATUS" ] && [ -t 2 ]; then printf '  %s' "$DEV_STATUS" >&2; fi
+}
+
+# A static status line on stderr; it stays until the next event redraws or clears it.
+dev_status() {
+  DEV_STATUS="$1"
+  if [ -t 2 ]; then printf '\r\033[2K  %s' "$1" >&2; fi
+}
+
+# A java.util.logging record header: "<date> <time> <logger class> <method>", no parentheses, so a
+# stack frame ("at org.eclipse.jetty.X.y(File.java:1)") never passes for one.
+JUL_NOISE='^[^(]* (org\.eclipse\.jetty|com\.zaxxer\.hikari)[A-Za-z0-9_.$]* [A-Za-z0-9_$<>]+$'
+
+dev_console() {
+  # The subshell's own trap: a Ctrl-C ends the loop here, and the status line must not be left
+  # under the prompt.
+  trap 'spin_stop; if [ -t 2 ]; then printf "\r\033[2K" >&2; fi' EXIT
+  local line pending="" changed=""
+  spin_start "starting sbt"
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      # sbt narrates its watch at info level whatever level it was started at, so the narration
+      # is dropped here; the triggering file's name is kept for the spinner's label.
+      "[info] Build triggered by "*)
+        changed="${line#\[info\] Build triggered by }"
+        changed="${changed%%. Running *}"
+        changed="${changed##*/}"
+        continue
+        ;;
+      "[info] "*"Monitoring source files for "* | "[info]    Press <enter> to interrupt"* | "[success] Total time:"*)
+        continue
+        ;;
+      "eezo dev: building")
+        DEV_STATUS=""
+        spin_stop
+        spin_start "compiling${changed:+ ($changed changed)}"
+        changed=""
+        continue
+        ;;
+      "eezo dev: started "*)
+        spin_stop
+        dev_status "$DEV_WATCHING"
+        continue
+        ;;
+      # sbt's summary of a failed task, after the diagnostics: "[error] (Compile / compile) ...".
+      "[error] ("*") "*)
+        spin_stop
+        dev_say "✗ build failed; the previous build keeps serving. Fix it and save."
+        dev_status "$DEV_WATCHING"
+        continue
+        ;;
+      "[error] Total time:"*)
+        continue
+        ;;
+    esac
+    # A record header is held until its level line says whether the pair is noise.
+    if [ -n "$pending" ]; then
+      case "$line" in
+        "INFO: "* | "CONFIG: "* | "FINE: "*)
+          pending=""
+          continue
+          ;;
+        *)
+          dev_say "$pending"
+          pending=""
+          ;;
+      esac
+    fi
+    if [[ $line =~ $JUL_NOISE ]]; then
+      pending="$line"
+      continue
+    fi
+    dev_say "$line"
+  done
+}
+
+dev() {
+  need_sbt
+  set +e
+  sbt_at -warn eezoDev 2>&1 | dev_console
+  local code="${PIPESTATUS[0]}"
+  set -e
+  exit "$code"
+}
+
+# ---------------------------------------------------------------------------------------------
 # deploy — design/cli.md records the ordering. The short version: `fly.toml` carries
-# `release_command = 'migrate --apply'`, so Fly runs the migrations in a one-off machine with the
+# `release_command = 'db migrate --apply'`, so Fly runs the migrations in a one-off machine with the
 # NEW image before any machine is updated; a nonzero exit stops the deployment and the old version
 # keeps serving. Migration ordering correctness comes from the platform, not from this script.
 # ---------------------------------------------------------------------------------------------
@@ -198,7 +307,7 @@ write_fly_toml() {
   # Runs in a one-off machine with the NEW image, before any app machine is updated. A nonzero
   # exit stops the deployment and the old version keeps serving — this is eezo's migration
   # ordering: the schema converges before new code takes traffic.
-  release_command = 'migrate --apply'
+  release_command = 'db migrate --apply'
 
 [http_service]
   # Must match the app's `port` (EezoApp default: 8080).
@@ -265,14 +374,14 @@ deploy() {
     echo "→ wrote fly.toml (app: $name${region:+, region: $region})"
   fi
 
-  # The one reliable secret preflight: an app with migrations will run `migrate --apply` on
+  # The one reliable secret preflight: an app with migrations will run `db migrate --apply` on
   # deploy, which needs a database. Names only — secret values never reach this machine.
   if [ -d db/migrations ] && [ -n "$(ls db/migrations 2> /dev/null)" ]; then
     if ! "$FLY" secrets list 2> /dev/null | grep -qE '(DATABASE_URL|EEZO_DB_URL)'; then
       cat >&2 <<'MSG'
 ✗ deployment cannot continue: no database secret is set.
 
-This app has migrations, and `migrate --apply` runs during deploy. Set the
+This app has migrations, and `db migrate --apply` runs during deploy. Set the
 database secret first:
 
     fly secrets set DATABASE_URL=postgres://user:password@host/dbname
@@ -447,7 +556,7 @@ import io.eezo.generated.Routes
 import io.eezo.http.RouteTable
 
 /** The whole entry point. `main` is inherited and dispatches: `sbt run` serves on port 8080,
-  * `eezo dev` adds the drift check and restart-on-save, and `eezo status|sync|freeze|migrate`
+  * `eezo dev` adds the drift check and restart-on-save, and `eezo db status|sync|freeze|migrate`
   * are the schema commands.
   *
   * `schema` is abstract on `EezoApp`, so an application on the umbrella always says what it has,
@@ -483,7 +592,7 @@ object Index {
         body(
           h1("it works"),
           p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("sbt \"run routes\""), " lists them.")
+          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
         )
       )
     )
@@ -516,8 +625,7 @@ case "$cmd" in
     scaffold "$@"
     ;;
   dev)
-    need_sbt
-    exec sbt eezoDev
+    dev
     ;;
   build)
     need_sbt
@@ -530,16 +638,25 @@ case "$cmd" in
   upgrade)
     upgrade
     ;;
-  # `freeze` bypasses the spinner: it prompts on destructive changes, and a prompt behind a
-  # spinner is a hang with good intentions. `dev` (above) keeps sbt's normal output entirely: the
-  # watch loop's compile lines *are* the dev console.
-  freeze)
+  # The schema commands, one namespace forwarded whole: `eezo db sync --apply` is
+  # `run db sync --apply`, and `eezo db` alone is the application's own list of them.
+  # `db freeze` bypasses the spinner: it prompts on destructive changes, and a prompt behind a
+  # spinner is a hang with good intentions.
+  db)
     need_sbt
-    forward_live "run $*"
+    if [ "${2:-}" = "freeze" ]; then
+      forward_live "run $*"
+    else
+      forward "eezo db ${2:-}" "run $*"
+    fi
     ;;
-  routes | status | sync | migrate | reset | drop | dump | ddl | help)
+  routes | help)
     need_sbt
     forward "eezo $cmd" "run $*"
+    ;;
+  status | sync | freeze | migrate | reset | drop | dump | ddl)
+    echo "eezo: the schema commands live under db: eezo db $*" >&2
+    exit 1
     ;;
   *)
     echo "eezo: unknown command '$cmd'" >&2

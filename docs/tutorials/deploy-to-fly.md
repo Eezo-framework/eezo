@@ -89,7 +89,7 @@ schema as the first migration (no database needed — freeze diffs the committed
 your code):
 
 ```bash
-eezo freeze initial schema
+eezo db freeze initial schema
 ```
 
 ```
@@ -119,13 +119,13 @@ Created app 'bookshelf-…' in organization '…'
 Three things happened: Fly created the app and picked your nearest region (`fly launch` under the
 hood — that detection is Fly's, not eezo's), eezo wrote `fly.toml` (yours: committed, editable,
 rewritten only if you delete it), and the deploy stopped **on purpose** — this app has
-migrations, `migrate --apply` will run on deploy, and there is no database yet.
+migrations, `db migrate --apply` will run on deploy, and there is no database yet.
 
 The interesting line in the generated `fly.toml`:
 
 ```toml
 [deploy]
-  release_command = 'migrate --apply'
+  release_command = 'db migrate --apply'
 ```
 
 This is eezo's migration ordering, delegated to the platform: Fly runs the command in a one-off
@@ -167,7 +167,7 @@ eezo deploy
 → staging the application
 → deploying to Fly (migrations run before the new version takes traffic)
    … Fly's build output (remote builder; no local Docker involved) …
-   … release_command: migrate --apply →  0001_initial_schema.sql, applied ✓,
+   … release_command: db migrate --apply →  0001_initial_schema.sql, applied ✓,
      database matches model ✓  (on some flyctl versions this appears in the Fly
      dashboard's release logs rather than inline) …
 → waiting for health at https://<app>.fly.dev/eezo/health
@@ -190,7 +190,7 @@ created. `/eezo/health` answers `ok`; anything unknown 404s with eezo's problem 
 
 ## 8. The loop from here
 
-Change the model → `eezo freeze <name>` → `eezo deploy`. The new migration ships inside the
+Change the model → `eezo db freeze <name>` → `eezo deploy`. The new migration ships inside the
 image and runs in the release machine before the new code serves. If it fails, the deploy fails,
 the old version keeps serving, and the migration's own output says why. `eezo deploy` with
 nothing pending prints `no pending migrations` in the release step and just ships code.

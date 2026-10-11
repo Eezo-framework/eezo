@@ -59,10 +59,10 @@ class HttpAppSuite extends munit.FunSuite {
   test("the database edge's commands are unknown on an http-only application") {
     val app = new Recording
     List("status", "sync", "freeze", "migrate", "reset", "drop", "dump", "ddl").foreach { command =>
-      val (code, out, err) = captured(app.run(List(command)))
+      val (code, out, err) = captured(app.run(List("db", command)))
       assertEquals(code, 2, command)
       assertEquals(out, "", command)
-      assert(err.contains(s"unknown command: $command"), err)
+      assert(err.contains(s"unknown command: db $command"), err)
     }
     assert(!app.booted)
   }

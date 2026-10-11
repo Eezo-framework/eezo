@@ -18,7 +18,7 @@ import io.eezo.http.RouteTable
   * `main` is inherited and dispatches: `sbt run` serves on port 8080 with a `Database` installed,
   * `sbt "run dev"` (or `sbt eezoDev`) adds the drift check and the route listing, and the schema
   * commands (`status`, `sync`, `freeze`, `migrate`) run against `AppSchema`. The table has to exist
-  * before the first request: `sbt "run sync --apply"` once, or `eezoDev`'s drift page.
+  * before the first request: `sbt "run db sync --apply"` once, or `eezoDev`'s drift page.
   *
   * The table is a value rather than something the server finds by reflection, which is what leaves
   * room for the lines in `routes` below. They split it on provenance and mount one half: the seven

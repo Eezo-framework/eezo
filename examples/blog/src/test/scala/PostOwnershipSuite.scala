@@ -112,13 +112,13 @@ class PostOwnershipSuite extends munit.FunSuite {
     def around[A](body: => A): A = withDatabase(body)
   }
 
-  /** The two users, made once, through the application's own tools: `run sync --apply` for the
+  /** The two users, made once, through the application's own tools: `run db sync --apply` for the
     * tables, exactly as `README.md` says to before the first request, and `CreateUser.hashPassword`
     * for the hash, so the rows the guard verifies against are the rows the operator's tool would
     * have written.
     */
   private lazy val signedUp: (Id[User], Id[User]) = {
-    BlogDb.main(Array("sync", "--apply"))
+    BlogDb.main(Array("db", "sync", "--apply"))
     val alice = Id.gen[User]()
     val bob   = Id.gen[User]()
     BlogDb.around {

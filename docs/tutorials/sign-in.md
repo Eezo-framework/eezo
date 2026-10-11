@@ -174,7 +174,7 @@ tutorial, delete it from its page first: `owner` is `not null`, and Postgres won
 column over an existing row.
 
 ```bash
-eezo status
+eezo db status
 ```
 
 ```
@@ -186,8 +186,8 @@ eezo status
 ```
 
 ```bash
-eezo freeze add users
-eezo migrate --apply
+eezo db freeze add users
+eezo db migrate --apply
 ```
 
 ```

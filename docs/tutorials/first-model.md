@@ -112,7 +112,7 @@ The routes exist, but the table doesn't yet. Ask eezo what the difference is bet
 and the database:
 
 ```bash
-eezo status
+eezo db status
 ```
 
 ```
@@ -124,12 +124,12 @@ eezo status
 
 (The command exits with code 1 whenever there's drift, so you can gate a CI job on it.)
 
-There are two ways to close that gap. For a database you don't care about, `eezo sync --apply`
+There are two ways to close that gap. For a database you don't care about, `eezo db sync --apply`
 runs the changes directly and keeps nothing. For anything else, freeze the change as a migration
 file, which is what you'd do in a real project, so do it here:
 
 ```bash
-eezo freeze initial schema
+eezo db freeze initial schema
 ```
 
 ```
@@ -167,7 +167,7 @@ diffs your code against a snapshot it keeps in `db/schema.json`, so you can free
 Now preview and apply:
 
 ```bash
-eezo migrate
+eezo db migrate
 ```
 
 ```
@@ -177,7 +177,7 @@ eezo migrate
 ```
 
 ```bash
-eezo migrate --apply
+eezo db migrate --apply
 ```
 
 ```
@@ -188,7 +188,7 @@ database matches model ✓
 ```
 
 ```bash
-eezo status
+eezo db status
 ```
 
 ```
@@ -241,7 +241,7 @@ the model but serves anyway, because adding a nullable column breaks nothing unt
 it. The same loop as before closes the gap:
 
 ```bash
-eezo status
+eezo db status
 ```
 
 ```
@@ -251,7 +251,7 @@ eezo status
 ```
 
 ```bash
-eezo freeze add notes
+eezo db freeze add notes
 ```
 
 ```
@@ -272,7 +272,7 @@ alter table "book" add column "notes" text;
 ```
 
 ```bash
-eezo migrate --apply
+eezo db migrate --apply
 ```
 
 ```

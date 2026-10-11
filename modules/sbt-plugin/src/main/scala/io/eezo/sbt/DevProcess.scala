@@ -88,8 +88,8 @@ private[sbt] object DevProcess {
 
     val builder = new ProcessBuilder(command)
     builder.directory(workingDirectory)
-    // The app's output belongs in the same console as the compile that produced it; this is the
-    // whole display of the dev loop.
+    // The app's output belongs in the same console as the compile that produced it: inherited,
+    // so that `eezo dev`, which reads sbt's output through a pipe, reads the app's with it.
     builder.inheritIO()
     // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
     val environment = builder.environment()

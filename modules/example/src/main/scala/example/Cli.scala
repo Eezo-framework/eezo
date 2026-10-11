@@ -11,7 +11,7 @@ import io.eezo.db.{DbApp, Schema}
   * `io.eezo.db.DbApp`; what remains here is exactly what an application is supposed to write:
   * name the schema, and say what `boot` does.
   *
-  *   sbt "example/run status" sbt "example/run migrate --apply"
+  *   sbt "example/run db status" sbt "example/run db migrate --apply"
   */
 object Cli extends DbApp {
 

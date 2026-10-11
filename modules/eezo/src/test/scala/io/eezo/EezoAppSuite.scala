@@ -166,7 +166,7 @@ class EezoAppSuite extends munit.FunSuite {
 
     val (helpCode, help, _) = captured(app.run(List("help")))
     assertEquals(helpCode, 0)
-    List("dev", "routes", "status", "sync", "freeze", "migrate").foreach { c =>
+    List("dev", "routes", "db status", "db sync", "db freeze", "db migrate").foreach { c =>
       assert(help.linesIterator.exists(_.trim.startsWith(c)), s"$c missing from:\n$help")
     }
     assert(!app.booted)

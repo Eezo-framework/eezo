@@ -44,9 +44,9 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-cp", "lib/*", "Main"]
 |---|---|
 | `FROM eclipse-temurin:<eezoJavaVersion>-jre-noble` | a JRE, no JDK, no sbt |
 | `WORKDIR /app` | the migration runtime resolves `db/` against the working directory |
-| `COPY db db` | so `migrate --apply` in the image finds the files `freeze` wrote |
+| `COPY db db` | so `db migrate --apply` in the image finds the files `freeze` wrote |
 | `MaxRAMPercentage=75` | the heap follows the machine size |
-| `ENTRYPOINT`, not `CMD` | a platform's release command replaces `CMD` and keeps the entrypoint, so `migrate --apply` becomes arguments to your `main` |
+| `ENTRYPOINT`, not `CMD` | a platform's release command replaces `CMD` and keeps the entrypoint, so `db migrate --apply` becomes arguments to your `main` |
 
 `Main` is `Compile / run / mainClass`, and staging fails with a message when the build has none.
 
@@ -65,7 +65,7 @@ primary_region = 'fra'
   # Runs in a one-off machine with the NEW image, before any app machine is updated. A nonzero
   # exit stops the deployment and the old version keeps serving — this is eezo's migration
   # ordering: the schema converges before new code takes traffic.
-  release_command = 'migrate --apply'
+  release_command = 'db migrate --apply'
 
 [http_service]
   # Must match the app's `port` (EezoApp default: 8080).
@@ -87,7 +87,7 @@ primary_region = 'fra'
 |---|---|---|
 | `app` | the name `fly launch` chose or `--app` gave | never |
 | `primary_region` | the region `fly launch` picked | you want another |
-| `release_command` | `migrate --apply` | the application has no database edge; delete the `[deploy]` block |
+| `release_command` | `db migrate --apply` | the application has no database edge; delete the `[deploy]` block |
 | `internal_port` | 8080 | your `Main` overrides `port` |
 | `force_https` | `true` | |
 | `auto_stop_machines`, `min_machines_running` | `stop`, 0 | the application has live pages: set `min_machines_running = 1`, or an idle stop closes every socket |

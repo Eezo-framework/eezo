@@ -22,13 +22,13 @@ The plugin does nothing until a project enables it. An application with no route
 |---|---|
 | `eezoGenerateRoutes` | writes `Routes.scala`; runs on every compile as a source generator, cached on the sources' hashes |
 | `eezoDev` | an alias for `~eezoRestart`: restart on every save |
-| `eezoRestart` | compiles, kills the running application, forks a fresh JVM running `Main dev` |
+| `eezoRestart` | prints `eezo dev: building`, compiles, kills the running application, forks a fresh JVM running `Main dev`, prints `eezo dev: started <Main>`; the two lines are what `eezo dev` builds its console from |
 | `eezoStop` | stops the forked application, if any |
 | `eezoRoutes` | `run routes` |
-| `eezoStatus` | `run status` |
-| `eezoSync <args>` | `run sync <args>`; `--apply` and `--force` pass through |
-| `eezoMigrate <args>` | `run migrate <args>` |
-| `eezoFreeze <args>` | `run freeze <args>` |
+| `eezoStatus` | `run db status` |
+| `eezoSync <args>` | `run db sync <args>`; `--apply` and `--force` pass through |
+| `eezoMigrate <args>` | `run db migrate <args>` |
+| `eezoFreeze <args>` | `run db freeze <args>` |
 | `eezoStage` | stages `target/eezo/stage/`, returns the directory |
 
 The five forwards go through `Compile / run`, so they inherit everything the build decided

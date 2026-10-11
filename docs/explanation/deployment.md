@@ -28,7 +28,7 @@ ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-cp", "lib/*", "Main"]
 
 No sbt in the image, no build tooling, no source. `MaxRAMPercentage` instead of a fixed heap,
 because the platform decides the machine size. And `ENTRYPOINT`, not `CMD`, so that
-arguments appended by the platform become arguments to your own `main`: `migrate --apply` is
+arguments appended by the platform become arguments to your own `main`: `db migrate --apply` is
 the same dispatch every other command goes through, and no arguments means `boot`, which
 serves.
 
@@ -49,7 +49,7 @@ The generated `fly.toml` carries one line that does the ordering:
 
 ```toml
 [deploy]
-  release_command = 'migrate --apply'
+  release_command = 'db migrate --apply'
 ```
 
 Fly runs that in a one-off machine, with the new image, before any serving machine is updated.
@@ -76,7 +76,7 @@ with eezo's own: the release command, the service on the app's port, and a healt
 
 The first deploy is the slow one, and most of it is you: creating the app, creating and
 attaching a Postgres, setting `EEZO_SECRET`. The deploy itself stops until a database secret
-exists, because an application with migrations will run `migrate --apply` and needs somewhere
+exists, because an application with migrations will run `db migrate --apply` and needs somewhere
 to run it.
 
 A redeploy is the one that's short. `fly.toml` is committed, so nothing is created; the command
@@ -89,7 +89,7 @@ layer cache away from fast.
 ## What a second target would need
 
 Nothing in the staged directory names Fly. A second target is a second `deploy` branch in the
-launcher, and it needs the same four things: a way to run `migrate --apply` with the new image
+launcher, and it needs the same four things: a way to run `db migrate --apply` with the new image
 before traffic moves, a secret store that becomes environment variables, a health check
 pointed at `/eezo/health`, and an image built from the staged context. A platform without a
 release step can still run the migrations as a separate container from the same image, before

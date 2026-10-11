@@ -6,38 +6,46 @@ tutorials build; the version string in them changes with every commit.
 
 ## Two layers
 
-`bin/eezo` is a shell script. Three of its commands are its own: `new`, `build` and `deploy`.
-`dev` runs the sbt task `eezoDev`. Everything else forwards to the application's own `main`
-as `sbt "run <command> <args>"`, so `eezo status` and `sbt "run status"` are the same code
-path, and so is the sbt task `eezoStatus`.
+`bin/eezo` is a shell script. Four of its commands are its own: `new`, `build`, `deploy` and
+`upgrade`. `dev` runs the sbt task `eezoDev` and shows a console built from its output: a spinner for the
+compile, the application's boot lines and logs, and none of sbt's narration. Everything else forwards to the application's own
+`main` as `sbt "run <command> <args>"`, so `eezo db status` and `sbt "run db status"` are the
+same code path, and so is the sbt task `eezoStatus`.
 
 The application's `main` is inherited from its entry trait. Each edge adds its commands: the
-database edge's eight and the http edge's two. `help` is matched before either, so no edge can
-shadow it. No arguments runs the application.
+http edge's two at the top level, and the database edge's eight under one namespace, `db`, so
+that `eezo db sync --apply` reads as what it touches. `help` is matched before either, so no
+edge can shadow it. No arguments runs the application.
 
 ## Commands
 
 | command | layer | needs | what it does |
 |---|---|---|---|
 | `new <name>` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>` |
-| `dev` | sbt task | | serves with restart on save, the route listing and the reload client |
+| `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
 | `routes [--json]` | http edge | | the mounted table and boot's warnings |
-| `status [--json]` | database edge | a database | the model against the live database |
-| `sync [--apply] [--force] [--json]` | database edge | a database | the diff, applied directly with `--apply` |
-| `freeze <name...> [--accept-all\|--skip-destructive] [--json]` | database edge | | writes a migration from the snapshot diff |
-| `migrate [--apply] [--json]` | database edge | a database | lists pending migrations, applies them, verifies |
-| `reset [--json]` | database edge | a database | drops every table and recreates from the model |
-| `drop [--json]` | database edge | a database | drops every table and the ledger |
-| `dump [--json]` | database edge | | prints the model's snapshot |
-| `ddl [--json]` | database edge | | prints the full DDL, one statement per line |
+| `db` | database edge | | the eight schema commands, listed; `db help` is the same |
+| `db status [--json]` | database edge | a database | the model against the live database |
+| `db sync [--apply] [--force] [--json]` | database edge | a database | the diff, applied directly with `--apply` |
+| `db freeze <name...> [--accept-all\|--skip-destructive] [--json]` | database edge | | writes a migration from the snapshot diff |
+| `db migrate [--apply] [--json]` | database edge | a database | lists pending migrations, applies them, verifies |
+| `db reset [--json]` | database edge | a database | drops every table and recreates from the model |
+| `db drop [--json]` | database edge | a database | drops every table and the ledger |
+| `db dump [--json]` | database edge | | prints the model's snapshot |
+| `db ddl [--json]` | database edge | | prints the full DDL, one statement per line |
 | `build` | launcher | | stages `target/eezo/stage/` |
 | `deploy [--app <name>] [--target fly]` | launcher | the Fly CLI | builds, deploys, migrates, waits for health |
 | `upgrade` | launcher | Maven Central | moves the command line, what `new` scaffolds, and the project in the current directory to the latest release |
 | `help` | both edges | | the command table |
 
-`freeze` takes everything after it that isn't a flag as the migration's name, joined with
-spaces, so `eezo freeze add isbn to book` names the migration `add_isbn_to_book`. Without a
+`db freeze` takes everything after it that isn't a flag as the migration's name, joined with
+spaces, so `eezo db freeze add isbn to book` names the migration `add_isbn_to_book`. Without a
 flag it prompts on each destructive change, `[d]` to drop, `[k]` to keep and skip.
+
+The application also answers the eight without the `db` in front, and `help` doesn't list that
+spelling. It exists for one caller: a `fly.toml` written by `eezo deploy` before the namespace,
+whose release command says `migrate --apply` and runs inside the new image. The launcher
+refuses the bare form and names the `db` one.
 
 `deploy` on a first run, with no `fly.toml`, runs `fly launch`, and in a session with no
 terminal that needs `--app <name>`. Before deploying an application with migrations it checks
@@ -58,7 +66,7 @@ Exit codes are the same in both modes. Each body carries a `"command"` discrimin
 line goes to stderr as `{"error": "..."}`.
 
 ```
-$ eezo status --json
+$ eezo db status --json
 {
   "command": "status",
   "inSync": false,
@@ -98,8 +106,8 @@ a prompt.
 | code | meaning |
 |---|---|
 | 0 | done, or in sync |
-| 1 | `status` found drift; `sync --apply` refused over destructive or risky changes; `migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
-| 2 | unknown command |
+| 1 | `db status` found drift; `db sync --apply` refused over destructive or risky changes; `migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
+| 2 | unknown command, or unknown `db` command |
 
 The launcher passes the application's exit code through. sbt prints three lines of its own when
 a forked application exits 1, and the launcher drops exactly those, because that exit code is

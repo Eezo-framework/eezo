@@ -80,7 +80,7 @@ create table if not exists "eezo_migrations" (
 )
 ```
 
-Created on first use. `migrate --apply` inserts one row per file it ran, in the same
+Created on first use. `db migrate --apply` inserts one row per file it ran, in the same
 transaction as the file's statements. `drop` and `reset` drop it. `status` never lists it as
 drift.
 
@@ -102,7 +102,7 @@ drift.
 | create index | `+ index name on t` | additive |
 | drop index | `- index name on t` | additive |
 
-Destructive loses data. Risky can fail on the rows already there. `sync --apply` refuses both
+Destructive loses data. Risky can fail on the rows already there. `db sync --apply` refuses both
 without `--force`; `freeze` prompts on destructive and accepts risky; the dev server's drift
 page refuses to serve over either. A renamed column is a drop and an add.
 
@@ -163,7 +163,7 @@ The verification line is `database matches model ✓`, or the remaining changes 
 `database does not match model (N difference(s))`. The JSON form:
 
 ```
-$ eezo migrate --json
+$ eezo db migrate --json
 {
   "command": "migrate",
   "outcome": "upToDate",

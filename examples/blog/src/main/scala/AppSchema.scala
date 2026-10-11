@@ -10,7 +10,7 @@ import models.User
   * An email is unique for a harder reason than a title is. `User.byEmail` takes the first row it
   * finds, so two rows sharing an address would make which account a password opens depend on the
   * order Postgres happened to return, and the index is what makes that unrepresentable rather than
-  * unlikely. Adding this table is drift against an existing blog database, so `run sync --apply`
+  * unlikely. Adding this table is drift against an existing blog database, so `run db sync --apply`
   * once before the application serves.
   */
 object AppSchema extends Schema {

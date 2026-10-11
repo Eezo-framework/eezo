@@ -26,7 +26,7 @@ The database edge. `eezo-http` does not depend on `eezo-db`, so nothing under `i
 classpath, and the schema commands are not commands:
 
 ```
-$ sbt "hello/run status"
+$ sbt "hello/run db status"
 [eezo] unknown command: status. Run `help` for the list.
 ```
 

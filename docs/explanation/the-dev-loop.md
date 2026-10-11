@@ -26,6 +26,23 @@ a new row in the table on the same save. It caches on the hash of the sources it
 writes the generated file only when its content changed, so a save that doesn't touch a route
 doesn't invalidate the compile that follows.
 
+## The console
+
+`eezo dev` shows the loop and nothing around it. A spinner runs while sbt loads and while each
+compile runs, labelled with the file that triggered it. Then the application's own boot lines:
+the drift banner if there is one, the route table, and `serving on http://localhost:8080`. A
+status line under them says the loop is watching and that Ctrl-C stops it. A compile error is
+the compiler's diagnostics as they are, followed by one line saying the previous build keeps
+serving. Anything else the application prints or logs passes through, a stack trace included.
+
+What is kept out: sbt's own narration, its loading, its watch prompts, its timings, and the
+`java.util.logging` records Jetty and HikariCP write at INFO on every boot, which say the same
+thing every time. Their warnings still come through.
+
+The launcher builds this from sbt's output, run at the warn level, and two marker lines the
+plugin prints: `eezo dev: building` before each compile and `eezo dev: started Main` after each
+fork. Running `sbt eezoDev` without the launcher shows that raw stream, markers and all.
+
 ## What the browser does
 
 Every page the dev server serves gets a small script appended to its `<body>`. The script keeps
