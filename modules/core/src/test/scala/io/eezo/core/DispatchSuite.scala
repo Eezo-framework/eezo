@@ -5,12 +5,12 @@ import io.eezo.core.support.Captured.captured
 
 /** `Dispatch` as `core` owns it: `main`, the chained `commands`, `help` over `usage`, and `emit`.
   *
-  * Nothing here starts or stops anything. Each edge chains its own arms in front of
-  * `super.commands`, and this suite pins the things the edges build on: an unknown first argument
-  * is exit 2, `Nil` is `program` and is answered here rather than by an edge, two edges that both
+  * Nothing here starts or stops anything. Each layer chains its own arms in front of
+  * `super.commands`, and this suite pins the things the layers build on: an unknown first argument
+  * is exit 2, `Nil` is `program` and is answered here rather than by a layer, two layers that both
   * implement `program` cannot be stacked without saying which one wins, a later mixin's arm shadows
-  * an earlier one's, `help` lays the table out once for every edge, and `emit` is the one place the
-  * `--json` choice is made.
+  * an earlier one's, `help` lays the table out once for every layer, and `emit` is the one place
+  * the `--json` choice is made.
   */
 class DispatchSuite extends munit.FunSuite {
 
@@ -44,7 +44,7 @@ class DispatchSuite extends munit.FunSuite {
 
   object Greeting extends Greeter
 
-  /** Two edges stacked. `program` is concrete in both, so this object has to say which one it
+  /** Two layers stacked. `program` is concrete in both, so this object has to say which one it
     * means, and it says both, in the earlier one's order.
     */
   object Both extends Greeter with Counter {
@@ -66,7 +66,7 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(out.trim, "greeter booted")
   }
 
-  test("two edges that both implement program cannot be stacked without choosing one") {
+  test("two layers that both implement program cannot be stacked without choosing one") {
     val e = compileErrors("object Wrong extends Greeter with Counter")
     assert(!e.contains("Not found"), s"the snippet did not resolve, so it proves nothing: $e")
     assert(e.contains("conflicting members"), e)
@@ -109,7 +109,7 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(out.linesIterator.toList, expected)
   }
 
-  test("help prints the notes after the table and before the footer, once for every edge") {
+  test("help prints the notes after the table and before the footer, once for every layer") {
     val (code, out, _) = captured(Both.run(List("help")))
     assertEquals(code, 0)
     val expected = List(

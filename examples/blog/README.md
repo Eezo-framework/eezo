@@ -1,10 +1,10 @@
-# blog: both edges
+# blog: both layers
 
 | | |
 |---|---|
 | artifact | `"io.eezo" %% "eezo"` (the umbrella) and `"io.eezo" %% "eezo-auth"` |
 | entry trait | `io.eezo.EezoApp` |
-| edges | database and http |
+| layers | database and http |
 
 One case class with all three derivations. `models/Post.scala` carries `derives Table, Form,
 Resource`: the table, the HTML form, and the seven CRUD routes over it. `AppSchema.scala` registers
@@ -130,10 +130,10 @@ schema commands.
 
 ## Why both derivations compile here
 
-`Table` is the database edge's derivation and `Form` and `Resource` are the http edge's. This
-application depends on the umbrella, so both edges are on its classpath and all three derive.
-`../hello` has the http edge only and shows `derives Table` failing to compile; `../reminders` has
-the database edge only and shows `derives Form` failing. Opting out of an edge is one changed line
+`Table` is the database layer's derivation and `Form` and `Resource` are the http layer's. This
+application depends on the umbrella, so both layers are on its classpath and all three derive.
+`../hello` has the http layer only and shows `derives Table` failing to compile; `../reminders` has
+the database layer only and shows `derives Form` failing. Opting out of a layer is one changed line
 in `build.sbt`.
 
 `eezo-auth` is named in `build.sbt` beside the umbrella, even though the umbrella already carries

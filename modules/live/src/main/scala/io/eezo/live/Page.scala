@@ -54,7 +54,7 @@ private[live] final class Page[S](
   private val dropped = new AtomicLong(0)
   private val log     = System.getLogger("io.eezo.live")
 
-  // Written once by mount before the worker starts (Thread.start is the happens-before edge),
+  // Written once by mount before the worker starts (Thread.start is the happens-before layer),
   // then owned by the worker.
   private var state: S                                    = scala.compiletime.uninitialized
   private var lastTree: Html.Element                      = scala.compiletime.uninitialized

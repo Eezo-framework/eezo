@@ -27,8 +27,7 @@ object Clicks {
         p(
           Attrs.cls := "live-count",
           strong(count),
-          if (count == 1) " click" else " clicks",
-          ", held on the server"
+          if (count == 1) " click" else " clicks"
         ),
         button(Attrs.cls := "btn btn-small", Attrs.tpe := "button", Live.onClick("inc"), "+1"),
         button(
@@ -42,8 +41,8 @@ object Clicks {
         Attrs.cls := "live-note",
         "This box is a live component: ",
         code("Component[State]"),
-        " on the server, events up and patches down over one socket, ",
-        "with no JavaScript of ours."
+        " on the server, events up and patches down over websocket, ",
+        "with no JS needed."
       )
     )
 }

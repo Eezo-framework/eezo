@@ -72,7 +72,7 @@ private[eezo] final class HttpServer private (
   *
   * The framework brings the server up and down. [[run]] blocks until the server stops, and the
   * server stops on the JVM's shutdown, so a SIGTERM unwinds `run`, `HttpApp.serve` returns, and
-  * whatever wrapped it (the database edge's `withDatabase`) runs its `finally`. The server drains
+  * whatever wrapped it (the database layer's `withDatabase`) runs its `finally`. The server drains
   * before any of that: it refuses new requests and lets the ones in flight finish, for up to
   * [[StopTimeout]], so the database closes after the last request has been answered rather than
   * under one still inside a transaction. [[stop]] is the same path, drain included, for a test that
@@ -83,7 +83,7 @@ private[eezo] object HttpServer {
   private val log = System.getLogger("io.eezo.http")
 
   /** How long the shutdown hook waits for [[run]]'s caller to unwind once the server is stopped:
-    * the database edge closes its `Database` in that window. The same ten seconds the sbt plugin's
+    * the database layer closes its `Database` in that window. The same ten seconds the sbt plugin's
     * `DevProcess.stop` gives the child before `destroyForcibly`.
     */
   private val UnwindTimeout: Duration = Duration.ofSeconds(10)

@@ -794,7 +794,7 @@ sbt over scala-cli in the first place. It is not one of the eight modules today.
 |---|---|
 | `Instant` as epoch millis on both dialects (§1.2) | `migrations.md` §2.3 argues for it and it costs native Postgres timestamp operators. Needs an explicit sign-off, not a default |
 | Whether `Api` is a derives entry or a call site (§6.2) | I recommend derives-for-description, explicit mount. It is a taste call with real consequences for how a service's public surface is audited |
-| Registry by source glob vs. explicit list (§2.1) | Globbing `app/models/*.scala` is convention-over-configuration and fragile at the edges. Measure how it behaves when a model is defined in a sub-package |
+| Registry by source glob vs. explicit list (§2.1) | Globbing `app/models/*.scala` is convention-over-configuration and fragile at the layers. Measure how it behaves when a model is defined in a sub-package |
 | Cost of `Table.derived` on a realistic model | Magnum's `DbCodec` alone was +41.5 ms per entity. eezo's `Table` does strictly more. Measure before promising anything about clean-build time on a forty-model app |
 | Model registry construction time inside a fresh classloader | `build-reload.md` §10 calls this **the** unmeasured term in the whole reload budget. The registry is a `List` of already-derived values, so it should be microseconds — but it has never been measured, and neither has the connection-pool re-acquisition next to it |
 | Down round-trip check on Postgres | §5.1 step 3 is cheap on SQLite. Whether it is worth a service container in CI for the Postgres side is a cost question nobody has priced |

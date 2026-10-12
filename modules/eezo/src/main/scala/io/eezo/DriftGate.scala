@@ -11,7 +11,7 @@ import io.eezo.http.{Csrf, Handler, Method, PathPattern, Response, Route, RouteT
 
 import scala.util.control.NonFatal
 
-/** The database edge's contribution to `dev` (design/cli.md §5): the drift check at boot, and when
+/** The database layer's contribution to `dev` (design/cli.md §5): the drift check at boot, and when
   * the drift is dangerous an *interactive* refusal page in place of the app. It answers a route
   * table or nothing; `EezoApp.devServer` is what serves either, so the server's overrides (`port`,
   * `maxBodySize`, `problems`) reach the drift page and the app the same way.

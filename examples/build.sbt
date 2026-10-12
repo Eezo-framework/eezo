@@ -30,12 +30,12 @@ lazy val commonSettings = Seq(
   run / outputStrategy := Some(OutputStrategy.StdoutOutput)
 )
 
-// Each example depends on the artifact of the edges it has, and that dependency is the one line
+// Each example depends on the artifact of the layers it has, and that dependency is the one line
 // that decides what compiles in it. `eezo-http` alone carries `HttpApp`, `Form` and `Resource`;
 // `eezo-db` alone carries `DbApp` and `Table`; the umbrella `eezo` carries both and `EezoApp`. A
-// derivation for an edge the example does not have is a compile error, because the type is not on
+// derivation for a layer the example does not have is a compile error, because the type is not on
 // the classpath: see each example's README for the line that proves it.
-def edge(artifact: String) = "io.eezo" %% artifact % EezoVersion.value
+def layer(artifact: String) = "io.eezo" %% artifact % EezoVersion.value
 
 // `freeze` writes `db/migrations` and `db/schema.json` against the working directory; pin the
 // forked run to the project dir so the terminal commands and the dev loop write one place.
@@ -43,27 +43,27 @@ lazy val runInProjectDir =
   Compile / run / forkOptions := (Compile / run / forkOptions).value
     .withWorkingDirectory(baseDirectory.value)
 
-// The http edge alone: one handwritten route, no database, no derivation. `derives Table` does not
+// The http layer alone: one handwritten route, no database, no derivation. `derives Table` does not
 // compile here.
 lazy val hello = (project in file("hello"))
   .enablePlugins(EezoPlugin)
   .settings(commonSettings)
   .settings(
     name := "hello",
-    libraryDependencies += edge("eezo-http")
+    libraryDependencies += layer("eezo-http")
   )
 
-// The database edge alone: one model deriving `Table`, an `AppSchema`, and a `boot` that is a job
+// The database layer alone: one model deriving `Table`, an `AppSchema`, and a `boot` that is a job
 // over rows. No routes, so no `EezoPlugin`; `derives Form` does not compile here.
 lazy val reminders = (project in file("reminders"))
   .settings(commonSettings)
   .settings(
     name := "reminders",
-    libraryDependencies += edge("eezo-db"),
+    libraryDependencies += layer("eezo-db"),
     runInProjectDir
   )
 
-// Both edges: one model deriving `Table, Form, Resource`, seven CRUD routes in a browser over rows
+// Both layers: one model deriving `Table, Form, Resource`, seven CRUD routes in a browser over rows
 // in Postgres, and the derived half of the table mounted under `/admin`.
 // `eezo-auth` is named here even though the umbrella already carries it, and naming it is what
 // turns the completeness check on: the generated route table only *demands* a `Guarded` of every
@@ -81,8 +81,8 @@ lazy val blog = (project in file("blog"))
   .settings(
     name := "blog",
     libraryDependencies ++= Seq(
-      edge("eezo"),
-      edge("eezo-auth"),
+      layer("eezo"),
+      layer("eezo-auth"),
       "org.scalameta" %% "munit" % "1.3.4" % Test,
       // `PostOwnershipSuite` drives the real route table over real rows, so it needs a real
       // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
@@ -94,7 +94,7 @@ lazy val blog = (project in file("blog"))
     runInProjectDir
   )
 
-// The tour app, on both edges: a model deriving `Table, Form, Resource`, an `AppSchema`, two
+// The tour app, on both layers: a model deriving `Table, Form, Resource`, an `AppSchema`, two
 // handwritten routes, and its own Postgres schema. `todo/README.md` is a guided walk through the
 // whole CLI on it.
 lazy val todo = (project in file("todo"))
@@ -102,7 +102,7 @@ lazy val todo = (project in file("todo"))
   .settings(commonSettings)
   .settings(
     name := "todo",
-    libraryDependencies += edge("eezo"),
+    libraryDependencies += layer("eezo"),
     runInProjectDir
   )
 
@@ -112,8 +112,8 @@ lazy val shop = (project in file("shop"))
   .settings(
     name := "shop",
     libraryDependencies ++= Seq(
-      edge("eezo"),
-      edge("eezo-auth"),
+      layer("eezo"),
+      layer("eezo-auth"),
       "com.lihaoyi" %% "upickle" % "4.4.3"
     ),
     Compile / run / mainClass := Some("Main"),

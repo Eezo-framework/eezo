@@ -127,5 +127,5 @@ that once per model.
 ## Where to go next
 
 The three derivations sit on two sides of the framework, and which sides your application has
-is the subject of [the two edges](edges.md). How the seven routes become rows in a table, and
+is the subject of [the two layers](layers.md). How the seven routes become rows in a table, and
 how a handwritten route wins over one of them, is [routing](routing.md).

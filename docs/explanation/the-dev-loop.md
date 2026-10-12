@@ -82,7 +82,7 @@ child inherits. A `reload` of the build makes a fresh secret and signs you out o
   code on disk.
 - **State preservation.** In-memory stores, live page state and anything else the process held
   are gone on restart. A model with a `Table` keeps its rows, because they're in Postgres.
-- **A database-only application.** `dev` is the http edge's command. On `DbApp` alone it's
+- **A database-only application.** `dev` is the http layer's command. On `DbApp` alone it's
   unknown, and a rerun-on-save loop for a job is sbt's own `~run`.
 
 > **Daniel:** the save-to-reload timings you measured when choosing sbt's resident watch over

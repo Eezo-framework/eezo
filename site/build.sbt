@@ -4,7 +4,7 @@
 // application on eezo is, through `sbt-eezo` and `bin/eezo`. It resolves eezo from the local ivy
 // cache at the version `sbt publishLocalForExample` recorded, until eezo is released.
 //
-// The site has the http edge only, with the live layer on it. Its content is files, not rows, so
+// The site has the http layer only, with the live layer on it. Its content is files, not rows, so
 // there is no database, no schema and no migration: `eezo deploy` ships the jars and nothing else.
 
 name         := "eezo-site"

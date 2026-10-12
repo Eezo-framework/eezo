@@ -226,7 +226,7 @@ object CreateUser extends DbApp {
 }
 ```
 
-It's a second application in the same project, on the database edge alone: `DbApp` gives it
+It's a second application in the same project, on the database layer alone: `DbApp` gives it
 the database around `boot` and nothing else. It reads the email and password from the
 environment, because a command-line argument is visible to every process on the machine, and
 it hashes through `Field[Password]`, the same door a login form goes through, so a password

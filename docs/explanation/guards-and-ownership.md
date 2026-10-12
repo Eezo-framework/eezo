@@ -147,5 +147,5 @@ may join.
 ## Where to go next
 
 The scope a covered route reads through is a store over the database, which is
-[the database edge](the-database-edge.md). The bound page is one piece of
+[the database layer](the-database-layer.md). The bound page is one piece of
 [the live layer](the-live-layer.md).

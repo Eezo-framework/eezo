@@ -1,16 +1,16 @@
-# hello: the http edge alone
+# hello: the http layer alone
 
 | | |
 |---|---|
 | artifact | `"io.eezo" %% "eezo-http"` |
 | entry trait | `io.eezo.http.HttpApp` |
-| edges | http only |
+| layers | http only |
 
 One handwritten route and no database. `src/main/scala/app/Hello.scala` defines `def hello`, and
 the sbt plugin turns the file's name into `GET /hello` in a generated `io.eezo.generated.Routes`,
 which `Main.scala` names as its `routes`. That override is the whole entry point: `HttpApp` brings
 `main`, the server and its overrides (`port`, `maxBodySize`, `problems`), and the two commands of
-the http edge.
+the http layer.
 
 ```bash
 sbt publishLocalForExample      # once, at the repository root
@@ -22,7 +22,7 @@ sbt "hello/run dev"             # the listing and the reload client; `hello/eezo
 
 ## What does not exist here
 
-The database edge. `eezo-http` does not depend on `eezo-db`, so nothing under `io.eezo.db` is on the
+The database layer. `eezo-http` does not depend on `eezo-db`, so nothing under `io.eezo.db` is on the
 classpath, and the schema commands are not commands:
 
 ```
@@ -47,5 +47,5 @@ case class Note(id: Id[Note], text: String) derives Table
 ```
 
 The cure is one changed line in `build.sbt`: depend on `"io.eezo" %% "eezo"` instead and extend
-`EezoApp`, as `../blog` and `../todo` do. Opting out of an edge is the deliberate act, and it costs
+`EezoApp`, as `../blog` and `../todo` do. Opting out of a layer is the deliberate act, and it costs
 that one line.

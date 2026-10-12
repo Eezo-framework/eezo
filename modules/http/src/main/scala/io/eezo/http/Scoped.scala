@@ -36,7 +36,7 @@ final class Scoped[A] private (whole: Store[A], narrow: Any => Store[A]) extends
 
 object Scoped {
 
-  /** The pair, from the two halves an edge builds: its plain store and its owner aware one, over
+  /** The pair, from the two halves a layer builds: its plain store and its owner aware one, over
     * the same rows.
     */
   def apply[A, V](whole: Store[A], owned: OwnedStore[A, V]): Scoped[A] =

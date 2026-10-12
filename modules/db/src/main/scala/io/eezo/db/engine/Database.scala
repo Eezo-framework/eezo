@@ -5,7 +5,7 @@ import java.time.Duration
 
 /** A database, and the only thing that owns a `Pool`.
   *
-  * Users never name this type. It is built once at the edge (`EezoApp` in production, the testkit
+  * Users never name this type. It is built once at the layer (`EezoApp` in production, the testkit
   * in tests), installed, and reached only through `transact` and `read`.
   */
 final class Database private[eezo] (private[eezo] val pool: Pool) {
@@ -16,8 +16,9 @@ final class Database private[eezo] (private[eezo] val pool: Pool) {
 
 object Database {
 
-  /** Built at the edge, from parsed config, so that a bad URL fails in `main` with the config parse
-    * in the stack trace rather than at whatever moment something first touches a hidden holder.
+  /** Built at the layer, from parsed config, so that a bad URL fails in `main` with the config
+    * parse in the stack trace rather than at whatever moment something first touches a hidden
+    * holder.
     *
     * No parameter has a default so that `DbInit` is the one place that decides the pool's settings,
     * and a caller that skips it has to say what it wants.
@@ -35,7 +36,7 @@ object Database {
 
 /** Where the installed `Database` lives.
   *
-  * `private[eezo]` because installing is the edge's job: `DbApp` in production, the testkit in
+  * `private[eezo]` because installing is the layer's job: `DbApp` in production, the testkit in
   * tests. `Test / parallelExecution := false` is set on the `db` project, which is what makes one
   * install point enough; see the comment on that setting.
   */

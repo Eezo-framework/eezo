@@ -29,14 +29,14 @@ private[sbt] object DevProcess {
 
   @volatile private var running: Option[Process] = None
 
-  /** The variable the http edge reads its secret from. Spelled again here rather than read off
+  /** The variable the http layer reads its secret from. Spelled again here rather than read off
     * `Secret.EnvVar`, because the plugin must not depend on the http module.
     */
   private[sbt] val SecretVar: String = "EEZO_SECRET"
 
   /** This sbt session's secret: 32 bytes from `SecureRandom`, base64 encoded so that it is text an
     * environment variable can carry and 44 UTF-8 bytes when the child parses it, above the 32 the
-    * http edge requires. Generated on first use, so a build that never starts the dev loop never
+    * http layer requires. Generated on first use, so a build that never starts the dev loop never
     * makes one.
     */
   private lazy val sessionSecret: String = {

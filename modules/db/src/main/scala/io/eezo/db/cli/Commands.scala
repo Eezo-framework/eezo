@@ -6,9 +6,9 @@ import io.eezo.db.schema.{Change, Ddl, Differ, Introspect}
 
 import java.nio.file.Path
 
-/** The database edge's commands, as library functions. Ported from `example/Cli.scala`, which was
+/** The database layer's commands, as library functions. Ported from `example/Cli.scala`, which was
   * their specification (design/cli.md §3); the two rules of layer 1 apply to every entry point
-  * here: return values, never print; take capabilities, not connections. The http edge's are in
+  * here: return values, never print; take capabilities, not connections. The http layer's are in
   * `io.eezo.http.cli.Commands`, in the same shape.
   *
   * `dbSchema` is the Postgres schema commands introspect, defaulting to `public` the way

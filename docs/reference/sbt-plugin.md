@@ -55,7 +55,7 @@ previous process is destroyed, forcibly after ten seconds, then the next is fork
 per sbt session is passed as `EEZO_SECRET` unless the environment already sets one. A `reload`
 of the build strands the running child until sbt exits, and makes a fresh secret.
 
-`dev` is the http edge's command, so `eezoDev` on a `DbApp` prints the unknown command line on
+`dev` is the http layer's command, so `eezoDev` on a `DbApp` prints the unknown command line on
 every save. A job's rerun-on-save loop is sbt's own `~run`.
 
 ## The generated file

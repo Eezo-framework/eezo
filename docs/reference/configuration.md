@@ -48,7 +48,7 @@ overridden `boot` that still wants to serve calls it.
 | member | default | read |
 |---|---|---|
 | `schema: Schema` | abstract | per command |
-| `boot(): Unit` | abstract on `DbApp`; `EezoApp` supplies the http edge's | the program |
+| `boot(): Unit` | abstract on `DbApp`; `EezoApp` supplies the http layer's | the program |
 | `databaseSchema: String` | `"public"` | by the commands that introspect |
 | `databaseUrl: String` | from the environment, above | when a `Database` is built |
 | `databaseUser: String` | from the environment | same |
@@ -74,7 +74,7 @@ is always admitted and the list only widens it.
 
 ## `EezoApp`
 
-All of the above. `program` is the http edge's `boot` under `withDatabase`, and `devServer`
+All of the above. `program` is the http layer's `boot` under `withDatabase`, and `devServer`
 runs the drift check first.
 
 ## Build settings

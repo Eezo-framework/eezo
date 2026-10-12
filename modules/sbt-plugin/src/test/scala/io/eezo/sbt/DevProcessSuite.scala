@@ -27,7 +27,7 @@ class DevProcessSuite extends munit.FunSuite {
     assert(generated.getBytes(StandardCharsets.UTF_8).length >= 32, generated.length)
   }
 
-  test("the variable is the one the http edge reads") {
+  test("the variable is the one the http layer reads") {
     assertEquals(DevProcess.SecretVar, "EEZO_SECRET")
   }
 }

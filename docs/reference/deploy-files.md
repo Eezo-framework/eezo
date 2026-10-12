@@ -87,7 +87,7 @@ primary_region = 'fra'
 |---|---|---|
 | `app` | the name `fly launch` chose or `--app` gave | never |
 | `primary_region` | the region `fly launch` picked | you want another |
-| `release_command` | `db migrate --apply` | the application has no database edge; delete the `[deploy]` block |
+| `release_command` | `db migrate --apply` | the application has no database layer; delete the `[deploy]` block |
 | `internal_port` | 8080 | your `Main` overrides `port` |
 | `force_https` | `true` | |
 | `auto_stop_machines`, `min_machines_running` | `stop`, 0 | the application has live pages: set `min_machines_running = 1`, or an idle stop closes every socket |

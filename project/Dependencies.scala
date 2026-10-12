@@ -77,7 +77,7 @@ object Dependencies {
     * with a server remembered, so a database only application printed SLF4J's no providers banner
     * on its first run and lost every line HikariCP wrote about its pool. Shipping this binding with
     * the two modules that bring `slf4j-api` puts all three on one backend by default. It is on both
-    * rather than on the umbrella so that an application on one edge alone gets it too. An
+    * rather than on the umbrella so that an application on one layer alone gets it too. An
     * application that wants Logback excludes it and adds `slf4j-jdk-platform-logging` instead.
     */
   val slf4jJdk14 = "org.slf4j" % "slf4j-jdk14" % V.slf4j % Runtime

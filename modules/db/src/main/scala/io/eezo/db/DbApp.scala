@@ -12,7 +12,7 @@ import scala.annotation.retainsCap
 import scala.caps.unsafe.unsafeAssumePure
 import scala.io.StdIn
 
-/** The database edge's entry trait: the one an application on `eezo-db` alone extends.
+/** The database layer's entry trait: the one an application on `eezo-db` alone extends.
   *
   * {{{
   * object Main extends DbApp {
@@ -21,7 +21,7 @@ import scala.io.StdIn
   * }
   * }}}
   *
-  * The edge is declarative. The application names its [[schema]] and says what [[boot]] does; the
+  * The layer is declarative. The application names its [[schema]] and says what [[boot]] does; the
   * framework builds the `Database` from `DbInit`'s overrides, installs it around the program, and
   * closes it after. `main` is inherited from `Dispatch`: `sbt run` runs the program once with a
   * database installed, and `eezo db status|sync|freeze|migrate|reset|drop|dump|ddl` are the schema
@@ -29,9 +29,9 @@ import scala.io.StdIn
   * and then the database's. `db` alone, or `db help`, lists that namespace by itself. The bare
   * spellings (`migrate --apply` without `db`) are still answered, silently: a deploy's release
   * command written before the namespace existed must keep running in the image that carries this
-  * code. `dev` and `routes` are the http edge's and do not exist here: `eezoDev` on a database only
-  * application prints the unknown command line on every save, and a rerun on save loop for a job is
-  * sbt's own `~run`.
+  * code. `dev` and `routes` are the http layer's and do not exist here: `eezoDev` on a database
+  * only application prints the unknown command line on every save, and a rerun on save loop for a
+  * job is sbt's own `~run`.
   *
   * A `Database` is installed only around what needs one. `ddl`, `dump`, `freeze` and `help` never
   * touch it, so they work with the database down; the program and the other commands get one for
@@ -44,7 +44,7 @@ import scala.io.StdIn
 trait DbApp extends Dispatch with DbInit {
 
   /** The application's schema, `object AppSchema extends Schema` named here. Abstract: a database
-    * edge is its schema, and an application without one is a mistake.
+    * layer is its schema, and an application without one is a mistake.
     */
   def schema: Schema
 
@@ -54,8 +54,8 @@ trait DbApp extends Dispatch with DbInit {
   def databaseSchema: String = "public"
 
   /** The program: what `sbt run` does, once, with a `Database` installed. Abstract, because a
-    * database only application is its program. The umbrella supplies the http edge's default, which
-    * is to serve.
+    * database only application is its program. The umbrella supplies the http layer's default,
+    * which is to serve.
     */
   def boot(): Unit
 
@@ -72,16 +72,16 @@ trait DbApp extends Dispatch with DbInit {
     }
   }
 
-  /** What `sbt run` does on this edge: [[boot]] with a `Database` installed around it. Concrete
-    * here and in the http edge both, so a trait that stacks the two inherits two and must say which
-    * one it means; the umbrella says this one. No `override` here, deliberately: see
+  /** What `sbt run` does on this layer: [[boot]] with a `Database` installed around it. Concrete
+    * here and in the http layer both, so a trait that stacks the two inherits two and must say
+    * which one it means; the umbrella says this one. No `override` here, deliberately: see
     * `Dispatch.program`.
     */
   protected def program(): Unit = withDatabase(boot())
 
   override protected def commands: PartialFunction[List[String], Int] = guarded.unsafeAssumePure
 
-  /** This edge's arms: the `db` namespace over [[schemaArms]], its own `help`, its own unknown
+  /** This layer's arms: the `db` namespace over [[schemaArms]], its own `help`, its own unknown
     * command answer, and the bare spellings as an alias (see the trait's note). The capture
     * annotation is `^` spelled the way scalafmt can parse: the literal closes over `this`, and
     * [[guarded]] is where that is asserted away.
@@ -101,7 +101,7 @@ trait DbApp extends Dispatch with DbInit {
   }
 
   /** The eight schema commands, spelled without the namespace. The patterns are the one list of
-    * what this edge answers; `isDefinedAt` over them runs no body.
+    * what this layer answers; `isDefinedAt` over them runs no body.
     */
   private def schemaArms: PartialFunction[List[String], Int] @retainsCap = {
     // Read once, outside every closure below. `read` and `transact` take a pure body under capture
@@ -202,9 +202,9 @@ trait DbApp extends Dispatch with DbInit {
   override protected def notes: List[String] = schemaNotes ++ super.notes
 
   /** [[arms]], and the rest of the chain after them, behind the `SchemaError` catch. The catch is
-    * here and not in `core`, which cannot see the type; the http edge has nothing that throws it,
-    * but the program does run under this edge's `Database` and may, so the catch covers
-    * `super.commands` too rather than this edge's arms alone. Exit 1, through `Dispatch.fail` so
+    * here and not in `core`, which cannot see the type; the http layer has nothing that throws it,
+    * but the program does run under this layer's `Database` and may, so the catch covers
+    * `super.commands` too rather than this layer's arms alone. Exit 1, through `Dispatch.fail` so
     * the line is JSON under `--json`.
     *
     * The type is inferred and then asserted pure at the `commands` site, deliberately.

@@ -3,16 +3,16 @@ package io.eezo.http.cli
 import io.eezo.core.internal.Json
 import io.eezo.http.Route
 
-/** The machine side of this edge's CLI: the same result values [[Render]] turns into text, as JSON.
-  * The format rules, and why the encoding is written by hand over `Json` rather than derived, are
-  * explained once on the db edge's `RenderJson` (`io.eezo.db.cli.RenderJson`) and hold here
+/** The machine side of this layer's CLI: the same result values [[Render]] turns into text, as
+  * JSON. The format rules, and why the encoding is written by hand over `Json` rather than derived,
+  * are explained once on the db layer's `RenderJson` (`io.eezo.db.cli.RenderJson`) and hold here
   * unchanged: a `"command"` discriminator on every object, and shapes that are a contract for
   * tools.
   */
 object RenderJson {
 
   /** `api` is on every route, `false` included, so a tool reads one field rather than inferring a
-    * browser route from a missing key. A boolean rather than a kind string, beside how the db edge
+    * browser route from a missing key. A boolean rather than a kind string, beside how the db layer
     * renders its yes or no properties, and because a WebSocket upgrade has no kind of its own.
     */
   private def route(r: Route): Json = {

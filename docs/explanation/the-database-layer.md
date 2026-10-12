@@ -1,4 +1,4 @@
-# The database edge
+# The database layer
 
 The connection pool, the two scopes a handler opens, the query layer, and the type-level trick
 that keeps a connection from leaking out of the block that borrowed it. This page is for you

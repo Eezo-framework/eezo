@@ -26,8 +26,12 @@ object Landing {
   )
 
   private val Steps: Vector[(String, String, String)] = Vector(
-    ("eezo new bookshelf", "Scaffold", "A Main, one route, the build files. Nothing to configure."),
-    ("eezo dev", "Serve", "Restarts on every save. A broken compile keeps the old code serving."),
+    (
+      "eezo new myUnicorn",
+      "Scaffold",
+      "A Main, one route, plus build files. Nothing to configure."
+    ),
+    ("eezo dev", "Serve", "Restarts on save. A broken compile keeps the old code serving."),
     ("eezo deploy", "Ship", "Stages the jars, builds the image, migrates, waits for health.")
   )
 
@@ -36,37 +40,37 @@ object Landing {
       "sun",
       "One declaration",
       "derives Table, Form, Resource",
-      "A model declares what it is. eezo derives its table, its HTML form and its seven CRUD routes from that one case class."
+      "Declare your model, and Eezo derives its tables & database API, its HTML form and all CRUD HTTP routes from one case class."
     ),
     (
       "coral",
       "The filename is the route",
       "app/Health.scala mounts GET /health",
-      "Handwritten routes come from the file layout. A handwritten route beats a derived one on the same path, so taking over one page keeps the other six."
+      "Your own routes come from the file layout. You can override a derived route on the same path."
     ),
     (
       "mint",
       "Direct style",
       "Request => Response",
-      "A handler is a plain function on a virtual thread. Block on the database, call an API, return a page. No effect system, no callbacks."
+      "A handler is a function. Eezo runs on virtual threads, so feel free to block on the database, call an API, or return a page."
     ),
     (
       "sky",
       "Migrations from the model",
       "eezo db freeze, then eezo db migrate",
-      "The schema diff becomes committed SQL with a fingerprint. On deploy it runs before the new code takes traffic, and a failure keeps the old version serving."
+      "Eezo detects schema diffs as you change your data model. Commit them to fingerprinted SQL migrations. On deploy they run before the new code takes traffic."
     ),
     (
       "grape",
       "Live pages",
       "Component[State]",
-      "State lives on the server, the browser is a thin renderer, and what travels is events up and DOM patches down over one socket. No JavaScript of yours."
+      "Write UIs with a Scala functional DSL. State lives on the server, and the browser gets a thin client. UI sends events, server renders UI. No need for JavaScript."
     ),
     (
       "sun",
       "Guarded by declaration",
       "given Owned[Post, User] = ...",
-      "A model says which of its routes need a signed in user and which rows are the owner's. In an application with a guard, a route that says nothing is a compile error."
+      "Control route protection, and get your owner type if successful (e.g. a user). In an application with a guard, a route that says nothing is a compile error."
     )
   )
 
@@ -91,7 +95,7 @@ object Landing {
         pillars,
         steps,
         features,
-        edges,
+        layers,
         closing
       )
     )
@@ -102,11 +106,12 @@ object Landing {
       div(
         Attrs.cls := "hero-copy",
         p(Attrs.cls := "eyebrow", "A Scala 3 web framework"),
-        h1("The ", Tags.span(Attrs.cls := "hl", "case class"), " is the source of truth."),
+        h1("Your ", Tags.span(Attrs.cls := "hl", "data model"), " is the source of truth."),
         p(
           Attrs.cls := "lede",
-          "Declare a model once. eezo derives its table, its form and its routes, ",
-          "restarts on every save, and deploys with one command."
+          "Declare a model, and Eezo derives tables, forms, and HTTP routes. ",
+          "Server-side rendering with functional, direct-style Scala. ",
+          "Fast dev feedback, deploys with one command."
         ),
         div(
           Attrs.cls := "cta",
@@ -119,12 +124,8 @@ object Landing {
           pre(Attrs.cls := "install-cmd", code(Landing.InstallCommand)),
           p(
             Attrs.cls := "install-note",
-            "Needs JDK 25 and sbt. Puts ",
-            code("eezo"),
-            " in ",
-            code("~/.local/bin"),
-            "; ",
-            a(Attrs.href := "/install", "read the script"),
+            "Needs JDK 25 and sbt. ",
+            a(Attrs.href := "/install", "Read the script"),
             " first if you like."
           )
         ),
@@ -132,7 +133,6 @@ object Landing {
           Attrs.cls := "facts",
           li("Scala 3"),
           li("JDK 25"),
-          li("Jetty on virtual threads"),
           li("Postgres"),
           li("MIT")
         )
@@ -157,26 +157,26 @@ object Landing {
     )
 
   private val Pillars: Vector[(String, String, String, String)] = Vector(
-    ("tutorials", "Tutorials", "/docs/tutorials", "Build something, step by step, from nothing."),
-    ("how-to", "How-to guides", "/docs/how-to", "Get one thing done: the steps and the code."),
+    ("tutorials", "Tutorials", "/docs/tutorials", "Build something step by step"),
+    ("how-to", "How-to guides", "/docs/how-to", "Get one thing done"),
     (
       "explanation",
-      "Explanation",
+      "Explanations",
       "/docs/explanation",
-      "How the parts work, and why they are shaped so."
+      "How Eezo's parts work and why"
     ),
     (
       "reference",
       "Reference",
       "/docs/reference",
-      "The raw APIs, every type and command, stated once."
+      "Full API docs"
     )
   )
 
   private def pillars: Html =
     section(
       Attrs.cls := "pillars",
-      h2("Four ways into the docs"),
+      h2("Four kinds of docs"),
       ul(
         Attrs.cls := "pillar-cards",
         Pillars.map { case (slug, name, href, blurb) =>
@@ -188,7 +188,7 @@ object Landing {
   private def steps: Html =
     section(
       Attrs.cls := "steps",
-      h2("Three commands, start to production"),
+      h2("How it works"),
       ol(
         Steps.zipWithIndex.map { case ((command, name, blurb), i) =>
           li(
@@ -204,7 +204,7 @@ object Landing {
       ),
       p(
         Attrs.cls := "steps-note",
-        "The whole arc, with real output, is in ",
+        "Check out a full dev cycle in ",
         a(Attrs.href := "/docs/deploying", "the deploy walkthrough"),
         "."
       )
@@ -227,36 +227,35 @@ object Landing {
       )
     )
 
-  private def edges: Html =
+  private def layers: Html =
     section(
-      Attrs.cls := "edges",
+      Attrs.cls := "layers",
       div(
-        Attrs.cls := "edges-copy",
-        h2("Two edges. Take one, or both."),
+        Attrs.cls := "layers-copy",
+        h2("Take the layers you need"),
         p(
-          "An application has a database edge, an http edge, or both, and opts in by artifact. ",
-          "Deriving for an edge you do not have is a compile error, not a runtime surprise."
+          "An application has a database layer, an http layer, or both. Import the right artifact for your app."
         )
       ),
       ul(
-        Attrs.cls := "edge-cards",
-        edgeCard("eezo-http", "HttpApp", "http only", "/docs/examples/hello", "hello"),
-        edgeCard("eezo-db", "DbApp", "database only", "/docs/examples/reminders", "reminders"),
-        edgeCard("eezo", "EezoApp", "both edges", "/docs/examples/blog", "blog")
+        Attrs.cls := "layer-cards",
+        layerCard("eezo-http", "HttpApp", "http only", "/docs/examples/hello", "hello"),
+        layerCard("eezo-db", "DbApp", "database only", "/docs/examples/reminders", "reminders"),
+        layerCard("eezo", "EezoApp", "all", "/docs/examples/blog", "blog")
       )
     )
 
-  private def edgeCard(
+  private def layerCard(
       artifact: String,
       entry: String,
-      edges: String,
+      layers: String,
       href: String,
       example: String
   ): Html =
     li(
-      Attrs.cls := "edge-card",
+      Attrs.cls := "layer-card",
       code(Attrs.cls := "artifact", s""""io.eezo" %% "$artifact""""),
-      p(strong(entry), " · ", edges),
+      p(strong(entry), " · ", layers),
       a(Attrs.href := href, s"See $example →")
     )
 
@@ -265,7 +264,7 @@ object Landing {
       Attrs.cls := "closing",
       h2("Ready when you are."),
       p(
-        "eezo is pre-release: the shape is settled, the polish is ongoing, and the source is open."
+        "Eezo is pre-release: dev is ongoing, and the source is open."
       ),
       div(
         Attrs.cls := "cta",

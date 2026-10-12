@@ -17,7 +17,7 @@ enum Html {
 
   /** The single unescaped path into the tree.
     *
-    * Mounting stops at its edge. `Route.under` moves a [[Url.Mounted]] wherever one sits in an
+    * Mounting stops at its layer. `Route.under` moves a [[Url.Mounted]] wherever one sits in an
     * attribute, and raw content is a string eezo never parses, so a link written inside it keeps
     * whatever it says and stays where the author put it.
     */

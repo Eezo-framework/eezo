@@ -11,14 +11,14 @@ import io.eezo.db.{Schema, SchemaError, Table}
 import io.eezo.db.engine.{ConnectionUnavailable, Installed}
 import io.eezo.http.{Handler, HttpServer, Method, PathPattern, Response, Route, RouteTable}
 
-/** The umbrella's entry trait: both edges stacked, `EezoApp extends HttpApp with DbApp`.
+/** The umbrella's entry trait: both layers stacked, `EezoApp extends HttpApp with DbApp`.
   *
-  * What this suite pins: `sbt run` on an `EezoApp` answers `Nil` through the database edge, which
-  * installs a `Database` around the http edge's `boot`, and `dev` is the one override, the drift
-  * check under that same `Database` and then the http edge's dev server. Both are overrides of a
-  * hook each edge implements (`program`, `devServer`), and the compiler refuses a trait that stacks
-  * the two edges without overriding `program`, so the suite also pins that a hand stacking in
-  * either order does not compile. No Postgres is needed: `Database.connect` never waits on the
+  * What this suite pins: `sbt run` on an `EezoApp` answers `Nil` through the database layer, which
+  * installs a `Database` around the http layer's `boot`, and `dev` is the one override, the drift
+  * check under that same `Database` and then the http layer's dev server. Both are overrides of a
+  * hook each layer implements (`program`, `devServer`), and the compiler refuses a trait that
+  * stacks the two layers without overriding `program`, so the suite also pins that a hand stacking
+  * in either order does not compile. No Postgres is needed: `Database.connect` never waits on the
   * network, since the pool fills in the background, so a bogus URL installs and closes without a
   * query, and the drift check skips an empty schema and warns about a database it cannot reach.
   */
@@ -141,8 +141,8 @@ class EezoAppSuite extends munit.FunSuite {
   }
 
   test("a ConnectionUnavailable out of a handler is a 500 at the request boundary") {
-    // The database edge's environment failure is not in the http edge's sealed set, and http cannot
-    // name it; only here, where both edges meet, can a test show it lands in the 500 arm.
+    // The database layer's environment failure is not in the http layer's sealed set, and http cannot
+    // name it; only here, where both layers meet, can a test show it lands in the 500 arm.
     val app = new Recording {
       private val starved: Handler = _ =>
         throw new ConnectionUnavailable(
@@ -158,7 +158,7 @@ class EezoAppSuite extends munit.FunSuite {
     }
   }
 
-  test("both edges' commands are known: routes needs no database, help lists both") {
+  test("both layers' commands are known: routes needs no database, help lists both") {
     val app                     = new Recording
     val (routesCode, routes, _) = captured(app.run(List("routes")))
     assertEquals(routesCode, 0)
@@ -181,7 +181,7 @@ class EezoAppSuite extends munit.FunSuite {
   test(
     "a SchemaError out of the program is exit 1 with the line, and the Database is uninstalled"
   ) {
-    // On `main` the whole dispatch sat under one `SchemaError` catch; the database edge's guard now
+    // On `main` the whole dispatch sat under one `SchemaError` catch; the database layer's guard now
     // covers the chain after its own arms too, so the program keeps that answer.
     val app = new Recording {
       override def boot(): Unit = throw SchemaError("boom")
@@ -192,9 +192,9 @@ class EezoAppSuite extends munit.FunSuite {
     assert(!Installed.installed, "the Database is uninstalled even when boot throws")
   }
 
-  test("stacking the two edges by hand does not compile, in either order") {
-    // `program` is concrete in both edges, so a trait that inherits both must override it and say
-    // which; `EezoApp` says the database edge's. Without that override the compiler refuses the
+  test("stacking the two layers by hand does not compile, in either order") {
+    // `program` is concrete in both layers, so a trait that inherits both must override it and say
+    // which; `EezoApp` says the database layer's. Without that override the compiler refuses the
     // stacking, and with it a user's own `Main` cannot boot with no `Database` installed by
     // writing the supertypes in the wrong order.
     val dbFirst = compileErrors("""

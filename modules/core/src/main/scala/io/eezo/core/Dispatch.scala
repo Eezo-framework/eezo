@@ -4,23 +4,23 @@ import io.eezo.core.Dispatch.Usage
 import io.eezo.core.internal.Json
 
 /** `main`, and the dispatch every entry trait shares. Users never name this trait: they extend an
-  * edge's entry trait (`HttpApp`, `DbApp`) or the umbrella's `EezoApp`, and each of those chains
+  * layer's entry trait (`HttpApp`, `DbApp`) or the umbrella's `EezoApp`, and each of those chains
   * its own commands in front of [[commands]].
   *
-  * `core` cannot see either edge, so nothing here starts or stops anything: no server, no database,
-  * no lifecycle hook. What lives here is only what both edges would otherwise write twice, which is
-  * `main`, the unknown command answer, `help` over [[usage]], and the `--json` flag with the one
-  * error shape it implies.
+  * `core` cannot see either layer, so nothing here starts or stops anything: no server, no
+  * database, no lifecycle hook. What lives here is only what both layers would otherwise write
+  * twice, which is `main`, the unknown command answer, `help` over [[usage]], and the `--json` flag
+  * with the one error shape it implies.
   */
 trait Dispatch {
 
   /** The application itself: what `sbt run` with no arguments does. Abstract, and the one member
-    * every edge implements, so an application that stacks two edges by hand inherits two concrete
+    * every layer implements, so an application that stacks two layers by hand inherits two concrete
     * `program`s and the compiler refuses the stacking until it says which one it means. That is how
-    * the umbrella is made to state "the http edge under the database" in words, instead of getting
-    * it from whichever edge happens to be the later mixin.
+    * the umbrella is made to state "the http layer under the database" in words, instead of getting
+    * it from whichever layer happens to be the later mixin.
     *
-    * The refusal depends on the edges implementing this without `override`. An implementation
+    * The refusal depends on the layers implementing this without `override`. An implementation
     * marked `override` is one the linearization may let a later mixin's silently replace, and two
     * of those stack in either order with no error, which is the hazard this member exists to close.
     * Only the trait that resolves the conflict writes `override`.
@@ -28,25 +28,25 @@ trait Dispatch {
   protected def program(): Unit
 
   /** The commands this application answers, as `first argument :: rest`. `Nil` is [[program]] and
-    * is answered here, once, so no edge owns it. Each edge writes `own orElse super.commands` for
+    * is answered here, once, so no layer owns it. Each layer writes `own orElse super.commands` for
     * its own commands, so the later mixin's arms are consulted first.
     */
   protected def commands: PartialFunction[List[String], Int] = { case Nil => program(); 0 }
 
-  /** One row per command, for `help`. Each edge writes `own ++ super.usage`, and names only the
-    * spelling and the description: the columns are [[help]]'s to lay out, once, over every edge's
-    * rows together, so no edge has to guess how wide the others' spellings are.
+  /** One row per command, for `help`. Each layer writes `own ++ super.usage`, and names only the
+    * spelling and the description: the columns are [[help]]'s to lay out, once, over every layer's
+    * rows together, so no layer has to guess how wide the others' spellings are.
     */
   protected def usage: List[Usage] = Nil
 
   /** What `help` says after the command table and before its footer: the caveats that belong to no
-    * single row. Each edge writes `own ++ super.notes`, and they are kept apart from [[usage]] so a
-    * stacked application prints one table and then every edge's notes, rather than one edge's notes
-    * in the middle of the other's commands.
+    * single row. Each layer writes `own ++ super.notes`, and they are kept apart from [[usage]] so
+    * a stacked application prints one table and then every layer's notes, rather than one layer's
+    * notes in the middle of the other's commands.
     */
   protected def notes: List[String] = Nil
 
-  /** `--json` renders the same result values through the edge's `RenderJson` instead of its
+  /** `--json` renders the same result values through the layer's `RenderJson` instead of its
     * `Render`, the machine readable half of design/objective.md's dev loop. Exit codes are
     * identical in both modes, so a caller gates on the code and parses the body.
     */
@@ -60,7 +60,7 @@ trait Dispatch {
   protected final def emit(flags: List[String])(asJson: => String, asText: => String): Unit =
     println(if (json(flags)) asJson else asText)
 
-  /** One failure line on stderr: `{"error": ...}` under `--json`, prose otherwise. The edges call
+  /** One failure line on stderr: `{"error": ...}` under `--json`, prose otherwise. The layers call
     * it for what they alone can catch; `core` calls it for the unknown command.
     */
   protected final def fail(args: List[String], message: String): Unit =
@@ -77,7 +77,7 @@ trait Dispatch {
   }
 
   /** `main` without the exit, so a suite can assert on the code. `help` is matched here rather than
-    * being an arm of [[commands]], so that no edge can shadow it.
+    * being an arm of [[commands]], so that no layer can shadow it.
     */
   private[eezo] final def run(args: List[String]): Int = args match {
     case "help" :: _ => println(help); 0
@@ -90,7 +90,7 @@ trait Dispatch {
   }
 
   /** Rows laid out as one table, every spelling padded to the widest. `help` uses it over every
-    * edge's rows together; an edge with a namespace of its own (`db`) uses it for that namespace's
+    * layer's rows together; a layer with a namespace of its own (`db`) uses it for that namespace's
     * own list, so the two read alike.
     */
   protected final def usageTable(rows: List[Usage]): List[String] = {
@@ -98,8 +98,8 @@ trait Dispatch {
     rows.map(row => s"  ${row.command.padTo(width, ' ')}  ${row.description}")
   }
 
-  /** The command table, then the edges' notes, then the footer. `help` itself is a row of the same
-    * table, so it lines up with whatever the edges brought.
+  /** The command table, then the layers' notes, then the footer. `help` itself is a row of the same
+    * table, so it lines up with whatever the layers brought.
     */
   private def help: String = {
     val extra = if (notes.isEmpty) Nil else "" :: notes

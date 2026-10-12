@@ -1,10 +1,10 @@
-# reminders: the database edge alone
+# reminders: the database layer alone
 
 | | |
 |---|---|
 | artifact | `"io.eezo" %% "eezo-db"` |
 | entry trait | `io.eezo.db.DbApp` |
-| edges | database only |
+| layers | database only |
 
 A nightly job over rows and no server. `models/Reminder.scala` derives `Table`, `AppSchema.scala`
 registers it with an index on `dueOn`, and `Main.scala` names that schema and says what `boot` does:
@@ -52,8 +52,8 @@ they do on `../todo`; `sbt "reminders/run help"` lists them.
 
 ## What does not exist here
 
-The http edge. `eezo-db` does not depend on `eezo-http`, so nothing under `io.eezo.http` is on the
-classpath, and the http edge's commands are not commands:
+The http layer. `eezo-db` does not depend on `eezo-http`, so nothing under `io.eezo.http` is on the
+classpath, and the http layer's commands are not commands:
 
 ```
 $ sbt "reminders/run dev"

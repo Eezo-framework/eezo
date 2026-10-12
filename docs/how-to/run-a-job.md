@@ -1,6 +1,6 @@
 # Run a job instead of a server
 
-An application on the database edge alone, whose `boot` is a unit of work over rows: run once,
+An application on the database layer alone, whose `boot` is a unit of work over rows: run once,
 on a schedule, or by a cron.
 
 ## The build
@@ -13,7 +13,7 @@ libraryDependencies += "io.eezo" %% "eezo-db" % eezoVersion
 ```
 
 With only `eezo-db` on the classpath, `derives Form` and `derives Resource` don't compile, and
-`dev` is a command the application doesn't know. That's the point of opting into one edge.
+`dev` is a command the application doesn't know. That's the point of opting into one layer.
 
 ## `boot` is the job
 

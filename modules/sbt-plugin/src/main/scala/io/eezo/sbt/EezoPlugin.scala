@@ -192,7 +192,7 @@ object EezoPlugin extends AutoPlugin {
     * one alias rather than machinery: research/build-reload.md measured resident `~` at 148 to 300
     * ms from save to rebuilt, which is the budget this rides on.
     *
-    * `dev` is the http edge's command. On a database only application (`DbApp` alone) it is
+    * `dev` is the http layer's command. On a database only application (`DbApp` alone) it is
     * unknown, so `eezoDev` prints the unknown command line on every save; a rerun on save loop for
     * a job is sbt's own `~run`.
     */

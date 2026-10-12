@@ -2,9 +2,9 @@ package io.eezo.http.cli
 
 import io.eezo.http.{Action, Route}
 
-/** What the http edge's commands return. Layer 1's contract (design/cli.md §4): a command computes
+/** What the http layer's commands return. Layer 1's contract (design/cli.md §4): a command computes
   * one of these values and never prints, so a front end can render it as text, as JSON, or as a
-  * page. The database edge's results are its own, in `io.eezo.db.cli`, in the same shape.
+  * page. The database layer's results are its own, in `io.eezo.db.cli`, in the same shape.
   */
 
 /** [[io.eezo.http.Resource]]'s `Orphan`, restated with cli owned visibility.

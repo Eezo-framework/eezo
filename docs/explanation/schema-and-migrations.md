@@ -144,5 +144,5 @@ introspector, and nothing is designed to stop that; it's work nobody has done.
 
 ## Where to go next
 
-The pool and scopes the migrations run through are [the database edge](the-database-edge.md).
+The pool and scopes the migrations run through are [the database layer](the-database-layer.md).
 The deploy that runs them is [deployment](deployment.md).

@@ -173,9 +173,9 @@ object Pages {
             Vector("getting-started", "first-model", "sign-in", "deploy-to-fly", "a-live-page")
           )() ++
             fixed("Tutorials", Some("The example applications"))(
-              "examples/hello/README.md"     -> "hello: the http edge",
-              "examples/reminders/README.md" -> "reminders: the database edge",
-              "examples/blog/README.md"      -> "blog: both edges",
+              "examples/hello/README.md"     -> "hello: the http layer",
+              "examples/reminders/README.md" -> "reminders: the database layer",
+              "examples/blog/README.md"      -> "blog: both layers",
               "examples/todo/README.md"      -> "todo: the CLI tour"
             )
         ),
@@ -215,13 +215,13 @@ object Pages {
             "Explanation",
             Vector(
               "the-case-class",
-              "edges",
+              "layers",
               "routing",
               "urls-and-mounts",
               "requests-and-responses",
               "sessions-and-csrf",
               "guards-and-ownership",
-              "the-database-edge",
+              "the-database-layer",
               "schema-and-migrations",
               "the-live-layer",
               "failures",

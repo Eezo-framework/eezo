@@ -1116,22 +1116,22 @@ html:not(.mac) .shortcut.mac {
   font-size: 0.98rem;
 }
 
-/* edges */
+/* layers */
 
-.edges {
+.layers {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1.4fr);
   gap: 40px;
   align-items: center;
 }
 
-.edges-copy p {
+.layers-copy p {
   color: var(--muted);
   font-size: 1.08rem;
   margin: 0;
 }
 
-.edge-cards {
+.layer-cards {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -1139,7 +1139,7 @@ html:not(.mac) .shortcut.mac {
   gap: 14px;
 }
 
-.edge-card {
+.layer-card {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;
   gap: 8px 20px;
@@ -1150,19 +1150,19 @@ html:not(.mac) .shortcut.mac {
   padding: 14px 18px;
 }
 
-.edge-card .artifact {
+.layer-card .artifact {
   color: var(--code-inline-ink);
   font-weight: 600;
   font-size: 0.9rem;
 }
 
-.edge-card p {
+.layer-card p {
   margin: 0;
   color: var(--muted);
   font-size: 0.95rem;
 }
 
-.edge-card a {
+.layer-card a {
   font-weight: 800;
   text-decoration: none;
 }
@@ -1899,7 +1899,7 @@ html:not(.mac) .shortcut.mac {
     transform: none;
   }
 
-  .edges {
+  .layers {
     grid-template-columns: 1fr;
   }
 
@@ -1987,7 +1987,7 @@ html:not(.mac) .shortcut.mac {
     grid-template-columns: 1fr;
   }
 
-  .edge-card {
+  .layer-card {
     grid-template-columns: 1fr;
     gap: 6px;
   }

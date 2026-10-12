@@ -12,10 +12,10 @@ compile, the application's boot lines and logs, and none of sbt's narration. Eve
 `main` as `sbt "run <command> <args>"`, so `eezo db status` and `sbt "run db status"` are the
 same code path, and so is the sbt task `eezoStatus`.
 
-The application's `main` is inherited from its entry trait. Each edge adds its commands: the
-http edge's two at the top level, and the database edge's eight under one namespace, `db`, so
+The application's `main` is inherited from its entry trait. Each layer adds its commands: the
+http layer's two at the top level, and the database layer's eight under one namespace, `db`, so
 that `eezo db sync --apply` reads as what it touches. `help` is matched before either, so no
-edge can shadow it. No arguments runs the application.
+layer can shadow it. No arguments runs the application.
 
 ## Commands
 
@@ -23,20 +23,20 @@ edge can shadow it. No arguments runs the application.
 |---|---|---|---|
 | `new <name>` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>` |
 | `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
-| `routes [--json]` | http edge | | the mounted table and boot's warnings |
-| `db` | database edge | | the eight schema commands, listed; `db help` is the same |
-| `db status [--json]` | database edge | a database | the model against the live database |
-| `db sync [--apply] [--force] [--json]` | database edge | a database | the diff, applied directly with `--apply` |
-| `db freeze <name...> [--accept-all\|--skip-destructive] [--json]` | database edge | | writes a migration from the snapshot diff |
-| `db migrate [--apply] [--json]` | database edge | a database | lists pending migrations, applies them, verifies |
-| `db reset [--json]` | database edge | a database | drops every table and recreates from the model |
-| `db drop [--json]` | database edge | a database | drops every table and the ledger |
-| `db dump [--json]` | database edge | | prints the model's snapshot |
-| `db ddl [--json]` | database edge | | prints the full DDL, one statement per line |
+| `routes [--json]` | http layer | | the mounted table and boot's warnings |
+| `db` | database layer | | the eight schema commands, listed; `db help` is the same |
+| `db status [--json]` | database layer | a database | the model against the live database |
+| `db sync [--apply] [--force] [--json]` | database layer | a database | the diff, applied directly with `--apply` |
+| `db freeze <name...> [--accept-all\|--skip-destructive] [--json]` | database layer | | writes a migration from the snapshot diff |
+| `db migrate [--apply] [--json]` | database layer | a database | lists pending migrations, applies them, verifies |
+| `db reset [--json]` | database layer | a database | drops every table and recreates from the model |
+| `db drop [--json]` | database layer | a database | drops every table and the ledger |
+| `db dump [--json]` | database layer | | prints the model's snapshot |
+| `db ddl [--json]` | database layer | | prints the full DDL, one statement per line |
 | `build` | launcher | | stages `target/eezo/stage/` |
 | `deploy [--app <name>] [--target fly]` | launcher | the Fly CLI | builds, deploys, migrates, waits for health |
 | `upgrade` | launcher | Maven Central | moves the command line, what `new` scaffolds, and the project in the current directory to the latest release |
-| `help` | both edges | | the command table |
+| `help` | both layers | | the command table |
 
 `db freeze` takes everything after it that isn't a flag as the migration's name, joined with
 spaces, so `eezo db freeze add isbn to book` names the migration `add_isbn_to_book`. Without a
@@ -61,7 +61,7 @@ umbrella runs the drift check first, and serves with the database down after a w
 
 ## `--json`
 
-Every edge command takes `--json`, which renders the same result through the JSON renderer.
+Every layer command takes `--json`, which renders the same result through the JSON renderer.
 Exit codes are the same in both modes. Each body carries a `"command"` discriminator. A failure
 line goes to stderr as `{"error": "..."}`.
 

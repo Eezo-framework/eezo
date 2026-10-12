@@ -4,9 +4,9 @@ import io.eezo.http.RouteTable
 
 /** The whole entry point: name the generated table, and `HttpApp` does the rest.
   *
-  * This application has the http edge only. It depends on `eezo-http`, not on the umbrella, so
+  * This application has the http layer only. It depends on `eezo-http`, not on the umbrella, so
   * `HttpApp` is the trait it extends and `routes` is the one thing it has to name. There is no
-  * `schema` to name, because there is no database edge: `derives Table` does not compile here
+  * `schema` to name, because there is no database layer: `derives Table` does not compile here
   * (`io.eezo.db` is not on the classpath), and `sbt "run db status"` is an unknown command.
   *
   * `Routes.table()` is an ordinary call: eezo does not find the table by reflection, which is what

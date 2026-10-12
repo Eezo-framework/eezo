@@ -149,14 +149,14 @@ object Layout {
       div(
         Attrs.cls := "footer-inner",
         p(
-          strong("eezo"),
+          strong("Eezo"),
           " is released under the ",
           a(
             Attrs.href := s"${Pages.Repository}/blob/main/LICENSE",
             Attrs.rel  := "noopener",
             "MIT License"
           ),
-          ". Built with eezo, of course."
+          ". Site built with Eezo, of course."
         ),
         p(
           Attrs.cls := "footer-meta",
@@ -168,7 +168,6 @@ object Layout {
       )
     )
 
-  /** `0.0.0+68-06488d5a+20260917-0725-SNAPSHOT` reads as `0.0.0+68-06488d5a` in a footer. */
   private def shortVersion: String =
     SiteInfo.eezoVersion.split('+').take(2).mkString("+")
 }

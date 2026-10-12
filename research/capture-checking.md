@@ -301,7 +301,7 @@ imagined **does work as imagined**. The mechanism is not the problem. The
 problems are cost (§5), diagnostics (§4), and the fact that it does not address
 the demo (§1).
 
-### 3.3 One sharp edge in the composition
+### 3.3 One sharp layer in the composition
 
 The escape check only fires when the *expected type* is restrictive enough. This
 compiles clean, with capture checking fully on:
@@ -963,7 +963,7 @@ with a given `InTx` in scope yields:
 
 Note that the message is **not** customisable through `@implicitNotFound` on
 `InTx`, because the missing given is `NotGiven[InTx]`, not `InTx`. This is a real
-sharp edge: negative constraints have bad error messages and there is no clean
+sharp layer: negative constraints have bad error messages and there is no clean
 fix. Use sparingly, for things like "do not open a transaction inside a
 transaction".
 

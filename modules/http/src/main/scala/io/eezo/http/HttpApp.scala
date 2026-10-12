@@ -4,7 +4,7 @@ import io.eezo.core.Dispatch
 import io.eezo.core.Dispatch.Usage
 import io.eezo.http.cli.{Commands, Render, RenderJson}
 
-/** The http edge's entry trait: the one an application on `eezo-http` alone extends.
+/** The http layer's entry trait: the one an application on `eezo-http` alone extends.
   *
   * {{{
   * object Main extends HttpApp {
@@ -12,12 +12,13 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   * }
   * }}}
   *
-  * The edge is declarative. The application names its [[routes]], and every knob of the server is
+  * The layer is declarative. The application names its [[routes]], and every knob of the server is
   * an override beside [[port]]; nothing in user code calls `HttpServer.run`. `main` is inherited
   * from `Dispatch`: `sbt run` boots, `eezo dev` (the plugin's `eezoDev`, or `sbt "run dev"` without
   * the restart on save) serves with the listing and the reload client on, `eezo routes` prints the
-  * table, and any other first argument is unknown. The database edge's commands do not exist here:
-  * an application that needs them depends on `eezo` and extends `EezoApp`, which stacks both edges.
+  * table, and any other first argument is unknown. The database layer's commands do not exist here:
+  * an application that needs them depends on `eezo` and extends `EezoApp`, which stacks both
+  * layers.
   *
   * [[serve]] is the only call site of `HttpServer.run` in the entry traits, so [[boot]] and `dev`
   * see the same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot`
@@ -26,7 +27,7 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
 trait HttpApp extends Dispatch {
 
   /** The route table, usually `Routes.table()` from the sbt plugin's generated object. Abstract: an
-    * http edge is its routes, and an application without any is a mistake.
+    * http layer is its routes, and an application without any is a mistake.
     */
   def routes: RouteTable
 
@@ -85,8 +86,8 @@ trait HttpApp extends Dispatch {
     */
   protected def devServer(): Unit = serve(routes, dev = true)
 
-  /** What `sbt run` does on this edge alone: [[boot]], under nothing. The umbrella overrides it to
-    * run the same `boot` under the database edge's lifecycle, the way it overrides [[devServer]].
+  /** What `sbt run` does on this layer alone: [[boot]], under nothing. The umbrella overrides it to
+    * run the same `boot` under the database layer's lifecycle, the way it overrides [[devServer]].
     * No `override` here, deliberately: see `Dispatch.program`.
     */
   protected def program(): Unit = boot()

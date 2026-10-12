@@ -170,7 +170,7 @@ That is a few hundred lines. Skiff's own `Migrations.scala` is 136 lines and alr
 
 The precedent is strong. Ecto (Elixir/Phoenix), Active Record (Rails) and Django all ship their own runner rather than wrapping a third party one, and all three get portability from a typed schema DSL rather than from SQL text. Discussed in §3.
 
-The counterargument is real and should be stated: Flyway has fifteen years of edge case handling in `SQLiteParser`, statement splitting, encoding detection, BOM filtering, dollar quoted Postgres bodies, and lock retry. Rewriting that badly is a genuine risk. Skiff's own hand rolled rollback path shows the hazard: `Migrations.applyScript` splits statements by scanning lines, which breaks on any statement containing a semicolon inside a string literal or a `$$` quoted function body.
+The counterargument is real and should be stated: Flyway has fifteen years of layer case handling in `SQLiteParser`, statement splitting, encoding detection, BOM filtering, dollar quoted Postgres bodies, and lock retry. Rewriting that badly is a genuine risk. Skiff's own hand rolled rollback path shows the hazard: `Migrations.applyScript` splits statements by scanning lines, which breaks on any statement containing a semicolon inside a string literal or a `$$` quoted function body.
 
 ---
 

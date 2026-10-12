@@ -152,11 +152,11 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // The umbrella, and the default artifact an application depends on: `"io.eezo" %% "eezo"`. It
 // exists so that `Main.scala` is one dependency, one import, one trait (`io.eezo.EezoApp`), which
 // is what design/objective.md's 30 minute benchmark asks of the first file a user writes. The two
-// edges are artifacts of their own: `eezo-http` carries `HttpApp` and `eezo-db` carries `DbApp`, so
-// an application that has only one edge depends on that edge alone and the other edge's derivations
+// layers are artifacts of their own: `eezo-http` carries `HttpApp` and `eezo-db` carries `DbApp`, so
+// an application that has only one layer depends on that layer alone and the other layer's derivations
 // are not on its classpath. `EezoApp` stacks the two entry traits, and the drift page the database
-// edge contributes to `dev` lives here because it is the one thing that needs both. `test->test` on
-// `core`, here and on the two edges, is what lets every entry trait suite share `core`'s
+// layer contributes to `dev` lives here because it is the one thing that needs both. `test->test` on
+// `core`, here and on the two layers, is what lets every entry trait suite share `core`'s
 // `Captured`; on `live` and `auth` it is what lets `BoundLivePageSuite`, the one place a real
 // guard, a real session and a real live socket meet, share `live`'s socket rig and `auth`'s planted
 // sign in rather than spell either a second time.

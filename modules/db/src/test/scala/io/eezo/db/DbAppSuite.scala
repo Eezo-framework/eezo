@@ -8,8 +8,8 @@ import io.eezo.db.support.{Library, Pg, PgSuite}
 
 import java.sql.Connection
 
-/** The database edge's entry trait: what `sbt "run <command>"` answers on an application that has
-  * only this edge, against the same testcontainers Postgres `db`'s suites use.
+/** The database layer's entry trait: what `sbt "run <command>"` answers on an application that has
+  * only this layer, against the same testcontainers Postgres `db`'s suites use.
   *
   * `PgSuite` rather than `DbSuite`, because installing the `Database` is exactly what `DbApp` is
   * being tested for: it builds one from `DbInit`'s overrides, installs it around the command, and
@@ -113,7 +113,7 @@ class DbAppSuite extends PgSuite {
     assert(dump.contains("\"tables\""), dump)
   }
 
-  test("the http edge's commands are unknown on a database-only application") {
+  test("the http layer's commands are unknown on a database-only application") {
     val app = new Job
     List("routes", "dev").foreach { command =>
       val (code, out, err) = captured(app.run(List(command)))
@@ -124,7 +124,7 @@ class DbAppSuite extends PgSuite {
     assert(!app.ran)
   }
 
-  test("help names this edge's commands under db and not the http edge's, with the note last") {
+  test("help names this layer's commands under db and not the http layer's, with the note last") {
     val (code, out, _) = captured(new Job().run(List("help")))
     assertEquals(code, 0)
     val lines = out.linesIterator.toList

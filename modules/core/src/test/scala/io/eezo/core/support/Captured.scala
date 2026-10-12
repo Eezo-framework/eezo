@@ -4,7 +4,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintStream
 
 /** What a `Dispatch.run` printed, for the entry trait suites of every module: `core`'s own, and
-  * each edge's through `test->test` on `core`.
+  * each layer's through `test->test` on `core`.
   */
 object Captured {
 

@@ -4,11 +4,11 @@ import io.eezo.core.{Id, Store}
 
 /** The five assertions both halves of [[io.eezo.core.OwnedStore]] have to satisfy, written once.
   *
-  * It lives in `core`'s test sources, and both edges reach it through their `test->test` dependency
-  * on `core`, for the reason the seam itself lives in `core`: `db`'s half and `http`'s half are
-  * siblings that never see each other, and a behaviour present in one and absent in the other is a
-  * difference nobody notices until a browser shows it. Mixed into a suite, this turns that
-  * difference into a failing test in the module that has it.
+  * It lives in `core`'s test sources, and both layers reach it through their `test->test`
+  * dependency on `core`, for the reason the seam itself lives in `core`: `db`'s half and `http`'s
+  * half are siblings that never see each other, and a behaviour present in one and absent in the
+  * other is a difference nobody notices until a browser shows it. Mixed into a suite, this turns
+  * that difference into a failing test in the module that has it.
   *
   * Every hook is a `def` rather than a `val`. The tests below register while this trait's body
   * runs, which is before a mixing suite's own fields are initialised, so a `val` hook would be read

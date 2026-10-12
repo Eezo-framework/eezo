@@ -374,7 +374,7 @@ This is the crux section.
 ### 4.1 What Zinc does, from its own source and docs
 
 Zinc records, per class, an extracted **API** (signatures, not bodies), a set of
-**used names**, and dependency edges in three kinds. The
+**used names**, and dependency layers in three kinds. The
 [sbt documentation](https://www.scala-sbt.org/1.x/docs/Understanding-Recompilation.html)
 states the distinction that matters:
 
@@ -390,7 +390,7 @@ and
 
 and that inheritance dependencies "are included _transitively_".
 
-Scala 3's compiler bridge produces these edges in
+Scala 3's compiler bridge produces these layers in
 [`ExtractDependencies.scala`](https://github.com/scala/scala3/blob/main/compiler/src/dotty/tools/dotc/sbt/ExtractDependencies.scala):
 `DependencyByMemberRef` for ordinary references, `DependencyByInheritance` and
 `LocalDependencyByInheritance` for `extends`, and `DependencyByMacroExpansion`

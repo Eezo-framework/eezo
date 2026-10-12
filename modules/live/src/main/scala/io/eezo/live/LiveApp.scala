@@ -2,7 +2,7 @@ package io.eezo.live
 
 import io.eezo.http.{HttpApp, Route}
 
-/** The live layer, mixed into an http-edge application: everything [[Live.mount]] needs on the
+/** The live layer, mixed into an http-layer application: everything [[Live.mount]] needs on the
   * server, contributed through `frameworkRoutes` so every way of serving — `boot`'s default, an
   * overridden `boot` calling `serve`, `dev` — carries it without knowing.
   *

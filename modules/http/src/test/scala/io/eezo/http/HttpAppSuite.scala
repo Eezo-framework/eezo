@@ -3,12 +3,12 @@ package io.eezo.http
 import io.eezo.core.html.Tags.p
 import io.eezo.core.support.Captured.captured
 
-/** The http edge's entry trait: what `sbt "run <command>"` answers on an application that has only
-  * this edge.
+/** The http layer's entry trait: what `sbt "run <command>"` answers on an application that has only
+  * this layer.
   *
   * The server itself is `EezoServerSuite`'s to test. What this suite pins is the dispatch: the
   * empty argument list is the application, `dev` goes through the `devServer` hook the umbrella
-  * overrides, `routes` needs no server, and the database edge's commands do not exist here.
+  * overrides, `routes` needs no server, and the database layer's commands do not exist here.
   */
 class HttpAppSuite extends munit.FunSuite {
 
@@ -56,7 +56,7 @@ class HttpAppSuite extends munit.FunSuite {
     assert(!app.booted)
   }
 
-  test("the database edge's commands are unknown on an http-only application") {
+  test("the database layer's commands are unknown on an http-only application") {
     val app = new Recording
     List("status", "sync", "freeze", "migrate", "reset", "drop", "dump", "ddl").foreach { command =>
       val (code, out, err) = captured(app.run(List("db", command)))
@@ -67,7 +67,7 @@ class HttpAppSuite extends munit.FunSuite {
     assert(!app.booted)
   }
 
-  test("help names this edge's two commands, in one column with help's own row") {
+  test("help names this layer's two commands, in one column with help's own row") {
     val (code, out, _) = captured(new Recording().run(List("help")))
     assertEquals(code, 0)
     val lines = out.linesIterator.toList

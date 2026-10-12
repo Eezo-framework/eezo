@@ -523,7 +523,7 @@ silent loss of transactionality, the same class of bug as §4.3 attempt 1.
 > checking another connection out of the pool, otherwise SQLite (pool of one)
 > deadlocks the moment a request opens a `transaction { ... }`."
 
-This is a genuine sharp edge and it is **SQLite specific**, which makes it eezo's
+This is a genuine sharp layer and it is **SQLite specific**, which makes it eezo's
 problem too since SQLite is the dev database. In 2.0.0-M3 `DbTx(Connection, SqlLogger)`
 is still not public API (`javap` shows the constructor, but the JVM does not
 enforce Scala's `private[magnum]`). Two ways out that do not need reflection:

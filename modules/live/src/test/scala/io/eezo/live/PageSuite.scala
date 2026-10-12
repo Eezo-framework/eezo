@@ -259,35 +259,43 @@ class PageSuite extends munit.FunSuite {
     page.close()
   }
 
-  /** Runs `body` with the records the live logger publishes about `pageId` collecting into the
+  /** Runs `body` with the records the live logger publishes that satisfy `keep` collecting into the
     * queue it is handed, so it can poll them while it runs. The logger is process wide and other
-    * suites share it, so a record is kept only when it names this page, the trailing space keeping
-    * "p1" from matching "p10".
+    * suites share it, so each caller says which records are its own; what it does not keep is
+    * dropped for the window, not printed.
     */
-  private def logsAbout[A](pageId: String)(
-      body: ConcurrentLinkedQueue[(Level, String)] => A
+  private def logsWhere[A](keep: LogRecord => Boolean)(
+      body: ConcurrentLinkedQueue[LogRecord] => A
   ): A = {
     val logger   = Logger.getLogger("io.eezo.live")
-    val captured = new ConcurrentLinkedQueue[(Level, String)]()
+    val captured = new ConcurrentLinkedQueue[LogRecord]()
     val handler  = new Handler {
       override def publish(record: LogRecord): Unit =
-        if (record.getMessage.startsWith(s"page $pageId ")) {
-          val _ = captured.add((record.getLevel, record.getMessage))
-        }
+        if (keep(record)) { val _ = captured.add(record) }
       override def flush(): Unit = ()
       override def close(): Unit = ()
     }
+    // The window owns the records it keeps: the console does not print what a test asserts on,
+    // so a provoked failure is not mistaken for a real one in the test output.
+    val parents = logger.getUseParentHandlers
+    logger.setUseParentHandlers(false)
     logger.addHandler(handler)
     try body(captured)
-    finally logger.removeHandler(handler)
+    finally {
+      logger.removeHandler(handler)
+      logger.setUseParentHandlers(parents)
+    }
   }
 
-  private def messagesAt(
-      level: Level,
-      records: ConcurrentLinkedQueue[(Level, String)]
-  ): List[String] = {
+  /** The records about `pageId`: a record is kept only when it names this page, the trailing space
+    * keeping "p1" from matching "p10".
+    */
+  private def logsAbout[A](pageId: String)(body: ConcurrentLinkedQueue[LogRecord] => A): A =
+    logsWhere(_.getMessage.startsWith(s"page $pageId "))(body)
+
+  private def messagesAt(level: Level, records: ConcurrentLinkedQueue[LogRecord]): List[String] = {
     import scala.jdk.CollectionConverters.*
-    records.asScala.toList.collect { case (`level`, message) => message }
+    records.asScala.toList.filter(_.getLevel == level).map(_.getMessage)
   }
 
   /** Holding the page thread on a latch lets a test keep an event past the injected threshold for
@@ -522,11 +530,20 @@ class PageSuite extends munit.FunSuite {
     gate.countDown()
     eventually(rendered == "<div><span>loaded</span></div>")
 
-    // A throwing work is a log line, not a state change and not a dead page.
-    page.event(Event("boom"))
-    Thread.sleep(100)
-    assertEquals(rendered, "<div><span>loaded</span></div>")
-    page.event(Event("fence"))
+    // A throwing work is a log line, not a state change and not a dead page. The log line is the
+    // positive proof that the work ran and threw; the fence proves the mailbox is drained past
+    // anything the work could have posted, so the DOM check is a fact rather than a wait.
+    val failed = (record: LogRecord) =>
+      record.getMessage == "async work failed; the state is unchanged" &&
+        Option(record.getThrown).exists(_.getMessage == "work failed")
+    logsWhere(failed) { records =>
+      page.event(Event("boom"))
+      eventually(!records.isEmpty)
+      assertEquals(records.size, 1, "the failure is logged once")
+      assertEquals(records.peek.getLevel, Level.SEVERE)
+      page.event(Event("fence"))
+      assertEquals(rendered, "<div><span>loaded</span></div>")
+    }
     page.close()
   }
 

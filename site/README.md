@@ -1,6 +1,6 @@
 # site: eezo.io
 
-The documentation site, an eezo application on the http edge with the live layer on it. It
+The documentation site, an eezo application on the http layer with the live layer on it. It
 renders the repository's own Markdown: the README, `CONTEXT.md`, everything under `docs/`, the
 research notes and the example READMEs, so the site is never a second copy of anything.
 

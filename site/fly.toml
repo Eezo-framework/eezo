@@ -1,7 +1,7 @@
 # The Fly app behind https://eezo.io. Written by hand rather than by `eezo deploy`, for the one
 # difference from the launcher's file: no `release_command`. The site has no database, so there
 # is nothing to migrate before the new version takes traffic, and an application on the http
-# edge alone does not answer `migrate`.
+# layer alone does not answer `migrate`.
 app = 'eezo-site'
 primary_region = 'fra'
 

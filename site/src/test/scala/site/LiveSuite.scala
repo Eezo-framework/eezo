@@ -38,8 +38,8 @@ class LiveSuite extends FunSuite {
   test("the counter counts and resets") {
     assertEquals(Clicks.handle(Event("inc"), 2), 3)
     assertEquals(Clicks.handle(Event("reset"), 9), 0)
-    assert(Clicks.render(1).render.contains("<strong>1</strong> click,"))
-    assert(Clicks.render(2).render.contains("<strong>2</strong> clicks,"))
+    assert(Clicks.render(1).render.contains("<strong>1</strong> click"))
+    assert(Clicks.render(2).render.contains("<strong>2</strong> clicks"))
   }
 
   private val index  = Search.build(pages, Content.current)
