@@ -53,6 +53,22 @@ class RouteGeneratorSuite extends munit.FunSuite {
     assertEquals(route("Health.scala").target, "app.Health.health")
   }
 
+  test("a custom name that is a Scala keyword calls its def in backticks") {
+    assertEquals(route("reports/Export.scala").target, "app.reports.Export.`export`")
+    assertEquals(route("Import.scala").target, "app.Import.`import`")
+    assertEquals(route("Given.scala").target, "app.Given.`given`")
+    assertEquals(route("Then.scala").target, "app.Then.`then`")
+    assertEquals(route("Yield.scala").target, "app.Yield.`yield`")
+    assertEquals(route("This.scala").target, "app.This.`this`")
+    assertEquals(route("Macro.scala").target, "app.Macro.`macro`")
+  }
+
+  test("a directory that is a Scala keyword is backticked in the owner and the target") {
+    assertEquals(route("import/Index.scala").owner, "app.`import`.Index")
+    assertEquals(route("import/Index.scala").target, "app.`import`.Index.index")
+    assertEquals(route("import/Index.scala").path, "/import")
+  }
+
   test("the emitted row remembers the file it came from") {
     assertEquals(route("widgets/New.scala").source, "src/main/scala/app/widgets/New.scala")
   }
