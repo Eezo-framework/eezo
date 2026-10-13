@@ -13,7 +13,8 @@ import scala.util.matching.Regex
   * @param source
   *   the file it came from, which the emitted row carries as a comment
   * @param owner
-  *   the object the `def` lives on, `app.widgets.Index` for `app/widgets/Index.scala`. Carried
+  *   the object the `def` lives on, `app.widgets.Index` for `app/widgets/Index.scala`, spelled as
+  *   code, so a directory named after a keyword is backticked: `` app.`import`.Index ``. Carried
   *   rather than recomputed from [[target]], because a target can end in a backticked name such as
   *   `` app.widgets.New.`new` `` and dropping "the last dotted segment" off one of those is a
   *   second spelling of a rule this file already applies once. It is what a handwritten route's
@@ -78,10 +79,19 @@ object RouteGenerator {
     */
   private val FormVerbs = Set("New", "Edit")
 
-  /** Scala's own keywords that a `def` name has to be backticked to use. `new` is the one the verb
-    * table actually reaches.
+  /** The words Scala 3 reserves, which a name has to be backticked to use: the compiler's
+    * alphanumeric keywords, Scala 2's `forSome` and `macro` among them. The generator writes file
+    * and directory names under `app/` as code, a custom file's `def` and every directory of a
+    * page's package, so any of them can arrive here: `app/reports/Export.scala` calls
+    * `` `export` ``, and `app/import/Index.scala` lives in `` app.`import` ``. Soft keywords such
+    * as `using` or `end` are ordinary identifiers where the generator writes them, so they are not
+    * listed.
     */
-  private val Keywords = Set("new", "type", "class", "object", "val", "def", "match")
+  private val Keywords: Set[String] = (
+    "abstract case catch class def do else enum export extends false final finally for forSome " +
+      "given if implicit import lazy macro match new null object override package private " +
+      "protected return sealed super then this throw trait true try type val var while with yield"
+  ).split(' ').toSet
 
   /** A file's `package` clauses, in order, so that nested ones join into the prefix the compiler
     * resolves. `package object` is excluded by requiring a plain identifier path.
@@ -292,7 +302,7 @@ object RouteGenerator {
 
       val dirPath = dirs.map(segment)
       val path    = ("/" + (dirPath :+ suffix.stripPrefix("/")).filter(_.nonEmpty).mkString("/"))
-      val owner   = (Vector("app") ++ dirs ++ Vector(fileName)).mkString(".")
+      val owner   = (Vector("app") ++ dirs.map(quoted) ++ Vector(fileName)).mkString(".")
       val target  = owner + "." + quoted(defName)
 
       Some(
@@ -759,8 +769,8 @@ object RouteGenerator {
   private def decapitalise(name: String): String =
     if (name.isEmpty) name else name.substring(0, 1).toLowerCase + name.substring(1)
 
-  private def quoted(defName: String): String =
-    if (Keywords.contains(defName)) "`" + defName + "`" else defName
+  private def quoted(name: String): String =
+    if (Keywords.contains(name)) "`" + name + "`" else name
 
   private def rank(segment: String): Int =
     if (segment.startsWith("*")) 2 else if (segment.startsWith(":")) 1 else 0
