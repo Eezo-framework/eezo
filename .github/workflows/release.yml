@@ -7,9 +7,10 @@ name: Release
 # publish has succeeded, so eezo.io never documents a version that is not on Maven Central.
 # Pushing to any other ref publishes nothing, so this workflow only ever fires on `v*`.
 #
-# The manual trigger redeploys the site alone, for a docs fix that is not worth a release. It
-# runs from main, which is always the latest release, and refuses any other branch: the site
-# serves the repository's own Markdown, so a deploy from dev would document unreleased work.
+# The manual trigger redeploys the site alone, for example after a deploy that failed on Fly's
+# side. It runs from main, which is always the latest release, and refuses any other branch: the
+# site serves the repository's own Markdown, so a deploy from dev would document unreleased work.
+# A docs fix reaches the site with the next release, a patch one if it cannot wait.
 on:
   push:
     tags: ["v*"]
