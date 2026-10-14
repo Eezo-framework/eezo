@@ -106,7 +106,7 @@ object RouteGenerator {
   // says so instead of guessing.
 
   private val CaseClassAnywhere: Regex =
-    new Regex("\\bcase\\s+class\\s+([A-Za-z_][A-Za-z0-9_]*)")
+    new Regex("\\bcase\\s+class\\s+([A-Za-z_][A-Za-z0-9_]*)(\\s*\\[)?")
 
   /** Containers that can enclose a model. `case class` matches too (at its `class` token), which is
     * wanted: a class body is a real enclosure.
@@ -195,7 +195,8 @@ object RouteGenerator {
       name: String,
       column: Int,
       enclosing: List[Option[(String, String)]], // innermost first; None = anonymous block
-      derives: Boolean
+      derives: Boolean,
+      generic: Boolean
   )
 
   private def maskedIn(regex: Regex, content: String, mask: Array[Boolean]) =
@@ -210,7 +211,7 @@ object RouteGenerator {
     case class Open(pos: Int)                                  extends Event
     case class Close(pos: Int)                                 extends Event
     case class Container(pos: Int, kind: String, name: String) extends Event
-    case class Clazz(pos: Int, name: String)                   extends Event
+    case class Clazz(pos: Int, name: String, generic: Boolean) extends Event
     case class Clear(pos: Int)                                 extends Event
 
     val braces = (0 until content.length).iterator
@@ -234,7 +235,9 @@ object RouteGenerator {
         maskedIn(ContainerDecl, content, mask).map(m =>
           Container(m.start, m.group(1), m.group(2))
         ) ++
-        maskedIn(CaseClassAnywhere, content, mask).map(m => Clazz(m.start, m.group(1))) ++
+        maskedIn(CaseClassAnywhere, content, mask).map(m =>
+          Clazz(m.start, m.group(1), m.group(2) != null)
+        ) ++
         maskedIn(PendingClear, content, mask).map(m => Clear(m.start))).sortBy(_.pos)
 
     var stack   = List.empty[Option[(String, String)]]
@@ -242,7 +245,7 @@ object RouteGenerator {
     // (position, depth) of every declaration and container-close, for the derives windows below.
     val boundaries = Vector.newBuilder[(Int, Int)]
     val closes     = Vector.newBuilder[(Int, Int)]
-    val found      = Vector.newBuilder[(Int, String, Int, List[Option[(String, String)]])]
+    val found      = Vector.newBuilder[(Int, String, Int, List[Option[(String, String)]], Boolean)]
 
     events.foreach {
       case Open(_)  => stack = pending :: stack; pending = None
@@ -250,18 +253,18 @@ object RouteGenerator {
       case Container(p, kind, name) =>
         if (!classTokens.contains(p)) boundaries += ((p, stack.length))
         pending = Some((kind, name))
-      case Clear(_)       => pending = None
-      case Clazz(p, name) =>
+      case Clear(_)                => pending = None
+      case Clazz(p, name, generic) =>
         boundaries += ((p, stack.length))
         val column = p - (content.lastIndexOf('\n', p - 1) + 1)
-        found += ((p, name, column, stack))
+        found += ((p, name, column, stack, generic))
     }
 
     val allBoundaries = boundaries.result()
     val allCloses     = closes.result()
     val derivesAt     = maskedIn(Derives, content, mask).map(_.start)
 
-    val classes = found.result().map { case (pos, name, column, enclosing) =>
+    val classes = found.result().map { case (pos, name, column, enclosing, generic) =>
       val depth = enclosing.length
       // The declaration's text ends at the next declaration at the same or an enclosing depth, or
       // where its own container closes — whichever comes first.
@@ -269,7 +272,13 @@ object RouteGenerator {
         allBoundaries.collect { case (p, d) if p > pos && d <= depth => p } ++
           allCloses.collect { case (p, d) if p > pos && d < depth => p } :+ content.length
       ).min
-      ScannedClass(name, column, enclosing, derivesAt.exists(d => d > pos && d < windowEnd))
+      ScannedClass(
+        name,
+        column,
+        enclosing,
+        derivesAt.exists(d => d > pos && d < windowEnd),
+        generic
+      )
     }
 
     (classes, maskedIn(ContainerColon, content, mask).nonEmpty)
@@ -336,6 +345,8 @@ object RouteGenerator {
     *   - **nested, every enclosing frame a named `object`** — mounted as `pkg.Outer.Inner`, the
     *     stable path the compiler resolves.
     *   - **nested in a class, trait, enum, or anonymous block** — no stable path exists; warns.
+    *   - **generic** — skipped without a warning: `Paged` alone is not a type, and a generic class
+    *     is not a model.
     */
   def modelsIn(relative: String, content: String): Seq[ModelCandidate] =
     if (!relative.endsWith(".scala")) Nil
@@ -345,7 +356,7 @@ object RouteGenerator {
       val source                = "src/main/scala/" + relative
 
       classes.collect {
-        case c if c.derives && mountablePath(c, colonStyle).isDefined =>
+        case c if c.derives && !c.generic && mountablePath(c, colonStyle).isDefined =>
           val path = mountablePath(c, colonStyle).get
           ModelCandidate(((prefix ++ path) :+ c.name).mkString("."), source)
       }
@@ -720,7 +731,7 @@ object RouteGenerator {
       val at                    = "src/main/scala/" + relative
 
       classes.collect {
-        case c if c.derives && mountablePath(c, colonStyle).isEmpty =>
+        case c if c.derives && !c.generic && mountablePath(c, colonStyle).isEmpty =>
           if (c.enclosing.isEmpty)
             s"$at: `case class ${c.name}` has a derives clause but is indented in a file that " +
               "nests by significant indentation, so the route generator cannot tell whether it " +

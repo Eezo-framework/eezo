@@ -125,4 +125,24 @@ class UnscannableModelSuite extends FunSuite {
     assertEquals(candidates(content), Seq("models.Book"))
     assertEquals(warnings(content), Seq.empty[String])
   }
+
+  test("a generic case class is not a candidate, since its bare name is not a type") {
+    val content =
+      """package models
+        |
+        |case class Paged[A](items: List[A], total: Int) derives CanEqual
+        |case class Pair [A, B](a: A, b: B) derives CanEqual
+        |""".stripMargin
+    assertEquals(candidates(content), Seq.empty[String])
+    assertEquals(warnings(content), Seq.empty[String])
+  }
+
+  test("a type argument in a field does not make a case class generic") {
+    val content =
+      """package models
+        |
+        |case class Page(items: List[Int]) derives Form
+        |""".stripMargin
+    assertEquals(candidates(content), Seq("models.Page"))
+  }
 }
