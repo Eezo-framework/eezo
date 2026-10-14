@@ -89,11 +89,12 @@ jobs:
       - name: Set up the Fly CLI
         uses: superfly/flyctl-actions/setup-flyctl@master
 
-      # The site pins the released eezo and resolves it from Maven Central, and Sonatype Central
-      # takes a while to sync a fresh release there. `publishLocal` first puts the same modules,
-      # built from the same commit, in the local ivy cache, which sbt consults before Maven
-      # Central, so the deploy neither waits on the sync nor fails for want of it. `unidoc`
-      # writes the API reference the site serves under /api.
+      # The site pins the released eezo. `publishLocal` first puts the same modules, built from
+      # the same commit, in the local ivy cache, which sbt consults before Maven Central, so the
+      # site build does not depend on resolving the fresh release from Central at all. Central
+      # has already reported it published by the time this job starts: `ci-release` waits for
+      # that before the publish job succeeds. `unidoc` writes the API reference the site serves
+      # under /api.
       - name: Publish eezo locally and generate the API docs
         run: sbt -batch publishLocal unidoc
 
