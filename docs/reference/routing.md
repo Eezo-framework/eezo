@@ -71,7 +71,10 @@ The file also holds, when there are rows that need them:
 
 A candidate model is any `case class` with a `derives` clause, at the top level or nested only
 in `object`s. One nested in a class, a trait or a block, or indented in a file that uses
-significant indentation, gets a warning and no row.
+significant indentation, gets a warning and no row. A generic one (`case class Paged[A](…)`)
+gets neither a row nor a warning: its bare name is not a type, so no row could name it, and a
+generic class with a `derives` clause is normally a helper (`derives CanEqual`, a JSON codec),
+not a model, so a warning would be noise.
 
 ## The reserved prefix
 
