@@ -1,8 +1,8 @@
 // The documentation site, https://eezo.io: an eezo application that serves the repository's own
 // Markdown. It is a build of its own for the reason the examples are: a plugin defined in a build
 // cannot be enabled by that same build, and the site is built, run and deployed the way any
-// application on eezo is, through `sbt-eezo` and `bin/eezo`. It resolves eezo from the local ivy
-// cache at the version `sbt publishLocalForExample` recorded, until eezo is released.
+// application on eezo is, through `sbt-eezo` and `bin/eezo`. It resolves the released eezo
+// from Maven Central, pinned in `project/project/EezoVersion.scala`; `bin/release` moves the pin.
 //
 // The site has the http layer only, with the live layer on it. Its content is files, not rows, so
 // there is no database, no schema and no migration: `eezo deploy` ships the jars and nothing else.

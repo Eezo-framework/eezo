@@ -4,13 +4,24 @@ on:
   push:
     branches: ["**"]
   pull_request:
-    branches: [main]
+    branches: [dev, main]
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # main is the latest release and moves only by fast forward when `bin/release` tags one, so a
+  # pull request can only ever target dev. This job exists to say so where the author looks.
+  base:
+    name: Pull requests target dev
+    if: github.event_name == 'pull_request' && github.base_ref == 'main'
+    runs-on: ubuntu-latest
+    steps:
+      - run: |
+          echo "::error::main is the latest release; change the base of this pull request to dev"
+          exit 1
+
   build:
     name: Compile and test
     runs-on: ubuntu-latest

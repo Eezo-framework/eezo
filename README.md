@@ -302,6 +302,12 @@ The `db` suite starts a real Postgres through testcontainers, so it needs a Dock
 describe open work and are expected to fail until it lands. The decisions behind the framework
 are recorded in [`docs/adr`](docs/adr).
 
+Pull requests target `dev`, the trunk. `main` is the latest release: it moves only by fast forward
+when a version is tagged, so the front page, this README and a plain clone always describe what is
+on Maven Central. Releasing is `bin/release <version>` on `dev`: it bumps the version literals the
+docs quote, fast forwards `main`, and pushes the tag that publishes the artifacts and deploys the
+site.
+
 ## Licence
 
 Eezo is released under the [MIT License](LICENSE), copyright 2026 Riccardo Cardin and Daniel

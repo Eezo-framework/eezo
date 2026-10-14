@@ -1,0 +1,140 @@
+#!/usr/bin/env bash
+#
+# Releasing eezo: one command, `bin/release <version>`, run on `dev`.
+#
+# A release is a tag. sbt-ci-release derives the version from it and publishes every module to
+# Sonatype Central, and the site deploys from the same commit once that has succeeded; see
+# .github/workflows/release.yml. There are two branches, and only one is ever worked on:
+#
+#   dev    the trunk. Every pull request targets it, CI runs there, the docs evolve with the code.
+#   main   the latest release. It moves only by fast forward to a commit of dev, the one that
+#          carries the tag. Nobody commits on it and nothing is merged back from it, so there is
+#          one line of history and never a merge to resolve.
+#
+# main is the default branch on GitHub, so the front page, the README and a plain clone describe
+# what is on Maven Central and never a feature that is not released yet.
+#
+# The version is a literal in a handful of places users copy from: the install snippets in the
+# README and the tutorials, the scaffold's own output as the tutorial quotes it, and the pin the
+# site is built with. This script rewrites them all, and `--check <version>` asserts that they all
+# name that version. The release workflow runs the check before publishing, so a tag pushed
+# without the bump costs a deleted tag and nothing else.
+#
+# `bin/release <version>` does, in order, stopping at the first failure:
+#   1. refuses unless on dev, with a clean tree, in sync with origin/dev, and origin/main behind it
+#   2. rewrites the version literals and commits `release: eezo <version>` on dev
+#   3. tags that commit v<version> and pushes dev, main and the tag in one atomic push
+# The tag starts the release workflow. Nothing here talks to Sonatype or to Fly.
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(dirname "$SCRIPT_DIR")"
+cd "$ROOT"
+
+usage() {
+  cat <<'USAGE'
+release — tag a version of eezo
+
+  bin/release <version>          bump the version literals, commit, tag, push dev, main and the tag
+  bin/release --check <version>  assert that every version literal names <version>; exit 1 otherwise
+
+<version> is x.y.z. Run on dev; the tag does the publishing.
+USAGE
+}
+
+fail() {
+  echo "release: $*" >&2
+  exit 1
+}
+
+# Where the release is named. The Markdown is what users copy install snippets from, and the pin is
+# what the site builds against. Add a file here when a new page quotes the version.
+MARKDOWN=(README.md docs/tutorials/*.md docs/how-to/*.md docs/explanation/*.md docs/reference/*.md examples/*/README.md)
+SITE_PIN=site/project/project/EezoVersion.scala
+
+# Every literal that names the release, one per line as file:line:version. Three shapes:
+#   "io.eezo" % "sbt-eezo" % "X" and "io.eezo" %% "eezo-module" % "X"   the coordinates
+#   (eezo X, Scala ...)                                                   the scaffold's own echo
+#   val value: String = "X"                                               the site's pin
+found() {
+  { grep -nHEo '"io\.eezo" %%? "[a-z-]+" % "[^"]+"' "${MARKDOWN[@]}" || true; } \
+    | sed -E 's/^([^:]+:[0-9]+):.* % "([^"]+)"$/\1:\2/'
+  { grep -nHEo '\(eezo [^,]+,' "${MARKDOWN[@]}" || true; } \
+    | sed -E 's/^([^:]+:[0-9]+):\(eezo ([^,]+),$/\1:\2/'
+  { grep -nHEo 'val value: String = "[^"]+"' "$SITE_PIN" || true; } \
+    | sed -E 's/^([^:]+:[0-9]+):.*"([^"]+)"$/\1:\2/'
+}
+
+check() { # <version>
+  local version="$1" count=0 bad=0 line
+  while IFS= read -r line; do
+    count=$((count + 1))
+    case "$line" in
+      *":$version") ;;
+      *)
+        echo "  $line" >&2
+        bad=1
+        ;;
+    esac
+  done < <(found)
+  [ "$count" -gt 0 ] || fail "no version literal found at all: the patterns in bin/release are stale"
+  [ "$bad" -eq 0 ] || fail "the literals above do not name $version"
+  echo "release: $count literals name $version"
+}
+
+bump() { # <version>
+  local version="$1"
+  # `${1}` rather than `$1`: a version starting with a digit would otherwise read as `$10`.
+  perl -pi -e 's/("io\.eezo" %%? "[a-z-]+" % ")[^"]+"/${1}'"$version"'"/g; s/\(eezo [^,]+,/(eezo '"$version"',/g' "${MARKDOWN[@]}"
+  perl -pi -e 's/(val value: String = ")[^"]+"/${1}'"$version"'"/' "$SITE_PIN"
+}
+
+[ $# -ge 1 ] || {
+  usage >&2
+  exit 1
+}
+
+case "$1" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+  --check)
+    [ $# -eq 2 ] || fail "--check takes exactly one version"
+    check "$2"
+    exit 0
+    ;;
+  -*)
+    fail "unknown option $1"
+    ;;
+esac
+
+[ $# -eq 1 ] || fail "one argument, the version"
+version="$1"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || fail "not a release version: $version (x.y.z)"
+
+# 1. The state the release is cut from.
+[ "$(git rev-parse --abbrev-ref HEAD)" = dev ] || fail "run on dev, not on $(git rev-parse --abbrev-ref HEAD)"
+[ -z "$(git status --porcelain)" ] || fail "the working tree is not clean"
+git fetch -q origin dev main --tags
+[ "$(git rev-parse HEAD)" = "$(git rev-parse origin/dev)" ] || fail "dev is not in sync with origin/dev"
+! git rev-parse -q --verify "refs/tags/v$version" > /dev/null || fail "v$version already exists"
+git merge-base --is-ancestor origin/main HEAD \
+  || fail "origin/main is not an ancestor of dev, so main cannot fast forward; it must never be committed on"
+
+# 2. The bump, verified by the same check the workflow runs.
+bump "$version"
+check "$version"
+git add -- "${MARKDOWN[@]}" "$SITE_PIN"
+git commit -q -m "release: eezo $version"
+
+# 3. The tag, and one push: dev, main fast forwarded to the same commit, and the tag. Atomic, so a
+#    rejected main leaves nothing on origin and the tag never publishes a commit main does not show.
+git tag -a "v$version" -m "eezo $version"
+git push --atomic origin dev dev:main "v$version"
+if git show-ref -q --verify refs/heads/main; then
+  git fetch -q origin main:main
+fi
+echo "release: v$version pushed; the Release workflow publishes it and deploys the site"
+echo "         https://github.com/Eezo-framework/eezo/actions/workflows/release.yml"
