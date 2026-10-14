@@ -106,7 +106,7 @@ a prompt.
 | code | meaning |
 |---|---|
 | 0 | done, or in sync |
-| 1 | `db status` found drift; `db sync --apply` refused over destructive or risky changes; `migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
+| 1 | `db status` found drift; `db sync --apply` refused over destructive or risky changes; `db migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
 | 2 | unknown command, or unknown `db` command |
 
 The launcher passes the application's exit code through. sbt prints three lines of its own when

@@ -177,10 +177,10 @@ object Main extends EezoApp {
 ```
 
 `AppSchema` registers the models that derive `Table`, and the schema commands run against it:
-`eezo status` shows the drift between the case classes and the database, `sync` applies it in
-development, `freeze` writes a migration, `migrate` runs the migrations in production. A model
-that derives `Table` beside `Form` and `Resource` gets its seven routes backed by Postgres, and
-the posts you create in the browser survive a restart.
+`eezo db status` shows the drift between the case classes and the database, `eezo db sync`
+applies it in development, `eezo db freeze` writes a migration, `eezo db migrate` runs the
+migrations in production. A model that derives `Table` beside `Form` and `Resource` gets its
+seven routes backed by Postgres, and the posts you create in the browser survive a restart.
 Check out the [the case class](docs/explanation/the-case-class.md) and the
 [schema and migrations](docs/explanation/schema-and-migrations.md) pages for more details.
 

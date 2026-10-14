@@ -27,7 +27,7 @@ classpath, and the schema commands are not commands:
 
 ```
 $ sbt "hello/run db status"
-[eezo] unknown command: status. Run `help` for the list.
+[eezo] unknown command: db status. Run `help` for the list.
 ```
 
 A model deriving `Table` does not compile. The line, tried in `src/main/scala/models/Note.scala`
