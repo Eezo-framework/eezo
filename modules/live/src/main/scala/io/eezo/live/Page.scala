@@ -95,7 +95,7 @@ private[live] final class Page[S](
     * class comment explains. Throws what `handle` (or the render after it) threw.
     */
   def event(event: Event): Unit = {
-    if (closed) throw new IllegalStateException(s"page $id closed")
+    if (closed) throw closedError()
     val done = Promise[Unit]()
     mailbox.put(Msg.FromClient(event, done))
     // `Await` on a virtual thread parks rather than pins, and a `Promise` failure surfaces the
@@ -129,10 +129,11 @@ private[live] final class Page[S](
   }
 
   /** A topic delivery: enqueue and return, never work on the publisher's thread. On a full mailbox
-    * the message is dropped and counted; the loop resyncs (class comment).
+    * the message is dropped and counted; the loop resyncs (class comment). After close it is
+    * dropped without counting, since there is no client left to resync.
     */
   private[live] def post(transition: S => S): Unit =
-    if (!mailbox.offer(Msg.FromTopic(transition))) {
+    if (!closed && !mailbox.offer(Msg.FromTopic(transition))) {
       val _ = dropped.incrementAndGet()
     }
 
@@ -192,9 +193,15 @@ private[live] final class Page[S](
         val _     = mailbox.drainTo(rest)
         val batch = first :: scala.jdk.CollectionConverters.ListHasAsScala(rest).asScala.toList
 
-        val work = batch.filter {
-          case Msg.Stop => running = false; false
-          case _        => true
+        // The batch is cut at Stop: what was offered after it, a post that read the flag as false
+        // but lost the race to the Stop offer included, is never stepped, and a caller blocked
+        // behind it is failed. A message offered before Stop is still stepped.
+        val (work, cut) = batch.span(_ != Msg.Stop)
+        cut match {
+          case Msg.Stop :: afterStop =>
+            running = false
+            failAsClosed(afterStop)
+          case _ => ()
         }
         // Rebase first: it moves the baseline the step diffs against and the tree the resync
         // sends, and the join enqueued it before anything that could follow it.
@@ -230,7 +237,9 @@ private[live] final class Page[S](
       case _: InterruptedException => ()
     } finally {
       subscriptions.foreach(_.cancel())
-      drainPendingAsClosed()
+      val pending = new java.util.ArrayList[Msg]
+      val _       = mailbox.drainTo(pending)
+      failAsClosed(scala.jdk.CollectionConverters.ListHasAsScala(pending).asScala)
     }
   }
 
@@ -318,16 +327,20 @@ private[live] final class Page[S](
 
   private def send(patches: List[Patch]): Unit = listener.foreach(_(patches))
 
-  /** Whoever was still queued when the page closed must not wait forever. */
-  private def drainPendingAsClosed(): Unit = {
-    val rest = new java.util.ArrayList[Msg]
-    val _    = mailbox.drainTo(rest)
-    scala.jdk.CollectionConverters.ListHasAsScala(rest).asScala.foreach {
+  /** A blocked caller behind a closed page gets a failure, not a wait forever; work nobody waits on
+    * is simply dropped.
+    */
+  private def failAsClosed(messages: Iterable[Msg]): Unit =
+    messages.foreach {
       case Msg.FromClient(_, done) =>
-        val _ = done.failure(new IllegalStateException(s"page $id closed"))
+        val _ = done.failure(closedError())
       case _ => ()
     }
-  }
+
+  /** What a caller gets from a closed page: fresh each time, since each failure carries its own
+    * stack.
+    */
+  private def closedError(): IllegalStateException = new IllegalStateException(s"page $id closed")
 }
 
 private[live] object Page {

@@ -312,6 +312,28 @@ class PageSuite extends munit.FunSuite {
     def render(n: Int): Html = div(span(n))
   }
 
+  /** Parks the page thread on `gate` inside every `handle`, after recording which thread it is and
+    * signalling `inside`, so a test can line up offers behind a busy page and later wait for its
+    * thread to end. The park ignores interrupts, unlike [[Held]]'s: close interrupts the page
+    * thread, and an early exit from `handle` would let it drain the mailbox before the test is done
+    * offering.
+    */
+  private final class Parked(gate: CountDownLatch) extends Component[Int] {
+    val inside                            = new CountDownLatch(1)
+    val pageThread                        = new java.util.concurrent.atomic.AtomicReference[Thread]
+    def init(ctx: Init[Int]): Int         = 0
+    def handle(event: Event, n: Int): Int = {
+      pageThread.set(Thread.currentThread())
+      inside.countDown()
+      var waiting = true
+      while (waiting)
+        try { gate.await(); waiting = false }
+        catch { case _: InterruptedException => () }
+      n
+    }
+    def render(n: Int): Html = div(span(n))
+  }
+
   test("an event held past the threshold warns once, still completes, then logs one INFO") {
     val gate    = new CountDownLatch(1)
     val page    = new Page("p10", new Held(gate), slowEventThreshold = 20.millis)
@@ -404,6 +426,46 @@ class PageSuite extends munit.FunSuite {
     assertEquals(topic.subscriberCount, 0)
     topic.publish("into the void")
     intercept[IllegalStateException](page.event(Event("click")))
+  }
+
+  test("a transition posted after close never reaches the mailbox") {
+    // The handler hands over the page thread, so the test can wait for it to end: once it has,
+    // nothing would ever drain the mailbox again, and a message that got in would stay there.
+    val component = new Parked(new CountDownLatch(0))
+    val page      = new Page("p13", component)
+    val _         = page.mount()
+    page.event(Event("who"))
+    page.close()
+    component.pageThread.get.join()
+    assertEquals(page.pendingForTests, 0)
+
+    page.post(_ + 1)
+    assertEquals(page.pendingForTests, 0)
+  }
+
+  test("a message offered after close is cut from the batch and never stepped") {
+    // Deterministic: the page thread is parked inside handle, so nothing drains the mailbox while
+    // the test thread offers Stop (through close) and then Resync, in that order, into a FIFO
+    // queue. The next batch is exactly [Stop, Resync], and only the cut keeps the resync from
+    // sending a whole tree frame. Parked ignores the interrupt close sends, so the page thread
+    // cannot leave handle and take Stop before Resync is offered.
+    val (frames, send) = collector()
+    val gate           = new CountDownLatch(1)
+    val component      = new Parked(gate)
+    val page           = new Page("p14", component)
+    page.attach(send)
+    val _      = page.mount()
+    val caller = Thread.ofVirtual().start(() => page.event(Event("hold")))
+    component.inside.await()
+    page.close()
+    page.resync()
+    val before = frames.size
+    gate.countDown()
+    component.pageThread.get.join()
+    caller.join()
+
+    assertEquals(frames.size, before, "a resync offered after Stop must not send a frame")
+    assertEquals(page.pendingForTests, 0)
   }
 
   test("a non-canonical render fails the mount and cancels what init subscribed") {
