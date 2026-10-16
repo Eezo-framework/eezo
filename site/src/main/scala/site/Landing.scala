@@ -88,23 +88,118 @@ object Landing {
       ),
       "landing"
     )(state =>
-      main(
-        Attrs.id  := "content",
-        Attrs.cls := "landing-main",
-        hero(state.clicks),
-        pillars,
-        steps,
-        features,
-        layers,
-        closing
+      // PROTOTYPE: three placements of the launch video, `?variant=A|B|C`. See LandingVideoPrototype.
+      LandingVideoPrototype.variant(request.queryParam("variant")) match {
+        case key @ ("B" | "D" | "E") =>
+          // B is the Scala red band; D and E are the same band in the site's own colours.
+          val tone = key match {
+            case "D" => "video-band-grape"
+            case "E" => "video-band-ink"
+            case _   => "video-band-red"
+          }
+          main(
+            Attrs.id  := "content",
+            Attrs.cls := s"landing-main variant-${key.toLowerCase}",
+            hero(state.clicks),
+            videoBand(tone),
+            pillars,
+            steps,
+            features,
+            layers,
+            closing,
+            LandingVideoPrototype.switcher(key)
+          )
+        case "C" =>
+          main(
+            Attrs.id  := "content",
+            Attrs.cls := "landing-main variant-c",
+            heroVideoFirst,
+            modelStrip(state.clicks),
+            pillars,
+            steps,
+            features,
+            layers,
+            closing,
+            LandingVideoPrototype.switcher("C")
+          )
+        case _ =>
+          main(
+            Attrs.id  := "content",
+            Attrs.cls := "landing-main variant-a",
+            heroWithVideo,
+            modelStrip(state.clicks),
+            pillars,
+            steps,
+            features,
+            layers,
+            closing,
+            LandingVideoPrototype.switcher("A")
+          )
+      }
+    )
+
+  // ---- PROTOTYPE, variant A: the video where the code block was, the model in a strip below.
+
+  private def heroWithVideo: Html =
+    section(
+      Attrs.cls := "hero",
+      heroCopy,
+      div(Attrs.cls := "hero-video", LandingVideoPrototype.redBox(tilt = true))
+    )
+
+  private def modelStrip(clicks: Int): Html =
+    section(
+      Attrs.cls := "model-strip",
+      div(
+        Attrs.cls := "model-strip-copy",
+        h2("One case class, seven routes"),
+        p(
+          "Declare the model once. The table, the form and every CRUD route are derived from it, ",
+          "and a live component is a function of its state."
+        )
+      ),
+      div(
+        Attrs.cls := "hero-code",
+        CodeBlock.render("scala", Model),
+        routesPop,
+        Clicks.render(clicks)
       )
     )
 
-  private def hero(clicks: Int): Html =
+  // ---- PROTOTYPE, variant B: the hero as it is, a full bleed red band under it.
+
+  private def videoBand(tone: String): Html =
     section(
-      Attrs.cls := "hero",
+      Attrs.cls := s"video-band $tone",
       div(
-        Attrs.cls := "hero-copy",
+        Attrs.cls := "video-band-inner",
+        div(
+          Attrs.cls := "video-band-copy",
+          p(Attrs.cls := "eyebrow eyebrow-light", "Five minutes"),
+          h2("See Eezo build an app"),
+          p(
+            "From ",
+            code("eezo new"),
+            " to a deployed CRUD app with a live page, in one sitting. ",
+            "Watch it before you read a line of the docs."
+          ),
+          a(
+            Attrs.cls  := "btn btn-light",
+            Attrs.href := "/docs/tutorials",
+            "Then follow the tutorial"
+          )
+        ),
+        LandingVideoPrototype.redBox(label = "The intro")
+      )
+    )
+
+  // ---- PROTOTYPE, variant C: the hero stacks, the video wide under the headline.
+
+  private def heroVideoFirst: Html =
+    section(
+      Attrs.cls := "hero hero-stacked",
+      div(
+        Attrs.cls := "hero-copy hero-copy-centred",
         p(Attrs.cls := "eyebrow", "A Scala 3 web framework"),
         h1("Your ", Tags.span(Attrs.cls := "hl", "data model"), " is the source of truth."),
         p(
@@ -112,7 +207,11 @@ object Landing {
           "Declare a model, and Eezo derives tables, forms, and HTTP routes. ",
           "Server-side rendering with functional, direct-style Scala. ",
           "Fast dev feedback, deploys with one command."
-        ),
+        )
+      ),
+      LandingVideoPrototype.redBox(label = "Watch the intro, five minutes"),
+      div(
+        Attrs.cls := "hero-under",
         div(
           Attrs.cls := "cta",
           a(Attrs.cls := "btn btn-primary", Attrs.href := "/docs", "Read the docs"),
@@ -129,29 +228,64 @@ object Landing {
             " first if you like."
           )
         ),
-        ul(
-          Attrs.cls := "facts",
-          li("Scala 3"),
-          li("JDK 25"),
-          li("Postgres"),
-          li("MIT")
+        ul(Attrs.cls := "facts", li("Scala 3"), li("JDK 25"), li("Postgres"), li("MIT"))
+      )
+    )
+
+  // ---- shared pieces the variants reuse
+
+  private def routesPop: Html =
+    ul(
+      Attrs.cls                := "routes-pop",
+      Attrs.attr("aria-label") := "The seven routes the model mounts",
+      Routes.zipWithIndex.map { case ((method, path), i) =>
+        li(
+          Attrs.cls           := s"sticker tilt-${i % 4}",
+          Attrs.data("delay") := i,
+          Tags.span(Attrs.cls := s"method method-${method.toLowerCase}", method),
+          code(path)
+        )
+      }
+    )
+
+  private def heroCopy: Html =
+    div(
+      Attrs.cls := "hero-copy",
+      p(Attrs.cls := "eyebrow", "A Scala 3 web framework"),
+      h1("Your ", Tags.span(Attrs.cls := "hl", "data model"), " is the source of truth."),
+      p(
+        Attrs.cls := "lede",
+        "Declare a model, and Eezo derives tables, forms, and HTTP routes. ",
+        "Server-side rendering with functional, direct-style Scala. ",
+        "Fast dev feedback, deploys with one command."
+      ),
+      div(
+        Attrs.cls := "cta",
+        a(Attrs.cls := "btn btn-primary", Attrs.href := "/docs", "Read the docs"),
+        a(Attrs.cls := "btn btn-ghost", Attrs.href   := "/docs/examples/hello", "See an example")
+      ),
+      div(
+        Attrs.cls := "install",
+        p(Attrs.cls   := "install-label", "Install the command line"),
+        pre(Attrs.cls := "install-cmd", code(Landing.InstallCommand)),
+        p(
+          Attrs.cls := "install-note",
+          "Needs JDK 25 and sbt. ",
+          a(Attrs.href := "/install", "Read the script"),
+          " first if you like."
         )
       ),
+      ul(Attrs.cls := "facts", li("Scala 3"), li("JDK 25"), li("Postgres"), li("MIT"))
+    )
+
+  private def hero(clicks: Int): Html =
+    section(
+      Attrs.cls := "hero",
+      heroCopy,
       div(
         Attrs.cls := "hero-code",
         CodeBlock.render("scala", Model),
-        ul(
-          Attrs.cls                := "routes-pop",
-          Attrs.attr("aria-label") := "The seven routes the model mounts",
-          Routes.zipWithIndex.map { case ((method, path), i) =>
-            li(
-              Attrs.cls           := s"sticker tilt-${i % 4}",
-              Attrs.data("delay") := i,
-              Tags.span(Attrs.cls := s"method method-${method.toLowerCase}", method),
-              code(path)
-            )
-          }
-        ),
+        routesPop,
         Clicks.render(clicks)
       )
     )

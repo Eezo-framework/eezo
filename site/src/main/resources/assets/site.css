@@ -2045,3 +2045,275 @@ html:not(.mac) .shortcut.mac {
     display: block;
   }
 }
+
+/* ======================================================================
+   PROTOTYPE, throwaway: the launch video on the front page, three variants.
+   See LandingVideoPrototype.scala. Delete with it.
+   ====================================================================== */
+
+:root {
+  --scala-red: #dc322f;
+  --scala-red-deep: #a8201e;
+}
+
+/* The Scala red box the embed sits in, every variant. */
+
+.video-box {
+  margin: 0;
+  position: relative;
+}
+
+.video-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 -2px 18px;
+  padding: 6px 14px 8px;
+  border: 3px solid var(--scala-red);
+  border-bottom: 0;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--scala-red);
+  color: #fff;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.video-play {
+  font-size: 0.75rem;
+}
+
+.video-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 3px solid var(--scala-red);
+  border-radius: var(--radius-sm);
+  background: var(--scala-red);
+  box-shadow: 6px 6px 0 var(--scala-red-deep), var(--shadow);
+  overflow: hidden;
+}
+
+.video-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
+.video-box-tilt {
+  transform: rotate(-1.2deg);
+}
+
+/* Variant A: the video in the hero's right column. */
+
+.hero-video {
+  position: relative;
+  padding: 10px 8px 12px 0;
+}
+
+.model-strip {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 48px;
+  align-items: center;
+}
+
+.model-strip .hero-code .codeblock {
+  transform: rotate(-0.8deg);
+}
+
+.model-strip-copy p {
+  color: var(--muted);
+  font-size: 1.1rem;
+  max-width: 30rem;
+}
+
+/* Variant B: a full bleed red band. */
+
+.video-band {
+  position: relative;
+  padding: 72px 0 !important;
+  color: #fff;
+}
+
+.video-band::before {
+  content: "";
+  position: absolute;
+  inset: 0 -50vw;
+  z-index: -1;
+  background: var(--scala-red);
+  background-image: radial-gradient(40% 60% at 85% 20%, rgba(255, 255, 255, 0.14), transparent 70%);
+}
+
+.video-band-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 56px;
+  align-items: center;
+}
+
+.video-band h2 {
+  color: #fff;
+}
+
+.video-band-copy p {
+  font-size: 1.12rem;
+  color: rgba(255, 255, 255, 0.88);
+  max-width: 28rem;
+}
+
+.video-band-copy code {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+}
+
+.eyebrow-light {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.btn-light {
+  background: #fff;
+  color: var(--scala-red-deep);
+  border-color: var(--ink-fixed);
+}
+
+.video-band .video-tab {
+  background: #fff;
+  color: var(--scala-red-deep);
+  border-color: #fff;
+}
+
+.video-band .video-frame {
+  border-color: #fff;
+  background: #fff;
+  box-shadow: 6px 6px 0 var(--scala-red-deep), 0 14px 34px -16px rgba(0, 0, 0, 0.5);
+}
+
+/* Variant C: the hero stacks, video wide under the headline. */
+
+.hero-stacked {
+  grid-template-columns: 1fr;
+  gap: 36px;
+  justify-items: center;
+}
+
+.hero-copy-centred {
+  text-align: center;
+  max-width: 48rem;
+}
+
+.hero-copy-centred .lede {
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.hero-stacked .video-box {
+  width: min(100%, 960px);
+}
+
+.hero-under {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  width: min(100%, 40rem);
+}
+
+.hero-under .cta {
+  justify-content: center;
+}
+
+.hero-under .install {
+  width: 100%;
+}
+
+.hero-under .facts {
+  justify-content: center;
+}
+
+/* The switcher: a high contrast pill at the bottom, obviously not part of the design. */
+
+.proto-bar {
+  position: fixed;
+  bottom: 18px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 1000;
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  padding: 8px 10px;
+  border-radius: 999px;
+  background: #111;
+  color: #fff;
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+  border: 2px dashed #ffd84d;
+}
+
+.proto-bar a {
+  color: #fff;
+  text-decoration: none;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: #333;
+}
+
+.proto-bar a:hover {
+  background: #ffd84d;
+  color: #111;
+}
+
+.proto-label strong {
+  color: #ffd84d;
+}
+
+@media (max-width: 900px) {
+  .model-strip,
+  .video-band-inner {
+    grid-template-columns: 1fr;
+  }
+
+  .video-box-tilt {
+    transform: none;
+  }
+}
+
+/* Variants D and E: the band of B in the site's own colours, the video in a sun frame. */
+
+.video-band-grape::before {
+  background: var(--grape);
+  background-image: radial-gradient(40% 60% at 85% 20%, rgba(255, 255, 255, 0.16), transparent 70%);
+}
+
+.video-band-ink::before {
+  background: var(--code-bg);
+  background-image:
+    radial-gradient(30% 50% at 85% 15%, color-mix(in srgb, var(--grape) 45%, transparent), transparent 70%),
+    radial-gradient(25% 40% at 10% 90%, color-mix(in srgb, var(--sun) 18%, transparent), transparent 70%);
+}
+
+.video-band-grape .btn-light,
+.video-band-ink .btn-light {
+  background: var(--sun);
+  color: var(--ink-fixed);
+  border-color: var(--ink-fixed);
+}
+
+.video-band-grape .video-tab,
+.video-band-ink .video-tab {
+  background: var(--sun);
+  color: var(--ink-fixed);
+  border-color: var(--sun);
+}
+
+.video-band-grape .video-frame,
+.video-band-ink .video-frame {
+  border-color: var(--sun);
+  background: var(--sun);
+  box-shadow: 6px 6px 0 var(--ink-fixed), 0 14px 34px -16px rgba(0, 0, 0, 0.5);
+}
