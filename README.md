@@ -19,6 +19,16 @@
   <a href="https://eezo.io/docs">Docs</a> ·
   <a href="https://eezo.io/api/">API</a>
 </p>
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=IOsSpHu3eKE">
+    <img src="https://img.youtube.com/vi/IOsSpHu3eKE/maxresdefault.jpg" width="720"
+         alt="Shopping for a Scala framework, the Scala Days talk">
+  </a>
+</p>
+<p align="center">
+  &#9654; <a href="https://www.youtube.com/watch?v=IOsSpHu3eKE">Watch the Scala Days talk</a>, 27 minutes:
+  Daniel Ciocîrlan and Riccardo Cardin build a shop with Eezo on stage, from the first case class to a working checkout.
+</p>
 
 ---
 
