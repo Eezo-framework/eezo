@@ -27,7 +27,14 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+      # The whole history, tags included, so that sbt-dynver derives the same version here as the
+      # release workflow does. On the commit a release tags, that is the release version itself,
+      # and the site step below needs it to be: a shallow clone has no tag to describe, so that
+      # commit would be versioned by its hash and the site would still look for the release on
+      # Maven Central, where it is not yet.
       - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
 
       - name: Set up JDK 25
         uses: actions/setup-java@v5
@@ -92,12 +99,21 @@ jobs:
           cd examples && sbt -batch test
 
       # The documentation site is an eezo application too, with a build of its own against the
-      # released eezo on Maven Central, the way a user's application is built. Its suite renders
-      # every page out of the repository's Markdown and follows every link, so a doc edit that
-      # breaks a cross reference, or a new file no section lists, fails here rather than on
-      # eezo.io. The API reference it serves is the scaladoc `unidoc` writes at the root, so that
-      # runs first; under `CI` the suite refuses a build without it.
+      # released eezo, the way a user's application is built. Its suite renders every page out of
+      # the repository's Markdown and follows every link, so a doc edit that breaks a cross
+      # reference, or a new file no section lists, fails here rather than on eezo.io. The API
+      # reference it serves is the scaladoc `unidoc` writes at the root, so that runs first; under
+      # `CI` the suite refuses a build without it.
+      #
+      # `publishLocal` first, as the release workflow does before it deploys the site. The site pins
+      # a release, and on the commit that cuts it the pin names a version that is on its way to
+      # Maven Central but not there yet: the release workflow is publishing it at the same moment
+      # this runs. Published locally from the same commit, it sits in the ivy cache sbt consults
+      # before Central, so the site builds against the code it documents rather than against a
+      # resolution that will fail. On every other commit the version published locally is not the
+      # one pinned, nothing in the cache matches, and the site resolves the release from Central as
+      # a user's build would.
       - name: Build the documentation site
         run: |
-          sbt -batch unidoc
+          sbt -batch publishLocal unidoc
           cd site && sbt -batch scalafmtCheckAll compile test
