@@ -40,6 +40,10 @@ class RoutesSuite extends FunSuite {
     assert(script.contains("maven-metadata.xml"), "the release is asked of Maven Central")
     assert(!script.contains("publishLocalForExample"), "nothing is built from source")
     assert(page(get("/")).contains(Landing.InstallCommand), "the command on the front page")
+    assert(
+      page(get("/")).contains(s"https://www.youtube-nocookie.com/embed/${Landing.VideoId}"),
+      "the talk on the front page"
+    )
     val launcher = get("/install/eezo")
     assertEquals(launcher.status, 200)
     val text = launcher.body match {

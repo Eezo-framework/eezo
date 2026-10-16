@@ -77,6 +77,11 @@ object Landing {
   /** The one command the front page shows, spelled here so a test can hold the page to it. */
   val InstallCommand: String = "curl -fsSL https://eezo.io/install | bash"
 
+  /** The Scala Days talk the front page embeds, spelled here so a test can hold the page to it. */
+  val VideoId: String = "IOsSpHu3eKE"
+
+  private val Iframe: Tag = Tag("iframe")
+
   def page(request: Request): Html =
     Layout.page(
       request,
@@ -92,6 +97,7 @@ object Landing {
         Attrs.id  := "content",
         Attrs.cls := "landing-main",
         hero(state.clicks),
+        talk,
         pillars,
         steps,
         features,
@@ -153,6 +159,47 @@ object Landing {
           }
         ),
         Clicks.render(clicks)
+      )
+    )
+
+  /** The talk, in a band under the hero: a shop built with Eezo on stage at Scala Days. The embed
+    * is YouTube's cookieless host and loads lazily, so the page does not pay for it until the band
+    * is near the viewport.
+    */
+  private def talk: Html =
+    section(
+      Attrs.cls := "talk",
+      div(
+        Attrs.cls := "talk-inner",
+        div(
+          Attrs.cls := "talk-copy",
+          p(Attrs.cls := "eyebrow", "From Scala Days"),
+          h2("Shopping for a Scala framework"),
+          p(
+            "Daniel Ciocîrlan and Riccardo Cardin build a shop with Eezo on stage, ",
+            "from the first case class to a working checkout."
+          ),
+          a(Attrs.cls := "btn btn-primary", Attrs.href := "/docs/examples/shop", "Read the shop")
+        ),
+        figure(
+          Attrs.cls := "talk-video",
+          figcaption(
+            Attrs.cls := "talk-tab",
+            Tags.span(Attrs.cls := "talk-play", Attrs.attr("aria-hidden") := "true", "▶"),
+            "Watch the talk, 27 minutes"
+          ),
+          div(
+            Attrs.cls := "talk-frame",
+            Iframe(
+              Attrs.src                     := s"https://www.youtube-nocookie.com/embed/$VideoId",
+              Attrs.attr("title")           := "Shopping for a Scala Framework, Scala Days",
+              Attrs.attr("loading")         := "lazy",
+              Attrs.attr("allow")           := "encrypted-media; picture-in-picture; web-share",
+              Attrs.attr("allowfullscreen") := "",
+              Attrs.attr("referrerpolicy")  := "strict-origin-when-cross-origin"
+            )
+          )
+        )
       )
     )
 

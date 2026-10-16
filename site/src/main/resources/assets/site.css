@@ -828,6 +828,94 @@ html:not(.mac) .shortcut.mac {
   font-size: 1rem;
 }
 
+/* The talk: a band in the code blocks' navy under the hero, the video in a sun frame. The band's
+   colours are fixed rather than tokens, since it is the same dark card in either theme. */
+
+.talk {
+  position: relative;
+  padding: 72px 0 !important;
+  color: #fff;
+}
+
+.talk::before {
+  content: "";
+  position: absolute;
+  inset: 0 -50vw;
+  z-index: -1;
+  background: var(--code-bg);
+  background-image:
+    radial-gradient(30% 50% at 85% 15%, color-mix(in srgb, var(--grape) 45%, transparent), transparent 70%),
+    radial-gradient(25% 40% at 10% 90%, color-mix(in srgb, var(--sun) 18%, transparent), transparent 70%);
+}
+
+.talk-inner {
+  display: grid;
+  grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr);
+  gap: 56px;
+  align-items: center;
+}
+
+.talk .eyebrow {
+  color: var(--sun);
+}
+
+.talk h2 {
+  color: #fff;
+}
+
+.talk-copy p {
+  font-size: 1.12rem;
+  color: rgba(255, 255, 255, 0.88);
+  max-width: 28rem;
+}
+
+.talk .btn-primary {
+  border-color: var(--ink-fixed);
+}
+
+.talk-video {
+  margin: 0;
+  position: relative;
+}
+
+.talk-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 -2px 18px;
+  padding: 6px 14px 8px;
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+}
+
+.talk-play {
+  font-size: 0.75rem;
+}
+
+.talk-frame {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  border: 8px solid var(--sun);
+  border-radius: 14px;
+  background: var(--sun);
+  box-shadow: 6px 6px 0 var(--ink-fixed), 0 14px 34px -16px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+
+.talk-frame iframe {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  display: block;
+}
+
 .routes-pop {
   list-style: none;
   padding: 0;
@@ -1893,6 +1981,10 @@ html:not(.mac) .shortcut.mac {
   .hero {
     grid-template-columns: 1fr;
     padding-top: 40px !important;
+  }
+
+  .talk-inner {
+    grid-template-columns: 1fr;
   }
 
   .hero-code .codeblock {
