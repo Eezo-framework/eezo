@@ -527,22 +527,24 @@ object Guard {
     * is read only where a sign in is stamped and where its age is measured, so passing one changes
     * nothing else, and the default is the system clock in UTC.
     *
-    * `tokens` answers with the key of the user a [[Token]] was issued to, and is what lets the
-    * guard wrap an API route. It is handed the hash and never the plain text, so an application
-    * looks its row up by the value it stored. Left out, the guard identifies browsers only, and
-    * wrapping an API route with it stops the boot. A function with a default rather than an
-    * `Option`, so the common call names a lambda and nothing else; the default is a class of its
-    * own, [[Untokened]], because "left out" has to be told apart from a lookup that answers nobody,
-    * and a class is the one default a match can recognise without comparing references.
+    * `tokens` comes last so that a call written before it existed, with `login`, `home`, `lifetime`
+    * or `clock` passed by position, still compiles. It answers with the key of the user a [[Token]]
+    * was issued to, and is what lets the guard wrap an API route. It is handed the hash and never
+    * the plain text, so an application looks its row up by the value it stored. Left out, the guard
+    * identifies browsers only, and wrapping an API route with it stops the boot. A function with a
+    * default rather than an `Option`, so the common call names a lambda and nothing else; the
+    * default is a class of its own, [[Untokened]], because "left out" has to be told apart from a
+    * lookup that answers nobody, and a class is the one default a match can recognise without
+    * comparing references.
     */
   def apply[U](
       find: Id[U] => Option[U],
       credentials: String => Option[(Id[U], Password)],
-      tokens: Token => Option[Id[U]] = untokened[U],
       login: Url = Url.Mounted("/login"),
       home: Url = Url.Mounted("/"),
       lifetime: Duration = DefaultLifetime,
-      clock: Clock = Clock.systemUTC()
+      clock: Clock = Clock.systemUTC(),
+      tokens: Token => Option[Id[U]] = untokened[U]
   ): Guard[U] = {
     val lookup = tokens match {
       case _: Untokened[?] => None

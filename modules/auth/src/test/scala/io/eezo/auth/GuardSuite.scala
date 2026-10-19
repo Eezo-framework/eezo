@@ -353,6 +353,14 @@ class GuardSuite extends munit.FunSuite {
     assert(!ran, "the handler behind the guard ran anyway")
   }
 
+  test("a login url passed by position still redirects there, as it did before tokens existed") {
+    // Pins the parameter order of a released signature: a third positional argument is `login`.
+    val g       = Guard[User](find, credentials, Url.Mounted("/signin"))
+    val refused = posts(g).dispatch(browser(Method.GET, "/posts"))
+    assertEquals(refused.status, 303)
+    assertEquals(refused.header("Location"), Some("/signin"))
+  }
+
   test("a session naming a row that is gone is refused, and loses that entry on the way out") {
     val response = posts().dispatch(signedIn(Id.gen[User]()))
     assertEquals(response.status, 303)
