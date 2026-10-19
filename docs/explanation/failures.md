@@ -29,11 +29,11 @@ stops the boot and reaches no boundary at all.
 
 Throw one of the sealed set in `io.eezo.http`: `BadRequest(detail)`, `Forbidden(detail)`,
 `NotFound(path)`, `MethodNotAllowed(allowed)`, `PayloadTooLarge(limit)`,
-`NotImplemented(method)`. None of them carries a status. The request boundary picks it, and
-renders a problem page with the status, a title and the detail. So a 404 is `throw
-NotFound(request.path)`, which is what a derived `show` does for a missing row. Its detail
-always reads `no route matches <path>`, row or route. For a 404 with your own wording, throw
-your own exception and map it in the hook below.
+`UnprocessableContent(detail)`, `NotImplemented(method)`. None of them carries a status. The
+request boundary picks it, and renders a problem page with the status, a title and the detail.
+So a 404 is `throw NotFound(request.path)`, which is what a derived `show` does for a missing
+row. Its detail always reads `no route matches <path>`, row or route. For a 404 with your own
+wording, throw your own exception and map it in the hook below.
 
 `Response.status(404)` is the other way: a value, a bare 404, no detail and no page. It's also
 the way to a status eezo doesn't model.

@@ -41,9 +41,10 @@ private[http] object Boundary {
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>
           Resolution(Problem(405, e.getMessage, path), Seq("Allow" -> allowed.mkString(", ")))
-        case PayloadTooLarge(_)         => Resolution(Problem(413, e.getMessage, path))
-        case NotImplemented(_)          => Resolution(Problem(501, e.getMessage, path))
-        case InternalServerError(cause) =>
+        case PayloadTooLarge(_)           => Resolution(Problem(413, e.getMessage, path))
+        case UnprocessableContent(detail) => Resolution(Problem(422, detail, path))
+        case NotImplemented(_)            => Resolution(Problem(501, e.getMessage, path))
+        case InternalServerError(cause)   =>
           Resolution(Problem(500, if (config.dev) messageOf(cause) else Redacted, path))
       }
 

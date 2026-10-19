@@ -117,6 +117,9 @@ the application while the drift is dangerous.
 - **`eezo-live`** sits on the http layer too. `LiveApp` adds the live socket and client script
   to whatever the application serves. `EezoApp` includes it, and an application on `eezo-http`
   alone writes `extends LiveApp` instead of `extends HttpApp` to get it.
+- **`eezo-upickle`** sits on the http layer and the umbrella doesn't carry it. It gives an API
+  route an `api.Serde` for any model through upickle, so `eezo-http` itself has no JSON library
+  on its classpath. An application that wants another library writes its own `given api.Serde`.
 - **`eezo-testkit`** sees all of them. It boots a real server against a real database and
   drives it over HTTP and WebSocket, for tests.
 

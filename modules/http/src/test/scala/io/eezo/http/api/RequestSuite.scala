@@ -2,7 +2,8 @@ package io.eezo.http.api
 
 import java.nio.charset.StandardCharsets
 
-import io.eezo.http.{BadRequest, Method}
+import io.eezo.core.Id
+import io.eezo.http.{BadRequest, Method, UnprocessableContent}
 
 /** What a handler on an API route reads: the request a program sent, and nothing a browser carries.
   *
@@ -81,5 +82,45 @@ class RequestSuite extends munit.FunSuite {
       compileErrors("request.form"),
       compileErrors("request.currentUser")
     ).foreach(failure => assert(clue(failure).contains("is not a member of"), failure))
+  }
+
+  /** A payload whose instance answers with whatever the body names, so each outcome of the seam can
+    * be asked for by the body alone, with no JSON library in `http`.
+    */
+  private final case class Quantity(value: Int)
+
+  private given Serde[Quantity] with {
+    def serialize(value: Quantity): String = value.value.toString
+
+    def deserialize(body: Array[Byte]): Either[Serde.Failure, Quantity] =
+      new String(body, StandardCharsets.UTF_8) match {
+        case "malformed" => Left(Serde.Failure.Malformed("expected json at $"))
+        case "unfit"     => Left(Serde.Failure.Unfit("missing keys in dictionary: value at $"))
+        case number      => Right(Quantity(number.toInt))
+      }
+
+    def deserialize(body: Array[Byte], key: Id[Quantity]): Either[Serde.Failure, Quantity] =
+      deserialize(body)
+  }
+
+  private def sending(body: String): Request =
+    request.copy(body = body.getBytes(StandardCharsets.UTF_8))
+
+  test("a body the Serde reads is the value as returns") {
+    assertEquals(sending("3").as[Quantity], Quantity(3))
+  }
+
+  test("a body that is not JSON is refused as a BadRequest carrying the Serde's reason") {
+    assertEquals(
+      intercept[BadRequest](sending("malformed").as[Quantity]).detail,
+      "expected json at $"
+    )
+  }
+
+  test("JSON that does not fit the model is refused as UnprocessableContent with the reason") {
+    assertEquals(
+      intercept[UnprocessableContent](sending("unfit").as[Quantity]).detail,
+      "missing keys in dictionary: value at $"
+    )
   }
 }

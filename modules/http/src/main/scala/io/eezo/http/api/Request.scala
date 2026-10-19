@@ -1,6 +1,6 @@
 package io.eezo.http.api
 
-import io.eezo.http.{FromPath, Method}
+import io.eezo.http.{BadRequest, FromPath, Method, UnprocessableContent}
 
 /** A request on an API route: one a program sends, in which no session takes part.
   *
@@ -38,6 +38,21 @@ final case class Request(
     */
   def param[A](name: String)(using from: FromPath[A]): A =
     io.eezo.http.Request.param(pathParams, name)
+
+  /** The body, read into a model through its [[Serde]].
+    *
+    * A value rather than the `Either` the browser's `request.as` returns, because on an API route
+    * there is no form to render again with its errors: the only answer to a body that will not read
+    * is a refusal, so it is thrown to the boundary, a [[io.eezo.http.BadRequest]] when the body is
+    * not JSON and an [[io.eezo.http.UnprocessableContent]] when it does not fit, each carrying the
+    * adapter's reason as the problem's detail.
+    */
+  def as[A](using serde: Serde[A]): A =
+    serde.deserialize(body) match {
+      case Right(value)                          => value
+      case Left(Serde.Failure.Malformed(reason)) => throw BadRequest(reason)
+      case Left(Serde.Failure.Unfit(reason))     => throw UnprocessableContent(reason)
+    }
 }
 
 object Request {

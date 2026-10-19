@@ -38,6 +38,16 @@ final case class MethodNotAllowed(allowed: Seq[Method])
   */
 final case class Forbidden(detail: String) extends EezoException(detail)
 
+/** A body that decoded and does not fit what the handler asked for: JSON on an API route whose
+  * fields are missing or of the wrong type. A refusal of its own rather than a `BadRequest`,
+  * because a client that sent well formed JSON needs to know the fix is in its fields and not in
+  * its encoding, which is the split the HTML routes already make between a 400 and a 422.
+  *
+  * Thrown rather than returned, unlike the 422 a derived form answers with: an API route has no
+  * page to render again, so nothing is lost by letting the boundary say it.
+  */
+final case class UnprocessableContent(detail: String) extends EezoException(detail)
+
 /** The request body exceeded `HttpApp.maxBodySize`. */
 final case class PayloadTooLarge(limit: Long)
     extends EezoException(s"request body exceeds the $limit byte limit")

@@ -110,6 +110,7 @@ Every artifact is published at the same version, under the `io.eezo` group:
 | `eezo-db` | the database layer: the pool, the `sql` interpolator, transactions, `Table`, schema commands and migrations, `DbApp` |
 | `eezo-auth` | sessions, email and password sign in, CSRF, route guards and row ownership                                           |
 | `eezo-live` | server-side rendered UI with the thin browser client: the diff and patch protocol, the client runtime, PubSub        |
+| `eezo-upickle` | the JSON adapter for API routes: `api.Serde` for any model through upickle, not carried by the umbrella                |
 | `eezo-core` | what the others build on: configuration, HTML tree and DSL, derivation, model keys                                   |
 | `sbt-eezo` | the sbt plugin that generates the route table, for sbt 1 and sbt 2                                                   |
 

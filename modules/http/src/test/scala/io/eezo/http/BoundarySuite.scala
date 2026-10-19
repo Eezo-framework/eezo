@@ -21,6 +21,7 @@ class BoundarySuite extends munit.FunSuite {
     assertEquals(problem(NotFound("/x")).status, 404)
     assertEquals(problem(MethodNotAllowed(Seq(Method.GET))).status, 405)
     assertEquals(problem(PayloadTooLarge(1024)).status, 413)
+    assertEquals(problem(UnprocessableContent("unfit")).status, 422)
     assertEquals(problem(NotImplemented("BREW")).status, 501)
     assertEquals(problem(InternalServerError(new RuntimeException("boom"))).status, 500)
   }
@@ -30,6 +31,12 @@ class BoundarySuite extends munit.FunSuite {
     assertEquals(result.tpe, "about:blank")
     assertEquals(result.title, "Not Found")
     assertEquals(result.instance, "/widgets/7")
+  }
+
+  test("a body that does not fit is titled Unprocessable Content and carries its reason") {
+    val result = problem(UnprocessableContent("missing keys in dictionary: price at $"))
+    assertEquals(result.title, "Unprocessable Content")
+    assertEquals(result.detail, "missing keys in dictionary: price at $")
   }
 
   test("a 4xx detail is the exception's message, in both modes") {

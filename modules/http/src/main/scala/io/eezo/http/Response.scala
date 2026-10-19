@@ -99,15 +99,15 @@ final case class Response(
     )
 }
 
-/** Named constructors stop at `Ok` and `Redirect` because those are the only two responses that
-  * carry structure beyond a bare code: a page and its Content Type for the former, a Location for
-  * the latter. A `NotFound` constructor is deliberately absent even though it would round out the
-  * set: eezo's own failure statuses are reached by throwing the sealed set in `Errors.scala`, which
-  * `Boundary` catches and renders as a full RFC 9457 problem page. A `Response.NotFound` would read
-  * as the way to say 404 while returning an empty body, skipping that page entirely, and it would
-  * sit one letter from the `NotFound` exception that does produce it. Every status eezo does not
-  * give a name to, including 404 when it is reached outside that thrown path, goes through `status`
-  * instead.
+/** Named constructors stop at `Ok`, `Created` and `Redirect` because those are the only responses
+  * that carry structure beyond a bare code: a page or a model for the first, a model for the
+  * second, a Location for the third. A `NotFound` constructor is deliberately absent even though it
+  * would round out the set: eezo's own failure statuses are reached by throwing the sealed set in
+  * `Errors.scala`, which `Boundary` catches and renders as a full RFC 9457 problem page. A
+  * `Response.NotFound` would read as the way to say 404 while returning an empty body, skipping
+  * that page entirely, and it would sit one letter from the `NotFound` exception that does produce
+  * it. Every status eezo does not give a name to, including 404 when it is reached outside that
+  * thrown path, goes through `status` instead.
   */
 object Response {
 
@@ -131,6 +131,24 @@ object Response {
   /** A 200 carrying a page. */
   def Ok(html: io.eezo.core.html.Html): Response =
     Response(200, Seq(HtmlContentType), Body.Html(html))
+
+  /** A 200 carrying a model as JSON, written by its [[api.Serde]].
+    *
+    * An overload of `Ok` rather than a constructor named after JSON: the status is in the name and
+    * the format in the body's type, as it is for a page. A page still picks the overload above,
+    * because a parameter of type `Html` is more specific than a type parameter, so a catch all
+    * adapter in scope cannot send a page out as JSON. It does make any other value, a `String`
+    * included, a model with a Serde once the adapter is imported. No content type is set here: the
+    * server names a [[Body.Json]] when the response names none.
+    */
+  def Ok[A](value: A)(using serde: api.Serde[A]): Response =
+    Response(200, Seq.empty, Body.Json(serde.serialize(value)))
+
+  /** A 201 carrying the model an API route just made, written by its [[api.Serde]]. The `Location`
+    * of the new row is the handler's to add, since only the handler knows where the row lives.
+    */
+  def Created[A](value: A)(using serde: api.Serde[A]): Response =
+    Response(201, Seq.empty, Body.Json(serde.serialize(value)))
 
   /** A 303, which is the redirect a form POST wants: the follow-up is a GET. */
   def Redirect(location: String): Response =

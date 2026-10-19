@@ -87,10 +87,12 @@ final case class Response(
 )
 ```
 
-**The status is an `Int`.** `Response.Ok(page)` and `Response.Redirect(url)` are the two named
-constructors, because those are the two responses with structure beyond the code: a page and
-its content type, a `Location`. Everything else goes through `Response.status(418)`. A
-framework that can't say 418 is one people work around.
+**The status is an `Int`.** `Response.Ok`, `Response.Created` and `Response.Redirect(url)` are
+the named constructors, because those are the responses with structure beyond the code.
+`Response.Ok(page)` carries a page and its content type, and its overload `Response.Ok(value)`
+carries a model through the `Serde` in scope. `Response.Created(value)` carries a model the same
+way. `Response.Redirect(url)` carries a `Location`. Everything else goes through
+`Response.status(418)`. A framework that can't say 418 is one people work around.
 
 **Headers are an ordered sequence that allows repeats.** Writing wants both, and `Set-Cookie`
 is the header that needs both. The request's headers are a map, because reading wants lookup.

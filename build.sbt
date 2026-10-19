@@ -146,6 +146,14 @@ lazy val auth = module("auth")
   // `live` drive their own sockets with.
   .settings(libraryDependencies ++= Seq(springCrypto, jettyWsClient))
 
+// The first JSON adapter: `api.Serde` for any model, through upickle. A module of its own, and
+// outside the umbrella's dependencies, because the JSON library is the application's choice and an
+// application with no API route should not carry one. `test->test` on `http` is what lets its server
+// suite boot a route through `http`'s own fixtures rather than spell them a second time.
+lazy val eezoUpickle = module("upickle")
+  .dependsOn(http % "compile->compile;test->test")
+  .settings(libraryDependencies += upickle)
+
 // Booting a real server against a real database, and driving it over HTTP and WebSocket.
 lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 
@@ -226,7 +234,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, eezo, sbtEezo)
+  .aggregate(core, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
   .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
@@ -244,7 +252,8 @@ lazy val root = (project in file("."))
       live,
       auth,
       testkit,
-      eezo
+      eezo,
+      eezoUpickle
     ),
     ScalaUnidoc / unidoc / target        := baseDirectory.value / "target" / "unidoc",
     ScalaUnidoc / unidoc / scalacOptions := Seq(

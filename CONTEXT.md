@@ -30,6 +30,15 @@ How one Scala type reads from and shows as a single form input: its input type, 
 its parsed value and what an absent submission means for it.
 _Avoid_: column, property, attribute
 
+**Serde**:
+How a model reads from and shows as JSON on an API route, the way Form is how it reads from and
+shows as a form: how a request body is read back into an instance, and how an instance is written
+into a response. It knows nothing about paths, verbs or storage, and a model with no key field can
+still have one. eezo holds only the seam; the JSON library behind it is the application's, chosen
+by adding an adapter, and eezo-upickle is the first. A body that is not JSON is refused with a 400,
+and JSON that does not fit the model with a 422, each saying what was wrong and where.
+_Avoid_: codec, encoder, decoder, JSON format, serializer
+
 ### How Form and Resource relate
 
 Form is what a handler calls. Resource is what writes handlers, and every handler it writes calls
@@ -48,6 +57,11 @@ inputs and the handler that reads them cannot disagree.
 
 Merging the two would break the first shape, since a model with no key cannot mount seven routes,
 and would leave the third shape with no Form for the handwritten half to call.
+
+Serde stands to an API route as Form stands to a page. A payload is a model that derives only a
+Serde: an API handler reads the body into it and chooses its own path, verb and outcome, as a login
+form is a model that derives only Form. An order placed by a program is the typical case, and it
+has no key.
 
 ### Application
 

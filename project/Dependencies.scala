@@ -39,6 +39,11 @@ object Dependencies {
       * with it.
       */
     val slf4j = "2.0.17"
+
+    /** upickle. The version the shop example already builds against, so that an application that
+      * adds `eezo-upickle` beside its own upickle meets no eviction.
+      */
+    val upickle = "4.4.3"
   }
 
   /** The test framework. Every module gets it; nothing else is shared by default. */
@@ -99,4 +104,9 @@ object Dependencies {
     * own, with no Spring context, no servlet and no transitive dependency behind it.
     */
   val springCrypto = "org.springframework.security" % "spring-security-crypto" % V.springCrypto
+
+  /** The JSON library behind `eezo-upickle`, and only there. `http` names a seam and never a JSON
+    * library, so an application chooses the one it serializes with by choosing the adapter.
+    */
+  val upickle = "com.lihaoyi" %% "upickle" % V.upickle
 }
