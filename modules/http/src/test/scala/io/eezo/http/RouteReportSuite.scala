@@ -95,18 +95,18 @@ class RouteReportSuite extends FunSuite {
   }
 
   test("an API route lists with its mark, and a browser route's line is unchanged") {
-    val api =
-      Route.handwritten(Method.POST, "/webhooks/stripe", (_: ApiRequest) => Response.status(200))
+    val hook =
+      Route.handwritten(Method.POST, "/webhooks/stripe", (_: api.Request) => Response.status(200))
     assertEquals(
-      RouteReport.listing(Seq(http(Method.GET, "/"), api)),
+      RouteReport.listing(Seq(http(Method.GET, "/"), hook)),
       "2 routes:\n  GET /\n  POST /webhooks/stripe api"
     )
   }
 
   test("a warning names an API route the way it names any other, with no mark") {
-    val api = Route.handwritten(Method.GET, "/feed/:id", (_: ApiRequest) => Response.status(200))
+    val feed = Route.handwritten(Method.GET, "/feed/:id", (_: api.Request) => Response.status(200))
     assertEquals(
-      RouteReport.shadowed(api, http(Method.GET, "/feed/latest")),
+      RouteReport.shadowed(feed, http(Method.GET, "/feed/latest")),
       "GET /feed/:id shadows GET /feed/latest, which can never match. Routes are tried in table " +
         "order; move the narrower route first."
     )

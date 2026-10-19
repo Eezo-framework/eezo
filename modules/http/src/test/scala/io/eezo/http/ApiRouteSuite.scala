@@ -14,7 +14,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
   private val ok: Handler = _ => Response.Ok(Html.text("ok"))
 
   /** A webhook, the shape the shop's Stripe handler has: reads the body, answers a status. */
-  private def webhook(request: ApiRequest): Response =
+  private def webhook(request: api.Request): Response =
     if (request.body.isEmpty) Response.status(400) else Response.status(200)
 
   private def page(request: Request): Response = Response.Ok(Html.text(request.path))
@@ -53,7 +53,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
     }
   }
 
-  test("the generated row makes an API route of a handler that takes an ApiRequest") {
+  test("the generated row makes an API route of a handler that takes an api.Request") {
     val route = Route.handwritten(Method.POST, "/webhooks/stripe", webhook)
     assertEquals(kindOf(route), RouteKind.Api)
     assertEquals(route.provenance, Provenance.Handwritten)
@@ -86,7 +86,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
 
   test("the handler and the guard around it see an empty session, whatever the request carried") {
     var guardSaw: Option[Session] = None
-    var handlerSaw                = Option.empty[ApiRequest]
+    var handlerSaw                = Option.empty[api.Request]
     val guard                     = Guarded[ApiRouteSuite](
       Set.empty,
       {
@@ -103,7 +103,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
         Route.handwritten(
           Method.POST,
           "/webhooks/stripe",
-          (request: ApiRequest) => { handlerSaw = Some(request); Response.status(200) }
+          (request: api.Request) => { handlerSaw = Some(request); Response.status(200) }
         )
       )
     )
@@ -121,14 +121,14 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
     // What an application can write with public names only: the kind of an existing API route,
     // copied onto a page whose handler takes a Request and reads the session.
     var pageSaw = Option.empty[Session]
-    val api     = kindOf(Route.handwritten(Method.POST, "/webhooks/stripe", webhook))
+    val apiKind = kindOf(Route.handwritten(Method.POST, "/webhooks/stripe", webhook))
     val flipped = Route
       .Http(
         Method.POST,
         PathPattern.parse("/account/delete"),
         request => { pageSaw = Some(request.session); Response.status(200) }
       )
-      .copy(kind = api)
+      .copy(kind = apiKind)
     val signedIn = request(Method.POST, "/account/delete").copy(
       session = Csrf.carrying(Session.empty.set("user", "42"), token)
     )
@@ -153,7 +153,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
     val routes =
       RouteTable(
         guard.mounting(
-          Route.handwritten(Method.GET, "/status", (_: ApiRequest) => Response.status(204))
+          Route.handwritten(Method.GET, "/status", (_: api.Request) => Response.status(204))
         )
       )
     val response = routes.dispatch(program(Method.GET, "/status", body = ""))
@@ -168,7 +168,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
           Route.handwritten(
             Method.POST,
             "/webhooks/stripe",
-            (_: ApiRequest) => Response.status(200).withSession(named)
+            (_: api.Request) => Response.status(200).withSession(named)
           )
         )
       )
@@ -201,7 +201,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
         Route.handwritten(
           Method.POST,
           "/webhooks/stripe",
-          (_: ApiRequest) => { called = true; Response.status(200) }
+          (_: api.Request) => { called = true; Response.status(200) }
         )
       )
     )
@@ -231,7 +231,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
         Route.handwritten(
           Method.POST,
           "/webhooks/stripe",
-          (_: ApiRequest) => { called = true; Response.status(200) }
+          (_: api.Request) => { called = true; Response.status(200) }
         )
       )
     )
@@ -284,8 +284,8 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
   test("shadowing and orphans are still reported with API routes in the table") {
     val table = RouteTable(
       Seq(
-        Route.handwritten(Method.GET, "/feed/:id", (_: ApiRequest) => Response.status(200)),
-        Route.handwritten(Method.GET, "/feed/latest", (_: ApiRequest) => Response.status(200)),
+        Route.handwritten(Method.GET, "/feed/:id", (_: api.Request) => Response.status(200)),
+        Route.handwritten(Method.GET, "/feed/latest", (_: api.Request) => Response.status(200)),
         Route.derived(Method.GET, "/widgets/new", ok)
       )
     )
@@ -298,7 +298,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
 
   // A form page cannot be one
 
-  test("a New or Edit file whose handler takes an ApiRequest does not compile, naming the file") {
+  test("a New or Edit file whose handler takes an api.Request does not compile, naming the file") {
     val failures = Seq(
       compileErrors(
         """Route.page(Method.GET, "/hooks/new", ApiPages.`new`, "src/main/scala/app/hooks/New.scala")"""
@@ -309,6 +309,7 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
     )
     failures.foreach { case (failure, source) =>
       assert(clue(failure).contains(source), failure)
+      assert(clue(failure).contains("takes an api.Request"), failure)
       assert(clue(failure).contains("take a Request there"), failure)
       assert(clue(failure).contains("rename the file"), failure)
       assert(!clue(failure).contains("literal string is expected"), failure)
@@ -364,8 +365,9 @@ class ApiRouteSuite extends munit.FunSuite with ResourceFixtures {
 
 /** Handlers shaped the way a file under `app/` writes them, for the form page rows above. */
 object ApiPages {
-  def `new`(request: ApiRequest): Response = Response.status(if (request.body.isEmpty) 204 else 200)
-  def edit(request: ApiRequest): Response  = Response.status(if (request.body.isEmpty) 204 else 200)
+  def `new`(request: api.Request): Response =
+    Response.status(if (request.body.isEmpty) 204 else 200)
+  def edit(request: api.Request): Response = Response.status(if (request.body.isEmpty) 204 else 200)
 }
 
 object BrowserPages {
@@ -382,6 +384,6 @@ final class Clock(val now: Int)
 object CapabilityPages {
   def index(request: Request)(using clock: Clock): Response =
     Response.Ok(Html.text(s"${request.path} ${clock.now}"))
-  def hook(request: ApiRequest)(using clock: Clock): Response =
+  def hook(request: api.Request)(using clock: Clock): Response =
     Response.status(if (request.body.isEmpty) 400 else 200 + clock.now)
 }

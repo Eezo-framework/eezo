@@ -21,7 +21,7 @@ object Stripe {
 
   /** Who may call the webhook: a caller whose `Stripe-Signature` matches the raw body. Anyone else
     * is refused with 403 before the handler runs. The wrapper sees the `Request`; the handler after
-    * it sees the `ApiRequest`.
+    * it sees the `api.Request`.
     */
   def signed[A]: Guarded[A] =
     Guarded(

@@ -20,7 +20,7 @@ class ClientSuite extends munit.FunSuite {
   /** What the API capture route last received. An API route, because no session takes part in a
     * program's post, so no CSRF token comes with it; the test thread reads it once the reply is in.
     */
-  private val captured = new AtomicReference[ApiRequest]()
+  private val captured = new AtomicReference[api.Request]()
 
   private def capturedText: String = new String(captured.get.body, StandardCharsets.UTF_8)
 
@@ -45,7 +45,7 @@ class ClientSuite extends munit.FunSuite {
         Route.handwritten(
           Method.POST,
           "/api/capture",
-          (request: ApiRequest) => {
+          (request: api.Request) => {
             captured.set(request)
             text(200, "kept")
           }

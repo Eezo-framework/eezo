@@ -14,11 +14,19 @@ enum Body {
 
   case Html(value: io.eezo.core.html.Html)
 
+  /** JSON, already serialized. A case of its own rather than `Bytes` with a header beside it,
+    * because what a body is decides how it goes out: the server encodes it as UTF-8, the only
+    * encoding RFC 8259 allows between systems, and names it JSON unless the response already names
+    * a type of its own, and nothing that frames a page reaches into it. Text rather than a value,
+    * because eezo serializes nothing an application owns: the serializer is the application's.
+    */
+  case Json(text: String)
+
   case Empty
 
   /** The page rewritten by `f` when this is one, and this body untouched otherwise: `Bytes` is user
-    * encoded and opaque even with an HTML content type. The one shape a mount's rewrite and the dev
-    * server's reload injection share.
+    * encoded and opaque even with an HTML content type, and `Json` is no page at all. The one shape
+    * a mount's rewrite and the dev server's reload injection share.
     */
   private[http] def mapHtml(f: io.eezo.core.html.Html => io.eezo.core.html.Html): Body =
     this match {
@@ -109,6 +117,16 @@ object Response {
     * since each copy is pinned by its own suite.
     */
   private[http] val HtmlContentType = "Content-Type" -> "text/html; charset=utf-8"
+
+  /** What a [[Body.Json]] goes out as when its response names no type of its own. Beside the HTML
+    * one so that the content types the package writes itself are spelled in one place.
+    */
+  private[http] val JsonContentType = "Content-Type" -> "application/json; charset=utf-8"
+
+  /** RFC 9457 section 6.1's media type, which `Boundary` writes for a failure on an API route. With
+    * no charset, because JSON has one encoding only.
+    */
+  private[http] val ProblemJsonContentType = "Content-Type" -> "application/problem+json"
 
   /** A 200 carrying a page. */
   def Ok(html: io.eezo.core.html.Html): Response =

@@ -24,7 +24,7 @@ import io.eezo.core.html.Tags.input
   * whose form does not return the session's token, derived and handwritten alike. The one place the
   * token does not apply is an API route, where no session takes part: a program holds no session to
   * keep a token in and serves no page to embed one, and the route's `Guarded` says who may call it
-  * instead. A route is an API route only when its handler takes an `ApiRequest`, so a page that
+  * instead. A route is an API route only when its handler takes an `api.Request`, so a page that
   * reads the session cannot drop the check without its type saying so. The safe methods, `GET`,
   * `HEAD` and `OPTIONS`, are never checked; a WebSocket upgrade is a `GET`. Only the form field is
   * read: a header for JavaScript waits until an example fetches.

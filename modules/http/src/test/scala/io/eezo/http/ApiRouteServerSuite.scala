@@ -13,10 +13,10 @@ import io.eezo.core.html.Tags.p
   */
 class ApiRouteServerSuite extends munit.FunSuite with ServerFixtures {
 
-  private def webhook(request: ApiRequest): Response =
+  private def webhook(request: api.Request): Response =
     Response.status(if (request.header("Content-Type").contains("application/json")) 200 else 415)
 
-  private def named(request: ApiRequest): Response =
+  private def named(request: api.Request): Response =
     Response.status(200).withSession(Session.empty.set("user", request.path))
 
   private val routes: RouteTable = RouteTable(

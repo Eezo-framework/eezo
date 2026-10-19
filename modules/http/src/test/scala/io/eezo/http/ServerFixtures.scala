@@ -7,6 +7,8 @@ import java.net.http.HttpResponse
 
 import scala.jdk.CollectionConverters.*
 
+import io.eezo.core.html.{Attrs, body as bodyTag, html}
+
 /** What a suite needs to drive a booted server the way a browser over the wire does: a server on an
   * ephemeral port, a session cookie carrying the CSRF token, and a `POST` under it that returns the
   * token the way a served form does.
@@ -31,18 +33,24 @@ trait ServerFixtures { self: munit.FunSuite =>
       routes: RouteTable,
       maxBodySize: Long = 1.MiB,
       dev: Boolean = false,
-      layout: Layout = Layout.plain
+      layout: Layout = Layout.plain,
+      problems: PartialFunction[Throwable, Problem] = HttpConfig.DefaultProblems
   )(
       body: (HttpServer, Int) => Unit
   ): Unit = {
     val server = HttpServer.start(
       port = 0,
       routes = routes,
-      config = HttpConfig(maxBodySize, dev, secret = secret, layout = layout)
+      config = HttpConfig(maxBodySize, dev, problems, secret, layout)
     )
     try body(server, server.port)
     finally server.stop()
   }
+
+  /** A layout that leaves `class="framed"` on every page it frames, so a suite can tell from the
+    * bytes alone whether a reply went through the application's layout.
+    */
+  protected val marked: Layout = (_, _, content) => html(bodyTag(Attrs.cls := "framed", content))
 
   /** What a route's `content` goes out as in eezo's own frame, which is what every page that is not
     * a whole document comes back in when the application names no layout.

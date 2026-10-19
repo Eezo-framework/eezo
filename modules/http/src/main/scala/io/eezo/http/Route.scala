@@ -22,9 +22,9 @@ enum Provenance {
   *
   * Not an enum, because neither value is named outside eezo, and an enum's cases cannot be hidden.
   * Every route an application builds by hand is a browser route by leaving the field out, and the
-  * way eezo mints an API route is a handler that takes an [[ApiRequest]], through the generated
-  * row. A kind an application could name would be a way to turn off the CSRF check on a page that
-  * reads the session, with nothing in the handler's type to say so.
+  * way eezo mints an API route is a handler that takes an [[io.eezo.http.api.Request]], through the
+  * generated row. A kind an application could name would be a way to turn off the CSRF check on a
+  * page that reads the session, with nothing in the handler's type to say so.
   *
   * Naming is all this closes, not holding: `kind` is a public field, so an application can copy it
   * from an existing API route onto a page whose handler takes a [[Request]]. What keeps such a page
@@ -111,7 +111,8 @@ object Route {
   private[eezo] def handwritten(method: Method, path: String, handler: Request => Response): Route =
     Http(method, PathPattern.parse(path), handler)
 
-  /** The generated row for a file under `app/` whose handler takes an [[ApiRequest]]: an API route.
+  /** The generated row for a file under `app/` whose handler takes an [[api.Request]]: an API
+    * route.
     *
     * The handler is handed its request only once dispatch has emptied the session, which is why the
     * conversion sits in the route's handler and not in front of it: a guard's wrapper runs between
@@ -121,17 +122,17 @@ object Route {
   private[eezo] def handwritten(
       method: Method,
       path: String,
-      handler: ApiRequest => Response
+      handler: api.Request => Response
   ): Route =
     Http(
       method,
       PathPattern.parse(path),
-      request => handler(ApiRequest.of(request)),
+      request => handler(api.Request.of(request)),
       kind = RouteKind.Api
     )
 
   /** The generated row for a `New` or an `Edit` file, which serves a form page and so can only be a
-    * browser route: a handler that takes an [[ApiRequest]] there does not compile.
+    * browser route: a handler that takes an [[api.Request]] there does not compile.
     *
     * A compile error rather than a boot failure because the mistake is in the author's file and the
     * compiler is the first to see it. The error has to name that file, since the row it points at
@@ -148,9 +149,9 @@ object Route {
   ): Route =
     inline handler match {
       case browser: (Request => Response) => handwritten(method, path, browser)
-      case _: (ApiRequest => Response)    =>
+      case _: (api.Request => Response)   =>
         scala.compiletime.error(
-          source + " takes an ApiRequest, but a New or Edit file serves a form page and an API " +
+          source + " takes an api.Request, but a New or Edit file serves a form page and an API " +
             "route has no form to serve: take a Request there, or rename the file"
         )
       case _ =>

@@ -153,7 +153,7 @@ _Avoid_: authenticity token, anti forgery token, form token, nonce
 **API route**:
 A route called by a program and not by a browser. No session takes part in it, so it carries no
 CSRF token, and who may call it is said by its Guarded like on any other route. A page is one
-when its handler takes an ApiRequest rather than a Request; nothing else declares it.
+when its handler takes an api.Request rather than a Request; nothing else declares it.
 _Avoid_: endpoint, webhook route, REST route, stateless route, CSRF exempt route
 
 **Mount**:

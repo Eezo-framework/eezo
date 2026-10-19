@@ -150,7 +150,7 @@ object Request {
       .exists(_.split(',').head.trim.equalsIgnoreCase("https"))
 
   /** A path parameter, converted, or the [[BadRequest]] that says why not. Over the bare map
-    * because an [[ApiRequest]] reads its path the same way, and a program calling an API route and
+    * because an [[api.Request]] reads its path the same way, and a program calling an API route and
     * a browser calling a page have to be refused in the same words for the same mistake.
     */
   private[http] def param[A](pathParams: Map[String, String], name: String)(using

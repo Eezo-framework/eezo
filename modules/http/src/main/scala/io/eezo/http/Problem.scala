@@ -2,10 +2,10 @@ package io.eezo.http
 
 /** A failure, as RFC 9457 section 3's data model.
   *
-  * Only the data model is adopted. Section 4's `application/problem+json` waits for `derives Api`,
-  * which will serialize this identical value, so the HTML and JSON paths cannot diverge on errors.
-  * A browser hitting a missing widget gets a page, not raw JSON, and eezo does not negotiate on
-  * `Accept`, which is out of scope.
+  * One value, two renderings: a browser route answers it as eezo's error page, and an API route as
+  * `application/problem+json`, so the HTML and JSON paths cannot diverge on errors. Which one is
+  * the route's kind, never the `Accept` header: a browser hitting a missing widget gets a page, not
+  * raw JSON, and eezo does not negotiate, which is out of scope.
   *
   * `tpe` is RFC 9457's `type` member, spelled the way `core`'s HTML DSL already spells that
   * keyword. It stays `about:blank`: minting `https://eezo.io/problems/...` URIs is a documentation

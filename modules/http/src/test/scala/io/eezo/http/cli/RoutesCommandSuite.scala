@@ -1,16 +1,7 @@
 package io.eezo.http.cli
 
 import io.eezo.core.html.Tags.p
-import io.eezo.http.{
-  ApiRequest,
-  Handler,
-  Method,
-  PathPattern,
-  Provenance,
-  Response,
-  Route,
-  RouteTable
-}
+import io.eezo.http.{api, Handler, Method, PathPattern, Provenance, Response, Route, RouteTable}
 
 import munit.FunSuite
 
@@ -84,7 +75,7 @@ class RoutesCommandSuite extends FunSuite {
     val mixed = RouteTable(
       Seq(
         http(Method.GET, "/"),
-        Route.handwritten(Method.POST, "/webhooks/stripe", (_: ApiRequest) => Response.status(200))
+        Route.handwritten(Method.POST, "/webhooks/stripe", (_: api.Request) => Response.status(200))
       )
     )
     assertEquals(

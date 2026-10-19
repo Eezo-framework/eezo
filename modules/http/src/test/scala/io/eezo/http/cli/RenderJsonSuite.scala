@@ -1,15 +1,6 @@
 package io.eezo.http.cli
 
-import io.eezo.http.{
-  ApiRequest,
-  Handler,
-  Method,
-  PathPattern,
-  Provenance,
-  Response,
-  Route,
-  RouteTable
-}
+import io.eezo.http.{api, Handler, Method, PathPattern, Provenance, Response, Route, RouteTable}
 
 import munit.FunSuite
 
@@ -38,7 +29,8 @@ class RenderJsonSuite extends FunSuite {
     val ok: Handler = _ => Response.status(200)
     val table       = RouteTable(
       Seq(
-        Route.handwritten(Method.POST, "/webhooks/stripe", (_: ApiRequest) => Response.status(200)),
+        Route
+          .handwritten(Method.POST, "/webhooks/stripe", (_: api.Request) => Response.status(200)),
         Route.Http(Method.GET, PathPattern.parse("/"), ok)
       )
     )

@@ -1,13 +1,15 @@
 package io.eezo.http
 
 import io.eezo.core.html.*
+import io.eezo.core.internal.Json
 
 /** Where a thrown failure becomes a response.
   *
   * Status is a fact about this boundary and never a field on an exception, so the mapping is one
   * exhaustive match over the sealed set. Extension sits in the same place: a user's own exception
   * reaches a status through the `problems` override on `HttpApp`, tried after eezo's set and before
-  * the 500 fallback.
+  * the 500 fallback. Only the rendering knows who asked: a page for a browser, problem+json for a
+  * program on an API route.
   */
 private[http] object Boundary {
 
@@ -52,27 +54,58 @@ private[http] object Boundary {
       }
   }
 
-  /** Renders a `Resolution` into a `Response`. No matching left to do: the headers are already
-    * decided, so this is the rendering path alone.
+  /** The page rendering of a `Resolution`, the one a browser route, a refused request and a refused
+    * upgrade get. No matching left to do: the headers are already decided.
     *
     * The `Response` is built directly rather than through `Response.Ok`, because `Ok` names a 200
     * and an error page is never one: borrowing it and overwriting the status would make every error
     * page inherit whatever else `Ok` ever grows.
     */
-  def toResponse(resolution: Resolution): Response = {
-    val page =
+  def toResponse(resolution: Resolution): Response =
+    withHeaders(
       Response(
         resolution.problem.status,
         Seq(Response.HtmlContentType),
         Body.Html(render(resolution.problem))
+      ),
+      resolution
+    )
+
+  /** The same `Resolution` as RFC 9457's `application/problem+json`, for a program on an API route.
+    *
+    * A second rendering of the one value rather than a second resolution, so the status, the
+    * redaction of a 500 and the `problems` hook are decided once for both, and an API cannot say
+    * more about a failure than the page would. The members are written through `core`'s escaping
+    * because the detail and the instance carry text a client or an exception message chose.
+    */
+  def toProblemJson(resolution: Resolution): Response = {
+    val problem = resolution.problem
+    val members = Json.Obj(
+      List(
+        "type"     -> Json.Str(problem.tpe),
+        "title"    -> Json.Str(problem.title),
+        "status"   -> Json.Num(problem.status.toLong),
+        "detail"   -> Json.Str(problem.detail),
+        "instance" -> Json.Str(problem.instance)
       )
-    resolution.headers.foldLeft(page) { case (response, (name, value)) =>
-      response.withHeader(name, value)
-    }
+    )
+    withHeaders(
+      Response(
+        problem.status,
+        Seq(Response.ProblemJsonContentType),
+        Body.Json(Json.render(members))
+      ),
+      resolution
+    )
   }
 
-  /** The response a failure becomes: one rendering path, and the `Allow` header in the one arm that
-    * has the methods to put in it.
+  private def withHeaders(response: Response, resolution: Resolution): Response =
+    resolution.headers.foldLeft(response) { case (built, (name, value)) =>
+      built.withHeader(name, value)
+    }
+
+  /** The page a failure becomes, the rendering a browser route, a refused request and a refused
+    * upgrade get, with the `Allow` header in the one arm that has the methods to put in it.
     */
   def errorResponse(failure: Throwable, path: String, config: HttpConfig): Response =
     toResponse(resolve(failure, path, config))

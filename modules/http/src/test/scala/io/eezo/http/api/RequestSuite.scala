@@ -1,15 +1,17 @@
-package io.eezo.http
+package io.eezo.http.api
 
 import java.nio.charset.StandardCharsets
+
+import io.eezo.http.{BadRequest, Method}
 
 /** What a handler on an API route reads: the request a program sent, and nothing a browser carries.
   *
   * The absence of a session, a flash, a CSRF token, the cookies and the form is the point of the
   * type, so it is pinned by a compile error rather than left to a reader of the source.
   */
-class ApiRequestSuite extends munit.FunSuite {
+class RequestSuite extends munit.FunSuite {
 
-  private val request = ApiRequest(
+  private val request = Request(
     method = Method.POST,
     path = "/webhooks/stripe/42",
     query = Map("mode" -> Seq("live", "test")),
@@ -42,9 +44,16 @@ class ApiRequestSuite extends munit.FunSuite {
     assertEquals(request.param[String]("word"), "abc")
   }
 
-  test("a path parameter that will not convert is refused the way a Request refuses it") {
+  test("a path parameter that will not convert is refused the way a browser Request refuses it") {
     val plain =
-      Request(Method.GET, "/", Map.empty, Map.empty, Array.emptyByteArray, request.pathParams)
+      io.eezo.http.Request(
+        Method.GET,
+        "/",
+        Map.empty,
+        Map.empty,
+        Array.emptyByteArray,
+        request.pathParams
+      )
     val api     = intercept[BadRequest](request.param[Int]("word"))
     val browser = intercept[BadRequest](plain.param[Int]("word"))
     assertEquals(api.getMessage, browser.getMessage)
@@ -54,8 +63,9 @@ class ApiRequestSuite extends munit.FunSuite {
     )
   }
 
-  test("a path parameter the route does not have is refused the way a Request refuses it") {
-    val plain   = Request(Method.GET, "/", Map.empty, Map.empty, Array.emptyByteArray, Map.empty)
+  test("a path parameter the route does not have is refused the way a browser Request refuses it") {
+    val plain =
+      io.eezo.http.Request(Method.GET, "/", Map.empty, Map.empty, Array.emptyByteArray, Map.empty)
     val api     = intercept[BadRequest](request.param[Int]("missing"))
     val browser = intercept[BadRequest](plain.param[Int]("missing"))
     assertEquals(api.getMessage, browser.getMessage)

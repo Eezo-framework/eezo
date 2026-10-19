@@ -267,17 +267,32 @@ private[eezo] object HttpServer {
     if (config.dev) println(RouteReport.listing(routes.routes))
   }
 
-  /** What a failure is answered with, on the HTTP path and on a refused upgrade alike, so that a
-    * 500 out of an endpoint is logged exactly as one out of a handler is.
-    *
-    * Resolved once: the log decision and the response both read off this single value, rather than
+  /** The page a failure is answered with, for a browser route, a refused request and a refused
+    * upgrade alike, so that a 500 out of an endpoint is logged exactly as one out of a handler is.
+    */
+  private def answer(failure: Throwable, path: String, config: HttpConfig): Response =
+    Boundary.toResponse(resolved(failure, path, config))
+
+  /** What a failure out of an API route's handler is answered with: the same resolution and the
+    * same log line as [[answer]], rendered for a program. A function of its own rather than a flag
+    * on `answer`, so that every other caller, the refused upgrade among them, keeps the page
+    * without having to say so.
+    */
+  private def answerProgram(failure: Throwable, path: String, config: HttpConfig): Response =
+    Boundary.toProblemJson(resolved(failure, path, config))
+
+  /** Resolved once: the log decision and the response both read off this single value, rather than
     * each re-matching the failure to ask its own question of it.
     */
-  private def answer(failure: Throwable, path: String, config: HttpConfig): Response = {
+  private def resolved(
+      failure: Throwable,
+      path: String,
+      config: HttpConfig
+  ): Boundary.Resolution = {
     val resolution = Boundary.resolve(failure, path, config)
     if (Boundary.logsStackTrace(resolution.problem.status))
       log.log(System.Logger.Level.ERROR, s"${resolution.problem.status} on $path", failure)
-    Boundary.toResponse(resolution)
+    resolution
   }
 
   /** The single WebSocket creator.
@@ -418,8 +433,13 @@ private[eezo] object HttpServer {
         val (route, matched) = routes.matching(incoming)
         // An API route is answered with the cookie left exactly as the browser holds it, when one
         // is sent at all: no session takes part in it, so reading the cookie could only sweep a
-        // flash meant for the next page or expire a cookie the route never looked at.
-        if (route.kind.api) routes.running(route, matched)
+        // flash meant for the next page or expire a cookie the route never looked at. Its failure
+        // is answered here, inside the match, because this is the one place the server knows a
+        // program is the caller: a 404 or a 405 from matching itself was no route's, and stays
+        // the page every caller gets.
+        if (route.kind.api)
+          try routes.running(route, matched)
+          catch { case failure: Throwable => answerProgram(failure, path, config) }
         else {
           val read = SessionCookie.read(matched, config.secret)
           SessionCookie.write(read, routes.running(route, read), config.secret)
@@ -473,20 +493,31 @@ private[eezo] object HttpServer {
     )
   }
 
-  /** Writes the response. The sole caller of `succeeded()` and `failed()` in eezo. */
+  /** Writes the response. The sole caller of `succeeded()` and `failed()` in eezo.
+    *
+    * A JSON body is the one body that brings its own content type, and only when the response names
+    * none: a handler that says `application/vnd.shop+json` or `application/problem+json` means it,
+    * and adding a second `Content-Type` beside it would leave the client to pick one.
+    */
   private def write(
       response: JettyResponse,
       value: Response,
       callback: Callback
   ): Unit = {
     response.setStatus(value.status)
-    value.headers.foreach { case (name, headerValue) =>
+    val headers = value.body match {
+      case Body.Json(_) if value.header("Content-Type").isEmpty =>
+        value.headers :+ Response.JsonContentType
+      case _ => value.headers
+    }
+    headers.foreach { case (name, headerValue) =>
       response.getHeaders.add(name, Response.renderUrl(headerValue))
     }
 
     val bytes = value.body match {
       case Body.Bytes(raw) => raw
       case Body.Html(html) => html.render.getBytes(StandardCharsets.UTF_8)
+      case Body.Json(text) => text.getBytes(StandardCharsets.UTF_8)
       case Body.Empty      => Array.emptyByteArray
     }
     response.write(true, ByteBuffer.wrap(bytes), callback)
