@@ -142,7 +142,12 @@ object Docs {
     ("io.eezo.http", "eezo-http", "Request, Response, routes, Form, Resource, sessions, CSRF."),
     ("io.eezo.db", "eezo-db", "The connection, sql, transactions, Table, Schema, migrations."),
     ("io.eezo.live", "eezo-live", "Component, Live, Topic, the patch protocol."),
-    ("io.eezo.auth", "eezo-auth", "Guard, Password, ownership.")
+    ("io.eezo.auth", "eezo-auth", "Guard, Password, ownership."),
+    (
+      "io.eezo.json.upickle",
+      "eezo-upickle",
+      "The api.Serde of any model through upickle, outside the umbrella."
+    )
   )
 
   private def api: Html =
