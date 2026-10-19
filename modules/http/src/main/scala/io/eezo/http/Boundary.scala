@@ -17,9 +17,9 @@ private[http] object Boundary {
   private val Redacted = "The server encountered an unexpected error."
 
   /** Everything the boundary decides about a failure, in one pass over it: the `Problem` it becomes
-    * and any headers earned along the way. `Allow` on a 405 is the only header eezo decides itself,
-    * and it is decided here rather than on a second match, because `Problem` (RFC 9457's data
-    * model) has no room for a header that is not part of that model.
+    * and any headers earned along the way. `Allow` on a 405 and the challenge on a 401 are the only
+    * headers eezo decides itself, and they are decided here rather than on a second match, because
+    * `Problem` (RFC 9457's data model) has no room for a header that is not part of that model.
     */
   private[http] final case class Resolution(
       problem: Problem,
@@ -36,7 +36,9 @@ private[http] object Boundary {
   def resolve(failure: Throwable, path: String, config: HttpConfig): Resolution = failure match {
     case e: EezoException =>
       e match {
-        case BadRequest(detail)        => Resolution(Problem(400, detail, path))
+        case BadRequest(detail)   => Resolution(Problem(400, detail, path))
+        case Unauthorized(detail) =>
+          Resolution(Problem(401, detail, path), Seq("WWW-Authenticate" -> "Bearer"))
         case Forbidden(detail)         => Resolution(Problem(403, detail, path))
         case NotFound(_)               => Resolution(Problem(404, e.getMessage, path))
         case MethodNotAllowed(allowed) =>

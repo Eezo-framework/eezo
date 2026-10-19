@@ -17,6 +17,7 @@ class BoundarySuite extends munit.FunSuite {
 
   test("each member of the sealed set maps to its status") {
     assertEquals(problem(BadRequest("bad")).status, 400)
+    assertEquals(problem(Unauthorized("who")).status, 401)
     assertEquals(problem(Forbidden("nope")).status, 403)
     assertEquals(problem(NotFound("/x")).status, 404)
     assertEquals(problem(MethodNotAllowed(Seq(Method.GET))).status, 405)
@@ -89,6 +90,17 @@ class BoundarySuite extends munit.FunSuite {
       )
     assertEquals(response.status, 405)
     assertEquals(response.headers.toMap.get("Allow"), Some("GET, PUT"))
+  }
+
+  test("a 401 challenges with the Bearer scheme, on the page and in problem+json alike") {
+    val resolution = Boundary.resolve(Unauthorized("no token"), "/api/posts", HttpConfig())
+    assertEquals(resolution.problem.status, 401)
+    assertEquals(resolution.problem.title, "Unauthorized")
+    assertEquals(resolution.problem.detail, "no token")
+    for (response <- Seq(Boundary.toResponse(resolution), Boundary.toProblemJson(resolution))) {
+      assertEquals(response.status, 401)
+      assertEquals(response.headers.toMap.get("WWW-Authenticate"), Some("Bearer"))
+    }
   }
 
   test("a stack trace is logged for 500 and above, and never for a client mistake") {

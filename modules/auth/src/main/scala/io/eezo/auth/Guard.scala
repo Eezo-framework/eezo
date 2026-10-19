@@ -19,14 +19,16 @@ import io.eezo.http.*
   */
 case class Login(email: String, password: Password.Plain) derives Form
 
-/** What identifies the user behind a request, for one way of signing in: a password.
+/** What identifies the user behind a request: a browser by the password it signed in with, a
+  * program by the API token it was issued.
   *
-  * Built from two functions, a URL and how long a sign in should last, and nothing else. `find`
-  * turns the key in the session into the application's own user, and `credentials` turns an email
-  * into the key and the stored hash that go with it. Both are the application's, which is what
-  * keeps `modules/auth` off `modules/db`: the guard never learns that a table exists, and
-  * `examples/blog` supplies two one-line closures over its own `read`. Constructing one therefore
-  * touches nothing, so a boot that never serves opens no connection.
+  * Built from three functions, a URL and how long a sign in should last, and nothing else. `find`
+  * turns the key in the session into the application's own user, `credentials` turns an email into
+  * the key and the stored hash that go with it, and `tokens` turns a [[Token]] into the key of the
+  * user it was issued to. All three are the application's, which is what keeps `modules/auth` off
+  * `modules/db`: the guard never learns that a table exists, and `examples/blog` supplies one line
+  * closures over its own `read`. Constructing one therefore touches nothing, so a boot that never
+  * serves opens no connection.
   *
   * `credentials` says where the hash is and stops there; comparing it against what was typed is the
   * guard's, in [[submitted]] and nowhere else. An application that did its own comparison had to be
@@ -43,11 +45,13 @@ case class Login(email: String, password: Password.Plain) derives Form
   *
   * One guard per user model. `required`, `only` and `except` are how it becomes a [[Guarded]], and
   * every declaration it makes carries [[carries]], the same three route instances, so an
-  * application that guards anything has mounted the page it redirects to without writing a line.
+  * application that guards a browser page has mounted the page it redirects to without writing a
+  * line.
   */
 final class Guard[U] private (
     find: Id[U] => Option[U],
     credentials: String => Option[(Id[U], Password)],
+    tokens: Option[Token => Option[Id[U]]],
     login: Url,
     home: Url,
     lifetime: Duration,
@@ -197,9 +201,25 @@ final class Guard[U] private (
 
   /** The wrapper every guarded route goes through.
     *
-    * Two cases, because refusing an upgrade is not refusing a page. A browser asking for HTML is
-    * sent to the login page, which is a `Response` and never a failure; a WebSocket has nowhere to
-    * send anyone, so it is [[io.eezo.http.Forbidden]] and the boundary answers 403.
+    * Three cases, because who is behind a request is read off what the caller can carry, and
+    * refusing each caller is a different answer. A browser asking for HTML is read off its session
+    * and sent to the login page, which is a `Response` and never a failure; a WebSocket has nowhere
+    * to send anyone, so it is [[io.eezo.http.Forbidden]] and the boundary answers 403. A program on
+    * an API route carries no session, so it is read off its Bearer header alone, and refused with
+    * [[io.eezo.http.Unauthorized]], whose 401 tells it to send one.
+    *
+    * The API arm never falls back to the session when the header is missing. Dispatch has emptied
+    * it already, and a guard that read it anyway would let a browser calling an API URL with its
+    * cookie act as its user, which is the forged request emptying it closes. It never writes one
+    * either, since dispatch refuses an API response that names a session; that is why its refusal
+    * is thrown rather than [[refuse]]'s redirect. The plain token goes no further than [[bearer]]
+    * and [[Token.hash]]: the lookup is handed the hash, so a lookup that logs what it is asked logs
+    * nothing a program could send.
+    *
+    * A guard built without `tokens` refuses to wrap an API route at all, and says so while the
+    * table is built rather than on the first request, because every request such a route would ever
+    * see is a 401: no program could be let through it, and nothing short of a boot failure would
+    * tell the author before a client did.
     *
     * 403 rather than a status that says "sign in first", because a cookie session has no challenge
     * to offer a client and a 401 carrying none is a status Jetty's WebSocket client hides from the
@@ -212,12 +232,28 @@ final class Guard[U] private (
     * sits inside it for the same reason and must stay there: naming out in the dispatch would put
     * it ahead of the CSRF check.
     *
-    * Only the page arm names anyone. A page behind this guard is one the wrapper already let
-    * through, so the handler reads the user off the request it was handed; an upgrade is named by
-    * the route table instead, which is the one thing holding every declaration at once and so the
-    * only thing that can name a socket nobody guarded.
+    * Only the page arm and the API arm name anyone. A page or an API route behind this guard is one
+    * the wrapper already let through, so the handler reads the user off the request it was handed;
+    * an upgrade is named by the route table instead, which is the one thing holding every
+    * declaration at once and so the only thing that can name a socket nobody guarded.
     */
   private val through: Route => Route = {
+    case route: Route.Http if route.kind.api =>
+      val lookup = tokens.getOrElse(
+        throw new IllegalStateException(
+          s"${route.describe} is an API route behind a guard that has no tokens lookup, so no " +
+            "program could ever be let through it: pass tokens to Guard, or take a Request in " +
+            "the handler if a browser calls this route"
+        )
+      )
+      route.copy(handler =
+        request =>
+          Guard.bearer(request).flatMap(plain => lookup(Token.hash(plain))) match {
+            case Some(id) => route.handler(named(request, id))
+            case None     =>
+              throw Unauthorized("this API route needs an API token issued to a user")
+          }
+      )
     case route: Route.Http =>
       route.copy(handler =
         request =>
@@ -490,15 +526,57 @@ object Guard {
     * `clock` exists so that a suite can ask what happens after a fortnight without waiting one. It
     * is read only where a sign in is stamped and where its age is measured, so passing one changes
     * nothing else, and the default is the system clock in UTC.
+    *
+    * `tokens` answers with the key of the user a [[Token]] was issued to, and is what lets the
+    * guard wrap an API route. It is handed the hash and never the plain text, so an application
+    * looks its row up by the value it stored. Left out, the guard identifies browsers only, and
+    * wrapping an API route with it stops the boot. A function with a default rather than an
+    * `Option`, so the common call names a lambda and nothing else; the default is a class of its
+    * own, [[Untokened]], because "left out" has to be told apart from a lookup that answers nobody,
+    * and a class is the one default a match can recognise without comparing references.
     */
   def apply[U](
       find: Id[U] => Option[U],
       credentials: String => Option[(Id[U], Password)],
+      tokens: Token => Option[Id[U]] = untokened[U],
       login: Url = Url.Mounted("/login"),
       home: Url = Url.Mounted("/"),
       lifetime: Duration = DefaultLifetime,
       clock: Clock = Clock.systemUTC()
-  ): Guard[U] = new Guard[U](find, credentials, login, home, lifetime, clock)
+  ): Guard[U] = {
+    val lookup = tokens match {
+      case _: Untokened[?] => None
+      case supplied        => Some(supplied)
+    }
+    new Guard[U](find, credentials, lookup, login, home, lifetime, clock)
+  }
+
+  /** What `tokens` is when an application says nothing: a guard that knows no program. */
+  private final class Untokened[U] extends (Token => Option[Id[U]]) {
+    def apply(token: Token): Option[Id[U]] = None
+  }
+
+  /** [[Untokened]] under the type `apply` declares, so the default's own signature names no private
+    * class.
+    */
+  private def untokened[U]: Token => Option[Id[U]] = new Untokened[U]
+
+  /** The token a program sent, if it sent exactly one under the Bearer scheme.
+    *
+    * The scheme is matched without regard to case, as RFC 7235 reads it, so a client writing
+    * `bearer` is not refused for its spelling. Two `Authorization` headers are refused rather than
+    * one of them picked, since which one a proxy or a client meant is a guess, and a guess is how a
+    * second credential gets read as the first. An empty value is no token.
+    */
+  private def bearer(request: Request): Option[String] =
+    Request.headerValues(request.headers, "Authorization") match {
+      case Seq(value) =>
+        value.trim.split("\\s+", 2) match {
+          case Array(scheme, token) if scheme.equalsIgnoreCase("Bearer") => Some(token.trim)
+          case _                                                         => None
+        }
+      case _ => None
+    }
 
   /** The key out of the session text. A session eezo signed can only hold what eezo wrote, so a
     * value that is not a UUID means the secret changed under a live browser rather than that anyone

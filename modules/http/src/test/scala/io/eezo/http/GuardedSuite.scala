@@ -113,4 +113,21 @@ class GuardedSuite extends munit.FunSuite with ResourceFixtures {
     val req = request(Method.GET, "/widgets")
     assertEquals(Guarded.public[Widget].identify(req), req)
   }
+
+  test(
+    "an API route is mounted alone, and a browser page or a socket brings the login page along"
+  ) {
+    val login =
+      Route.Http(Method.GET, PathPattern.parse("/login"), _ => Response.Ok(Html.text("form")))
+    val guarded = Guarded[Widget](Set.empty, identity, Seq(login))
+
+    val program =
+      Route.handwritten(Method.GET, "/api/widgets", (_: api.Request) => Response.status(200))
+    val page = Route.Http(Method.GET, PathPattern.parse("/widgets"), _ => Response.status(200))
+    val ws   = Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})
+
+    assertEquals(guarded.mounting(program), Seq(program))
+    assertEquals(guarded.mounting(page), Seq(login, page))
+    assertEquals(guarded.mounting(ws), Seq(login, ws))
+  }
 }

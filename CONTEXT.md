@@ -103,18 +103,22 @@ _Avoid_: secret key base, signing key, app key, salt
 ### Authentication
 
 **Guard**:
-What identifies the user behind a request, for one way of signing in, and what makes routes
-guarded. It reads the session, turns what it finds there into the application's own user, sends
-a browser it cannot identify to the login page, and carries that login page with it. One per user
-model. eezo-auth ships the password guard. A sign in lasts a fixed time from the moment it was
-made, however active the user is; past it the guard no longer knows the browser.
+What identifies the user behind a request and what makes routes guarded. On a browser route it
+reads the session, turns what it finds there into the application's own user, sends a browser it
+cannot identify to the Login page, and carries that page with it. On an API route it reads the
+API token instead, and answers a program it cannot identify with a 401 and never a page. One per
+user model. eezo-auth ships the password guard, which also knows tokens when the application
+hands it a lookup for them. A sign in lasts a fixed time from the moment it was made, however
+active the user is; past it the guard no longer knows the browser.
 _Avoid_: authenticator, filter, middleware, interceptor, before action, timeout, idle
 
 **Guarded**:
-The declaration, made beside a model or a page, of which of its routes require a signed in user
-and refuse otherwise. A model says it per Action; a page is guarded or public. It is the concept a
-guard fulfils, and any way of signing in can produce one. In an application that has a guard,
-every route mounted has said whether it is guarded; silence is an error.
+The declaration, made beside a model or a page, of which of its routes require a known user and
+refuse otherwise. A model says it per Action; a page is guarded or public. It is the concept a
+guard fulfils, and any way of signing in can produce one. The guard behind it identifies by route
+kind: the session on a browser route, the Bearer header carrying an API token on an API route, and
+never the one in place of the other. In an application that has a guard, every route mounted has
+said whether it is guarded; silence is an error.
 _Avoid_: protected, secured, authenticated route, policy
 
 **Current user**:
@@ -150,6 +154,20 @@ What a login form decodes to: the text as typed, alive only until it is hashed o
 no way to be stored.
 _Avoid_: raw password, cleartext, secret
 
+**API token**:
+The hash of a secret an application issued once to a program, stored on the user and looked up by
+the guard. The program holds the secret and sends it as a Bearer header on an API route; the
+guard hashes what arrives and asks the application whose hash it is, so the secret itself is
+neither stored nor looked up. Issuing, listing and revoking tokens is the application's own page.
+_Avoid_: API key, access token, personal access token, bearer token
+
+**Login page**:
+The page a guard carries for signing in, with the sign in form and the sign out route beside it.
+It exists because a browser route is guarded: a guard brings it along with every browser page and
+socket it wraps, so a refused browser always has somewhere to go. An application whose guarded
+routes are all API routes has none, because a program is never sent to a page.
+_Avoid_: sign in page, auth page
+
 **Credentials**:
 What an application hands the password guard: for an email, that user's key and their Password,
 or nothing when no such user exists. The application says where the hash is kept and stops there;
@@ -166,8 +184,9 @@ _Avoid_: authenticity token, anti forgery token, form token, nonce
 
 **API route**:
 A route called by a program and not by a browser. No session takes part in it, so it carries no
-CSRF token, and who may call it is said by its Guarded like on any other route. A page is one
-when its handler takes an api.Request rather than a Request; nothing else declares it.
+CSRF token, and who may call it is said by its Guarded like on any other route; a guarded one
+knows its caller by the API token it sends and never by a cookie. A page is one when its handler
+takes an api.Request rather than a Request; nothing else declares it.
 _Avoid_: endpoint, webhook route, REST route, stateless route, CSRF exempt route
 
 **Mount**:

@@ -5,7 +5,7 @@ import java.net.URLEncoder
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 import java.nio.charset.StandardCharsets
 import java.time.{Clock, Duration, Instant}
-import java.util.concurrent.atomic.AtomicReference
+import java.util.concurrent.atomic.{AtomicBoolean, AtomicReference}
 
 import io.eezo.core.Id
 import io.eezo.core.html.Attrs
@@ -1068,6 +1068,228 @@ class GuardSuite extends munit.FunSuite {
     )
     val _ = g.required[Any]
     assertEquals(asked, 0)
+  }
+
+  // The token arm: an API route, where a program says who it is with a Bearer header.
+
+  /** The token ann's program was issued, as the plain text it holds and the hash ann's row keeps.
+    */
+  private val (annPlain, annToken) = Token.gen()
+
+  /** A lookup over the one issued token, recording every token it is asked about, so a test can
+    * tell what the guard hashed from what the header said.
+    */
+  private def issued(asked: AtomicReference[List[Token]]): Token => Option[Id[User]] =
+    token => {
+      asked.updateAndGet(token :: _)
+      Option.when(token == annToken)(ann.id)
+    }
+
+  private def tokenGuard(asked: AtomicReference[List[Token]]): Guard[User] =
+    Guard[User](find, credentials, tokens = issued(asked), clock = clock)
+
+  /** An API route behind `g`, answering with who its handler was told is there. */
+  private def apiPosts(g: Guard[User]): RouteTable =
+    RouteTable(
+      g.required[Any]
+        .mounting(
+          Route.handwritten(
+            Method.GET,
+            "/api/posts",
+            (request: api.Request) =>
+              Response.Ok(Html.text(request.currentUser.getOrElse("nobody")))
+          )
+        )
+    )
+
+  /** A program calling the API route, with whatever Authorization header it chose to send. */
+  private def program(authorization: String*): Request =
+    browser(Method.GET, "/api/posts").copy(headers =
+      if (authorization.isEmpty) Map.empty else Map("Authorization" -> authorization)
+    )
+
+  private def textOf(response: Response): String = response.body match {
+    case Body.Html(html) => html.render
+    case other           => fail(s"expected an HTML body, got $other")
+  }
+
+  test("an API token the lookup knows names its user on an API route, and writes no session") {
+    val asked    = AtomicReference[List[Token]](Nil)
+    val response = apiPosts(tokenGuard(asked)).dispatch(program(s"Bearer $annPlain"))
+    assertEquals(response.status, 200)
+    assertEquals(textOf(response), ann.id.show)
+    assertEquals(response.session, None)
+    assertEquals(asked.get, List(Token.hash(annPlain)))
+    assert(!asked.get.exists(_.value == annPlain), "the lookup was handed the plain text")
+  }
+
+  /** What `table` answers a program with over the wire, where the boundary renders the refusal. The
+    * boundary is private to `io.eezo.http`, so a real request is the only thing that runs it.
+    */
+  private def calling(table: RouteTable, headers: (String, String)*): HttpResponse[String] = {
+    val server = HttpServer.start(port = 0, routes = table, config = HttpConfig())
+    try {
+      val request = headers.foldLeft(
+        HttpRequest.newBuilder(URI.create(s"http://localhost:${server.port}/api/posts")).GET()
+      ) { case (built, (name, value)) => built.header(name, value) }
+      HttpClient.newHttpClient().send(request.build(), HttpResponse.BodyHandlers.ofString())
+    } finally server.stop()
+  }
+
+  /** A 401 a program can act on: the Bearer challenge, problem+json, and nothing a browser keeps.
+    */
+  private def assertChallenged(response: HttpResponse[String]): Unit = {
+    assertEquals(response.statusCode, 401)
+    assertEquals(response.headers.firstValue("WWW-Authenticate").orElse(""), "Bearer")
+    assertEquals(
+      response.headers.firstValue("Content-Type").orElse(""),
+      "application/problem+json"
+    )
+    assert(clue(response.body).contains("\"status\": 401"))
+    assert(!response.headers.firstValue("Location").isPresent, "a program was redirected")
+    assert(!response.headers.firstValue("Set-Cookie").isPresent, "a program was handed a cookie")
+  }
+
+  test(
+    "a program with no Authorization header is challenged, never redirected or given a session"
+  ) {
+    assertChallenged(calling(apiPosts(tokenGuard(AtomicReference(Nil)))))
+  }
+
+  test("an API token the lookup does not know is challenged the same way") {
+    val (stranger, _) = Token.gen()
+    assertChallenged(
+      calling(apiPosts(tokenGuard(AtomicReference(Nil))), "Authorization" -> s"Bearer $stranger")
+    )
+  }
+
+  /** A token guard over one API handler that records, in `ran`, whether it was reached. */
+  private def recording(ran: AtomicBoolean): RouteTable =
+    RouteTable(
+      tokenGuard(AtomicReference(Nil))
+        .required[Any]
+        .mounting(
+          Route.handwritten(
+            Method.GET,
+            "/api/posts",
+            (_: api.Request) => { ran.set(true); Response.status(200) }
+          )
+        )
+    )
+
+  /** Whether a request reached the API handler behind a token guard. */
+  private def reaches(request: Request): Boolean = {
+    val ran = AtomicBoolean(false)
+    recording(ran).dispatch(request)
+    ran.get
+  }
+
+  /** Pins the refusal itself, so a redirect or any other answer that skips the handler fails. */
+  private def refused(request: Request): Unit = {
+    val ran = AtomicBoolean(false)
+    intercept[Unauthorized](recording(ran).dispatch(request))
+    assert(!ran.get, "a refused program reached the handler")
+  }
+
+  test(
+    "another scheme, an empty Bearer value or two Authorization headers are challenged before the handler"
+  ) {
+    refused(program(s"Basic $annPlain"))
+    refused(program("Bearer"))
+    refused(program("Bearer    "))
+    refused(program(s"Bearer $annPlain", s"Bearer $annPlain"))
+    assert(reaches(program(s"Bearer $annPlain")))
+  }
+
+  test("the Bearer scheme is read without regard to case, and the value without its padding") {
+    assert(reaches(program(s"bearer $annPlain")))
+    assert(reaches(program(s"  BEARER   $annPlain  ")))
+  }
+
+  private def apiRoute: Route =
+    Route.handwritten(Method.GET, "/api/posts", (_: api.Request) => Response.status(200))
+
+  test("the session is never consulted on an API route, even when the wrapper is handed one") {
+    // Straight at the wrapper, past dispatch, which would have emptied the session first: what is
+    // pinned here is the guard's own rule, not the table's.
+    val wrapped = tokenGuard(AtomicReference(Nil)).required[Any].mounting(apiRoute) match {
+      case Seq(route: Route.Http) => route
+      case other                  => fail(s"expected the API route alone, got $other")
+    }
+    intercept[Unauthorized](wrapped.handler(program().copy(session = signedInSession(ann.id))))
+  }
+
+  test("a browser signed in by its cookie that calls a guarded API route is challenged") {
+    val g     = tokenGuard(AtomicReference(Nil))
+    val table = RouteTable(
+      (g.required[Any].mounting(page()) ++ g.required[Any].mounting(apiRoute)).distinct
+    )
+    val server = HttpServer.start(port = 0, routes = table, config = HttpConfig())
+    try {
+      val client                                = HttpClient.newHttpClient()
+      def sending(request: HttpRequest.Builder) =
+        client.send(request.build(), HttpResponse.BodyHandlers.ofString())
+      def at(path: String) = URI.create(s"http://localhost:${server.port}$path")
+
+      val form   = sending(HttpRequest.newBuilder(at("/login")).GET())
+      val minted = form.headers().firstValue("Set-Cookie").orElseThrow().takeWhile(_ != ';')
+      val token  = s"""name="${Csrf.Field}"\\s+value="([^"]*)"""".r
+        .findFirstMatchIn(form.body())
+        .map(_.group(1))
+        .getOrElse(fail("the login page carries no token"))
+      val signedIn = sending(
+        HttpRequest
+          .newBuilder(at("/login"))
+          .header("Cookie", minted)
+          .header("Content-Type", "application/x-www-form-urlencoded")
+          .POST(
+            HttpRequest.BodyPublishers.ofString(
+              s"email=ann%40example.com&password=secret&${Csrf.Field}=$token"
+            )
+          )
+      )
+      assertEquals(signedIn.statusCode(), 303)
+      val cookie = signedIn.headers().firstValue("Set-Cookie").orElseThrow().takeWhile(_ != ';')
+
+      // The cookie opens the browser page, so it is a live sign in and not a stale one.
+      assertEquals(
+        sending(HttpRequest.newBuilder(at("/posts")).header("Cookie", cookie)).statusCode,
+        200
+      )
+      assertChallenged(sending(HttpRequest.newBuilder(at("/api/posts")).header("Cookie", cookie)))
+    } finally server.stop()
+  }
+
+  // Which routes a guard brings along, and the boot it refuses.
+
+  test("a guard brings its login and logout only beside a browser page or a socket") {
+    val g       = tokenGuard(AtomicReference(Nil))
+    val carried = g.required[Any].carries.map(_.describe)
+    assertEquals(carried, Seq("GET /login", "POST /login", "POST /logout"))
+
+    assertEquals(g.required[Any].mounting(apiRoute).map(_.describe), Seq("GET /api/posts"))
+    assertEquals(g.required[Any].mounting(page()).map(_.describe), carried :+ "GET /posts")
+    val socket = Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})
+    assertEquals(g.required[Any].mounting(socket).map(_.describe), carried :+ "WS /live")
+  }
+
+  test("a table of API routes alone behind a guard mounts no login page") {
+    val table = RouteTable(tokenGuard(AtomicReference(Nil)).required[Any].mounting(apiRoute))
+    intercept[NotFound](table.dispatch(browser(Method.GET, "/login")))
+    intercept[NotFound](table.dispatch(browser(Method.POST, "/logout")))
+  }
+
+  test("a guard with no tokens lookup that wraps an API route stops the boot, naming the route") {
+    val failure = intercept[IllegalStateException](
+      RouteTable(guard.required[Any].mounting(apiRoute))
+    )
+    assert(clue(failure.getMessage).contains("GET /api/posts"))
+    assert(clue(failure.getMessage).contains("no tokens lookup"))
+  }
+
+  test("the same guard over browser pages alone boots and serves") {
+    val table = RouteTable(guard.required[Any].mounting(page()))
+    assertEquals(table.dispatch(signedIn(ann.id)).status, 200)
   }
 }
 
