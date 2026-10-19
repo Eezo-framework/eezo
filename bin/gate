@@ -1,0 +1,137 @@
+#!/usr/bin/env bash
+#
+# The CI gate, run locally: `bin/gate` from anywhere in a checkout. It runs the steps of
+# .github/workflows/ci.yml in CI's order and prints GATE GREEN, or GATE RED and the name of the
+# step that failed, with that step's output above it. Green here is green on the pull request.
+#
+#   format     sbt scalafmtCheckAll scalafmtSbtCheck
+#   compile    sbt +compile Test/compile      the plugin is cross built for sbt 1 and sbt 2
+#   test       sbt +test                      every module suite
+#   examples   sbt publishLocalForExample, then the examples build's own suites
+#   site       sbt unidoc, then the site build's own suites
+#
+# Several agents may run the gate at once, so it takes two locks. A checkout lock serialises runs
+# on the same checkout, because two sbt processes cannot share a target directory. A machine lock
+# wraps the examples step, because publishLocalForExample writes to ~/.ivy2/local, which every
+# checkout on the machine reads. Waiting on a lock is normal; the gate says so and how long.
+#
+# What the build does not say for itself, and the gate does on its behalf:
+#
+# - modules/db is capture checked. An incremental build hides closure over `this` errors in
+#   read and transact, so the gate cleans db before compiling. Never trust a green db build that
+#   did not start from clean.
+# - The db and example suites start Postgres through testcontainers and need a Docker daemon.
+#   With colima, Docker is reached through a socket under ~/.colima and testcontainers needs
+#   the API version pinned, or it reports no Docker environment at all. The gate points
+#   DOCKER_HOST at the colima socket when nothing else set it, and pins the API version whenever
+#   DOCKER_HOST names a colima socket, however it got there.
+# - In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
+#   nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir
+#   file. An uncommitted local-worktree.sbt at the worktree root turns that setting off. The
+#   gate writes it and excludes it from git, so it never lands in a commit.
+#
+# `bin/gate --dry-run` prints the steps and the lock paths without running sbt.
+
+set -uo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+DRY_RUN=0
+for arg in "$@"; do
+  case "$arg" in
+    --dry-run) DRY_RUN=1 ;;
+    *) echo "bin/gate: unknown argument $arg" >&2; exit 2 ;;
+  esac
+done
+
+# ---------- environment ----------
+
+if [ -z "${DOCKER_HOST:-}" ] && [ -S "$HOME/.colima/default/docker.sock" ]; then
+  export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
+fi
+case "${DOCKER_HOST:-}" in
+  *colima*)
+    case "${JAVA_TOOL_OPTIONS:-}" in
+      *api.version*) ;;
+      *) export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Dapi.version=1.43" ;;
+    esac ;;
+esac
+
+if [ -f "$ROOT/.git" ] && [ ! -f "$ROOT/local-worktree.sbt" ]; then
+  printf '// Written by bin/gate for this linked worktree, see its header. Never commit it.\nThisBuild / git.gitUncommittedChanges := false\n' > "$ROOT/local-worktree.sbt"
+  exclude="$(git -C "$ROOT" rev-parse --git-common-dir)/info/exclude"
+  grep -qx 'local-worktree.sbt' "$exclude" 2>/dev/null || echo 'local-worktree.sbt' >> "$exclude"
+  echo "gate: wrote local-worktree.sbt for this worktree"
+fi
+
+# ---------- locks ----------
+
+# A lock is a directory holding the pid of its owner, so a lock left by a killed gate is
+# recognised as stale and taken over instead of blocking forever.
+LOCK_DIR="${TMPDIR:-/tmp}"; LOCK_DIR="${LOCK_DIR%/}/eezo-gate"
+mkdir -p "$LOCK_DIR"
+CHECKOUT_LOCK="$LOCK_DIR/checkout-$(printf '%s' "$ROOT" | shasum | cut -c1-12)"
+EXAMPLES_LOCK="$LOCK_DIR/examples"
+HELD=()
+
+acquire() {
+  local lock=$1 what=$2 waited=0
+  while ! mkdir "$lock" 2>/dev/null; do
+    local owner
+    owner=$(cat "$lock/pid" 2>/dev/null || echo "")
+    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then
+      echo "gate: $what lock left by dead process $owner, taking it over"
+      rm -rf "$lock"
+      continue
+    fi
+    if [ "$waited" -eq 0 ]; then echo "gate: waiting for the $what lock held by ${owner:-another gate}"; fi
+    sleep 15
+    waited=$((waited + 15))
+  done
+  echo $$ > "$lock/pid"
+  HELD+=("$lock")
+  if [ "$waited" -gt 0 ]; then echo "gate: $what lock acquired after ${waited}s"; fi
+}
+
+release() {
+  local lock=$1
+  rm -rf "$lock"
+  local kept=()
+  for h in "${HELD[@]}"; do [ "$h" != "$lock" ] && kept+=("$h"); done
+  HELD=("${kept[@]+"${kept[@]}"}")
+}
+
+cleanup() { for h in "${HELD[@]+"${HELD[@]}"}"; do rm -rf "$h"; done; }
+trap cleanup EXIT INT TERM
+
+# ---------- steps ----------
+
+# step <name> <dir> <command...>: runs the command in the directory, names the step on failure.
+step() {
+  local name=$1 dir=$2; shift 2
+  local rel=${dir#"$ROOT"}
+  echo "gate: $name, in ${rel:-.}: $*"
+  if [ "$DRY_RUN" -eq 1 ]; then return 0; fi
+  (cd "$dir" && "$@") || { echo "GATE RED: $name"; exit 1; }
+}
+
+if [ "$DRY_RUN" -eq 1 ]; then
+  echo "gate: checkout $ROOT"
+  echo "gate: checkout lock $CHECKOUT_LOCK, examples lock $EXAMPLES_LOCK"
+  echo "gate: DOCKER_HOST=${DOCKER_HOST:-unset}"
+fi
+
+acquire "$CHECKOUT_LOCK" checkout
+
+step format   "$ROOT" sbt -batch scalafmtCheckAll scalafmtSbtCheck
+step compile  "$ROOT" sbt -batch db/clean +compile Test/compile
+step test     "$ROOT" sbt -batch +test
+
+acquire "$EXAMPLES_LOCK" examples
+step examples "$ROOT" sbt -batch publishLocalForExample
+step examples "$ROOT/examples" sbt -batch test
+release "$EXAMPLES_LOCK"
+
+step site     "$ROOT" sbt -batch unidoc
+step site     "$ROOT/site" sbt -batch scalafmtCheckAll compile test
+
+echo "GATE GREEN"
