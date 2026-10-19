@@ -311,8 +311,9 @@ sbt +test
 
 The `db` suite starts a real Postgres through testcontainers, so it needs a Docker daemon.
 `sbt check` runs the regression half of that suite, and `sbt backlog` runs the tests that
-describe open work and are expected to fail until it lands. The decisions behind the framework
-are recorded in [`docs/adr`](docs/adr).
+describe open work and are expected to fail until it lands. `bin/gate` runs all of it in CI's
+order and installs the repository's git hooks, which check every commit message. The decisions
+behind the framework are recorded in [`docs/adr`](docs/adr).
 
 Pull requests target `dev`, the trunk. `main` is the latest release: it moves only by fast forward
 when a version is tagged, so the front page, this README and a plain clone always describe what is

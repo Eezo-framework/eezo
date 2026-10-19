@@ -29,8 +29,18 @@
 #   nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir
 #   file. An uncommitted local-worktree.sbt at the worktree root turns that setting off. The
 #   gate writes it and excludes it from git, so it never lands in a commit.
+# - The repository's git hooks live in .githooks and git does not run them until core.hooksPath
+#   says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one
+#   accepted co author trailer and no dash characters in prose, so a commit refused with a message
+#   about either is the hook doing its job: fix the message, not the hook.
+# - Three suites are timing sensitive and can go red under machine load with no code cause.
+#   PoolSuite's "with the database down, the first read waits the acquire timeout" fires its
+#   500 ms acquire timeout before the driver's refusal is recorded. LiveServerSuite's abnormal
+#   drop rejoin can time out on a slow runner. DrainSuite can hang the test step with every suite
+#   green. A lone red in one of those: rerun once before diagnosing.
 #
-# `bin/gate --dry-run` prints the steps and the lock paths without running sbt.
+# `bin/gate --dry-run` prints the steps and the lock paths without running sbt, and changes
+# nothing, not even the git config.
 
 set -uo pipefail
 
@@ -61,6 +71,15 @@ if [ -f "$ROOT/.git" ] && [ ! -f "$ROOT/local-worktree.sbt" ]; then
   exclude="$(git -C "$ROOT" rev-parse --git-common-dir)/info/exclude"
   grep -qx 'local-worktree.sbt' "$exclude" 2>/dev/null || echo 'local-worktree.sbt' >> "$exclude"
   echo "gate: wrote local-worktree.sbt for this worktree"
+fi
+
+if [ "$(git -C "$ROOT" config core.hooksPath)" != ".githooks" ]; then
+  if [ "$DRY_RUN" -eq 1 ]; then
+    echo "gate: would set core.hooksPath to .githooks"
+  else
+    git -C "$ROOT" config core.hooksPath .githooks
+    echo "gate: installed the repository's git hooks, core.hooksPath is .githooks"
+  fi
 fi
 
 # ---------- locks ----------

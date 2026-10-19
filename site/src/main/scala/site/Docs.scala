@@ -136,13 +136,18 @@ object Docs {
   }
 
   /** The modules an application depends on, each a door into the generated API. */
-  private val Modules: Vector[(String, String, String)] = Vector(
+  /** One card per published module on the API page: its top level package, its artifact and a
+    * blurb. `ModulesSuite` holds it against the API reference, so a module whose package the
+    * reference lists and no card covers fails the site build.
+    */
+  private[site] val Modules: Vector[(String, String, String)] = Vector(
     ("io.eezo", "eezo", "The umbrella: EezoApp, both layers."),
     ("io.eezo.core", "eezo-core", "The HTML tree and DSL, Id, Store."),
     ("io.eezo.http", "eezo-http", "Request, Response, routes, Form, Resource, sessions, CSRF."),
     ("io.eezo.db", "eezo-db", "The connection, sql, transactions, Table, Schema, migrations."),
     ("io.eezo.live", "eezo-live", "Component, Live, Topic, the patch protocol."),
-    ("io.eezo.auth", "eezo-auth", "Guard, Password, ownership.")
+    ("io.eezo.auth", "eezo-auth", "Guard, Password, ownership."),
+    ("io.eezo.json.upickle", "eezo-upickle", "The api.Serde for API routes, through upickle.")
   )
 
   private def api: Html =

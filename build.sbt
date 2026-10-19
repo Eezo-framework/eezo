@@ -90,7 +90,11 @@ lazy val commonSettings = Seq(
   libraryDependencies += munit
 )
 
-/** A module of the framework, at `modules/<id>`, published as `eezo-<id>`. */
+/** A module of the framework, at `modules/<id>`, published as `eezo-<id>`. A new module also joins
+  * three tables by hand, because nothing checks them: the artifact table in README.md, the rows
+  * that start with `eezo-`; the module list in docs/explanation/layers.md; and the `Modules` vector
+  * in site/src/main/scala/site/Docs.scala, the cards on the site's API page.
+  */
 def module(id: String): Project =
   Project(id, file(s"modules/$id"))
     .settings(commonSettings)

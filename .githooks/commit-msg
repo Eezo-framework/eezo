@@ -1,0 +1,58 @@
+#!/usr/bin/env bash
+#
+# The repository's commit message rules, checked where they cannot be argued with. bin/gate
+# installs this directory as core.hooksPath; git then runs this script on every commit with the
+# path of the proposed message as its one argument, and a non zero exit refuses the commit.
+#
+# Two rules. The co author trailer names one model, exactly, because the agent that ships a change
+# otherwise writes whatever name its own context suggests. And prose contains no dash characters:
+# no en or em dash, no hyphen standing between spaces, no run of hyphens, no dash bullet. A hyphen
+# inside a word or an identifier is fine, because sbt-plugin, ff-only and problem+json are real
+# names. Lines git will strip, the # comments and everything below the scissors line, are skipped.
+
+set -u
+
+file=$1
+trailer='Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>'
+en=$'\xe2\x80\x93'
+em=$'\xe2\x80\x94'
+status=0
+n=0
+
+while IFS= read -r line || [ -n "$line" ]; do
+  n=$((n + 1))
+  case "$line" in
+    '#'*'>8'*) break ;;
+    '#'*) continue ;;
+  esac
+
+  case "$line" in
+    'Co-Authored-By: Claude '*)
+      if [ "$line" != "$trailer" ]; then
+        echo "commit-msg: line $n names a co author this repository does not accept:"
+        echo "  $line"
+        echo "commit-msg: the trailer line is the repository's rule, use exactly this one:"
+        echo "  $trailer"
+        status=1
+      fi ;;
+  esac
+
+  reason=""
+  case "$line" in
+    *"$en"* | *"$em"*) reason="an en or em dash" ;;
+    *' - '*) reason="a hyphen with a space on both sides" ;;
+    *--*) reason="two or more hyphens in a row" ;;
+  esac
+  unindented="${line#"${line%%[! ]*}"}"
+  case "$unindented" in
+    '- '*) reason="a dash bullet" ;;
+  esac
+  if [ -n "$reason" ]; then
+    echo "commit-msg: line $n contains $reason:"
+    echo "  $line"
+    echo "commit-msg: prose contains no dash characters, write a sentence or use an asterisk bullet."
+    status=1
+  fi
+done < "$file"
+
+exit "$status"
