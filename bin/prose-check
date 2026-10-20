@@ -1,4 +1,4 @@
-#!/usr/bin/env python3 -I
+#!/usr/bin/env -S python3 -I
 # Checks that prose in Markdown files and in scaladoc comments contains no dash characters, the
 # rule in CLAUDE.md, with the commit-msg hook's definition of a dash: an en or em dash, a hyphen
 # with a space on both sides, or two or more hyphens in a row. A hyphen inside a word is fine. Not
