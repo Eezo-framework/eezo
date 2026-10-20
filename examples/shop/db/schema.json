@@ -111,6 +111,14 @@
           "primaryKey": false,
           "checks": [],
           "references": null
+        },
+        {
+          "name": "token",
+          "type": "text",
+          "nullable": true,
+          "primaryKey": false,
+          "checks": [],
+          "references": null
         }
       ],
       "indexes": [

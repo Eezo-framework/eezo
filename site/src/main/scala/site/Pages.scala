@@ -176,7 +176,8 @@ object Pages {
               "examples/hello/README.md"     -> "hello: the http layer",
               "examples/reminders/README.md" -> "reminders: the database layer",
               "examples/blog/README.md"      -> "blog: both layers",
-              "examples/todo/README.md"      -> "todo: the CLI tour"
+              "examples/todo/README.md"      -> "todo: the CLI tour",
+              "examples/shop/README.md"      -> "shop: a small shop with Stripe"
             )
         ),
         Section(

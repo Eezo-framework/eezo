@@ -25,9 +25,10 @@ object CreateUser extends DbApp {
 
   override def boot(): Unit = {
     val email  = sys.env("SHOP_EMAIL")
-    val hashed = Field[Password].read(sys.env("SHOP_PASSWORD"))
+    val hashed = Field[Password]
+      .read(sys.env("SHOP_PASSWORD"))
       .fold(message => throw new IllegalStateException(s"SHOP_PASSWORD $message"), identity)
-    transact(Table[User].insert(User(Id.gen(), email, hashed)))
+    transact(Table[User].insert(User(Id.gen(), email, hashed, token = None)))
     println(s"created $email; sign in at /login")
   }
 }

@@ -6,7 +6,8 @@ import io.eezo.http.Request
 import models.User
 
 /** The shop's frame: the nav and the stylesheet around every page, the derived admin pages, the
-  * login page and the error page included. Named in `Main`. Every link in the nav has a route behind it.
+  * login page and the error page included. Named in `Main`. Every link in the nav has a route
+  * behind it.
   *
   * The stylesheet is `assets/shop.css` in the jar, linked under the versioned address `Assets`
   * gives it and served by the route under `/assets`. Element selectors only, so the pages typed on
@@ -26,6 +27,7 @@ object Layout extends io.eezo.http.Layout {
           a(Attrs.href := "/", "shop"),
           a(Attrs.href := "/board", "board"),
           a(Attrs.href := "/products", "admin"),
+          a(Attrs.href := "/settings/token", "API token"),
           User.guard.logoutForm(request, Url.Absolute("/logout"))
         ),
         main(content)

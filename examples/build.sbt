@@ -114,7 +114,18 @@ lazy val shop = (project in file("shop"))
     libraryDependencies ++= Seq(
       layer("eezo"),
       layer("eezo-auth"),
-      "com.lihaoyi" %% "upickle" % "4.4.3"
+      layer("eezo-upickle"),
+      "com.lihaoyi" %% "upickle" % "4.4.3",
+      "org.scalameta" %% "munit" % "1.3.4" % Test,
+      "org.testcontainers" % "postgresql" % "1.21.3" % Test
+    ),
+    // `Stripe` reads its two secrets when the route table is built, and a suite builds the table,
+    // so the suite runs in a JVM of its own that can be handed stand ins. Nothing in it calls
+    // Stripe, so no real key is ever needed or read.
+    Test / fork := true,
+    Test / envVars := Map(
+      "STRIPE_SECRET_KEY"     -> "sk_test_unused",
+      "STRIPE_WEBHOOK_SECRET" -> "whsec_unused"
     ),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir
