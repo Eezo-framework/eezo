@@ -384,9 +384,11 @@ object Bars {
         deserialize(body, io.eezo.core.Id.gen[A]())
       def deserialize(
           body: Array[Byte],
-          id: io.eezo.core.Id[A]
-      ): Either[io.eezo.http.api.Serde.Failure, A] =
+          decided: Map[String, io.eezo.core.Id[Any]]
+      ): Either[io.eezo.http.api.Serde.Failure, A] = {
+        val id = decided.get("id").fold(io.eezo.core.Id.gen[A]())(k => io.eezo.core.Id(k.value))
         Right(build(id, new String(body, java.nio.charset.StandardCharsets.UTF_8)))
+      }
     }
 }
 

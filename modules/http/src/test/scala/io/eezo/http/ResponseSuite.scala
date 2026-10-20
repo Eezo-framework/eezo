@@ -56,7 +56,10 @@ class ResponseSuite extends munit.FunSuite {
       def deserialize(body: Array[Byte]): Either[api.Serde.Failure, A] =
         Left(api.Serde.Failure.Malformed("never read here"))
 
-      def deserialize(body: Array[Byte], key: Id[A]): Either[api.Serde.Failure, A] =
+      def deserialize(
+          body: Array[Byte],
+          decided: Map[String, Id[Any]]
+      ): Either[api.Serde.Failure, A] =
         deserialize(body)
     }
   }

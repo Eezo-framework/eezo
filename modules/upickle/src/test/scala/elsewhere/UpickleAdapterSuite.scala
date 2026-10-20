@@ -43,6 +43,11 @@ final case class Tally(id: Id[Tally], count: Long)
 /** A flat model with an integral field, the shape a quantity in an order payload has. */
 final case class Line(sku: String, quantity: Int)
 
+/** A model with a key, an owner that is another model's key, and a count past what a `Double`
+  * holds, the shape an owned row has when a program writes it.
+  */
+final case class Entry(id: Id[Entry], owner: Id[Product], count: Long)
+
 /** A model whose one field the author left optional, so a JSON `null` there means absent. */
 final case class Note(text: Option[String])
 
@@ -93,6 +98,66 @@ class UpickleAdapterSuite extends munit.FunSuite {
     val none  = s"""{"product":"${order.product.show}","quantity":2,"price":"9.50"}"""
     assertEquals(serde.deserialize(bytes(other), key), Right(order.copy(id = key)))
     assertEquals(serde.deserialize(bytes(none), key), Right(order.copy(id = key)))
+  }
+
+  private val entryKey   = Id.gen[Entry]()
+  private val entryOwner = Id.gen[Product]()
+  private val decided    =
+    Map("id" -> Id[Any](entryKey.value), "owner" -> Id[Any](entryOwner.value))
+
+  test("every name eezo decided wins over whatever the body carried there, and over nothing") {
+    val serde = summon[Serde[Entry]]
+    val any   =
+      """{"id":{"a":[1,{"b":null}]},"owner":[{"c":{"d":"e"}},null],"count":9007199254740993}"""
+    assertEquals(
+      serde.deserialize(bytes(any), decided),
+      Right(Entry(entryKey, entryOwner, 9007199254740993L))
+    )
+    assertEquals(
+      serde.deserialize(bytes("""{"count":3}"""), decided),
+      Right(Entry(entryKey, entryOwner, 3))
+    )
+  }
+
+  test("a decided name the body repeats, or spells with an escape, is skipped every time") {
+    val serde = summon[Serde[Entry]]
+    val body  =
+      """{"owner":"x","id":"y","count":1,"owner":"z","\u006fwner":{"w":1},"i\u0064":[]}"""
+    assertEquals(serde.deserialize(bytes(body), decided), Right(Entry(entryKey, entryOwner, 1)))
+  }
+
+  test(
+    "a field nobody decided is still required and refused null, non JSON is malformed, and deep nesting is a failure, not a crash"
+  ) {
+    val serde = summon[Serde[Entry]]
+    assertEquals(
+      unfit(serde.deserialize(bytes("""{"id":"x"}"""), decided)),
+      "missing keys in dictionary: count at $"
+    )
+    assertEquals(
+      unfit(serde.deserialize(bytes("""{"count":null}"""), decided)),
+      "expected a value got null at $['count']"
+    )
+    assertEquals(
+      malformed(serde.deserialize(bytes("not json"), decided)),
+      "expected null got \"n\" at index 0 at $"
+    )
+    assert(clue(unfit(serde.deserialize(bytes("[1,2]"), decided))).endsWith(" at $"))
+    val depth = 50000
+    val deep  = bytes(("""{"count":""" * depth) + "1" + ("}" * depth))
+    assert(clue(serde.deserialize(deep, decided)).isLeft)
+  }
+
+  test("only the names eezo decided are filled: the owner left out is still required") {
+    val serde = summon[Serde[Entry]]
+    assertEquals(
+      unfit(serde.deserialize(bytes("""{"count":3}"""), entryKey)),
+      "missing keys in dictionary: owner at $"
+    )
+    assertEquals(
+      serde.deserialize(bytes(s"""{"owner":"${entryOwner.show}","count":3}"""), Map.empty),
+      serde.deserialize(bytes(s"""{"owner":"${entryOwner.show}","count":3}"""))
+    )
   }
 
   test("a key crosses the wire as the text Id.show gives, and reads back to an equal key") {

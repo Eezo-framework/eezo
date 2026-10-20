@@ -28,11 +28,21 @@ trait Serde[A] {
   /** For a payload with no key, or one whose key the client is allowed to choose. */
   def deserialize(body: Array[Byte]): Either[Serde.Failure, A]
 
-  /** For a model whose key the caller owns: `key` goes under `id` over whatever the body said, and
-    * a body that said nothing there is not a failure, because a client does not name the row eezo
-    * is about to write.
+  /** For a write whose fields eezo has decided, the key it minted or read from the path and the
+    * owner it filled from the current user: each value goes under its name over whatever the body
+    * said, and a body that said nothing there is not a failure, because a client names neither the
+    * row eezo is about to write nor whose row it is.
+    *
+    * Keys of any model, as `Id[Any]`, because an owner is the key of another model than this one
+    * and the seam has no way to name which.
     */
-  def deserialize(body: Array[Byte], key: Id[A]): Either[Serde.Failure, A]
+  def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, A]
+
+  /** For a model whose key the caller owns and nothing else decided. Concrete, so an instance
+    * written by hand implements one decided read and not two that could disagree.
+    */
+  final def deserialize(body: Array[Byte], key: Id[A]): Either[Serde.Failure, A] =
+    deserialize(body, Map("id" -> Id[Any](key.value)))
 }
 
 object Serde {

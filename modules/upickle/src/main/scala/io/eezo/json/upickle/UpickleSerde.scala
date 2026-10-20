@@ -79,8 +79,8 @@ private final class UpickleSerde[A](rw: ReadWriter[A]) extends Serde[A] {
   def deserialize(body: Array[Byte]): Either[Serde.Failure, A] =
     parsed(body).flatMap(_ => fitted(body, rw))
 
-  def deserialize(body: Array[Byte], key: Id[A]): Either[Serde.Failure, A] =
-    parsed(body).flatMap(_ => fitted(body, Keyed(rw, key.show)))
+  def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, A] =
+    parsed(body).flatMap(_ => fitted(body, Decided(rw, decided.view.mapValues(_.show).toMap)))
 
   /** Whether the body is JSON at all, checked on its own before any reading, so that which step
     * failed is what tells a body that was never JSON from one that was and did not fit, rather than
@@ -124,15 +124,17 @@ private final class UpickleSerde[A](rw: ReadWriter[A]) extends Serde[A] {
     }
 }
 
-/** A model's reader with the caller's key put under `id` as the body streams through it.
+/** A model's reader with every field eezo decided put under its name as the body streams through
+  * it, each as the text its key has on the wire.
   *
   * On the way past rather than by editing a parsed tree, for the same reasons the body is never
-  * parsed into one: numbers stay exact and nesting costs no thread stack. Whatever `id` the body
-  * carried is skipped unread, and the key goes in last, so a body that said nothing there reads the
-  * same as one that said something else. Anything but an object at the top goes to the model
-  * untouched, which refuses it in its own words.
+  * parsed into one: numbers stay exact and nesting costs no thread stack. Whatever the body carried
+  * under a decided name is skipped unread, as often as it names it, and the decided values go in
+  * last, so a body that said nothing there reads the same as one that said something else. A name
+  * is compared after the parser has undone its escapes, so no spelling of it gets through. Anything
+  * but an object at the top goes to the model untouched, which refuses it in its own words.
   */
-private final class Keyed[A](model: Visitor[Any, A], key: String)
+private final class Decided[A](model: Visitor[Any, A], decided: Map[String, String])
     extends Visitor.Delegate[Any, A](model) {
 
   override def visitObject(length: Int, jsonableKeys: Boolean, index: Int): ObjVisitor[Any, A] = {
@@ -147,8 +149,9 @@ private final class Keyed[A](model: Visitor[Any, A], key: String)
       }
 
       def visitKeyValue(name: Any): Unit = {
-        skipping = name == "id"
-        if (!skipping) named(name.toString, keyIndex)
+        val text = name.toString
+        skipping = decided.contains(text)
+        if (!skipping) named(text, keyIndex)
       }
 
       def subVisitor: Visitor[?, ?] = if (skipping) NoOpVisitor else fields.subVisitor
@@ -157,8 +160,10 @@ private final class Keyed[A](model: Visitor[Any, A], key: String)
         if (!skipping) fields.visitValue(value, index)
 
       def visitEnd(index: Int): A = {
-        named("id", index)
-        fields.visitValue(fields.subVisitor.visitString(key, index), index)
+        decided.foreach { (name, key) =>
+          named(name, index)
+          fields.visitValue(fields.subVisitor.visitString(key, index), index)
+        }
         fields.visitEnd(index)
       }
 

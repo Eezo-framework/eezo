@@ -3,7 +3,7 @@ package io.eezo.json.upickle.shop
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import io.eezo.core.{Id, OwnerOf}
+import io.eezo.core.{Id, OwnerOf, Store}
 import io.eezo.http.*
 import io.eezo.json.upickle.given
 
@@ -76,16 +76,25 @@ class DerivedApiSuite extends munit.FunSuite {
     assertEquals(routes.dispatch(program(Method.GET, s"/products/${stored.id.show}")).status, 200)
   }
 
-  test("an owned model's body carries the owner field, and the caller's key replaces it") {
-    val ada     = Id.gen[Clerk]()
+  private val ada   = Id.gen[Clerk]()
+  private val grace = Id.gen[Clerk]()
+
+  /** A note store holding one row of grace's, and the five over it, owned with these actions
+    * covered, every route guarded and the caller named off an `X-User` header the way a guard's
+    * token arm names it.
+    */
+  private def notes(covers: Set[Action]): (RouteTable, Store[Note], Note) = {
     val ownerOf = OwnerOf[Note, Id[Clerk]]("owner", _.owner)
     val store   = InMemoryStore.scoped(ownerOf)
-    // Every route guarded, the caller named the way a guard's token arm names it.
+    val graces  = Note(Id.gen(), grace, "grace's")
+    store.insert(graces.id, graces)
     val named = Guarded[Note](
       Action.values.toSet,
       {
         case http: Route.Http =>
-          http.copy(handler = request => http.handler(request.copy(currentUser = Some(ada.show))))
+          http.copy(handler =
+            request => http.handler(request.copy(currentUser = request.header("X-User")))
+          )
         case other => other
       },
       Seq.empty
@@ -93,24 +102,64 @@ class DerivedApiSuite extends munit.FunSuite {
     val owned = Owned[Note, Clerk](
       ownerOf,
       request => request.currentUser.map(text => Id[Clerk](UUID.fromString(text))),
-      Set(Action.Index),
+      covers,
       named
     )
-    val routes = RouteTable(Api[Note].routes(store, owned))
+    (RouteTable(Api[Note].routes(store, owned)), store, graces)
+  }
 
-    // The case class reader needs every field, so a body without the owner never reaches the
-    // overwrite: it is the 422 any other missing field is, and nothing is stored.
-    intercept[UnprocessableContent](
-      routes.dispatch(program(Method.POST, "/api/notes", """{"text":"bare"}"""))
+  private def by(who: Id[Clerk], method: Method, path: String, body: String): Request =
+    program(method, path, body).copy(headers =
+      Map("Content-Type" -> Seq("application/json"), "X-User" -> Seq(who.show))
     )
-    assertEquals(store.all(), Seq.empty)
 
-    // Any key the body names is a placeholder: the row records the caller.
-    val placeholder = Id.gen[Clerk]()
-    val created     = routes.dispatch(
-      program(Method.POST, "/api/notes", s"""{"owner":"${placeholder.show}","text":"kept"}""")
-    )
+  test("an owned model's body names no owner, and the row records the caller") {
+    val (routes, store, _) = notes(Set(Action.Index))
+    val created = routes.dispatch(by(ada, Method.POST, "/api/notes", """{"text":"hello"}"""))
     assertEquals(created.status, 201)
-    assertEquals(store.all().map(_.owner), Seq(ada))
+    val stored = store.all().find(_.text == "hello").get
+    assertEquals(stored.owner, ada)
+    assertEquals(
+      text(created),
+      s"""{"id":"${stored.id.show}","owner":"${ada.show}","text":"hello"}"""
+    )
+  }
+
+  test("an owned model's body that names another owner and another key is overruled on both") {
+    val (routes, store, _) = notes(Set(Action.Index))
+    val claimed            = Id.gen[Note]()
+    val body               = s"""{"id":"${claimed.show}","owner":"${grace.show}","text":"kept"}"""
+    val created            = routes.dispatch(by(ada, Method.POST, "/api/notes", body))
+    assertEquals(created.status, 201)
+    val stored = store.all().find(_.text == "kept").get
+    assertEquals(stored.owner, ada)
+    assertNotEquals(stored.id, claimed)
+    assertEquals(created.header("Location"), Some(s"/api/notes/${stored.id.show}"))
+  }
+
+  test("an update ownership does not cover keeps the row's owner, named in the body or not") {
+    val (routes, store, graces) = notes(Set(Action.Index))
+    val path                    = s"/api/notes/${graces.id.show}"
+    assertEquals(routes.dispatch(by(ada, Method.PUT, path, """{"text":"one"}""")).status, 200)
+    assertEquals(store.find(graces.id), Some(Note(graces.id, grace, "one")))
+    val named = s"""{"owner":"${ada.show}","text":"two"}"""
+    assertEquals(routes.dispatch(by(ada, Method.PUT, path, named)).status, 200)
+    assertEquals(store.find(graces.id), Some(Note(graces.id, grace, "two")))
+  }
+
+  test("an update ownership covers records the requester, named in the body or not") {
+    val (routes, store, graces) = notes(Set(Action.Index, Action.Update))
+    val path                    = s"/api/notes/${graces.id.show}"
+    assertEquals(routes.dispatch(by(grace, Method.PUT, path, """{"text":"one"}""")).status, 200)
+    assertEquals(store.find(graces.id), Some(Note(graces.id, grace, "one")))
+    val named = s"""{"owner":"${ada.show}","text":"two"}"""
+    assertEquals(routes.dispatch(by(grace, Method.PUT, path, named)).status, 200)
+    assertEquals(store.find(graces.id), Some(Note(graces.id, grace, "two")))
+  }
+
+  test("a field nobody decided is still required of an owned model's body") {
+    val (routes, store, graces) = notes(Set(Action.Index))
+    intercept[UnprocessableContent](routes.dispatch(by(ada, Method.POST, "/api/notes", "{}")))
+    assertEquals(store.all(), Seq(graces))
   }
 }

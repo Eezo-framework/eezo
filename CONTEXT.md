@@ -44,7 +44,9 @@ shows as a form: how a request body is read back into an instance, and how an in
 into a response. It knows nothing about paths, verbs or storage, and a model with no key field can
 still have one. eezo holds only the seam; the JSON library behind it is the application's, chosen
 by adding an adapter, and eezo-upickle is the first. A body that is not JSON is refused with a 400,
-and JSON that does not fit the model with a 422, each saying what was wrong and where.
+and JSON that does not fit the model with a 422, each saying what was wrong and where. On a write
+the Serde is handed the fields eezo decided, the key it minted or read from the path and the owner
+it filled, and puts each over whatever the body said, so a body need name neither.
 _Avoid_: codec, encoder, decoder, JSON format, serializer
 
 ### How Form and Resource relate
@@ -219,8 +221,7 @@ _Avoid_: permission, policy, access control, ACL
 **Owner**:
 The user a row records as the one who created it, held as that user's key in a field of the model
 like any other. Filled once, from the current user, when the row is created, and never taken from a
-form. An Api body still names an owner, because the Serde reads only whole rows, and whatever it
-names is replaced.
+form.
 _Avoid_: creator, user id, foreign key, tenant
 
 **Owned**:

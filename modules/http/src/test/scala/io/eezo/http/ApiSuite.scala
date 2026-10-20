@@ -347,6 +347,97 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
     assertEquals(store.all().filter(_.text == "forged").map(_.owner), Seq(ada))
   }
 
+  test("a create body that names no owner records the caller") {
+    val (routes, store) = memos(Set(Action.Index))
+    val response = routes.dispatch(caller(ada, Method.POST, "/api/memos", """{"text":"bare"}"""))
+    assertEquals(response.status, 201)
+    assertEquals(store.all().filter(_.text == "bare").map(_.owner), Seq(ada))
+  }
+
+  test("the Serde is handed the key and the owner eezo decided, and an unowned model the key") {
+    var handed: Seq[Map[String, Id[Any]]]               = Seq.empty
+    def recording[A](serde: api.Serde[A]): api.Serde[A] = new api.Serde[A] {
+      def serialize(value: A): String                                   = serde.serialize(value)
+      def deserialize(body: Array[Byte]): Either[api.Serde.Failure, A]  = serde.deserialize(body)
+      def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]) = {
+        handed :+= decided
+        serde.deserialize(body, decided)
+      }
+    }
+    val memoStore  = InMemoryStore.scoped(memoOwner)
+    val memoRoutes = {
+      given api.Serde[Memo] = recording(summon[api.Serde[Memo]])
+      RouteTable(Api.derived[Memo].routes(memoStore, ownedMemos(Set(Action.Index))))
+    }
+    memoRoutes.dispatch(caller(ada, Method.POST, "/api/memos", """{"text":"mine"}"""))
+    val memo = memoStore.all().head
+    assertEquals(handed, Seq(Map("id" -> Id[Any](memo.id.value), "owner" -> Id[Any](ada.value))))
+
+    handed = Seq.empty
+    val gadgetStore  = InMemoryStore[Gadget]()
+    val gadgetRoutes = {
+      given api.Serde[Gadget] = recording(gadgetSerde)
+      RouteTable(Api.derived[Gadget].routes(gadgetStore))
+    }
+    gadgetRoutes.dispatch(program(Method.POST, "/api/gadgets", """{"name":"Nut","cents":1}"""))
+    assertEquals(handed, Seq(Map("id" -> Id[Any](gadgetStore.all().head.id.value))))
+  }
+
+  test("a Serde that trusts the body still cannot choose the key or the owner of a row") {
+    val store  = InMemoryStore.scoped(memoOwner)
+    val routes = {
+      given api.Serde[Memo] = trusting
+      RouteTable(Api.derived[Memo].routes(store, ownedMemos(Set(Action.Index, Action.Update))))
+    }
+    val claimed = Id.gen[Memo]()
+    val forged  = s"""{"id":"${claimed.show}","owner":"${grace.show}","text":"forged"}"""
+    val created = routes.dispatch(caller(ada, Method.POST, "/api/memos", forged))
+    assertEquals(created.status, 201)
+    val stored = store.all().head
+    assertNotEquals(stored.id, claimed)
+    assertEquals(stored.owner, ada)
+    assertEquals(created.header("Location"), Some(s"/api/memos/${stored.id.show}"))
+
+    val updated = routes.dispatch(caller(ada, Method.PUT, s"/api/memos/${stored.id.show}", forged))
+    assertEquals(updated.status, 200)
+    assertEquals(store.all(), Seq(Memo(stored.id, ada, "forged")))
+  }
+
+  test("a create body naming another id is stored under the minted key, and points at it") {
+    val (routes, store) = memos(Set(Action.Index))
+    val claimed         = Id.gen[Memo]()
+    val response        = routes.dispatch(
+      caller(ada, Method.POST, "/api/memos", s"""{"id":"${claimed.show}","text":"keyed"}""")
+    )
+    assertEquals(response.status, 201)
+    val stored = store.all().find(_.text == "keyed").get
+    assertNotEquals(stored.id, claimed)
+    assertEquals(response.header("Location"), Some(s"/api/memos/${stored.id.show}"))
+  }
+
+  test(
+    "an update body that names no owner keeps the row's owner when ownership does not cover it"
+  ) {
+    val (routes, store) = memos(Set(Action.Index))
+    val graces          = store.all().find(_.owner == grace).get
+    val response        = routes.dispatch(
+      caller(ada, Method.PUT, s"/api/memos/${graces.id.show}", """{"text":"edited"}""")
+    )
+    assertEquals(response.status, 200)
+    assertEquals(store.find(graces.id), Some(Memo(graces.id, grace, "edited")))
+  }
+
+  test("an update ownership covers records the requester, whether or not the body names an owner") {
+    val (routes, store) = memos(Set(Action.Index, Action.Update))
+    val adas            = store.all().find(_.owner == ada).get
+    val path            = s"/api/memos/${adas.id.show}"
+    assertEquals(routes.dispatch(caller(ada, Method.PUT, path, """{"text":"one"}""")).status, 200)
+    assertEquals(store.find(adas.id), Some(Memo(adas.id, ada, "one")))
+    val named = s"""{"owner":"${grace.show}","text":"two"}"""
+    assertEquals(routes.dispatch(caller(ada, Method.PUT, path, named)).status, 200)
+    assertEquals(store.find(adas.id), Some(Memo(adas.id, ada, "two")))
+  }
+
   test("an update ownership does not cover keeps the row's owner, whatever the body names") {
     val (routes, store) = memos(Set(Action.Index))
     val graces          = store.all().find(_.owner == grace).get
@@ -398,14 +489,19 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
       val key = Id.gen[Memo]()
       store.insert(key, Memo(key, who, text))
     }
-    val owned = Owned[Memo, Person](
+    (RouteTable(summon[Api[Memo]].routes(store, ownedMemos(covers))), store)
+  }
+
+  /** Memos owned through [[memoOwner]] with these actions covered, every route guarded by
+    * [[named]].
+    */
+  private def ownedMemos(covers: Set[Action]): Owned[Memo, Person] =
+    Owned[Memo, Person](
       memoOwner,
       request => request.currentUser.map(text => Id[Person](UUID.fromString(text))),
       covers,
       named
     )
-    (RouteTable(summon[Api[Memo]].routes(store, owned)), store)
-  }
 
   /** The request a program naming `who` sends, the way a guard's token arm names it. */
   private def caller(who: Id[Person], method: Method, path: String, body: String = ""): Request =
@@ -605,7 +701,9 @@ object ApiSuite {
     Seq.empty
   )
 
-  /** Memo JSON: an `owner` key and a `text`, with the `id` under the key it is handed. */
+  /** Memo JSON: an `owner` key and a `text`, with each field eezo decided under the key it is
+    * handed, so a body may leave the owner out.
+    */
   given api.Serde[Memo] with {
     def serialize(value: Memo): String =
       Json.render(
@@ -619,47 +717,83 @@ object ApiSuite {
       )
 
     def deserialize(body: Array[Byte]): Either[api.Serde.Failure, Memo] =
-      deserialize(body, Id.gen[Memo]())
+      deserialize(body, Map.empty)
 
-    def deserialize(body: Array[Byte], key: Id[Memo]): Either[api.Serde.Failure, Memo] =
-      Json.parse(new String(body, StandardCharsets.UTF_8)) match {
-        case Right(Json.Obj(fields)) =>
-          (fields.toMap.get("owner"), fields.toMap.get("text")) match {
-            case (Some(Json.Str(owner)), Some(Json.Str(text))) =>
-              // An owner that is no key still reads, as a key nobody holds: the route overwrites it.
-              val who = scala.util
-                .Try(UUID.fromString(owner))
-                .getOrElse(UUID.nameUUIDFromBytes(owner.getBytes(StandardCharsets.UTF_8)))
-              Right(Memo(key, Id(who), text))
-            case _ => Left(api.Serde.Failure.Unfit("a memo needs an owner and a text"))
-          }
-        case Right(_)     => Left(api.Serde.Failure.Unfit("a memo is an object"))
-        case Left(reason) => Left(api.Serde.Failure.Malformed(reason))
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[api.Serde.Failure, Memo] =
+      memoFrom(body) { members =>
+        val owner = decided.get("owner").map(_.value).orElse(ownerIn(members))
+        val key   = decided.get("id").map(_.value).getOrElse(UUID.randomUUID())
+        (owner, members.get("text")) match {
+          case (Some(who), Some(Json.Str(text))) => Right(Memo(Id(key), Id(who), text))
+          case _ => Left(api.Serde.Failure.Unfit("a memo needs an owner and a text"))
+        }
       }
   }
 
+  /** Memo JSON read the way a hand written instance can get wrong: the key and the owner are
+    * whatever the body names, and what eezo decided is never looked at.
+    */
+  val trusting: api.Serde[Memo] = new api.Serde[Memo] {
+    def serialize(value: Memo): String = summon[api.Serde[Memo]].serialize(value)
+
+    def deserialize(body: Array[Byte]): Either[api.Serde.Failure, Memo] =
+      memoFrom(body) { members =>
+        val key = members.get("id").collect { case Json.Str(text) => UUID.fromString(text) }
+        (key, ownerIn(members), members.get("text")) match {
+          case (Some(key), Some(who), Some(Json.Str(text))) => Right(Memo(Id(key), Id(who), text))
+          case _ => Left(api.Serde.Failure.Unfit("a memo needs an id, an owner and a text"))
+        }
+      }
+
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[api.Serde.Failure, Memo] = deserialize(body)
+  }
+
+  private def memoFrom(body: Array[Byte])(
+      read: Map[String, Json] => Either[api.Serde.Failure, Memo]
+  ): Either[api.Serde.Failure, Memo] =
+    Json.parse(new String(body, StandardCharsets.UTF_8)) match {
+      case Right(Json.Obj(fields)) => read(fields.toMap)
+      case Right(_)                => Left(api.Serde.Failure.Unfit("a memo is an object"))
+      case Left(reason)            => Left(api.Serde.Failure.Malformed(reason))
+    }
+
+  /** An owner that is no key still reads, as a key nobody holds: the route overwrites it. */
+  private def ownerIn(members: Map[String, Json]): Option[UUID] =
+    members.get("owner").collect { case Json.Str(owner) =>
+      scala.util
+        .Try(UUID.fromString(owner))
+        .getOrElse(UUID.nameUUIDFromBytes(owner.getBytes(StandardCharsets.UTF_8)))
+    }
+
   /** A Serde for a model whose JSON no test reads, which only its routes' paths are about. */
   def blank[A]: api.Serde[A] = new api.Serde[A] {
-    def serialize(value: A): String                                              = "{}"
-    def deserialize(body: Array[Byte]): Either[api.Serde.Failure, A]             = Left(nothing)
-    def deserialize(body: Array[Byte], key: Id[A]): Either[api.Serde.Failure, A] = Left(nothing)
+    def serialize(value: A): String                                   = "{}"
+    def deserialize(body: Array[Byte]): Either[api.Serde.Failure, A]  = Left(nothing)
+    def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]) = Left(nothing)
     private def nothing = api.Serde.Failure.Unfit("no test reads this")
   }
 
-  /** The same model's routes over a Serde whose keyed reader ignores the key it is handed, the
+  /** The same model's routes over a Serde whose decided read ignores the key it is handed, the
     * mistake a hand written instance can make.
     */
   val careless: Api[Gadget] = {
     given api.Serde[Gadget] = new api.Serde[Gadget] {
-      def serialize(value: Gadget): String                = gadgetSerde.serialize(value)
-      def deserialize(body: Array[Byte])                  = gadgetSerde.deserialize(body)
-      def deserialize(body: Array[Byte], key: Id[Gadget]) = gadgetSerde.deserialize(body)
+      def serialize(value: Gadget): String = gadgetSerde.serialize(value)
+      def deserialize(body: Array[Byte])   = gadgetSerde.deserialize(body)
+      def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]) =
+        gadgetSerde.deserialize(body)
     }
     Api.derived[Gadget]
   }
 
   /** A Serde over `core`'s own reader: an object with a text `name` and a whole `cents`, and an
-    * `id` the keyed reader replaces. Anything that is not JSON is malformed, and JSON that is not
+    * `id` the decided read replaces. Anything that is not JSON is malformed, and JSON that is not
     * that object is unfit, which is the split the adapter makes.
     */
   given api.Serde[Gadget] = gadgetSerde
@@ -678,8 +812,11 @@ object ApiSuite {
 
     def deserialize(body: Array[Byte]): Either[api.Serde.Failure, Gadget] = read(body, None)
 
-    def deserialize(body: Array[Byte], key: Id[Gadget]): Either[api.Serde.Failure, Gadget] =
-      read(body, Some(key))
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[api.Serde.Failure, Gadget] =
+      read(body, decided.get("id").map(key => Id(key.value)))
 
     private def read(body: Array[Byte], key: Option[Id[Gadget]]) =
       Json.parse(new String(body, StandardCharsets.UTF_8)) match {

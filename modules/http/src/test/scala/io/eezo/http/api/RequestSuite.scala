@@ -107,7 +107,10 @@ class RequestSuite extends munit.FunSuite {
         case number      => Right(Quantity(number.toInt))
       }
 
-    def deserialize(body: Array[Byte], key: Id[Quantity]): Either[Serde.Failure, Quantity] =
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[Serde.Failure, Quantity] =
       deserialize(body)
   }
 

@@ -31,8 +31,10 @@ class SerdeSuite extends munit.FunSuite {
         case _           => Left(Serde.Failure.Malformed("no bar at $"))
       }
 
-    def deserialize(body: Array[Byte], key: Id[Note]): Either[Serde.Failure, Note] =
-      deserialize(body).map(_.copy(id = key))
+    def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, Note] =
+      deserialize(body).map(note =>
+        decided.get("id").fold(note)(id => note.copy(id = Id(id.value)))
+      )
   }
 
   private val key  = Id.gen[Note]()
@@ -48,6 +50,27 @@ class SerdeSuite extends munit.FunSuite {
     assertEquals(serde.deserialize(bytes("hello")), Left(Serde.Failure.Malformed("no bar at $")))
     val other = Id.gen[Note]()
     assertEquals(serde.deserialize(bytes(s"${key.show}|hi"), other), Right(Note(other, "hi")))
+  }
+
+  test("the keyed read is the general one, handed the key alone under id") {
+    var handed: Map[String, Id[Any]] = Map.empty
+    val serde                        = new Serde[Note] {
+      def serialize(value: Note): String                              = ""
+      def deserialize(body: Array[Byte]): Either[Serde.Failure, Note] = Left(unread)
+      def deserialize(
+          body: Array[Byte],
+          decided: Map[String, Id[Any]]
+      ): Either[Serde.Failure, Note] = {
+        handed = decided
+        Left(unread)
+      }
+      private def unread = Serde.Failure.Unfit("not read here")
+    }
+    assertEquals(
+      serde.deserialize(bytes("anything"), key),
+      Left(Serde.Failure.Unfit("not read here"))
+    )
+    assertEquals(handed, Map("id" -> Id[Any](key.value)))
   }
 
   test("a failure is one reason, in one of two kinds") {

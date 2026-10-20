@@ -200,15 +200,20 @@ object ApiGuardSuite {
       )
 
     def deserialize(body: Array[Byte]): Either[api.Serde.Failure, Product] =
-      deserialize(body, Id.gen())
+      deserialize(body, Id.gen[Product]())
 
-    def deserialize(body: Array[Byte], key: Id[Product]): Either[api.Serde.Failure, Product] =
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[api.Serde.Failure, Product] = {
+      val key = decided.get("id").fold(Id.gen[Product]())(id => Id(id.value))
       members(body).flatMap { m =>
         (m.get("name"), m.get("cents")) match {
           case (Some(Json.Str(name)), Some(Json.Num(cents))) => Right(Product(key, name, cents))
           case _ => Left(api.Serde.Failure.Unfit("a product needs a name and cents"))
         }
       }
+    }
   }
 
   given api.Serde[Note] with {
@@ -224,9 +229,13 @@ object ApiGuardSuite {
       )
 
     def deserialize(body: Array[Byte]): Either[api.Serde.Failure, Note] =
-      deserialize(body, Id.gen())
+      deserialize(body, Id.gen[Note]())
 
-    def deserialize(body: Array[Byte], key: Id[Note]): Either[api.Serde.Failure, Note] =
+    def deserialize(
+        body: Array[Byte],
+        decided: Map[String, Id[Any]]
+    ): Either[api.Serde.Failure, Note] = {
+      val key = decided.get("id").fold(Id.gen[Note]())(id => Id(id.value))
       members(body).flatMap { m =>
         (m.get("author"), m.get("text")) match {
           case (Some(Json.Str(author)), Some(Json.Str(text))) =>
@@ -234,5 +243,6 @@ object ApiGuardSuite {
           case _ => Left(api.Serde.Failure.Unfit("a note needs an author and a text"))
         }
       }
+    }
   }
 }

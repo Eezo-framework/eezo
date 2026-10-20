@@ -223,8 +223,9 @@ private[http] final class Ownership[A](
     }
 
   /** The owner field's name and the key a write puts in it, by [[body]]'s rule, for a write whose
-    * submission is not a form: an [[Api]] reads JSON into a whole row first and sets the field on
-    * that row, so it needs the value and not a rewritten form. Nothing for an unowned model.
+    * submission is not a form: an [[Api]] hands the owner to its Serde beside the key and sets it
+    * again on the row the Serde read, so it needs the value and not a rewritten form. Nothing for
+    * an unowned model.
     */
   def owner(request: Request, existing: Option[A]): Option[(String, Id[Any])] =
     owned.map { o =>

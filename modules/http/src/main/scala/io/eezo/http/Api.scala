@@ -24,12 +24,6 @@ import io.eezo.core.internal.util.snake
   *
   * There is no JSON route for `New` or `Edit`. Both serve a blank or filled form for a browser to
   * submit, and a program builds its own body, so subtracting either changes nothing here.
-  *
-  * An owned model's body still carries its owner field, and what it holds is thrown away. The Serde
-  * reads a whole row, and the only part of a row eezo can hand it is the key, so a reader that
-  * needs every field, as eezo-upickle's does, refuses a body without the owner as unfit before the
-  * caller's key could replace it. Filling the owner in for the Serde would need a Serde that takes
-  * a named field the way it takes the key.
   */
 @implicitNotFound(
   "No Api instance for ${A}.\n" +
@@ -152,29 +146,30 @@ object Api {
 
     private def member(key: Id[A]): Url = collection / key.show
 
-    /** The body, read as a row under a key eezo already decided.
+    /** The body, read as a row under the key and the owner eezo already decided.
       *
-      * The key is set again after the Serde has read the body under it, rather than trusted to have
-      * been: a hand written Serde whose keyed reader kept the body's `id` would otherwise let a
-      * client choose the key of the row it creates, or move a row it updates to another key.
+      * The owner is decided by the rule [[Ownership.body]] applies to a form: a body naming another
+      * owner is not refused, it is overwritten, with the caller on a covered write and with the
+      * row's own owner on an uncovered update, which is what `existing` carries. A form is
+      * rewritten before it is parsed; a JSON body is handed to the Serde with both, so a body need
+      * name neither.
       *
-      * The owner field is set the same way and for the reason [[Ownership.body]] sets it on a form:
-      * a body naming another owner is not refused, it is overwritten, with the caller on a covered
-      * write and with the row's own owner on an uncovered update, which is what `existing` carries.
-      * A form is rewritten before it is parsed, and a JSON body cannot be, since the Serde reads it
-      * whole; so it is rewritten after, which is why the body has to name an owner at all.
+      * Both are set again after the Serde has read the body, rather than trusted to have been: a
+      * hand written Serde that kept what the body said would otherwise let a client choose the key
+      * of the row it creates, move a row it updates to another key, or write a row as somebody
+      * else's.
       */
     private def read(request: Request, key: Id[A], existing: Option[A]): A = {
-      val row = serde.deserialize(request.body, key) match {
+      val owner                         = ownership.owner(request, existing)
+      val decided: Map[String, Id[Any]] = Map("id" -> Id[Any](key.value)) ++ owner
+      val row                           = serde.deserialize(request.body, decided) match {
         case Right(row)                                => row
         case Left(api.Serde.Failure.Malformed(reason)) => throw BadRequest(reason)
         case Left(api.Serde.Failure.Unfit(reason))     => throw UnprocessableContent(reason)
       }
       val values = row.asInstanceOf[Product].productIterator.toArray[Any]
       values(keyIndex) = key
-      ownership.owner(request, existing).foreach { (name, who) =>
-        values(labels.indexOf(name)) = who
-      }
+      owner.foreach((name, who) => values(labels.indexOf(name)) = who)
       build(values)
     }
 
