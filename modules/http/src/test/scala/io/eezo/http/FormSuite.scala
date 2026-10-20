@@ -106,6 +106,13 @@ class FormSuite extends munit.FunSuite {
     assert(html.contains(" checked>"), html)
   }
 
+  test("a false value leaves the box unticked, though it shows as a word that is not empty") {
+    val html =
+      Form[Widget].render("/widgets", Method.POST, Some(widget.copy(inStock = false)), token).render
+    assert(html.contains("""type="checkbox""""), html)
+    assert(!html.contains("checked"), html)
+  }
+
   test("a value is escaped by core's constructor, not by anything here") {
     val nasty = widget.copy(name = "<script>alert(1)</script>")
     val html  = Form[Widget].render("/widgets", Method.POST, Some(nasty), token).render
@@ -167,7 +174,14 @@ class FormSuite extends munit.FunSuite {
   test("show pairs every rendered field with its value, and never the key") {
     val shown = Form[Widget].show(widget)
     assertEquals(shown.map(_._1.name), Seq("name", "price", "inStock", "note"))
-    assertEquals(shown.map(_._2), Seq("Bolt", "3", "on", "hex"))
+    assertEquals(shown.map(_._2), Seq("Bolt", "3", "true", "hex"))
+  }
+
+  test("a Boolean shows as true or false, never as the on a ticked box submits") {
+    def inStock(value: Widget): String =
+      Form[Widget].show(value).collectFirst { case (f, v) if f.name == "inStock" => v }.get
+    assertEquals(inStock(widget), "true")
+    assertEquals(inStock(widget.copy(inStock = false)), "false")
   }
 
   test("show reads an Option through its Field rather than printing Some") {

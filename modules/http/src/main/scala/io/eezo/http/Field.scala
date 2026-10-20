@@ -31,7 +31,10 @@ trait Field[X] {
   /** The `type` attribute of the rendered `<input>`. */
   def inputType: String
 
-  /** The field's value as submitted text. */
+  /** The field's value as text: what an input is filled with, and what a show page or an index
+    * prints. A checkbox has no text to fill, so `Form.render` reads this back through [[read]] to
+    * decide whether the box is ticked.
+    */
   def show(x: X): String
 
   /** Reads submitted text, or says why it will not read. The message is what reaches the user, so
@@ -73,10 +76,14 @@ object Field {
 
   /** A checkbox. Every value a browser sends for a checked box means `true`; the only thing that
     * means `false` is the key being absent, which is [[Field.absent]]'s job rather than this one's.
+    *
+    * It shows as `true` or `false`, the value rather than the wire. A ticked box submits `on`, but
+    * that is the input's text and not the model's, and showing it put `on` in every index row and
+    * left a `false` cell blank (#142).
     */
   given Field[Boolean] = new Field[Boolean] {
     def inputType: String                           = "checkbox"
-    def show(x: Boolean): String                    = if (x) "on" else ""
+    def show(x: Boolean): String                    = x.toString
     def read(text: String): Either[String, Boolean] =
       Right(text.trim.nonEmpty && !text.equalsIgnoreCase("false"))
     override def absent: Option[Boolean] = Some(false)

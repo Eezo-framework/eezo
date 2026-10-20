@@ -28,7 +28,8 @@ parse, and what an absent submission means. The types are in [the API](/api/):
 | `Password.Plain` | none | `password`, kept as typed | required | same |
 
 "Required" means the field reports "is required" when its key is missing from the body. A
-checkbox's value is `true` for anything but an empty string or `false`. Numbers are trimmed
+checkbox's value is `true` for anything but an empty string or `false`, and the show page and
+the index print it as `true` or `false`, not as the `on` a ticked box submits. Numbers are trimmed
 before parsing. A `Field` whose column is "none" works in a form and can't be a column of a
 table; a `Column` whose input is "none" can be stored and can't appear in a form.
 

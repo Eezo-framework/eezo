@@ -58,6 +58,11 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     given Actions[Stub] = Actions.only(Action.New, Action.Edit)
   }
 
+  /** A checkbox, whose wire text and value differ: a ticked box submits `on`, and the field holds
+    * `true`.
+    */
+  case class Chore(id: Id[Chore], name: String, done: Boolean) derives Form, Resource
+
   /** Forms, and deliberately does not mount: it has no key. */
   case class Login(email: String, password: String) derives Form
 
@@ -146,6 +151,33 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val (_, routes, _) = widgets()
     val page           = markup(routes.dispatch(request(Method.GET, "/widgets")))
     assert(page.contains("No widgets yet"), page)
+  }
+
+  test("a Boolean submitted as a ticked box is stored, listed and shown as the value, not as on") {
+    val store  = InMemoryStore[Chore]()
+    val routes = table[Chore](store)
+    // What the derived form sends: `on` for a ticked box, and nothing at all for an unticked one.
+    routes.dispatch(request(Method.POST, "/chores", "name" -> "Sweep", "done" -> "on"))
+    routes.dispatch(request(Method.POST, "/chores", "name" -> "Mop"))
+    val byName = store.all().map(chore => chore.name -> chore).toMap
+    assertEquals(
+      byName.map((name, chore) => name -> chore.done),
+      Map("Sweep" -> true, "Mop" -> false)
+    )
+
+    val index = markup(routes.dispatch(request(Method.GET, "/chores")))
+    assert(index.contains("<td>true</td>"), index)
+    assert(index.contains("<td>false</td>"), index)
+    assert(!index.contains(">on<"), index)
+
+    val swept = s"/chores/${byName("Sweep").id.show}"
+    val show  = markup(routes.dispatch(request(Method.GET, swept)))
+    assert(show.contains("<dt>Done</dt><dd>true</dd>"), show)
+    assert(markup(routes.dispatch(request(Method.GET, s"$swept/edit"))).contains(" checked>"))
+
+    val mopped = s"/chores/${byName("Mop").id.show}"
+    assert(markup(routes.dispatch(request(Method.GET, mopped))).contains("<dd>false</dd>"))
+    assert(!markup(routes.dispatch(request(Method.GET, s"$mopped/edit"))).contains("checked"))
   }
 
   test("index links to new when New is mounted, and does not when it is not") {
