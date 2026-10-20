@@ -79,9 +79,17 @@ class RequestSuite extends munit.FunSuite {
       compileErrors("request.csrf"),
       compileErrors("request.cookies"),
       compileErrors("request.cookie(\"eezo_session\")"),
-      compileErrors("request.form"),
-      compileErrors("request.currentUser")
+      compileErrors("request.form")
     ).foreach(failure => assert(clue(failure).contains("is not a member of"), failure))
+  }
+
+  test("who the guard named travels into the API request, and nobody is the default") {
+    assertEquals(request.currentUser, None)
+    val named =
+      io.eezo.http
+        .Request(Method.GET, "/", Map.empty, Map.empty, Array.emptyByteArray, Map.empty)
+        .copy(currentUser = Some("ann"))
+    assertEquals(Request.of(named).currentUser, Some("ann"))
   }
 
   /** A payload whose instance answers with whatever the body names, so each outcome of the seam can

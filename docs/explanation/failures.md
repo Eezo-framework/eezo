@@ -27,8 +27,8 @@ stops the boot and reaches no boundary at all.
 
 ## Refusing from a handler
 
-Throw one of the sealed set in `io.eezo.http`: `BadRequest(detail)`, `Forbidden(detail)`,
-`NotFound(path)`, `MethodNotAllowed(allowed)`, `PayloadTooLarge(limit)`,
+Throw one of the sealed set in `io.eezo.http`: `BadRequest(detail)`, `Unauthorized(detail)`,
+`Forbidden(detail)`, `NotFound(path)`, `MethodNotAllowed(allowed)`, `PayloadTooLarge(limit)`,
 `UnprocessableContent(detail)`, `NotImplemented(method)`. None of them carries a status. The
 request boundary picks it, and renders a problem page with the status, a title and the detail.
 So a 404 is `throw NotFound(request.path)`, which is what a derived `show` does for a missing

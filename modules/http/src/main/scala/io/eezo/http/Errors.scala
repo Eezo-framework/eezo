@@ -7,9 +7,10 @@ package io.eezo.http
   * module boundary enforces what a convention would only ask for.
   *
   * No case carries a `status`, and none carries `headers`. Sealing makes the mapping at the
-  * boundary an exhaustive match with no fallback, the `Allow` header lives in the 405 arm, and an
-  * open base carrying a status is exactly the mechanism by which an HTTP status reaches code that
-  * should not know one. See `docs/adr/0001-http-errors-live-in-http-and-carry-no-status.md`.
+  * boundary an exhaustive match with no fallback, the `Allow` header lives in the 405 arm and the
+  * challenge in the 401 arm, and an open base carrying a status is exactly the mechanism by which
+  * an HTTP status reaches code that should not know one. See
+  * `docs/adr/0001-http-errors-live-in-http-and-carry-no-status.md`.
   *
   * Four documents enumerate the set and move with it, so a widening of the set is a change to all
   * of them: `docs/adr/0001`, `docs/adr/0006`, `docs/explanation/failures.md` and
@@ -34,13 +35,24 @@ final case class MethodNotAllowed(allowed: Seq[Method])
   * carrying no live sign in. #166's constraint: no status here, and a redirect to login is a
   * `Response`, never an error.
   *
-  * The one refusal there is, rather than a 403 beside a 401, because eezo signs in through a form
-  * and a session cookie and has no honest challenge to put on a 401: the scheme token a 401 needs
-  * would be one eezo invented, and a client reading the status alone learns as little from that as
-  * from this. What kind of refusal it was is the detail's job. See
+  * The refusal for everything a browser does, rather than [[Unauthorized]], because a browser signs
+  * in through a form and a session cookie and there is no challenge for that to put on a 401: the
+  * scheme token would be one eezo invented, and a client reading the status alone learns as little
+  * from that as from this. What kind of refusal it was is the detail's job. See
   * `docs/adr/0001-http-errors-live-in-http-and-carry-no-status.md`.
   */
 final case class Forbidden(detail: String) extends EezoException(detail)
+
+/** A program on an API route that did not say who it is, or said it with a token nobody issued.
+  *
+  * A 401 of its own beside [[Forbidden]], because here there is a challenge to make and a client
+  * that can act on it: a program sends an API token in a Bearer header, and
+  * `WWW-Authenticate: Bearer` tells it to send one. The header is the boundary's to write, like
+  * `Allow` on a 405, so this carries neither it nor a status. Only a guard's token check throws it,
+  * and no browser route does, because a browser route already has its answer to nobody signed in: a
+  * redirect to the login page, which a person can act on and a challenge is not.
+  */
+final case class Unauthorized(detail: String) extends EezoException(detail)
 
 /** A body that decoded and does not fit what the handler asked for: JSON on an API route whose
   * fields are missing or of the wrong type. A refusal of its own rather than a `BadRequest`,

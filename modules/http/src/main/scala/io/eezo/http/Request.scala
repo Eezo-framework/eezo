@@ -167,7 +167,7 @@ object Request {
   /** Every value of a header, case insensitively, in order. Over the bare map rather than a
     * [[Request]], because [[isSecure]] is asked before there is one.
     */
-  private[http] def headerValues(headers: Map[String, Seq[String]], name: String): Seq[String] =
+  private[eezo] def headerValues(headers: Map[String, Seq[String]], name: String): Seq[String] =
     headers.iterator.collect { case (k, v) if k.equalsIgnoreCase(name) => v }.flatten.toSeq
 
   /** The field name a browser sends the verb it cannot issue under. */

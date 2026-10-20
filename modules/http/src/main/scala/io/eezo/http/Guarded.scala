@@ -28,10 +28,10 @@ import scala.annotation.implicitNotFound
   *
   * [[carries]] is the guard's own routes, the login page and the logout button, travelling inside
   * every declaration that guard produced. That is what makes them impossible to forget: an
-  * application that guards one route has mounted the page that route redirects to, without writing
-  * a line. It also means the same route instances appear in many declarations, so the route table
-  * concatenates them and takes `distinct`; two equal but separate instances would mount the login
-  * page twice and `RouteTable`'s duplicate check would refuse to boot.
+  * application that guards one browser route has mounted the page that route redirects to, without
+  * writing a line. It also means the same route instances appear in many declarations, so the route
+  * table concatenates them and takes `distinct`; two equal but separate instances would mount the
+  * login page twice and `RouteTable`'s duplicate check would refuse to boot.
   *
   * [[identify]] is the gentle half of [[through]]: it names the current user on a request and never
   * refuses one. The two are separate because refusing and naming happen in different places. A
@@ -79,21 +79,26 @@ class Guarded[A](
     val identify: Request => Request = identity
 ) {
 
-  /** What one handwritten route becomes in the table: the guard's own pages, and that route
-    * wrapped.
+  /** What one handwritten route becomes in the table: that route wrapped, and the guard's own pages
+    * when a browser is the one who will be refused.
     *
     * A handwritten route has no [[Action]], so there is nothing to test [[actions]] against and the
     * wrapper reaches it directly. A page is guarded or it is public, which is the same rule
     * `Guarded[Index.type] = Guarded.public` states in the other direction, and `public` wraps
     * nothing and carries nothing, so an unguarded application's table is exactly what it was.
     *
-    * The login page comes out of every declaration rather than being mounted once somewhere else,
-    * because the two have to arrive together: a route that redirects to a page nobody mounted is a
-    * 404 at the end of every refusal. The table takes `distinct` afterwards, which is safe only
-    * because one guard builds its routes once and hands the same instances to every declaration it
-    * makes.
+    * The login page comes out of every declaration over a browser page or a socket rather than
+    * being mounted once somewhere else, because the two have to arrive together: a route that
+    * redirects to a page nobody mounted is a 404 at the end of every refusal. An API route
+    * redirects nobody, since a program has no page to be sent to, so it brings no login page, and
+    * an application whose only guarded routes are API routes mounts none. The table takes
+    * `distinct` afterwards, which is safe only because one guard builds its routes once and hands
+    * the same instances to every declaration it makes.
     */
-  def mounting(route: Route): Seq[Route] = carries :+ through(route)
+  def mounting(route: Route): Seq[Route] = route match {
+    case http: Route.Http if http.kind.api => Seq(through(route))
+    case _                                 => carries :+ through(route)
+  }
 }
 
 object Guarded {

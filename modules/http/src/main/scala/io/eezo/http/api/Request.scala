@@ -12,6 +12,12 @@ import io.eezo.http.{BadRequest, FromPath, Method, UnprocessableContent}
   * they are absent rather than empty. The `Cookie` header is still among the headers, as sent,
   * because a header is what a program chose to send and not something eezo read for it.
   *
+  * `currentUser` is the one thing it carries that a program did not send: who the guard says is
+  * behind the request, read off the API token in its Bearer header and never off a session, as the
+  * key the browser's request spells it with. A handler reads it here because it holds no browser
+  * request to ask a guard about, and `None` is nobody, which is what every unguarded API route
+  * reads.
+  *
   * Public and a plain case class so that an application's test can build one and call its handler
   * directly; only turning a served [[io.eezo.http.Request]] into one, [[Request.of]], is eezo's
   * own. It lives in a package of its own so that the signature says the kind of route in so many
@@ -23,7 +29,8 @@ final case class Request(
     query: Map[String, Seq[String]],
     headers: Map[String, Seq[String]],
     body: Array[Byte],
-    pathParams: Map[String, String]
+    pathParams: Map[String, String],
+    currentUser: Option[String] = None
 ) {
 
   /** A header, case insensitively, first value wins. */
@@ -69,6 +76,7 @@ object Request {
       request.query,
       request.headers,
       request.body,
-      request.pathParams
+      request.pathParams,
+      request.currentUser
     )
 }
