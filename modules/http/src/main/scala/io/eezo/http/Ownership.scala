@@ -58,6 +58,23 @@ private[http] final class Ownership[A](
         "InMemoryStore.scoped, or JdbcStore's owner aware pair."
     )
 
+  /** The key is a field, but never one of `fields`: `Form.fields` leaves it out and `Api` strips it
+    * before this call, so the check below would refuse an owner named `id` as a field the model
+    * does not have, which is false and sends the user looking for a typo. The real reason is that a
+    * create mints the key and then writes the owner by name, so an owner named `id` would overwrite
+    * the key and leave the row stored under one key and carrying another. Checked first, so the
+    * name the model does have gets its own reason.
+    */
+  owned.foreach { o =>
+    if (o.ownerOf.name == Form.KeyName)
+      throw new IllegalStateException(
+        s"""$modelName declares Owned naming "${o.ownerOf.name}" as its owner, but
+           |"${o.ownerOf.name}" is the key. A create mints the key and then writes the owner, so
+           |a row would be stored under one key and carry another. Name the field that holds
+           |the owner.""".stripMargin.replace("\n", " ")
+      )
+  }
+
   /** A mistyped owner name would otherwise leave the field it meant to hide sitting on a `Resource`
     * page as an ordinary input a browser can edit: `Form.without` documents that a name naming no
     * field changes nothing, so `shape` below would be `declared` itself and `body` would write

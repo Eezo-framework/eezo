@@ -170,7 +170,7 @@ object Form {
   /** The key is the field literally named `id`, matching what `db`'s `TableMacro` enforces. Located
     * by name and not by type, and optional: `Login(email, password)` has none, forms, and parses.
     */
-  private val KeyName = "id"
+  private[http] val KeyName = "id"
 
   /** The one input type whose value never reaches the page.
     *

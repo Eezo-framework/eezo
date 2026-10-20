@@ -134,6 +134,23 @@ class OwnershipSuite extends munit.FunSuite with ResourceFixtures {
     )
   }
 
+  test("an owner naming the key is refused at construction with its own reason") {
+    val declared = Owned[Note, Note](
+      OwnerOf[Note, Id[Note]]("id", _.id),
+      _ => Some(Id.gen[Note]()),
+      Set(Action.Create),
+      Guarded(Action.values.toSet, identity, Seq.empty)
+    )
+
+    val thrown = intercept[IllegalStateException](notes(scopedNotes(), declared))
+    assertEquals(
+      thrown.getMessage,
+      "Note declares Owned naming \"id\" as its owner, but \"id\" is the key. A create mints the " +
+        "key and then writes the owner, so a row would be stored under one key and carry " +
+        "another. Name the field that holds the owner."
+    )
+  }
+
   test("a covered or created action the guard leaves open is refused at construction") {
     // Only Destroy is covered and only Destroy is guarded, and Vault still mounts Create: an owned
     // create fills the owner from who is signed in, so it needs the guard as much as Destroy does.

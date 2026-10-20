@@ -386,7 +386,7 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
     val thrown = intercept[IllegalStateException] {
       summon[Api[Memo]].routes(InMemoryStore.scoped(byKey), owned)
     }
-    assert(thrown.getMessage.contains("""naming "id" as its owner"""), thrown.getMessage)
+    assert(thrown.getMessage.contains("""but "id" is the key"""), thrown.getMessage)
   }
 
   /** A memo store holding one row each for ada and grace, and the five over it, owned with these

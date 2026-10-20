@@ -520,6 +520,21 @@ class OwnedResourceSuite extends munit.FunSuite with ResourceFixtures {
     assert(thrown.getMessage.contains("auth0r"), thrown.getMessage)
   }
 
+  test("an owner naming the key refuses to mount with its own reason") {
+    val byKey    = OwnerOf[Note, Id[Note]]("id", _.id)
+    val declared = Owned[Note, Note](
+      byKey,
+      _ => Some(Id.gen[Note]()),
+      Set(Action.Create),
+      Guarded(Action.values.toSet, identity, Seq.empty)
+    )
+
+    val thrown = intercept[IllegalStateException] {
+      Resource[Note].routes(InMemoryStore.scoped(byKey), declared)
+    }
+    assert(thrown.getMessage.contains("""but "id" is the key"""), thrown.getMessage)
+  }
+
   /** The whole table, with its `find` counted.
     *
     * It is the unnarrowed half of a [[Scoped]] built by hand, while the narrowing reads the same
