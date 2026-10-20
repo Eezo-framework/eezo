@@ -375,6 +375,20 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
     assertEquals(store.find(graces.id).map(_.text), Some("grace's"))
   }
 
+  test("an owner naming the key is refused at mount, as Resource refuses it") {
+    val byKey: OwnerOf[Memo, Id[Memo]] = OwnerOf("id", _.id)
+    val owned                          = Owned[Memo, Memo](
+      byKey,
+      request => request.currentUser.map(text => Id[Memo](UUID.fromString(text))),
+      Action.values.toSet,
+      named
+    )
+    val thrown = intercept[IllegalStateException] {
+      summon[Api[Memo]].routes(InMemoryStore.scoped(byKey), owned)
+    }
+    assert(thrown.getMessage.contains("""naming "id" as its owner"""), thrown.getMessage)
+  }
+
   /** A memo store holding one row each for ada and grace, and the five over it, owned with these
     * actions covered and every route guarded by [[named]].
     */

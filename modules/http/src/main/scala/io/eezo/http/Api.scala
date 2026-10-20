@@ -109,6 +109,13 @@ object Api {
       */
     val mounted = Actions[A](actions.allowed -- Set(Action.New, Action.Edit))
 
+    /** The names an owner may be: every field but the key, the set [[Resource]] hands the same
+      * check through `Form.fields`. A create sets the minted key and then the owner, so an owner
+      * named `id` would overwrite the key and leave a row stored under one key and carrying
+      * another.
+      */
+    val ownable = labels.patch(keyIndex, Nil, 1)
+
     new Api[A] {
       def routes(store: Store[A], guarded: Guarded[A]): Seq[Route] =
         new Calls(
@@ -119,7 +126,7 @@ object Api {
           mounted,
           collection,
           guarded,
-          new Ownership(modelName, labels, mounted, store, guarded)
+          new Ownership(modelName, ownable, mounted, store, guarded)
         ).routes
     }
   }
