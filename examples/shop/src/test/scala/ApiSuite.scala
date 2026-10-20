@@ -356,6 +356,7 @@ class ApiSuite extends munit.FunSuite {
       assertEquals(shown.sliding(plain.length).count(_ == plain), 1)
       assertEquals(stored(user), Some(Token.hash(plain)))
       assertEquals(reply.header("Location"), None)
+      assertEquals(reply.header("Cache-Control"), Some("no-store"))
       assertEquals(
         call(Method.POST, "/api/products", """{"name":"Clock","price":25}""", Some(plain)).status,
         201
