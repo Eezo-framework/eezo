@@ -21,9 +21,9 @@ import io.eezo.http.Resource
   * in eezo can be generated. It is never rendered into the form: it travels in the path.
   *
   * `author` is the owner, and it is a field like any other: the same `Id[User]` a `Ref` would hold,
-  * stored in a column of the same name. It is never on a page. The derived form has no input for it,
-  * the index no column and the show page no row, because the value is filled from who is signed in
-  * rather than from anything a browser sends.
+  * stored in a column of the same name. It is never on a page. The derived form has no input for
+  * it, the index no column and the show page no row, because the value is filled from who is signed
+  * in rather than from anything a browser sends.
   */
 case class Post(
     id: Id[Post],

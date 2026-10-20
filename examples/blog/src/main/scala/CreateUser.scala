@@ -10,9 +10,8 @@ import models.User
 
 /** How the blog gets its first user, with no registration page anywhere.
   *
-  *   printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; export EEZO_BLOG_PASSWORD
-  *   EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
-  *   unset EEZO_BLOG_PASSWORD
+  * printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; export EEZO_BLOG_PASSWORD
+  * EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser" unset EEZO_BLOG_PASSWORD
   *
   * A second `DbApp` rather than a command on `Main`, because `Main` is the application and this is
   * an operator's tool: the two have different lifetimes, and the one that inserts a user should not
@@ -87,8 +86,10 @@ object CreateUser extends DbApp {
     * through [[boot]].
     */
   def hashPassword(text: String): Password =
-    Field[Password].read(text).fold(
-      message => throw new IllegalStateException(s"$PasswordVariable $message"),
-      identity
-    )
+    Field[Password]
+      .read(text)
+      .fold(
+        message => throw new IllegalStateException(s"$PasswordVariable $message"),
+        identity
+      )
 }

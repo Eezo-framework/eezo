@@ -7,8 +7,8 @@ import io.eezo.live.Live
 
 import components.Guestbook
 
-/** `app/live/Index.scala` mounts `GET /live`: the everything-on-one-page demo that
-  * `docs/live.md` walks through.
+/** `app/live/Index.scala` mounts `GET /live`: the everything-on-one-page demo that `docs/live.md`
+  * walks through.
   */
 object Index {
 

@@ -12,6 +12,10 @@
 // every load.
 ThisBuild / scalaVersion := EezoVersion.scalaVersion
 
+// One formatter configuration for the whole repository: the examples are formatted and checked
+// against the root `.scalafmt.conf`, so a rule changed there changes here too.
+ThisBuild / scalafmtConfig := (ThisBuild / baseDirectory).value.getParentFile / ".scalafmt.conf"
+
 lazy val commonSettings = Seq(
   scalaVersion := EezoVersion.scalaVersion,
   scalacOptions ++= Seq(

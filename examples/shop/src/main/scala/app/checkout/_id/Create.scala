@@ -17,7 +17,8 @@ object Create {
   def create(request: Request): Response = {
     val id      = request.param[Id[Product]]("id")
     val product = read(Table[Product].findById(id)).getOrElse(throw NotFound(request.path))
-    val order   = Order(Id.gen(), product.id, product.name, product.price, paid = false, Instant.now())
+    val order   =
+      Order(Id.gen(), product.id, product.name, product.price, paid = false, Instant.now())
     transact(Table[Order].insert(order))
     Http.post(
       "https://api.stripe.com/v1/checkout/sessions",

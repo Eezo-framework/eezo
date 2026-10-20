@@ -1,13 +1,19 @@
 package io.eezo.http
 
+import java.net.InetSocketAddress
+import java.net.Socket
 import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.util.concurrent.TimeUnit
+import java.util.logging.Level
+import java.util.logging.Logger
 
 import scala.jdk.CollectionConverters.*
 
 import io.eezo.core.html.{Attrs, body as bodyTag, html}
+import org.eclipse.jetty.server.Server
 
 /** What a suite needs to drive a booted server the way a browser over the wire does: a server on an
   * ephemeral port, a session cookie carrying the CSRF token, and a `POST` under it that returns the
@@ -18,6 +24,14 @@ import io.eezo.core.html.{Attrs, body as bodyTag, html}
   * business.
   */
 trait ServerFixtures { self: munit.FunSuite =>
+
+  ServerFixtures.quietJetty()
+
+  /** The address every request to the suite's own server goes to, spelled out so that the far end
+    * check in [[serving]] and the requests it vouches for agree on it: `localhost` resolves to
+    * either loopback address, and a stranger holds its port on one of them.
+    */
+  protected val Loopback: String = "127.0.0.1"
 
   /** The client requests go out on, never following a redirect, which is what a suite reading a
     * `Location` header itself wants. A suite that wants one followed overrides this.
@@ -38,13 +52,47 @@ trait ServerFixtures { self: munit.FunSuite =>
   )(
       body: (HttpServer, Int) => Unit
   ): Unit = {
-    val server = HttpServer.start(
-      port = 0,
-      routes = routes,
-      config = HttpConfig(maxBodySize, dev, problems, secret, layout)
-    )
+    val server = reachable(routes, HttpConfig(maxBodySize, dev, problems, secret, layout))
     try body(server, server.port)
     finally server.stop()
+  }
+
+  /** A server started on port 0 whose port, on [[Loopback]], is its own.
+    *
+    * The server listens on every address, and the kernel will hand it a port another process
+    * already holds on the loopback alone. A connection to the loopback then goes to that process,
+    * the more specific listener, and the server never sees it: the suite reads the stranger's
+    * greeting as its status line. Only the server's own connector can say which process answered,
+    * by the far end of each connection it holds, so a server a probe never reached is stopped and
+    * another started on the next port the kernel offers.
+    */
+  private def reachable(routes: RouteTable, config: HttpConfig, attempts: Int = 3): HttpServer = {
+    val server = HttpServer.start(port = 0, routes = routes, config = config)
+    val probe  = new Socket(Loopback, server.port)
+    val ours   =
+      try acceptedBy(server.jetty, probe)
+      finally probe.close()
+    if (ours) server
+    else {
+      server.stop()
+      if (attempts > 1) reachable(routes, config, attempts - 1)
+      else fail("every port the server was given was one another process holds on the loopback")
+    }
+  }
+
+  /** Whether `socket` reached `server` or some other process that holds the same port, by the far
+    * end of each connection the server's connectors hold.
+    */
+  private def acceptedBy(server: Server, socket: Socket): Boolean = {
+    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+    def accepted = server.getConnectors.exists(
+      _.getConnectedEndPoints.asScala.exists(_.getRemoteSocketAddress match {
+        case far: InetSocketAddress => far.getPort == socket.getLocalPort
+        case _                      => false
+      })
+    )
+    while (!accepted && System.nanoTime() < deadline) Thread.onSpinWait()
+    accepted
   }
 
   /** A layout that leaves `class="framed"` on every page it frames, so a suite can tell from the
@@ -89,7 +137,7 @@ trait ServerFixtures { self: munit.FunSuite =>
       headers: Seq[(String, String)] = Nil,
       form: Option[String] = None
   ): HttpResponse[String] = {
-    val builder = HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path"))
+    val builder = HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port$path"))
     cookie.foreach(value => builder.header("Cookie", s"${SessionCookie.Name}=$value"))
     headers.foreach(builder.header(_, _))
     form.foreach(_ => builder.header("Content-Type", "application/x-www-form-urlencoded"))
@@ -149,4 +197,19 @@ trait ServerFixtures { self: munit.FunSuite =>
     val carried = if (form.isEmpty) token else s"$form&$token"
     send(port, "POST", path, Some(browser.cookie), headers, form = Some(carried))
   }
+}
+
+object ServerFixtures {
+
+  /** Jetty's loggers, held: `LogManager` keeps a logger only weakly, and a level set on one nobody
+    * holds is gone with the next collection.
+    */
+  private val jetty: Logger = Logger.getLogger("org.eclipse.jetty")
+
+  /** Jetty announces every start and stop at `INFO` through `java.util.logging`, the backend the
+    * build binds SLF4J to, and a suite starts a server per test: the lines would bury the summary.
+    * Only what Jetty warns about reaches the test output. Production logging is untouched, since
+    * this runs in the test JVM alone.
+    */
+  def quietJetty(): Unit = jetty.setLevel(Level.WARNING)
 }

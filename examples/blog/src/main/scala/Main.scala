@@ -9,8 +9,8 @@ import io.eezo.http.RouteTable
 
 /** The whole entry point: name the schema and the generated table, and `EezoApp` does the rest.
   *
-  * This application has both layers. It depends on the umbrella `eezo`, so `EezoApp` is the trait it
-  * extends, and it names the two things an application with both layers has: a `schema` and its
+  * This application has both layers. It depends on the umbrella `eezo`, so `EezoApp` is the trait
+  * it extends, and it names the two things an application with both layers has: a `schema` and its
   * `routes`. `Routes.table()` is a `def` rather than a `val` because it mints the store the derived
   * routes write to; `Post` derives `Table`, so that store is `JdbcStore` and the posts live in
   * Postgres. Nothing in this file names the store: the generated table picks it per model.

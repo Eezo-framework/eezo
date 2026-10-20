@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+#
+# One sbt start, with the environment bin/gate sets up and none of its locks or steps. For the
+# red green loop: one suite, one format check, one publish. The gate's header lists what the
+# environment is for; bin/lib/env.sh is where both scripts get it.
+
+set -uo pipefail
+
+ROOT=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
+
+usage() {
+  cat <<'EOF'
+usage: bin/fast [--examples|--site] <sbt command>...
+
+Runs sbt once, in batch mode, with the environment bin/gate sets up: DOCKER_HOST at the colima
+socket, the testcontainers API version pin, the local-worktree.sbt file in a linked worktree, the
+repository's git hooks. No locks, no gate steps. The build is the root by default, examples/ with
+--examples, site/ with --site.
+
+Each argument is one sbt command, so this runs two commands in one sbt start:
+
+  bin/fast 'http/testOnly io.eezo.http.ApiSuite' scalafmtCheckAll
+
+Quote a testOnly command, or sbt runs the whole module. The project id is the directory name
+under modules, so upickle and not eezoUpickle, except sbt-plugin, whose id is sbtEezo. The
+examples build resolves eezo from the local ivy cache, so after a module change run
+`bin/fast publishLocalForExample` first. The verdict is the munit summary at the end of the
+output.
+EOF
+}
+
+DIR=$ROOT
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --examples) DIR=$ROOT/examples; shift ;;
+    --site) DIR=$ROOT/site; shift ;;
+    -h|--help) usage; exit 0 ;;
+    --*) echo "bin/fast: unknown option $1" >&2; usage >&2; exit 2 ;;
+    *) break ;;
+  esac
+done
+if [ $# -eq 0 ]; then
+  usage
+  exit 2
+fi
+
+TOOL=fast
+# shellcheck source=lib/env.sh
+. "$ROOT/bin/lib/env.sh"
+
+rel=${DIR#"$ROOT"}
+echo "fast: in ${rel:-.}: sbt -batch $*"
+cd "$DIR" && exec sbt -batch "$@"

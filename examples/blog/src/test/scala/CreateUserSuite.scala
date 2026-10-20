@@ -18,7 +18,7 @@ class CreateUserSuite extends munit.FunSuite {
 
   test("a password of exactly 72 UTF-8 bytes hashes rather than refuses") {
     val seventyTwo = "e" * 72
-    val stored      = CreateUser.hashPassword(seventyTwo)
+    val stored     = CreateUser.hashPassword(seventyTwo)
     assert(stored.verify(Password.Plain(seventyTwo)))
   }
 

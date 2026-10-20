@@ -34,7 +34,7 @@ class JsonBodySuite extends munit.FunSuite with ServerFixtures {
 
   private def bytes(port: Int, path: String): HttpResponse[Array[Byte]] =
     client.send(
-      HttpRequest.newBuilder(URI.create(s"http://localhost:$port$path")).GET().build(),
+      HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port$path")).GET().build(),
       HttpResponse.BodyHandlers.ofByteArray()
     )
 

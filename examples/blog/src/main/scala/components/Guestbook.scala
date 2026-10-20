@@ -4,16 +4,15 @@ import io.eezo.core.html.*
 import io.eezo.core.html.Tags.*
 import io.eezo.live.{Component, Event, Init, Live, Topic}
 
-/** Every live feature on one page (design/live.md M7): a per-page counter, a validated live
-  * form, a shared keyed list over pub/sub, and a sort toggle that moves rows instead of
-  * re-rendering them.
+/** Every live feature on one page (design/live.md M7): a per-page counter, a validated live form, a
+  * shared keyed list over pub/sub, and a sort toggle that moves rows instead of re-rendering them.
   *
-  * Two kinds of state on one screen, on purpose. The click counter is this page's own: two
-  * browsers count independently, because each mount is its own component instance. The entries
-  * are shared: signing publishes to the topic, every subscribed page — the signer's included —
-  * appends through its own subscription, so both browsers converge on one list. The sort toggle
-  * is per-page again: the same shared rows, ordered differently in each browser, and reordering
-  * emits `moveChild` patches so the row nodes keep their identity.
+  * Two kinds of state on one screen, on purpose. The click counter is this page's own: two browsers
+  * count independently, because each mount is its own component instance. The entries are shared:
+  * signing publishes to the topic, every subscribed page, the signer's included, appends through
+  * its own subscription, so both browsers converge on one list. The sort toggle is per-page again:
+  * the same shared rows, ordered differently in each browser, and reordering emits `moveChild`
+  * patches so the row nodes keep their identity.
   */
 final case class GuestbookState(
     name: String,
@@ -47,7 +46,7 @@ final class Guestbook extends Component[GuestbookState] {
       case "name-changed"    => s.copy(name = value)
       case "message-changed" => s.copy(message = value)
       case "toggle-sort"     => s.copy(alphabetical = !s.alphabetical)
-      case "sign" =>
+      case "sign"            =>
         val name    = event.payload.getOrElse("name", "").trim
         val message = event.payload.getOrElse("message", "").trim
         if (name.nonEmpty && message.nonEmpty)
@@ -80,18 +79,28 @@ final class Guestbook extends Component[GuestbookState] {
       ),
       form(
         Live.onSubmit("sign"),
-        p(label("name ", input(
-          Attrs.tpe   := "text",
-          Attrs.name  := "name",
-          Attrs.value := s.name,
-          Live.onInput("name-changed")
-        ))),
-        p(label("message ", input(
-          Attrs.tpe   := "text",
-          Attrs.name  := "message",
-          Attrs.value := s.message,
-          Live.onInput("message-changed")
-        ))),
+        p(
+          label(
+            "name ",
+            input(
+              Attrs.tpe   := "text",
+              Attrs.name  := "name",
+              Attrs.value := s.name,
+              Live.onInput("name-changed")
+            )
+          )
+        ),
+        p(
+          label(
+            "message ",
+            input(
+              Attrs.tpe   := "text",
+              Attrs.name  := "message",
+              Attrs.value := s.message,
+              Live.onInput("message-changed")
+            )
+          )
+        ),
         p(
           button(Attrs.tpe := "submit", Attrs.disabled := problem(s).isDefined, "sign"),
           " ",

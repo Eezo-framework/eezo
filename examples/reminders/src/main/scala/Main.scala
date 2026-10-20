@@ -11,9 +11,9 @@ import models.Reminder
   *
   * This application depends on `eezo-db`, not on the umbrella, so `DbApp` is the trait it extends
   * and there is no server: `sbt run` runs [[boot]] once with a `Database` installed around it and
-  * exits, and `sbt "run db status|sync|freeze|migrate|reset|drop|dump|ddl"` are the schema commands.
-  * `sbt "run dev"` and `sbt "run routes"` are unknown commands here, because they are the http
-  * layer's; a rerun on save loop for a job is sbt's own `~run`.
+  * exits, and `sbt "run db status|sync|freeze|migrate|reset|drop|dump|ddl"` are the schema
+  * commands. `sbt "run dev"` and `sbt "run routes"` are unknown commands here, because they are the
+  * http layer's; a rerun on save loop for a job is sbt's own `~run`.
   *
   * The program is a nightly job over rows: deliver every reminder that is due and not yet sent, and
   * mark it sent. Delivery is a line on stdout; a real one would be an email. Both halves of the job

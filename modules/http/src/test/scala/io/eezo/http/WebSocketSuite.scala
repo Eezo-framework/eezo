@@ -17,7 +17,7 @@ import org.eclipse.jetty.websocket.client.WebSocketClient
 /** The WebSocket half of the single Jetty mapping: eezo matches the path itself, and an upgrade
   * matching no `Route.Ws` is answered rather than falling through.
   */
-class WebSocketSuite extends munit.FunSuite {
+class WebSocketSuite extends munit.FunSuite with ServerFixtures {
 
   /** A client that demands its own events, since this side is not eezo's runtime.
     *
@@ -30,26 +30,18 @@ class WebSocketSuite extends munit.FunSuite {
     override def onWebSocketOpen(session: Session): Unit = ()
   }
 
-  private val secret = Secret.parse("websocket secret, thirty two bytes")
-
-  private def serving(routes: RouteTable, dev: Boolean = false)(
+  /** [[serving]] with a socket client started against the server and stopped with it. */
+  private def servingSockets(routes: RouteTable, dev: Boolean = false)(
       body: (WebSocketClient, Int) => Unit
-  ): Unit = {
-    val server =
-      HttpServer.start(port = 0, routes = routes, config = HttpConfig(dev = dev, secret = secret))
+  ): Unit = serving(routes, dev = dev) { (_, port) =>
     val client = new WebSocketClient()
     client.start()
-    try {
-      val port = server.port
-      body(client, port)
-    } finally {
-      client.stop()
-      server.stop()
-    }
+    try body(client, port)
+    finally client.stop()
   }
 
   private def connect(client: WebSocketClient, port: Int, path: String): Session =
-    client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path")).get()
+    client.connect(new ClientListener, URI.create(s"ws://$Loopback:$port$path")).get()
 
   /** [[connect]], with `session` on the handshake the way a browser would carry it. */
   private def connect(
@@ -58,7 +50,7 @@ class WebSocketSuite extends munit.FunSuite {
       path: String,
       session: io.eezo.http.Session
   ): Session = {
-    val upgrade = new ClientUpgradeRequest(URI.create(s"ws://localhost:$port$path"))
+    val upgrade = new ClientUpgradeRequest(URI.create(s"ws://$Loopback:$port$path"))
     upgrade.setHeader("Cookie", s"eezo_session=${SessionCookie.encode(session, secret)}")
     client.connect(new ClientListener, upgrade).get()
   }
@@ -85,7 +77,7 @@ class WebSocketSuite extends munit.FunSuite {
         answered.set((response.getStatus, Option(response.getHeaders.get("WWW-Authenticate"))))
     }
     val failure = intercept[java.util.concurrent.ExecutionException](
-      client.connect(new ClientListener, URI.create(s"ws://localhost:$port$path"), reading).get()
+      client.connect(new ClientListener, URI.create(s"ws://$Loopback:$port$path"), reading).get()
     )
     Option(answered.get)
       .getOrElse(fail(s"the upgrade at $path never reached the listener, failing with $failure"))
@@ -97,7 +89,7 @@ class WebSocketSuite extends munit.FunSuite {
     * and the body is what a person sees when they open a socket URL in a browser by hand.
     */
   private def refusalBody(port: Int, path: String): String = {
-    val socket = new java.net.Socket("localhost", port)
+    val socket = new java.net.Socket(Loopback, port)
     try {
       socket.setSoTimeout(5000)
       val out = socket.getOutputStream
@@ -151,7 +143,7 @@ class WebSocketSuite extends munit.FunSuite {
       )
     )
 
-    serving(routes) { (client, port) =>
+    servingSockets(routes) { (client, port) =>
       val session = connect(client, port, "/live/lobby")
       assertEquals(events.poll(5, TimeUnit.SECONDS), "open:lobby")
       session.sendText("one", Callback.NOOP)
@@ -180,7 +172,7 @@ class WebSocketSuite extends munit.FunSuite {
       )
     )
 
-    serving(routes) { (client, port) =>
+    servingSockets(routes) { (client, port) =>
       val session = connect(client, port, "/live", io.eezo.http.Session.empty.set("user", "42"))
       assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
       session.close()
@@ -207,13 +199,13 @@ class WebSocketSuite extends munit.FunSuite {
       request => request.copy(currentUser = request.session.get("user"))
     )
 
-    serving(routes) { (client, port) =>
+    servingSockets(routes) { (client, port) =>
       val session = connect(client, port, "/live", io.eezo.http.Session.empty.set("user", "42"))
       assertEquals(events.poll(5, TimeUnit.SECONDS), "user:42")
       session.close()
     }
 
-    serving(routes) { (client, port) =>
+    servingSockets(routes) { (client, port) =>
       val session = connect(client, port, "/live")
       assertEquals(events.poll(5, TimeUnit.SECONDS), "user:nobody")
       session.close()
@@ -238,7 +230,7 @@ class WebSocketSuite extends munit.FunSuite {
       )
     )
 
-    serving(routes) { (client, port) =>
+    servingSockets(routes) { (client, port) =>
       val session = connect(
         client,
         port,
@@ -251,7 +243,7 @@ class WebSocketSuite extends munit.FunSuite {
   }
 
   test("an upgrade matching no WebSocket route is refused, not left hanging") {
-    serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
+    servingSockets(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
       (client, port) => refused(client, port, "/nope")
     }
   }
@@ -259,7 +251,7 @@ class WebSocketSuite extends munit.FunSuite {
   test("a refused upgrade is answered with eezo's own error page, never the application's frame") {
     // A refusal is answered outside the HTTP handler and is not a page an application serves, so
     // it keeps the whole document it always had rather than coming back as bare content.
-    serving(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
+    servingSockets(RouteTable(Seq(Route.Ws(PathPattern.parse("/live"), _ => new WsListener {})))) {
       (_, port) =>
         assert(
           clue(refusalBody(port, "/nope")).startsWith(
@@ -282,7 +274,7 @@ class WebSocketSuite extends munit.FunSuite {
     // refuses an expired socket rather than redirecting it is pinned in `GuardSuite`.
     val refusing =
       Route.Ws(PathPattern.parse("/live"), _ => throw Forbidden("nobody is signed in"))
-    serving(RouteTable(Seq(refusing))) { (client, port) =>
+    servingSockets(RouteTable(Seq(refusing))) { (client, port) =>
       val (status, challenge) = refusal(client, port, "/live")
       assertEquals(status, 403)
       assertEquals(challenge, None)
@@ -291,12 +283,12 @@ class WebSocketSuite extends munit.FunSuite {
 
   test("the dev server accepts an upgrade on the reload path, and production refuses it") {
     val none = RouteTable(Seq.empty)
-    serving(none, dev = true) { (client, port) =>
+    servingSockets(none, dev = true) { (client, port) =>
       val session = connect(client, port, Reload.path)
       assert(session.isOpen)
       session.close()
     }
-    serving(none) { (client, port) => refused(client, port, Reload.path) }
+    servingSockets(none) { (client, port) => refused(client, port, Reload.path) }
   }
 
   test("a user route on the reload path never shadows it on the dev server") {
@@ -312,7 +304,7 @@ class WebSocketSuite extends munit.FunSuite {
         )
       )
     )
-    serving(routes, dev = true) { (client, port) =>
+    servingSockets(routes, dev = true) { (client, port) =>
       val session = connect(client, port, Reload.path)
       assert(session.isOpen)
       assertEquals(events.poll(500, TimeUnit.MILLISECONDS), null)

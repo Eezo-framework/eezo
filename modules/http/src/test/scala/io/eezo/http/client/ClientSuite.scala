@@ -9,7 +9,7 @@ import io.eezo.http.*
 /** The taxonomy, held against a real server: every arm reached by an endpoint built to provoke it,
   * nothing touching the network beyond the loopback.
   */
-class ClientSuite extends munit.FunSuite {
+class ClientSuite extends munit.FunSuite with ServerFixtures {
 
   private def route(method: Method, path: String)(handler: Handler): Route =
     Route.Http(method, PathPattern.parse(path), handler)
@@ -52,11 +52,7 @@ class ClientSuite extends munit.FunSuite {
         )
       )
     )
-    val server = HttpServer.start(port = 0, routes = routes)
-    try {
-      val port = server.port
-      body(s"http://localhost:$port")
-    } finally server.stop()
+    serving(routes)((_, port) => body(s"http://$Loopback:$port"))
   }
 
   test("2xx is Ok, with the body and the headers readable") {

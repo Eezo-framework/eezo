@@ -1,0 +1,57 @@
+#!/usr/bin/env bash
+#
+# Prints the next free ADR number. ADRs live in docs/adr as NNNN-slug.md, and a number taken on
+# one branch is invisible on another until the branches meet, which is how two branches once
+# drafted the same ADR 0007. So the script fetches origin quietly, reads docs/adr on the working
+# tree and on every remote branch, and prints on stdout the first number above all of them, zero
+# padded to four digits. Every number above the local maximum is listed on stderr with the
+# branches holding it, so the reader knows which drafts are still in flight.
+#
+# Usage: bin/adr-next
+
+set -euo pipefail
+
+cd "$(git rev-parse --show-toplevel)"
+
+git fetch --quiet origin || echo "adr-next: fetch failed, remote branches may be stale" >&2
+
+numbers_in() {
+  sed -n 's#^\(docs/adr/\)\{0,1\}\([0-9][0-9][0-9][0-9]\)-.*\.md$#\2#p'
+}
+
+local_max=$(ls docs/adr | numbers_in | sort -n | tail -n 1)
+local_max=${local_max:-0000}
+
+held=$(
+  git branch -r | grep -v -- '->' | sed 's/^ *//' | while IFS= read -r branch; do
+    git ls-tree -r --name-only "$branch" -- docs/adr 2>/dev/null | numbers_in \
+      | while IFS= read -r number; do
+          if [ "$((10#$number))" -gt "$((10#$local_max))" ]; then
+            echo "$number $branch"
+          fi
+        done
+  done | sort -u
+)
+
+max=$((10#$local_max))
+if [ -n "$held" ]; then
+  while IFS=' ' read -r number _; do
+    n=$((10#$number))
+    if [ "$n" -gt "$max" ]; then max=$n; fi
+  done <<< "$held"
+fi
+
+printf '%04d\n' "$((max + 1))"
+
+if [ -n "$held" ]; then
+  echo "above the local maximum $local_max:" >&2
+  for number in $(echo "$held" | cut -d' ' -f1 | sort -u); do
+    branches=$(echo "$held" | awk -v n="$number" '$1 == n { print $2 }')
+    if echo "$branches" | grep -qx 'origin/dev'; then
+      others=$(echo "$branches" | grep -vcx 'origin/dev' || true)
+      echo "  $number on origin/dev, already merged, pull it, and on $others other branches" >&2
+    else
+      echo "  $number on $(echo "$branches" | paste -sd ',' - | sed 's/,/, /g')" >&2
+    fi
+  done
+fi

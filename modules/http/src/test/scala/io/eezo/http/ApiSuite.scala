@@ -192,7 +192,7 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
   private def calling(port: Int, method: String, path: String, body: String = "") =
     client.send(
       HttpRequest
-        .newBuilder(URI.create(s"http://localhost:$port$path"))
+        .newBuilder(URI.create(s"http://$Loopback:$port$path"))
         .header("Content-Type", "application/json")
         .method(method, HttpRequest.BodyPublishers.ofString(body))
         .build(),

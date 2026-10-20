@@ -3,12 +3,20 @@
 # The CI gate, run locally: `bin/gate` from anywhere in a checkout. It runs the steps of
 # .github/workflows/ci.yml in CI's order and prints GATE GREEN, or GATE RED and the name of the
 # step that failed, with that step's output above it. Green here is green on the pull request.
+# A green gate takes about two minutes on a developer machine with warm caches; a wait on a lock
+# adds to that.
 #
 #   format     sbt scalafmtCheckAll scalafmtSbtCheck
-#   compile    sbt +compile Test/compile      the plugin is cross built for sbt 1 and sbt 2
-#   test       sbt +test                      every module suite
-#   examples   sbt publishLocalForExample, then the examples build's own suites
+#   prose      bin/prose-check                   no dash characters in docs and scaladoc
+#   compile    sbt +compile Test/compile         the plugin is cross built for sbt 1 and sbt 2
+#   test       sbt +test                         every module suite
+#   examples   sbt publishLocalForExample, then the examples build's format check and suites
 #   site       sbt unidoc, then the site build's own suites
+#
+# For one sbt command with the same environment and none of the locks or steps, `bin/fast`:
+# `bin/fast 'http/testOnly io.eezo.http.ApiSuite'`, or `bin/fast --examples test`. Its usage
+# header says how to name a suite. The environment both scripts set up lives in bin/lib/env.sh,
+# so do not redo any of it by hand.
 #
 # Several agents may run the gate at once, so it takes two locks. A checkout lock serialises runs
 # on the same checkout, because two sbt processes cannot share a target directory. A machine lock
@@ -17,27 +25,36 @@
 #
 # What the build does not say for itself, and the gate does on its behalf:
 #
-# - modules/db is capture checked. An incremental build hides closure over `this` errors in
-#   read and transact, so the gate cleans db before compiling. Never trust a green db build that
-#   did not start from clean.
-# - The db and example suites start Postgres through testcontainers and need a Docker daemon.
-#   With colima, Docker is reached through a socket under ~/.colima and testcontainers needs
-#   the API version pinned, or it reports no Docker environment at all. The gate points
-#   DOCKER_HOST at the colima socket when nothing else set it, and pins the API version whenever
-#   DOCKER_HOST names a colima socket, however it got there.
-# - In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
-#   nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir
-#   file. An uncommitted local-worktree.sbt at the worktree root turns that setting off. The
-#   gate writes it and excludes it from git, so it never lands in a commit.
-# - The repository's git hooks live in .githooks and git does not run them until core.hooksPath
-#   says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one
-#   accepted co author trailer and no dash characters in prose, so a commit refused with a message
-#   about either is the hook doing its job: fix the message, not the hook.
-# - Three suites are timing sensitive and can go red under machine load with no code cause.
-#   PoolSuite's "with the database down, the first read waits the acquire timeout" fires its
-#   500 ms acquire timeout before the driver's refusal is recorded. LiveServerSuite's abnormal
-#   drop rejoin can time out on a slow runner. DrainSuite can hang the test step with every suite
-#   green. A lone red in one of those: rerun once before diagnosing.
+# modules/db is capture checked. An incremental build hides closure over `this` errors in read
+# and transact, so the gate cleans db before compiling. Never trust a green db build that did not
+# start from clean.
+#
+# The db and example suites start Postgres through testcontainers and need a Docker daemon. With
+# colima, Docker is reached through a socket under ~/.colima and testcontainers needs the API
+# version pinned, or it reports no Docker environment at all. The gate points DOCKER_HOST at the
+# colima socket when nothing else set it, and pins the API version whenever DOCKER_HOST names a
+# colima socket, however it got there.
+#
+# In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
+# nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir file.
+# An uncommitted local-worktree.sbt at the worktree root turns that setting off. The gate writes
+# it and excludes it from git, so it never lands in a commit.
+#
+# The repository's git hooks live in .githooks and git does not run them until core.hooksPath
+# says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one
+# accepted co author trailer and no dash characters in prose, so a commit refused with a message
+# about either is the hook doing its job: fix the message, not the hook.
+#
+# The http ClientSuite binds port 8080, and a stray local server on the same port answers in its
+# place, so the suite fails with an H2 greeting where a status line should be. Before the test
+# step the gate names any process listening on 8080 and carries on; a red ClientSuite under that
+# line is the squatter, not the code.
+#
+# Three suites are timing sensitive and can go red under machine load with no code cause.
+# PoolSuite's "with the database down, the first read waits the acquire timeout" fires its 500 ms
+# acquire timeout before the driver's refusal is recorded. LiveServerSuite's abnormal drop rejoin
+# can time out on a slow runner. DrainSuite can hang the test step with every suite green. A lone
+# red in one of those: rerun once before diagnosing.
 #
 # `bin/gate --dry-run` prints the steps and the lock paths without running sbt, and changes
 # nothing, not even the git config.
@@ -55,32 +72,9 @@ done
 
 # ---------- environment ----------
 
-if [ -z "${DOCKER_HOST:-}" ] && [ -S "$HOME/.colima/default/docker.sock" ]; then
-  export DOCKER_HOST="unix://$HOME/.colima/default/docker.sock"
-fi
-case "${DOCKER_HOST:-}" in
-  *colima*)
-    case "${JAVA_TOOL_OPTIONS:-}" in
-      *api.version*) ;;
-      *) export JAVA_TOOL_OPTIONS="${JAVA_TOOL_OPTIONS:+$JAVA_TOOL_OPTIONS }-Dapi.version=1.43" ;;
-    esac ;;
-esac
-
-if [ -f "$ROOT/.git" ] && [ ! -f "$ROOT/local-worktree.sbt" ]; then
-  printf '// Written by bin/gate for this linked worktree, see its header. Never commit it.\nThisBuild / git.gitUncommittedChanges := false\n' > "$ROOT/local-worktree.sbt"
-  exclude="$(git -C "$ROOT" rev-parse --git-common-dir)/info/exclude"
-  grep -qx 'local-worktree.sbt' "$exclude" 2>/dev/null || echo 'local-worktree.sbt' >> "$exclude"
-  echo "gate: wrote local-worktree.sbt for this worktree"
-fi
-
-if [ "$(git -C "$ROOT" config core.hooksPath)" != ".githooks" ]; then
-  if [ "$DRY_RUN" -eq 1 ]; then
-    echo "gate: would set core.hooksPath to .githooks"
-  else
-    git -C "$ROOT" config core.hooksPath .githooks
-    echo "gate: installed the repository's git hooks, core.hooksPath is .githooks"
-  fi
-fi
+TOOL=gate
+# shellcheck source=lib/env.sh
+. "$ROOT/bin/lib/env.sh"
 
 # ---------- locks ----------
 
@@ -133,6 +127,14 @@ step() {
   (cd "$dir" && "$@") || { echo "GATE RED: $name"; exit 1; }
 }
 
+# Names every process listening on TCP port 8080, see the header. Quiet without lsof.
+port_squatters() {
+  command -v lsof >/dev/null 2>&1 || return 0
+  lsof -nP -iTCP:8080 -sTCP:LISTEN -Fpc 2>/dev/null \
+    | awk '/^p/ { pid = substr($0, 2) } /^c/ { print "gate: port 8080 is held by pid " pid " (" substr($0, 2) ")" }'
+  return 0
+}
+
 if [ "$DRY_RUN" -eq 1 ]; then
   echo "gate: checkout $ROOT"
   echo "gate: checkout lock $CHECKOUT_LOCK, examples lock $EXAMPLES_LOCK"
@@ -142,12 +144,14 @@ fi
 acquire "$CHECKOUT_LOCK" checkout
 
 step format   "$ROOT" sbt -batch scalafmtCheckAll scalafmtSbtCheck
+step prose    "$ROOT" bin/prose-check
 step compile  "$ROOT" sbt -batch db/clean +compile Test/compile
+port_squatters
 step test     "$ROOT" sbt -batch +test
 
 acquire "$EXAMPLES_LOCK" examples
 step examples "$ROOT" sbt -batch publishLocalForExample
-step examples "$ROOT/examples" sbt -batch test
+step examples "$ROOT/examples" sbt -batch scalafmtCheckAll test
 release "$EXAMPLES_LOCK"
 
 step site     "$ROOT" sbt -batch unidoc

@@ -5,9 +5,10 @@ import io.eezo.generated.Routes
 import io.eezo.db.Schema
 import io.eezo.http.RouteTable
 
-/** The entry point: name the schema and the generated route table, and `EezoApp` does the rest —
-  * `sbt run` serves, `sbt "run dev"` adds the drift check, `sbt "run db status|sync|freeze|migrate"`
-  * are the schema commands. See README.md for the guided tour.
+/** The entry point: name the schema and the generated route table, and `EezoApp` does the rest:
+  * `sbt run` serves, `sbt "run dev"` adds the drift check,
+  * `sbt "run db status|sync|freeze|migrate"` are the schema commands. See README.md for the guided
+  * tour.
   */
 object Main extends EezoApp {
 

@@ -5,15 +5,14 @@ import io.eezo.core.html.Tags.*
 import io.eezo.http.client.{Auth, Reply}
 import io.eezo.live.{Async, Component, Event, Init, Live}
 
-/** The components-that-call-out demo (design/live.md M6): an outbound HTTP call from `handle`,
-  * its four outcomes each driving their own state, and the page never freezing while the call
-  * runs.
+/** The components-that-call-out demo (design/live.md M6): an outbound HTTP call from `handle`, its
+  * four outcomes each driving their own state, and the page never freezing while the call runs.
   *
-  * The component is built with its [[Async]] through `Live.mount(request, async => new Callout(async))`.
-  * A click starts the call on its own virtual thread and returns the loading state at once; the
-  * reaction is a total match over `Reply`, so forgetting the `Denied` arm is a compile error,
-  * not a production surprise. The token toggle is the whole auth demo: break it and the same
-  * click lands in the `Denied` branch, live.
+  * The component is built with its [[Async]] through
+  * `Live.mount(request, async => new Callout(async))`. A click starts the call on its own virtual
+  * thread and returns the loading state at once; the reaction is a total match over `Reply`, so
+  * forgetting the `Denied` arm is a compile error, not a production surprise. The token toggle is
+  * the whole auth demo: break it and the same click lands in the `Denied` branch, live.
   */
 final case class CalloutState(token: String, outcome: String, loading: Boolean)
 
@@ -28,9 +27,9 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
 
     case "fetch" =>
       async.get("http://127.0.0.1:8080/api", Auth.bearer(s.token)) {
-        case Reply.Ok(r)            => done(s"ok: ${r.text}")
-        case Reply.Denied(r)        => done(s"denied (${r.status}): the token is bad — fix it and retry")
-        case Reply.Failed(r)        => done(s"failed (${r.status}): the upstream answered, badly")
+        case Reply.Ok(r)     => done(s"ok: ${r.text}")
+        case Reply.Denied(r) => done(s"denied (${r.status}): the token is bad — fix it and retry")
+        case Reply.Failed(r) => done(s"failed (${r.status}): the upstream answered, badly")
         case Reply.Unreachable(why) => done(s"unreachable: $why")
       }
       s.copy(loading = true)

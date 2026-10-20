@@ -28,11 +28,11 @@ object User {
 
   /** How a `Password` reaches a column.
     *
-    * It is written here, in the application, rather than shipped by `auth` or by `db`, because it is
-    * the one line where the two modules meet and neither depends on the other: `auth` knows nothing
-    * about a `ResultSet` and `db` knows nothing about bcrypt. A seam in `db` for library types
-    * stored as text is worth building when there is a second such type; with one, it would be an
-    * abstraction designed against a single implementation.
+    * It is written here, in the application, rather than shipped by `auth` or by `db`, because it
+    * is the one line where the two modules meet and neither depends on the other: `auth` knows
+    * nothing about a `ResultSet` and `db` knows nothing about bcrypt. A seam in `db` for library
+    * types stored as text is worth building when there is a second such type; with one, it would be
+    * an abstraction designed against a single implementation.
     */
   given Column[Password] = Column[String].imap(Password.stored)(_.value)
 
@@ -49,8 +49,8 @@ object User {
     *
     * `credentials` says where the stored hash is and nothing else. The comparison is the guard's,
     * which is why no plain password appears anywhere in this application: there is no line here
-    * that could answer an unknown email faster than a wrong one, because there is no line here
-    * that hashes at all.
+    * that could answer an unknown email faster than a wrong one, because there is no line here that
+    * hashes at all.
     */
   given guard: Guard[User] = Guard[User](
     find = id => read(Table[User].findById(id)),

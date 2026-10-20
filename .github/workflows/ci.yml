@@ -51,6 +51,11 @@ jobs:
       - name: Check formatting
         run: sbt -batch scalafmtCheckAll scalafmtSbtCheck
 
+      # Prose in docs and scaladoc carries no dash characters. The script lists each offender as
+      # file:line and exits 1, so a stray dash fails here, in seconds, before the build starts.
+      - name: Check prose
+        run: bin/prose-check
+
       # `+compile` rather than `compile`, and the `+` is there for the sbt plugin alone. `sbt-eezo`
       # is built from one source set on two axes, Scala 2.12 with sbt 1 and Scala 3.8.4 with sbt 2,
       # and no compiler flag enforces the shared subset that requires: `-Xsource:3` on the 2.12 axis
@@ -96,7 +101,7 @@ jobs:
       - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample
-          cd examples && sbt -batch test
+          cd examples && sbt -batch scalafmtCheckAll test
 
       # The documentation site is an eezo application too, with a build of its own against the
       # released eezo, the way a user's application is built. Its suite renders every page out of

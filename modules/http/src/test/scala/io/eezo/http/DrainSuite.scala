@@ -1,6 +1,5 @@
 package io.eezo.http
 
-import java.net.InetSocketAddress
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -8,8 +7,6 @@ import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
-
-import scala.jdk.CollectionConverters.*
 
 import io.eezo.core.html.Html
 import org.eclipse.jetty.server.NetworkConnector
@@ -60,7 +57,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     serving(held.routes) { (server, port) =>
       try {
         val answer = client.sendAsync(
-          HttpRequest.newBuilder(URI.create(s"http://localhost:$port/held")).GET().build(),
+          HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port/held")).GET().build(),
           HttpResponse.BodyHandlers.ofString()
         )
         assert(held.entered.await(5, TimeUnit.SECONDS), "the held handler never started")
@@ -131,7 +128,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
         intercept[java.net.ConnectException](
           late.send(
             HttpRequest
-              .newBuilder(URI.create(s"http://localhost:$port${HttpServer.HealthPath}"))
+              .newBuilder(URI.create(s"http://$Loopback:$port${HttpServer.HealthPath}"))
               .build(),
             HttpResponse.BodyHandlers.ofString()
           )
@@ -183,7 +180,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
                 val _ = closes.offer((status, reason))
               }
             },
-            URI.create(s"ws://localhost:$port/live")
+            URI.create(s"ws://$Loopback:$port/live")
           )
           .get(5, TimeUnit.SECONDS)
         assert(opened.await(5, TimeUnit.SECONDS), "the socket never opened on the server")
@@ -211,34 +208,13 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
-  /** Whether `socket` reached `server` or some other process that holds the same port.
-    *
-    * The server listens on every address, and the kernel will hand it a port another process
-    * already holds on the loopback alone. A connection to localhost then goes to that process, the
-    * more specific listener, and the server never sees it. Only the server's own connector can say
-    * which one answered, by the far end of each connection it holds.
-    */
-  private def acceptedBy(server: Server, socket: java.net.Socket): Boolean = {
-    val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-    def accepted = server.getConnectors.exists(
-      _.getConnectedEndPoints.asScala.exists(_.getRemoteSocketAddress match {
-        case far: InetSocketAddress => far.getPort == socket.getLocalPort
-        case _                      => false
-      })
-    )
-    while (!accepted && System.nanoTime() < deadline) Thread.onSpinWait()
-    accepted
-  }
-
   /** A slow client, whose request is still in flight while the drain's silence window runs, is the
     * one case where the dev and production windows must disagree. Three times the dev window
     * outlasts it and still sits inside the production one, so one pause tells the two apart.
     *
-    * A raw socket, since no client lets a test pause halfway through a body, and so a fresh server
-    * when the port turns out to be shared: the socket then never reached the server, and waiting on
-    * the server to see its request would wait on nothing.
+    * A raw socket, since no client lets a test pause halfway through a body.
     */
-  private def pausedUpload(dev: Boolean, attempts: Int = 3): String = {
+  private def pausedUpload(dev: Boolean): String = {
     val routes = RouteTable(
       Seq(
         Route.Http(
@@ -250,45 +226,39 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
         )
       )
     )
-    var answer = Option.empty[String]
+    var answer = ""
     serving(routes, dev = dev) { (server, port) =>
-      val socket = new java.net.Socket("localhost", port)
-      try
-        if (acceptedBy(server.jetty, socket)) {
-          socket.setSoTimeout(5000)
-          val out = socket.getOutputStream
-          out.write(
-            ("GET /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\n" +
-              "Content-Length: 10\r\n\r\nhello").getBytes(StandardCharsets.US_ASCII)
-          )
-          out.flush()
-          val graceful = Option(server.jetty.getDescendant(classOf[GracefulHandler]))
-            .getOrElse(fail("the handler tree has no GracefulHandler"))
-          val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
-          while (graceful.getCurrentRequestCount == 0) {
-            if (System.nanoTime() > deadline)
-              fail("the server took the upload but never handled it")
-            Thread.onSpinWait()
-          }
-          val stopper = stopping(server.jetty)
-          // The pause is the scenario rather than a wait on something.
-          Thread.sleep(HttpServer.shutdownIdleTimeout(dev = true).multipliedBy(3).toMillis)
-          answer = Some(
-            try {
-              out.write("world".getBytes(StandardCharsets.US_ASCII))
-              out.flush()
-              new String(socket.getInputStream.readAllBytes(), StandardCharsets.US_ASCII)
-            } catch { case _: java.io.IOException => "" }
-          )
-          stopper.join(5000)
-          assert(!stopper.isAlive, "stop did not return once the upload was over")
+      val socket = new java.net.Socket(Loopback, port)
+      try {
+        socket.setSoTimeout(5000)
+        val out = socket.getOutputStream
+        out.write(
+          ("GET /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\n" +
+            "Content-Length: 10\r\n\r\nhello").getBytes(StandardCharsets.US_ASCII)
+        )
+        out.flush()
+        val graceful = Option(server.jetty.getDescendant(classOf[GracefulHandler]))
+          .getOrElse(fail("the handler tree has no GracefulHandler"))
+        val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+        while (graceful.getCurrentRequestCount == 0) {
+          if (System.nanoTime() > deadline)
+            fail("the server took the upload but never handled it")
+          Thread.onSpinWait()
         }
-      finally socket.close()
+        val stopper = stopping(server.jetty)
+        // The pause is the scenario rather than a wait on something.
+        Thread.sleep(HttpServer.shutdownIdleTimeout(dev = true).multipliedBy(3).toMillis)
+        answer =
+          try {
+            out.write("world".getBytes(StandardCharsets.US_ASCII))
+            out.flush()
+            new String(socket.getInputStream.readAllBytes(), StandardCharsets.US_ASCII)
+          } catch { case _: java.io.IOException => "" }
+        stopper.join(5000)
+        assert(!stopper.isAlive, "stop did not return once the upload was over")
+      } finally socket.close()
     }
-    answer.getOrElse {
-      if (attempts > 1) pausedUpload(dev, attempts - 1)
-      else fail("every port the server was given was one another process holds on the loopback")
-    }
+    answer
   }
 
   test("a client that pauses mid upload during a production drain still gets its answer") {

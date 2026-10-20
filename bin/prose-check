@@ -1,0 +1,179 @@
+#!/usr/bin/env python3 -I
+# Checks that prose in Markdown files and in scaladoc comments contains no dash characters, the
+# rule in CLAUDE.md, with the commit-msg hook's definition of a dash: an en or em dash, a hyphen
+# with a space on both sides, or two or more hyphens in a row. A hyphen inside a word is fine. Not
+# prose, so skipped: fenced code blocks, inline code spans, Markdown tables, YAML front matter,
+# thematic breaks, HTML comment markers, the bullet marker that opens a list item, and URLs. Scala
+# files are read for their /** ... */ blocks only. The hook also refuses a dash bullet, which
+# Markdown lists need, so that rule stays the hook's alone.
+#
+# The tree carried a few hundred dashes when this check arrived, so with no arguments it checks
+# only the files changed against the merge base with origin/dev plus the untracked ones, and the
+# whole tree on request. A file is fixed when it is touched.
+#
+# Usage: bin/prose-check              the .md and .scala files changed since origin/dev, untracked
+#                                     ones included
+#        bin/prose-check --all        every tracked .md and .scala file, through git ls-files
+#        bin/prose-check PATH...      those files, Markdown or Scala by extension
+# Prints path:line: the line for each hit and exits 1 when there are hits, 0 when clean.
+
+import re
+import subprocess
+import sys
+
+EN_DASH = "\u2013"
+EM_DASH = "\u2014"
+
+CODE_SPAN = re.compile(r"``.*?``|`[^`]*`")
+URL = re.compile(r"<?(?:https?|ftp)://\S+>?")
+LINK_TARGET = re.compile(r"\]\([^)]*\)")
+LEADING_BULLET = re.compile(r"^(\s*)-\s")
+THEMATIC_BREAK = re.compile(r"^\s{0,3}(-\s*){3,}$")
+FENCE = re.compile(r"^\s{0,3}(```|~~~)")
+SCALADOC_FENCE = re.compile(r"\{\{\{|\}\}\}")
+HTML_COMMENT_MARKER = re.compile(r"<!--|-->")
+PATTERNS = ["*.md", "*.scala"]
+
+
+def dash_in(text):
+    """The reason a line of prose is refused, or None: the hook's three cases."""
+    if EN_DASH in text or EM_DASH in text:
+        return "an en or em dash"
+    if " - " in text:
+        return "a hyphen with a space on both sides"
+    if "--" in text:
+        return "two or more hyphens in a row"
+    return None
+
+
+class Prose:
+    """Strips what is not prose from one line at a time, remembering a code span left open at the
+    end of the previous line, since a span may run across lines."""
+
+    def __init__(self):
+        self.span_open = False
+
+    def of(self, line):
+        text = LEADING_BULLET.sub(r"\1", line)
+        if self.span_open:
+            text = "`" + text
+        self.span_open = text.count("`") % 2 == 1
+        if self.span_open:
+            text = text + "`"
+        text = CODE_SPAN.sub("", text)
+        text = LINK_TARGET.sub("]", text)
+        text = URL.sub("", text)
+        text = HTML_COMMENT_MARKER.sub("", text)
+        return text
+
+
+def check_markdown(lines):
+    hits = []
+    prose = Prose()
+    in_fence = None
+    in_front_matter = False
+    for number, line in enumerate(lines, 1):
+        if number == 1 and line.strip() == "---":
+            in_front_matter = True
+            continue
+        if in_front_matter:
+            if line.strip() in ("---", "..."):
+                in_front_matter = False
+            continue
+        fence = FENCE.match(line)
+        if fence:
+            marker = fence.group(1)
+            if in_fence is None:
+                in_fence = marker
+            elif in_fence == marker:
+                in_fence = None
+            continue
+        if in_fence is not None:
+            continue
+        if line.lstrip().startswith("|") or THEMATIC_BREAK.match(line):
+            continue
+        if dash_in(prose.of(line)):
+            hits.append((number, line))
+    return hits
+
+
+def check_scaladoc(lines):
+    hits = []
+    prose = Prose()
+    in_doc = False
+    in_fence = False
+    for number, line in enumerate(lines, 1):
+        text = line
+        if not in_doc:
+            start = text.find("/**")
+            if start < 0:
+                continue
+            in_doc = True
+            prose = Prose()
+            text = text[start + 3 :]
+        end = text.find("*/")
+        if end >= 0:
+            text = text[:end]
+            in_doc = False
+            in_fence = False
+        body = re.sub(r"^\s*\*\s?", "", text)
+        marks = len(SCALADOC_FENCE.findall(body)) + len(FENCE.findall(body))
+        if marks:
+            if marks % 2:
+                in_fence = not in_fence
+            continue
+        if in_fence:
+            continue
+        if body.lstrip().startswith("|"):
+            continue
+        if dash_in(prose.of(body)):
+            hits.append((number, line))
+    return hits
+
+
+def git_lines(*args):
+    out = subprocess.run(["git", *args, "-z", "--", *PATTERNS], check=True, capture_output=True)
+    return [p.decode() for p in out.stdout.split(b"\0") if p]
+
+
+def tracked_files():
+    return git_lines("ls-files")
+
+
+def changed_files():
+    """What the working tree changed against the merge base with origin/dev, plus untracked files;
+    HEAD stands in for the base when origin/dev is unknown."""
+    base = subprocess.run(
+        ["git", "merge-base", "HEAD", "origin/dev"], capture_output=True, text=True
+    )
+    base = base.stdout.strip() if base.returncode == 0 else "HEAD"
+    changed = git_lines("diff", "--name-only", "--diff-filter=ACMR", base)
+    untracked = git_lines("ls-files", "--others", "--exclude-standard")
+    return sorted(set(changed) | set(untracked))
+
+
+def main(argv):
+    if argv == ["--all"]:
+        paths = tracked_files()
+    elif argv:
+        paths = argv
+    else:
+        paths = changed_files()
+    total = 0
+    for path in paths:
+        try:
+            with open(path, encoding="utf-8") as f:
+                lines = f.read().splitlines()
+        except (OSError, UnicodeDecodeError) as e:
+            print(f"{path}: cannot read: {e}", file=sys.stderr)
+            total += 1
+            continue
+        hits = check_scaladoc(lines) if path.endswith(".scala") else check_markdown(lines)
+        for number, line in hits:
+            print(f"{path}:{number}: {line}")
+        total += len(hits)
+    return 1 if total else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))

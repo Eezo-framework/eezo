@@ -6,15 +6,15 @@ import io.eezo.live.{Component, Event, Init, Live, Topic}
 
 /** A board every open browser shares: the two-browsers-one-topic demo.
   *
-  * The topic is the shared thing, a value on the companion; every mounted board subscribes to it
-  * in `init`. A click does not touch the clicking page's own state at all — `handle` publishes
-  * and returns the state unchanged, and the update comes back through the subscription like
-  * everyone else's, so both browsers repaint from the same message, the clicking one included.
-  * That round trip is the whole pub/sub model in one gesture.
+  * The topic is the shared thing, a value on the companion; every mounted board subscribes to it in
+  * `init`. A click does not touch the clicking page's own state at all: `handle` publishes and
+  * returns the state unchanged, and the update comes back through the subscription like everyone
+  * else's, so both browsers repaint from the same message, the clicking one included. That round
+  * trip is the whole pub/sub model in one gesture.
   *
   * The self link is a `Url.Mounted`, so the same component mounted at `/board` and under
-  * `/admin/board` shows a different, correct address in each place - the mount-prefix seam
-  * (design/live.md §2.6), visible.
+  * `/admin/board` shows a different, correct address in each place, the mount-prefix seam
+  * (design/live.md §2.6) made visible.
   */
 object Board {
 

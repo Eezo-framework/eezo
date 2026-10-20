@@ -87,7 +87,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     try {
       assertEquals(awaiting(port, HttpServer.HealthPath).statusCode(), 200)
       val _ = client.sendAsync(
-        HttpRequest.newBuilder(URI.create(s"http://localhost:$port/held")).GET().build(),
+        HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port/held")).GET().build(),
         HttpResponse.BodyHandlers.ofString()
       )
       assert(entered.await(5, TimeUnit.SECONDS), "the held handler never started")
@@ -191,7 +191,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
   test("a matched path with the wrong method is a 405 carrying Allow") {
     serving(hello) { (_, port) =>
       val response = client.send(
-        HttpRequest.newBuilder(URI.create(s"http://localhost:$port/hello")).DELETE().build(),
+        HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port/hello")).DELETE().build(),
         HttpResponse.BodyHandlers.ofString()
       )
       assertEquals(response.statusCode(), 405)
@@ -213,7 +213,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     serving(routes, maxBodySize = 16) { (_, port) =>
       val response = client.send(
         HttpRequest
-          .newBuilder(URI.create(s"http://localhost:$port/upload"))
+          .newBuilder(URI.create(s"http://$Loopback:$port/upload"))
           .POST(HttpRequest.BodyPublishers.ofString("x" * 64))
           .build(),
         HttpResponse.BodyHandlers.ofString()

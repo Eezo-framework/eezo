@@ -20,6 +20,25 @@ API token.
 The shop keeps its tables in a Postgres schema named `shop`, so it shares the dev database with the
 other examples.
 
+## Run it locally
+
+The shop boots with a Postgres, two Stripe secrets, a session key and port 8080 free. It reads them
+from the environment:
+
+| variable | what it is for | when unset |
+|---|---|---|
+| `EEZO_DB_URL`, `EEZO_DB_USER`, `EEZO_DB_PASS` | the Postgres the tables live in | `jdbc:postgresql://localhost:5442/eezo`, `postgres`, `postgres`, which is the container below |
+| `STRIPE_SECRET_KEY` | the test mode key Stripe Checkout sessions are created with | the server refuses to boot |
+| `STRIPE_WEBHOOK_SECRET` | the signing secret the `POST /webhooks/stripe` guard verifies | the server refuses to boot |
+| `EEZO_SECRET` | the key the session cookie is signed with, at least 32 bytes | a throwaway key announced at WARNING, so every restart signs the admin out |
+| `SHOP_URL` | where Stripe sends the buyer back | `http://localhost:8080` |
+
+The port is `EezoApp`'s default, 8080, and `Main.scala` does not override it, so stop whatever else
+listens there. Stripe cannot reach localhost on its own: the Stripe CLI forwards test events with
+`stripe listen --forward-to localhost:8080/webhooks/stripe` and prints the `whsec_...` secret to
+export. The `sbt` commands below run in `examples/`, except the one that publishes eezo locally,
+and `-batch` on any of them keeps sbt from waiting on a prompt nobody will answer.
+
 ```bash
 docker run -d --name eezo-pg -p 5442:5432 \
   -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=eezo postgres:17   # skip if it already runs
@@ -40,7 +59,8 @@ them when it boots:
 
 ```bash
 export STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_...
-sbt shop/run                    # http://localhost:8080
+export EEZO_SECRET=$(openssl rand -base64 32)   # or leave it out and sign in again after a restart
+sbt -batch shop/run             # http://localhost:8080
 ```
 
 `sbt shop/test` runs the shop's own suite against a Postgres of its own, started through Docker.

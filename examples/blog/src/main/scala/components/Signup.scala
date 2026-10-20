@@ -6,13 +6,13 @@ import io.eezo.live.{Component, Event, Init, Live}
 
 /** The live-form demo: every M5 behavior on one page.
   *
-  * The name and email validate per keystroke (debounced on the client), and the server echoes
-  * each field's value back as its `value` attribute - which is exactly the echo that would eat
-  * your text mid-word if the applier did not protect the focused element's value property. Type
-  * fast and watch the caret stay put. The checkbox and select send committed changes; submit
-  * sends the whole form as one payload; and the roster below is a keyed list whose shuffle
-  * button emits a handful of `moveChild` patches, so the rows keep their scroll position and
-  * identity instead of re-rendering.
+  * The name and email validate per keystroke (debounced on the client), and the server echoes each
+  * field's value back as its `value` attribute, which is exactly the echo that would eat your text
+  * mid-word if the applier did not protect the focused element's value property. Type fast and
+  * watch the caret stay put. The checkbox and select send committed changes; submit sends the whole
+  * form as one payload; and the roster below is a keyed list whose shuffle button emits a handful
+  * of `moveChild` patches, so the rows keep their scroll position and identity instead of
+  * re-rendering.
   */
 final case class SignupState(
     name: String,
@@ -43,7 +43,7 @@ final class Signup extends Component[SignupState] {
       case "subscribed"    => s.copy(subscribed = value == "on", saved = false)
       case "flavor-picked" => s.copy(flavor = value, saved = false)
       case "shuffle"       => s.copy(roster = scala.util.Random.shuffle(s.roster))
-      case "save" =>
+      case "save"          =>
         s.copy(
           name = event.payload.getOrElse("name", ""),
           email = event.payload.getOrElse("email", ""),
@@ -69,39 +69,52 @@ final class Signup extends Component[SignupState] {
       form(
         Live.onSubmit("save"),
         p(
-          label("name ", input(
-            Attrs.tpe   := "text",
-            Attrs.name  := "name",
-            Attrs.value := s.name,
-            Live.onInput("name-changed")
-          )),
+          label(
+            "name ",
+            input(
+              Attrs.tpe   := "text",
+              Attrs.name  := "name",
+              Attrs.value := s.name,
+              Live.onInput("name-changed")
+            )
+          ),
           nameProblem(s).map(problem => em(" ", problem))
         ),
         p(
-          label("email ", input(
-            Attrs.tpe   := "text",
-            Attrs.name  := "email",
-            Attrs.value := s.email,
-            Live.onInput("email-changed", debounceMillis = 150)
-          )),
+          label(
+            "email ",
+            input(
+              Attrs.tpe   := "text",
+              Attrs.name  := "email",
+              Attrs.value := s.email,
+              Live.onInput("email-changed", debounceMillis = 150)
+            )
+          ),
           emailProblem(s).map(problem => em(" ", problem))
         ),
-        p(label(
-          input(
-            Attrs.tpe     := "checkbox",
-            Attrs.name    := "subscribed",
-            Attrs.checked := s.subscribed,
-            Live.onChange("subscribed")
-          ),
-          " subscribe to the newsletter"
-        )),
-        p(label("flavor ", select(
-          Attrs.name := "flavor",
-          Live.onChange("flavor-picked"),
-          Seq("vanilla", "chocolate", "pistachio").map { f =>
-            option(Attrs.value := f, Attrs.selected := (f == s.flavor), f)
-          }
-        ))),
+        p(
+          label(
+            input(
+              Attrs.tpe     := "checkbox",
+              Attrs.name    := "subscribed",
+              Attrs.checked := s.subscribed,
+              Live.onChange("subscribed")
+            ),
+            " subscribe to the newsletter"
+          )
+        ),
+        p(
+          label(
+            "flavor ",
+            select(
+              Attrs.name := "flavor",
+              Live.onChange("flavor-picked"),
+              Seq("vanilla", "chocolate", "pistachio").map { f =>
+                option(Attrs.value := f, Attrs.selected := (f == s.flavor), f)
+              }
+            )
+          )
+        ),
         p(button(Attrs.tpe := "submit", "save")),
         p(
           if (s.saved) strong("saved ✓")

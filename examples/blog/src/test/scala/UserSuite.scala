@@ -1,8 +1,8 @@
 import io.eezo.http.Method
 import io.eezo.http.Request
 
-/** What the blog's guard does to the blog's own routes: the editing screens refuse a browser
-  * nobody has signed in, and the front page does not.
+/** What the blog's guard does to the blog's own routes: the editing screens refuse a browser nobody
+  * has signed in, and the front page does not.
   *
   * Driven through `Main.routes`, the table the application actually serves, rather than through one
   * assembled here. The two answers below depend on the declaration in `models/Post.scala` and on
