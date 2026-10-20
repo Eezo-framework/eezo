@@ -72,13 +72,31 @@ class OwnershipSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   private def notes(store: Store[Note], guarded: Guarded[Note]): Ownership[Note] =
-    new Ownership[Note]("Note", summon[Form[Note]], summon[Actions[Note]], store, guarded)
+    new Ownership[Note](
+      "Note",
+      summon[Form[Note]].fields.map(_.name),
+      summon[Actions[Note]],
+      store,
+      guarded
+    )
 
   private def vaults(store: Store[Vault], guarded: Guarded[Vault]): Ownership[Vault] =
-    new Ownership[Vault]("Vault", summon[Form[Vault]], summon[Actions[Vault]], store, guarded)
+    new Ownership[Vault](
+      "Vault",
+      summon[Form[Vault]].fields.map(_.name),
+      summon[Actions[Vault]],
+      store,
+      guarded
+    )
 
   private def baskets(store: Store[Basket], guarded: Guarded[Basket]): Ownership[Basket] =
-    new Ownership[Basket]("Basket", summon[Form[Basket]], summon[Actions[Basket]], store, guarded)
+    new Ownership[Basket](
+      "Basket",
+      summon[Form[Basket]].fields.map(_.name),
+      summon[Actions[Basket]],
+      store,
+      guarded
+    )
 
   /** What `missing` threw, as the status the boundary would render it with. */
   private def answered(run: => Nothing): Int =
@@ -111,8 +129,8 @@ class OwnershipSuite extends munit.FunSuite with ResourceFixtures {
     val thrown = intercept[IllegalStateException](notes(scopedNotes(), declared))
     assertEquals(
       thrown.getMessage,
-      "Note declares Owned naming \"auth0r\" as its owner, but Note has no field of that name " +
-        "for the form to hide. Name the field the declaration actually owns."
+      "Note declares Owned naming \"auth0r\" as its owner, but Note has no field of that " +
+        "name. Name the field the declaration actually owns."
     )
   }
 
@@ -166,8 +184,9 @@ class OwnershipSuite extends munit.FunSuite with ResourceFixtures {
   }
 
   test("shape hides the owner field, and an unowned model keeps every field it declared") {
-    val owned   = notes(scopedNotes(), notesOwnedBy(ada)).shape.fields.map(_.name)
-    val unowned = notes(InMemoryStore[Note](), Guarded.public).shape.fields.map(_.name)
+    val owned = notes(scopedNotes(), notesOwnedBy(ada)).shape(summon[Form[Note]]).fields.map(_.name)
+    val unowned =
+      notes(InMemoryStore[Note](), Guarded.public).shape(summon[Form[Note]]).fields.map(_.name)
 
     assert(!owned.contains("author"), owned)
     assert(owned.contains("title"), owned)

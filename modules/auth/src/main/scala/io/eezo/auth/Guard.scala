@@ -163,8 +163,15 @@ final class Guard[U] private (
     * owner's controls. Whether nobody is an ordinary visitor or a route table that forgot to guard
     * a covered route is a question only the call site can answer, so the call site is where the
     * mistake surfaces.
+    *
+    * On an API route the session is empty, so the key comes off the request instead, where the
+    * token arm of [[through]] wrote it through [[named]] once the token checked out. Nothing else
+    * writes it there on such a route: dispatch emptied the session, the server read no cookie, and
+    * no header, query or path parameter ever becomes it. So a browser calling an API URL with its
+    * cookie is still nobody here, and an owned model's JSON routes scope to the token's user.
     */
-  private val currentUserKey: Request => Option[Id[U]] = request => key(request.session)
+  private val currentUserKey: Request => Option[Id[U]] =
+    request => key(request.session).orElse(request.currentUser.flatMap(Guard.parse[U]))
 
   /** The request with the guard's verdict written on it, as the key the session spells.
     *

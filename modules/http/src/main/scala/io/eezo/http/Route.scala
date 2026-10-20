@@ -8,8 +8,8 @@ import io.eezo.core.html.Url
   *
   * Handwritten is the default, so every site that builds a route directly keeps writing what it
   * already wrote: users under `app/`, the sbt plugin that emits them, and any transformation over
-  * `Seq[Route]`. [[Resource]] is the single place that mints derived routes, and the single place
-  * that has to say so. Two values rather than a richer record naming the model, because the only
+  * `Seq[Route]`. [[Resource]] and [[Api]] are where derived routes are minted, and the only places
+  * that have to say so. Two values rather than a richer record naming the model, because the only
   * question [[RouteTable]] asks is which of two routes on the same method and path the user wrote
   * on purpose.
   */
@@ -23,8 +23,9 @@ enum Provenance {
   * Not an enum, because neither value is named outside eezo, and an enum's cases cannot be hidden.
   * Every route an application builds by hand is a browser route by leaving the field out, and the
   * way eezo mints an API route is a handler that takes an [[io.eezo.http.api.Request]], through the
-  * generated row. A kind an application could name would be a way to turn off the CSRF check on a
-  * page that reads the session, with nothing in the handler's type to say so.
+  * generated row, or a model that derives [[Api]]. A kind an application could name would be a way
+  * to turn off the CSRF check on a page that reads the session, with nothing in the handler's type
+  * to say so.
   *
   * Naming is all this closes, not holding: `kind` is a public field, so an application can copy it
   * from an existing API route onto a page whose handler takes a [[Request]]. What keeps such a page
@@ -96,10 +97,19 @@ object Route {
 
   /** A route eezo made rather than one the user wrote, which is what lets a handwritten route at
     * the same method and path win: the table drops the derived twin rather than refusing to boot.
-    * The one spelling of that, for `Resource`'s seven and a guard's three.
+    * The one spelling of that, for `Resource`'s seven, `Api`'s five and a guard's three.
+    *
+    * `kind` is a parameter rather than a second helper, because derived and handwritten is one
+    * question and browser and API another, and `Api`'s five are both derived and API routes: a
+    * handwritten file shadows one of them the way it shadows a page, whatever its kind.
     */
-  private[eezo] def derived(method: Method, path: String, handler: Handler): Route =
-    Http(method, PathPattern.parse(path), handler, Provenance.Derived)
+  private[eezo] def derived(
+      method: Method,
+      path: String,
+      handler: Handler,
+      kind: RouteKind = RouteKind.Browser
+  ): Route =
+    Http(method, PathPattern.parse(path), handler, Provenance.Derived, kind)
 
   /** The generated row for a file under `app/` whose handler takes a [[Request]]: a browser route.
     *

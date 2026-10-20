@@ -20,6 +20,14 @@ the store calls, the redirects and the 404 for a missing row, and requires an `i
 `create` has to mint one before inserting.
 _Avoid_: controller, CRUD, scaffold
 
+**Api**:
+The five JSON routes a model mounts for a program, under `/api` and the same plural its Resource
+uses: index, show, create, update and destroy. It is to an API route what Resource is to a page:
+it reads and writes through the model's Serde, mints the key on create, answers a missing row the
+way the pages do, and is guarded and owned by the same declaration as the seven. New and Edit have
+no counterpart, since they serve a form and a program builds its own body.
+_Avoid_: REST resource, JSON resource, endpoints, API controller
+
 **Action**:
 One of the seven route roles a Resource can mount. A model subtracts from the full set in its
 companion, and a handwritten route may take over the role it subtracted.
@@ -63,14 +71,20 @@ Serde: an API handler reads the body into it and chooses its own path, verb and 
 form is a model that derives only Form. An order placed by a program is the typical case, and it
 has no key.
 
+Serde is what a handwritten API handler calls. Api is what writes handlers that call Serde, as
+Resource writes handlers that call Form, and the same three shapes follow: a payload with a Serde
+and no Api, a model whose five are all derived, and a model that subtracts an Action and serves it
+from a handwritten file under `app/api/`. A model may derive Resource, Api or both; deriving both
+mounts twelve routes over one store, so a row a program creates is a row the pages show.
+
 ### Application
 
 **Layer**:
 One of the two sides of an application that eezo brings up and takes down for it: the database
 layer, which is the connection to the database and the schema commands, and the http layer, which
 is the server and the routes. An application declares which layers it has, one or both, and a
-derivation belongs to one layer: Table to the database layer, Form and Resource to the http layer.
-Deriving for a layer the application does not have is a compile error.
+derivation belongs to one layer: Table to the database layer, Form, Resource and Api to the http
+layer. Deriving for a layer the application does not have is a compile error.
 _Avoid_: half, side, edge, backend, runtime
 
 **Layout**:
@@ -185,8 +199,9 @@ _Avoid_: authenticity token, anti forgery token, form token, nonce
 **API route**:
 A route called by a program and not by a browser. No session takes part in it, so it carries no
 CSRF token, and who may call it is said by its Guarded like on any other route; a guarded one
-knows its caller by the API token it sends and never by a cookie. A page is one when its handler
-takes an api.Request rather than a Request; nothing else declares it.
+knows its caller by the API token it sends and never by a cookie. A page is one in two ways
+only: its handwritten handler takes an api.Request rather than a Request, or it is one of the five
+a model that derives Api mounts.
 _Avoid_: endpoint, webhook route, REST route, stateless route, CSRF exempt route
 
 **Mount**:
@@ -204,7 +219,8 @@ _Avoid_: permission, policy, access control, ACL
 **Owner**:
 The user a row records as the one who created it, held as that user's key in a field of the model
 like any other. Filled once, from the current user, when the row is created, and never taken from a
-form.
+form. An Api body still names an owner, because the Serde reads only whole rows, and whatever it
+names is replaced.
 _Avoid_: creator, user id, foreign key, tenant
 
 **Owned**:

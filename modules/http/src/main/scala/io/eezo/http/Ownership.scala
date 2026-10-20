@@ -2,20 +2,26 @@ package io.eezo.http
 
 import io.eezo.core.{Id, Store}
 
-/** Everything that depends on what the model **declared**, built once per [[Resource.routes]] call
-  * rather than once per derivation.
+/** Everything that depends on what the model **declared**, built once per [[Resource.routes]] or
+  * [[Api.routes]] call rather than once per derivation.
   *
   * The declaration is where ownership arrives, and ownership changes three things at once: which
-  * store a handler reaches for, which fields the form has, and what a row somebody else owns
-  * answers. All three are decided here and read by the handlers `Resource` mounts, so no handler
-  * branches on whether the model is owned and the unowned path is the one it always was.
+  * store a handler reaches for, who a write names as owner, and what a row somebody else owns
+  * answers. All three are decided here and read by the handlers `Resource` and `Api` mount, so no
+  * handler branches on whether the model is owned and the unowned path is the one it always was. A
+  * `Resource` page also hides the owner field from its form, through [[shape]]; an `Api` has no
+  * form, so that part is the page's alone.
+  *
+  * It takes the model's field names rather than its [[Form]], because an [[Api]] has no Form and
+  * reads and writes the same rows through the same scope: the names are all the owner check below
+  * needs, and the one question that does need a Form, [[shape]], is asked by the page that has one.
   *
   * Built at the same call that builds those handlers and before any of them exists, so the three
   * refusals below fire when the route table is assembled at boot rather than on the first request.
   */
 private[http] final class Ownership[A](
     modelName: String,
-    declared: Form[A],
+    fields: Seq[String],
     actions: Actions[A],
     store: Store[A],
     guarded: Guarded[A]
@@ -52,19 +58,21 @@ private[http] final class Ownership[A](
         "InMemoryStore.scoped, or JdbcStore's owner aware pair."
     )
 
-  /** A mistyped owner name would otherwise leave the field it meant to hide sitting on the page as
-    * an ordinary, browser-editable input: `Form.without` documents that a name naming no field
-    * changes nothing, so `shape` below would be `declared` itself and `body` would write under a
-    * key `parse` never reads, which is the forgery this whole mechanism exists to close. Refused
-    * here, beside the `Scoped` refusal above and at the same boot, rather than discovered from a
-    * hostile submission that a mistyped name would otherwise let through.
+  /** A mistyped owner name would otherwise leave the field it meant to hide sitting on a `Resource`
+    * page as an ordinary input a browser can edit: `Form.without` documents that a name naming no
+    * field changes nothing, so `shape` below would be `declared` itself and `body` would write
+    * under a key `parse` never reads, which is the forgery this whole mechanism exists to close. An
+    * `Api` has no page, but its writes set the owner by this same name, so a mistyped one would
+    * fail every write rather than one boot. Refused here, beside the `Scoped` refusal above and at
+    * the same boot, rather than discovered from a hostile submission that a mistyped name would
+    * otherwise let through.
     */
   owned.foreach { o =>
-    if (!declared.fields.exists(_.name == o.ownerOf.name))
+    if (!fields.contains(o.ownerOf.name))
       throw new IllegalStateException(
         s"""$modelName declares Owned naming "${o.ownerOf.name}" as its owner, but $modelName
-           |has no field of that name for the form to hide. Name the field the declaration
-           |actually owns.""".stripMargin.replace("\n", " ")
+           |has no field of that name. Name the field the declaration actually
+           |owns.""".stripMargin.replace("\n", " ")
       )
   }
 
@@ -107,7 +115,8 @@ private[http] final class Ownership[A](
     * must not be shown an input for it, an index must not head a column with it, and a show page
     * must not print a raw key. It is still parsed, out of the value `body` puts there.
     */
-  val shape: Form[A] = owned.fold(declared)(o => declared.without(o.ownerOf.name))
+  def shape(declared: Form[A]): Form[A] =
+    owned.fold(declared)(o => declared.without(o.ownerOf.name))
 
   /** The declaration, when ownership covers this action. The one place that question is asked, so
     * every handler reads the same answer.
@@ -192,9 +201,17 @@ private[http] final class Ownership[A](
     * uncovered `update`, and every other write, covered or not, takes the requester.
     */
   def body(request: Request, existing: Option[A]): Map[String, Seq[String]] =
-    owned.fold(request.form) { o =>
-      val who = existing.map(o.ownerOf.get).getOrElse(requireCurrentUser(o, request))
-      request.form.updated(o.ownerOf.name, Seq(who.show))
+    owner(request, existing).fold(request.form) { case (name, who) =>
+      request.form.updated(name, Seq(who.show))
+    }
+
+  /** The owner field's name and the key a write puts in it, by [[body]]'s rule, for a write whose
+    * submission is not a form: an [[Api]] reads JSON into a whole row first and sets the field on
+    * that row, so it needs the value and not a rewritten form. Nothing for an unowned model.
+    */
+  def owner(request: Request, existing: Option[A]): Option[(String, Id[Any])] =
+    owned.map { o =>
+      o.ownerOf.name -> existing.map(o.ownerOf.get).getOrElse(requireCurrentUser(o, request))
     }
 
   /** The row whose owner an uncovered `update` has to keep, and nothing at all when there is no

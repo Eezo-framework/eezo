@@ -128,7 +128,7 @@ object Resource {
     * does not mount, because a `create` whose success has nowhere to redirect and an `index` that
     * cannot link a row are not half a resource.
     */
-  private inline def keyIndex[A, Labels <: Tuple, Types <: Tuple](inline soFar: Int): Int =
+  private[http] inline def keyIndex[A, Labels <: Tuple, Types <: Tuple](inline soFar: Int): Int =
     inline erasedValue[Labels] match {
       case _: EmptyTuple =>
         error(
@@ -188,7 +188,8 @@ object Resource {
           plural,
           collection,
           guarded,
-          new Ownership(modelName, declared, actions, store, guarded)
+          declared,
+          new Ownership(modelName, declared.fields.map(_.name), actions, store, guarded)
         ).routes
     }
   }
@@ -206,8 +207,14 @@ object Resource {
       plural: String,
       collection: Url,
       guarded: Guarded[A],
+      declared: Form[A],
       ownership: Ownership[A]
   ) {
+
+    /** The form every page renders and every write parses, with the owner field hidden when the
+      * model is owned.
+      */
+    private val shape: Form[A] = ownership.shape(declared)
 
     private def member(key: Id[A]): Url = collection / key.show
 
@@ -266,10 +273,10 @@ object Resource {
         if (rows.isEmpty) p(s"No $plural yet")
         else
           table(
-            thead(tr(ownership.shape.fields.map(field => th(field.label)))),
+            thead(tr(shape.fields.map(field => th(field.label)))),
             tbody(
               rows.map { record =>
-                val cells = ownership.shape.show(record).map(_._2)
+                val cells = shape.show(record).map(_._2)
                 tr(
                   td(
                     if (actions.has(Action.Show))
@@ -297,7 +304,7 @@ object Resource {
         page(
           s"New $modelName",
           h1(s"New $modelName"),
-          ownership.shape.render(collection, Method.POST, None, request.csrf),
+          shape.render(collection, Method.POST, None, request.csrf),
           backToIndex
         )
       )
@@ -335,11 +342,11 @@ object Resource {
         verb: Method,
         existing: Option[A] = None
     )(persist: A => Boolean): Response =
-      ownership.shape.parse(ownership.body(request, existing), Some(key.show)) match {
+      shape.parse(ownership.body(request, existing), Some(key.show)) match {
         case Left(errors) =>
           rejected(
             heading,
-            ownership.shape.render(target, verb, None, request.csrf, errors, request.form)
+            shape.render(target, verb, None, request.csrf, errors, request.form)
           )
         case Right(record) =>
           if (!persist(record)) ownership.missing(request, key, action)
@@ -363,7 +370,7 @@ object Resource {
           modelName,
           h1(modelName),
           dl(
-            ownership.shape.show(record).flatMap { case (field, value) =>
+            shape.show(record).flatMap { case (field, value) =>
               Seq(dt(field.label), dd(value))
             }
           ),
@@ -390,7 +397,7 @@ object Resource {
         page(
           s"Edit $modelName",
           h1(s"Edit $modelName"),
-          ownership.shape.render(member(key), Method.PUT, Some(record), request.csrf),
+          shape.render(member(key), Method.PUT, Some(record), request.csrf),
           backToIndex
         )
       )
@@ -426,8 +433,8 @@ object Resource {
     val routes: Seq[Route] = {
       import Route.derived as route
 
-      Action.values.toSeq.filter(actions.has).map { action =>
-        val built = action match {
+      derivedRoutes(actions, guarded) { action =>
+        Some(action match {
           case Action.Index => route(Method.GET, collection.path, index)
           case Action.New   =>
             route(Method.GET, s"${collection.path}/${NewPage.segment}", blank)
@@ -438,13 +445,7 @@ object Resource {
           case Action.Update =>
             route(EditPage.targetMethod, s"${collection.path}/:id", update)
           case Action.Destroy => route(Method.DELETE, s"${collection.path}/:id", destroy)
-        }
-
-        // The declaration reaches a route only when it names that route's role, so a model can
-        // guard its writes and leave its index open. Applied once, here, where the [[Action]]
-        // that earned it is still in hand: one step later, a `Seq[Route]` has only methods and
-        // paths, and the mapping back would be this table written a second time.
-        if (guarded.actions.contains(action)) guarded.through(built) else built
+        })
       }
     }
   }
@@ -530,13 +531,29 @@ object Resource {
       }
   }
 
+  /** The routes a derivation mounts: one per [[Action]] the model keeps, each wrapped by the
+    * declaration only when it names that route's role, so a model can guard its writes and leave
+    * its index open. Applied here, where the [[Action]] that earned a route is still in hand: one
+    * step later, a `Seq[Route]` has only methods and paths, and the mapping back would be each
+    * derivation's table written a second time. Shared by [[Resource]] and [[Api]] so that
+    * subtraction and guarding mean the same thing on a page and on a JSON route; `mint` answers
+    * `None` for a role the derivation has no route for.
+    */
+  private[http] def derivedRoutes[A](actions: Actions[A], guarded: Guarded[A])(
+      mint: Action => Option[Route]
+  ): Seq[Route] =
+    Action.values.toSeq.filter(actions.has).flatMap { action =>
+      mint(action)
+        .map(route => if (guarded.actions.contains(action)) guarded.through(route) else route)
+    }
+
   /** #110's deliberately dumb inflector: `+s`, a consonant before `y` becoming `ies`, and a
     * sibilant taking `es`. No dictionary and no irregular list, because a plural that reads badly
     * is a companion override away, while a dictionary is a dependency and a surprise.
     *
     * Underscores survive, so `blog_post` mounts at `/blog_posts`.
     */
-  private def pluralise(word: String): String =
+  private[http] def pluralise(word: String): String =
     if (word.isEmpty) word
     else if (
       word.endsWith("y") && word.length > 1 && !"aeiou".contains(word.charAt(word.length - 2))

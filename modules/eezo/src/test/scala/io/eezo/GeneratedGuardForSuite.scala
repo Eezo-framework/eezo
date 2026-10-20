@@ -42,6 +42,56 @@ class GeneratedGuardForSuite extends munit.FunSuite {
     assertEquals(guarded.carries, Seq(DeclaredPage.login))
   }
 
+  test("a model whose only routes are its Api is asked to declare, like one with a Resource") {
+    val failure =
+      compileErrors("""io.eezo.StrictTable.forModel[io.eezo.ApiOnly]("models.ApiOnly")""")
+    assert(clue(failure).contains("no Guarded given for"), failure)
+    assert(clue(failure).contains("models.ApiOnly"), failure)
+  }
+
+  test("a model deriving Form, Resource and Api mounts twelve routes, and Api alone five") {
+    val both = DerivedRows.forModel[Both](io.eezo.http.InMemoryStore(), io.eezo.http.Guarded.public)
+    assertEquals(both.size, 12)
+    assertEquals(both.take(7).map(_.describe).head, "GET /boths")
+    assertEquals(both.drop(7).map(_.describe).head, "GET /api/boths")
+    assertEquals(
+      DerivedRows.forModel[ApiOnly](io.eezo.http.InMemoryStore(), io.eezo.http.Guarded.public).size,
+      5
+    )
+    assertEquals(
+      DerivedRows
+        .forModel[OwnedRow](io.eezo.http.InMemoryStore(), io.eezo.http.Guarded.public)
+        .size,
+      0
+    )
+  }
+
+  test("a row a program creates is a row the page lists: the two halves share the one store") {
+    // The store is an argument expression, as `storeFor[A]` is in the generated row, so a helper
+    // that evaluated it once per half would hand the pages and the program two stores.
+    val routes = io.eezo.http.RouteTable(
+      DerivedRows.forModel[Both](io.eezo.http.InMemoryStore(), io.eezo.http.Guarded.public)
+    )
+    def request(method: io.eezo.http.Method, path: String, body: String) =
+      io.eezo.http.Request(
+        method = method,
+        path = path,
+        query = Map.empty,
+        headers = Map.empty,
+        body = body.getBytes(java.nio.charset.StandardCharsets.UTF_8),
+        pathParams = Map.empty
+      )
+    assertEquals(
+      routes.dispatch(request(io.eezo.http.Method.POST, "/api/boths", "made")).status,
+      201
+    )
+    val page = routes.dispatch(request(io.eezo.http.Method.GET, "/boths", "")).body match {
+      case io.eezo.http.Body.Html(html) => html.render
+      case other                        => fail(s"expected a page, got $other")
+    }
+    assert(clue(page).contains("made"))
+  }
+
   test("a model that mounts nothing is not asked to declare anything") {
     // `examples/blog`'s `User` derives `Table` alone, so it has no `Resource` and mounts no route.
     val guarded = StrictTable.forModel[Unguarded]("models.Unguarded")
@@ -167,12 +217,13 @@ object StrictTable {
         )
     }
 
-  /** Who may reach a derived model's routes. A model with no `Resource` mounts nothing, so it
-    * is not asked to declare anything.
+  /** Who may reach a derived model's routes. A model with no `Resource` and no `Api` mounts
+    * nothing, so it is not asked to declare anything.
     */
   private inline def guardForModel[A](inline name: String): io.eezo.http.Guarded[A] =
     scala.compiletime.summonFrom {
       case _: io.eezo.http.Resource[A] => guardFor[A](name)
+      case _: io.eezo.http.Api[A]      => guardFor[A](name)
       case _                           => io.eezo.http.Guarded.public[A]
     }
   // format: on
@@ -301,4 +352,70 @@ object DbStores {
   // format: on
 
   inline def forModel[A]: io.eezo.core.Store[A] = storeFor[A]
+}
+
+/** A model whose only routes are the five of its `Api`, with no `Guarded` beside it. */
+case class ApiOnly(id: io.eezo.core.Id[ApiOnly], name: String) derives io.eezo.http.Api
+
+object ApiOnly {
+  given io.eezo.http.api.Serde[ApiOnly] = Bars.serde(ApiOnly(_, _))(_.id, _.name)
+}
+
+/** A model that mounts its pages and its API. */
+case class Both(id: io.eezo.core.Id[Both], name: String)
+    derives io.eezo.http.Form,
+      io.eezo.http.Resource,
+      io.eezo.http.Api
+
+object Both {
+  given io.eezo.http.api.Serde[Both] = Bars.serde(Both(_, _))(_.id, _.name)
+}
+
+/** A deliberately crude Serde, `id|name`, since nothing here is about JSON: only about which routes
+  * a row mounts and which store they read.
+  */
+object Bars {
+  def serde[A](
+      build: (io.eezo.core.Id[A], String) => A
+  )(key: A => io.eezo.core.Id[A], name: A => String): io.eezo.http.api.Serde[A] =
+    new io.eezo.http.api.Serde[A] {
+      def serialize(value: A): String = s"${key(value).show}|${name(value)}"
+      def deserialize(body: Array[Byte]): Either[io.eezo.http.api.Serde.Failure, A] =
+        deserialize(body, io.eezo.core.Id.gen[A]())
+      def deserialize(
+          body: Array[Byte],
+          id: io.eezo.core.Id[A]
+      ): Either[io.eezo.http.api.Serde.Failure, A] =
+        Right(build(id, new String(body, java.nio.charset.StandardCharsets.UTF_8)))
+    }
+}
+
+/** The routes helper `RouteGenerator` emits for every build with a candidate model, verbatim.
+  *
+  * Compiled here because whether it shares one store between the two halves is a question about how
+  * an inline call binds its arguments, which only a compiler answers.
+  */
+object DerivedRows {
+
+  // format: off
+  /** A candidate model's routes: the seven of its `Resource` and the five of its `Api`,
+    * over the one store and the one declaration, so a page and a program read and write
+    * the same rows. A model with neither mounts nothing.
+    */
+  private inline def routesOf[A](
+      store: io.eezo.core.Store[A],
+      guarded: io.eezo.http.Guarded[A]
+  ): Seq[io.eezo.http.Route] =
+    io.eezo.http.Resource.routesOf[A](store, guarded) ++
+      io.eezo.http.Api.routesOf[A](store, guarded)
+  // format: on
+
+  /** The store is `inline` so the caller's expression reaches `routesOf` unevaluated, the way
+    * `storeFor[A]` does in the generated row; a by value parameter would bind it once here and hide
+    * a helper that evaluated it once per half.
+    */
+  inline def forModel[A](
+      inline store: io.eezo.core.Store[A],
+      guarded: io.eezo.http.Guarded[A]
+  ): Seq[io.eezo.http.Route] = routesOf[A](store, guarded)
 }

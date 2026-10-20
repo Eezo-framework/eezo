@@ -63,6 +63,7 @@ class UnscannableModelSuite extends FunSuite {
     assertEquals(warnings(content).size, 1)
     assert(warnings(content).head.contains("class Holder"))
     assert(warnings(content).head.contains("Resource.routesOf"))
+    assert(warnings(content).head.contains("Api.routesOf"))
   }
 
   test("an indented depth-zero class in a significant-indentation file is ambiguous: warns") {
