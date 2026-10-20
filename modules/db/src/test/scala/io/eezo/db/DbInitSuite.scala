@@ -218,6 +218,30 @@ class DbInitSuite extends FunSuite {
     )
   }
 
+  test("a + in the credentials stays a +: only percent escapes are decoded, so %2B is a + too") {
+    assertEquals(parsed("postgres://app:a+b@host/db").password, "a+b")
+    assertEquals(parsed("postgres://app:a%2Bb@host/db").password, "a+b")
+    assertEquals(parsed("postgres://a+pp:secret@host/db").user, "a+pp")
+  }
+
+  test("a host with an underscore, as docker-compose names a service, is still the host") {
+    assertEquals(
+      parsed("postgres://app:secret@db_1:5432/prod"),
+      DbInit.Parsed("jdbc:postgresql://db_1:5432/prod?sslmode=require", "app", "secret")
+    )
+    assertEquals(
+      parsed("postgres://db_1/prod").jdbcUrl,
+      "jdbc:postgresql://db_1/prod?sslmode=require"
+    )
+  }
+
+  test("a bracketed IPv6 host keeps its brackets and its port") {
+    assertEquals(
+      parsed("postgres://app:secret@[::1]:5433/prod").jdbcUrl,
+      "jdbc:postgresql://[::1]:5433/prod?sslmode=require"
+    )
+  }
+
   test("user without password, and no userinfo at all") {
     assertEquals(parsed("postgres://app@host/db").user, "app")
     assertEquals(parsed("postgres://app@host/db").password, "")

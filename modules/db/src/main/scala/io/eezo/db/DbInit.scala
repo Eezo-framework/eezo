@@ -179,7 +179,11 @@ object DbInit {
     *
     * User and password come out of the URL and percent decoded, because JDBC takes them as separate
     * properties, decoded, while the platform folds them into `postgres://user:pass@host/db` and
-    * encodes them (a password with `@` or `/` must be).
+    * encodes them (a password with `@` or `/` must be). Only `%XX` is decoded: a `+` is a `+`, as
+    * in any URL outside a form body.
+    *
+    * The authority is split here rather than by `java.net.URI`, whose `getHost` is null for a name
+    * with `_` in it, which is how docker-compose names a service (`db_1`).
     *
     * TLS is required when the query names no `sslmode`, because the driver's own fallback is
     * `prefer`, which quietly settles for clear text when the server refuses TLS, and Heroku and
@@ -192,31 +196,39 @@ object DbInit {
     */
   private[eezo] def parseDatabaseUrl(url: String): Option[Parsed] =
     try {
-      val uri = new URI(url)
-      val ok  = (uri.getScheme == "postgres" || uri.getScheme == "postgresql") &&
-        uri.getHost != null && uri.getPath != null && uri.getPath.length > 1
+      val uri       = new URI(url)
+      val authority = Option(uri.getRawAuthority).getOrElse("")
+      val at        = authority.lastIndexOf('@')
+      val hostPort  = authority.drop(at + 1)
+      val ok        = (uri.getScheme == "postgres" || uri.getScheme == "postgresql") &&
+        HostPort.matches(hostPort) && uri.getPath != null && uri.getPath.length > 1
       if (!ok) None
       else {
-        val (user, password) = uri.getRawUserInfo match {
-          case null => ("postgres", "")
-          case info =>
-            def decoded(s: String): String = URLDecoder.decode(s, "UTF-8")
+        val (user, password) =
+          if (at == -1) ("postgres", "")
+          else {
+            val info                       = authority.take(at)
+            def decoded(s: String): String = URLDecoder.decode(s.replace("+", "%2B"), "UTF-8")
             info.indexOf(':') match {
-              case -1 => (decoded(info), "")
-              case at => (decoded(info.take(at)), decoded(info.drop(at + 1)))
+              case -1    => (decoded(info), "")
+              case colon => (decoded(info.take(colon)), decoded(info.drop(colon + 1)))
             }
-        }
-        val port  = if (uri.getPort == -1) "" else s":${uri.getPort}"
-        val query = Option(uri.getRawQuery).filter(_.nonEmpty) match {
+          }
+        val HostPort(host, portDigits) = hostPort: @unchecked
+        val port                       = Option(portDigits).filter(_.nonEmpty).fold("")(":" + _)
+        val query                      = Option(uri.getRawQuery).filter(_.nonEmpty) match {
           case None                       => "?sslmode=require"
           case Some(q) if namesSslmode(q) => s"?$q"
           case Some(q)                    => s"?$q&sslmode=require"
         }
-        Some(Parsed(s"jdbc:postgresql://${uri.getHost}$port${uri.getPath}$query", user, password))
+        Some(Parsed(s"jdbc:postgresql://$host$port${uri.getPath}$query", user, password))
       }
     } catch {
       case _: java.net.URISyntaxException => None
     }
+
+  /** A host, bracketed when it is IPv6, then an optional port. */
+  private val HostPort = """(\[[^\]]+\]|[^\[\]:]+)(?::(\d*))?""".r
 
   private def namesSslmode(rawQuery: String): Boolean =
     rawQuery.split('&').exists(_.takeWhile(_ != '=') == "sslmode")
