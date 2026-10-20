@@ -25,6 +25,11 @@ jobs:
   build:
     name: Compile and test
     runs-on: ubuntu-latest
+    # A green run takes about 6 minutes, so 25 leaves room for a cold cache or a slow runner
+    # without letting a hang run on. The default is 360, and a hung suite once held the Test step
+    # for 5 hours 23 minutes before anyone cancelled it, blocking the branch status all the while.
+    # Hitting this limit ends the job red, which is the point: a hang costs minutes, not hours.
+    timeout-minutes: 25
 
     steps:
       # The whole history, tags included, so that sbt-dynver derives the same version here as the
