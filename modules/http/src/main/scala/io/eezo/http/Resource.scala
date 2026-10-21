@@ -1,13 +1,12 @@
 package io.eezo.http
 
 import scala.annotation.implicitNotFound
-import scala.compiletime.{constValue, erasedValue, error, summonFrom}
+import scala.compiletime.summonFrom
 import scala.deriving.Mirror
 
 import io.eezo.core.{Id, Store}
 import io.eezo.core.html.{Attrs, Html, Url}
 import io.eezo.core.html.Tags.*
-import io.eezo.core.internal.util.snake
 
 /** A mounted form page whose submit target is not mounted, named both ways.
   *
@@ -108,88 +107,25 @@ object Resource {
       form: Form[A],
       actions: Actions[A]
   ): Resource[A] =
-    make[A](
-      constValue[m.MirroredLabel],
-      keyIndex[A, m.MirroredElemLabels, m.MirroredElemTypes](0),
-      form,
-      actions
-    )
-
-  /** The index of the field named `id`, which has to be typed `Id[A]`.
-    *
-    * A separate check with its own message rather than an `@implicitNotFound` on the trait, because
-    * "no `Form` instance for `Widget`" and "`Widget`'s `id` is a `Long`" are different mistakes and
-    * one message cannot say both well.
-    *
-    * The key type is fixed rather than summoned, and that is `create`'s doing: it has to mint a key
-    * before there is anything to insert, and `Id.gen()` is the only generator eezo has. A
-    * `Keygen[K]` typeclass would be the same constraint with a name on it, designed against one
-    * implementation. A keyless model such as `Login(email, password)` still forms and parses; it
-    * does not mount, because a `create` whose success has nowhere to redirect and an `index` that
-    * cannot link a row are not half a resource.
-    */
-  private[http] inline def keyIndex[A, Labels <: Tuple, Types <: Tuple](inline soFar: Int): Int =
-    inline erasedValue[Labels] match {
-      case _: EmptyTuple =>
-        error(
-          "A model deriving Resource needs a field named `id`, typed Id[Model]: the seven routes " +
-            "read it out of the path, and `create` mints one with Id.gen()."
-        )
-      case _: (label *: labels) =>
-        inline erasedValue[Types] match {
-          case _: (tpe *: types) =>
-            inline erasedValue[label] match {
-              case _: "id" =>
-                inline erasedValue[tpe] match {
-                  case _: Id[A] => soFar
-                  case _        =>
-                    error(
-                      "A model deriving Resource needs its `id` field typed Id[Model]: `create` " +
-                        "mints a key with Id.gen(), which no other key type has."
-                    )
-                }
-              case _ => keyIndex[A, labels, types](soFar + 1)
-            }
-        }
-    }
+    make[A](Model.of[A]("Resource"), form, actions)
 
   /** Compiled once, rather than at every `derives` site: an anonymous class returned straight out
     * of an `inline def` is duplicated into every model's companion.
     */
-  private def make[A](
-      modelName: String,
-      keyIndex: Int,
-      declared: Form[A],
-      actions: Actions[A]
-  ): Resource[A] = {
-
-    /** The route name, inflected off the class name.
-      *
-      * It names paths and nothing else. A store no longer takes a bucket, so this string cannot
-      * reach storage even by accident, and a legacy table name renames no URL.
-      */
-    val plural = pluralise(snake(modelName))
-
-    /** A [[Url.Mounted]] rather than a `String`, so that every link a page renders and every
-      * `Location` a write sets travels with `Route.under`. Derivation has no prefix to bake in;
-      * mounting is what puts one on.
-      */
-    val collection: Url = Url.Mounted(s"/$plural")
-
-    def keyOf(row: A): Id[A] =
-      row.asInstanceOf[Product].productElement(keyIndex).asInstanceOf[Id[A]]
+  private def make[A](model: Model[A], declared: Form[A], actions: Actions[A]): Resource[A] = {
+    val collection = model.collection("")
 
     new Resource[A] {
       def routes(store: Store[A], guarded: Guarded[A]): Seq[Route] =
         new Pages(
-          modelName,
-          keyOf,
+          model.name,
+          model.keyOf,
           actions,
-          plural,
+          model.plural,
           collection,
           guarded,
           declared,
-          new Ownership(modelName, declared.fields.map(_.name), actions, store, guarded)
+          new Ownership(model.name, declared.fields.map(_.name), actions, store, guarded)
         ).routes
     }
   }
@@ -244,7 +180,7 @@ object Resource {
 
     /** A well-formed submission that failed a field is a 422, and it is **returned** rather than
       * thrown: it carries the re-rendered form, so it must not reach `Boundary`'s problem page. A
-      * 400 would be the wrong fact — that is what a request eezo cannot decode gets.
+      * 400 would be the wrong fact: that is what a request eezo cannot decode gets.
       */
     private def rejected(heading: String, rendered: Html): Response =
       Response(
@@ -433,7 +369,7 @@ object Resource {
     val routes: Seq[Route] = {
       import Route.derived as route
 
-      derivedRoutes(actions, guarded) { action =>
+      Model.derivedRoutes(actions, guarded) { action =>
         Some(action match {
           case Action.Index => route(Method.GET, collection.path, index)
           case Action.New   =>
@@ -530,38 +466,4 @@ object Resource {
         }
       }
   }
-
-  /** The routes a derivation mounts: one per [[Action]] the model keeps, each wrapped by the
-    * declaration only when it names that route's role, so a model can guard its writes and leave
-    * its index open. Applied here, where the [[Action]] that earned a route is still in hand: one
-    * step later, a `Seq[Route]` has only methods and paths, and the mapping back would be each
-    * derivation's table written a second time. Shared by [[Resource]] and [[Api]] so that
-    * subtraction and guarding mean the same thing on a page and on a JSON route; `mint` answers
-    * `None` for a role the derivation has no route for.
-    */
-  private[http] def derivedRoutes[A](actions: Actions[A], guarded: Guarded[A])(
-      mint: Action => Option[Route]
-  ): Seq[Route] =
-    Action.values.toSeq.filter(actions.has).flatMap { action =>
-      mint(action)
-        .map(route => if (guarded.actions.contains(action)) guarded.through(route) else route)
-    }
-
-  /** #110's deliberately dumb inflector: `+s`, a consonant before `y` becoming `ies`, and a
-    * sibilant taking `es`. No dictionary and no irregular list, because a plural that reads badly
-    * is a companion override away, while a dictionary is a dependency and a surprise.
-    *
-    * Underscores survive, so `blog_post` mounts at `/blog_posts`.
-    */
-  private[http] def pluralise(word: String): String =
-    if (word.isEmpty) word
-    else if (
-      word.endsWith("y") && word.length > 1 && !"aeiou".contains(word.charAt(word.length - 2))
-    )
-      word.dropRight(1) + "ies"
-    else if (
-      word.endsWith("s") || word.endsWith("x") || word.endsWith("z") ||
-      word.endsWith("ch") || word.endsWith("sh")
-    ) word + "es"
-    else word + "s"
 }

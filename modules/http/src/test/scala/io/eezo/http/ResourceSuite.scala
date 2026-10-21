@@ -373,6 +373,20 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     assert(errors.contains("typed Id[Model]"), errors)
   }
 
+  test("both refusals name Resource, the derivation the model asked for") {
+    val keyless = compileErrors(
+      "case class Ledger(name: String) derives Form, Resource"
+    )
+    assert(keyless.contains("A model deriving Resource needs a field named `id`"), keyless)
+    val mistyped = compileErrors(
+      "case class Ledger(id: Long, name: String) derives Form, Resource"
+    )
+    assert(
+      mistyped.contains("A model deriving Resource needs its `id` field typed Id[Model]"),
+      mistyped
+    )
+  }
+
   // ---------------------------------------------------------------- orphaned pages
 
   test("an edit page whose update is not mounted is orphaned, which is what boot warns about") {

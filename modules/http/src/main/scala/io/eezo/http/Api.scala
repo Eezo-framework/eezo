@@ -1,12 +1,10 @@
 package io.eezo.http
 
 import scala.annotation.implicitNotFound
-import scala.compiletime.{constValue, constValueTuple}
 import scala.deriving.Mirror
 
 import io.eezo.core.{Id, Store}
 import io.eezo.core.html.Url
-import io.eezo.core.internal.util.snake
 
 /** The five JSON routes a model mounts for a program: index, show, create, update and destroy.
   *
@@ -27,10 +25,11 @@ import io.eezo.core.internal.util.snake
   */
 @implicitNotFound(
   "No Api instance for ${A}.\n" +
-    "Add `derives Form, Resource, Api` to its declaration:\n" +
-    "  case class ${A}(id: Id[${A}], ...) derives Form, Resource, Api\n" +
+    "Add `derives Api` to its declaration:\n" +
+    "  case class ${A}(id: Id[${A}], ...) derives Api\n" +
     "Api reads and writes JSON through a Serde, so one has to be in scope where it derives:\n" +
-    "  import io.eezo.json.upickle.given"
+    "  import io.eezo.json.upickle.given\n" +
+    "Resource is optional: derive it beside Api only if the model also wants HTML pages."
 )
 trait Api[A] {
 
@@ -62,40 +61,25 @@ object Api {
     case _         => Seq.empty
   }
 
-  /** The key is found the way [[Resource.derived]] finds it, with the same two refusals, because
-    * `create` mints one with `Id.gen()` here too and update reads one out of the path.
+  /** The model is read the way [[Resource.derived]] reads it, with the same two refusals naming
+    * this derivation, because `create` mints a key with `Id.gen()` here too and update reads one
+    * out of the path.
     */
   inline def derived[A](using
       m: Mirror.ProductOf[A],
       serde: api.Serde[A],
       actions: Actions[A]
   ): Api[A] =
-    make[A](
-      constValue[m.MirroredLabel],
-      constValueTuple[m.MirroredElemLabels].toList.map(_.asInstanceOf[String]),
-      Resource.keyIndex[A, m.MirroredElemLabels, m.MirroredElemTypes](0),
-      values => m.fromProduct(Tuple.fromArray(values)),
-      serde,
-      actions
-    )
+    make[A](Model.of[A]("Api"), serde, actions)
 
   /** Compiled once, rather than at every `derives` site, for the reason [[Resource]]'s is: an
     * anonymous class returned straight out of an `inline def` is duplicated into every model's
     * companion.
     */
-  private def make[A](
-      modelName: String,
-      labels: List[String],
-      keyIndex: Int,
-      build: Array[Any] => A,
-      serde: api.Serde[A],
-      actions: Actions[A]
-  ): Api[A] = {
+  private def make[A](model: Model[A], serde: api.Serde[A], actions: Actions[A]): Api[A] = {
 
-    /** A [[Url.Mounted]] for the reason [[Resource]]'s collection is one: a mount moves the five
-      * with the seven, and the `Location` a create sets moves with them.
-      */
-    val collection: Url = Url.Mounted(s"/api/${Resource.pluralise(snake(modelName))}")
+    /** Under `/api`, so the five never share a path with the seven a model deriving both mounts. */
+    val collection = model.collection("/api")
 
     /** What this model mounts, read as JSON: the form pages are not among the five. Handed to
       * [[Ownership]] as well, so its check that a covered route is guarded reads the routes that
@@ -108,19 +92,17 @@ object Api {
       * named `id` would overwrite the key and leave a row stored under one key and carrying
       * another.
       */
-    val ownable = labels.patch(keyIndex, Nil, 1)
+    val ownable = model.labels.patch(model.keyIndex, Nil, 1)
 
     new Api[A] {
       def routes(store: Store[A], guarded: Guarded[A]): Seq[Route] =
         new Calls(
-          labels,
-          keyIndex,
-          build,
+          model,
           serde,
           mounted,
           collection,
           guarded,
-          new Ownership(modelName, ownable, mounted, store, guarded)
+          new Ownership(model.name, ownable, mounted, store, guarded)
         ).routes
     }
   }
@@ -132,9 +114,7 @@ object Api {
     * the caller's rows and a foreign row is the same 404 or 403 it is on a page.
     */
   private final class Calls[A](
-      labels: List[String],
-      keyIndex: Int,
-      build: Array[Any] => A,
+      model: Model[A],
       serde: api.Serde[A],
       actions: Actions[A],
       collection: Url,
@@ -145,6 +125,12 @@ object Api {
     private given api.Serde[A] = serde
 
     private def member(key: Id[A]): Url = collection / key.show
+
+    /** Where the owner sits in the row, found once. [[Ownership]] is built before this and has
+      * already refused an owner that is the key or names no field, so a name it hands over is
+      * always one of the labels.
+      */
+    private val ownerIndex: Option[Int] = ownership.ownerField.map(model.labels.indexOf)
 
     /** The body, read as a row under the key and the owner eezo already decided.
       *
@@ -167,10 +153,8 @@ object Api {
         case Left(api.Serde.Failure.Malformed(reason)) => throw BadRequest(reason)
         case Left(api.Serde.Failure.Unfit(reason))     => throw UnprocessableContent(reason)
       }
-      val values = row.asInstanceOf[Product].productIterator.toArray[Any]
-      values(keyIndex) = key
-      owner.foreach((name, who) => values(labels.indexOf(name)) = who)
-      build(values)
+      val owned = ownerIndex.zip(owner).map { case (at, (_, who)) => at -> who }
+      model.set(row, (model.keyIndex -> key) +: owned.toSeq*)
     }
 
     /** One array of what the Serde writes for each row. The Serde is asked for one value at a time
@@ -227,7 +211,7 @@ object Api {
       def route(method: Method, path: String, handler: Handler): Route =
         Route.derived(method, path, handler, RouteKind.Api)
 
-      Resource.derivedRoutes(actions, guarded) {
+      Model.derivedRoutes(actions, guarded) {
         case Action.Index   => Some(route(Method.GET, collection.path, index))
         case Action.Show    => Some(route(Method.GET, s"${collection.path}/:id", show))
         case Action.Create  => Some(route(Method.POST, collection.path, create))

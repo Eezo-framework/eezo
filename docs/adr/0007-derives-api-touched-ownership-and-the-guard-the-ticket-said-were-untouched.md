@@ -12,6 +12,8 @@ What landed in `modules/http/src/main/scala/io/eezo/http/Ownership.scala`: the c
 
 Amended by [issue #328](https://github.com/Eezo-framework/eezo/issues/328): the `Serde` now fills the owner. `Api` hands it every field eezo decides on a write, the key under `id` and, for an owned model, the name and key `owner(request, existing)` returns, so a body need not name an owner and a program sends no placeholder. Setting the key and the owner again on the row the `Serde` read stays, because the `Serde` is the application's to write: one that trusted the body over what it was handed would otherwise let a client choose the owner, or the key, of the row it writes.
 
+Amended by [issue #329](https://github.com/Eezo-framework/eezo/issues/329): `Ownership` also exposes `ownerField`, the owner field's name read from the declaration it already holds, so `Api` finds that field's position in the row once at mount instead of looking the name up on every request. The answer still comes from `Ownership`, so the declaration is read in one place and the second reading rejected below is still avoided.
+
 ## The guard's current user falls back to the token named user
 
 #311 does not name auth. On `dev`, the `currentUser` every `GuardedBy`, `Owning` and `Owned` receives from a `Guard` reads the session only. An API route has no session: the server reads no cookie for it and dispatch empties the session before the handler runs. The token arm of `Guard.through` names the caller on `request.currentUser`, but nothing an `Owned` reaches read that field, so a covered route of an owned model threw on every request that a valid token had already let through.

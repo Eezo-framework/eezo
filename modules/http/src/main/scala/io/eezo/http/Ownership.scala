@@ -222,6 +222,13 @@ private[http] final class Ownership[A](
       request.form.updated(name, Seq(who.show))
     }
 
+  /** The owner field's name, known before any request: an [[Api]] sets the owner on every row its
+    * Serde reads, and finding that field once, at mount, keeps the per request work to the write.
+    * Read off the declaration here, the one place that reads it, rather than matched again by the
+    * caller. Nothing for an unowned model.
+    */
+  val ownerField: Option[String] = owned.map(_.ownerOf.name)
+
   /** The owner field's name and the key a write puts in it, by [[body]]'s rule, for a write whose
     * submission is not a form: an [[Api]] hands the owner to its Serde beside the key and sets it
     * again on the row the Serde read, so it needs the value and not a rewritten form. Nothing for

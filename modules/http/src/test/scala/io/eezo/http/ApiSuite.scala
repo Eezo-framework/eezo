@@ -575,15 +575,21 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
 
   // ---------------------------------------------------------------- deriving
 
-  test("a model with no id field does not derive, and says why the way Resource does") {
+  test("a model with no id field does not derive, and the refusal names Api") {
     val errors = compileErrors(
       "case class Keyless(name: String) derives Api\n" +
         "object Keyless { given api.Serde[Keyless] = ApiSuite.blank }"
     )
-    assert(errors.contains("needs a field named `id`"), errors)
+    assert(
+      errors.contains(
+        "A model deriving Api needs a field named `id`, typed Id[Model]: its routes read it " +
+          "out of the path, and `create` mints one with Id.gen()."
+      ),
+      errors
+    )
   }
 
-  test("a model whose id is not an Id[Model] does not derive, and says why the way Resource does") {
+  test("a model whose id is not an Id[Model] does not derive, and the refusal says why") {
     val errors = compileErrors(
       "case class Mistyped(id: io.eezo.core.Id[String], name: String) derives Api\n" +
         "object Mistyped { given api.Serde[Mistyped] = ApiSuite.blank }"
@@ -591,13 +597,33 @@ class ApiSuite extends munit.FunSuite with ServerFixtures {
     assert(errors.contains("typed Id[Model]"), errors)
   }
 
+  test("a mistyped id names Api as the derivation that refused it, not Resource") {
+    val errors = compileErrors(
+      "case class Misnamed(id: io.eezo.core.Id[String], name: String) derives Api\n" +
+        "object Misnamed { given api.Serde[Misnamed] = ApiSuite.blank }"
+    )
+    assert(
+      errors.contains(
+        "A model deriving Api needs its `id` field typed Id[Model]: `create` mints a key with " +
+          "Id.gen(), which no other key type has."
+      ),
+      errors
+    )
+  }
+
   test("a model with no instance is told to derive it, and where its Serde comes from") {
     val errors = compileErrors("summon[Api[io.eezo.http.ApiSuite.Plain]]")
     val lines  = errors.linesIterator.map(_.trim).toSeq
-    val first  = lines.indexWhere(_.contains("derives Form, Resource, Api"))
+    val first  = lines.indexWhere(_.contains("derives Api"))
     val serde  = lines.indexWhere(_.contains("import io.eezo.json.upickle.given"))
     assert(first >= 0, errors)
     assert(serde > first, errors)
+    assert(
+      lines.exists(line => line.contains("Resource") && line.contains("optional")),
+      errors
+    )
+    assert(lines.exists(_.contains("pages")), errors)
+    assert(!errors.contains("derives Form, Resource, Api"), errors)
   }
 
   // ---------------------------------------------------------------- the store a program shares
