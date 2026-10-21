@@ -23,6 +23,8 @@ class FormSuite extends munit.FunSuite {
 
   case class Login(email: String, password: String) derives Form
 
+  case class Toggle(id: UUID, flag: Option[Boolean]) derives Form
+
   /** The shape every real eezo model has: a key of type `Id[A]`, which `TableMacro` requires and
     * which this module could not see at all while `Id` lived in `db`.
     */
@@ -111,6 +113,25 @@ class FormSuite extends munit.FunSuite {
       Form[Widget].render("/widgets", Method.POST, Some(widget.copy(inStock = false)), token).render
     assert(html.contains("""type="checkbox""""), html)
     assert(!html.contains("checked"), html)
+  }
+
+  test("an optional Boolean ticks for Some(true) and for nothing else") {
+    def html(flag: Option[Boolean]): String =
+      Form[Toggle].render("/toggles", Method.POST, Some(Toggle(theKey, flag)), token).render
+    assert(html(Some(true)).contains(" checked>"), html(Some(true)))
+    assert(!html(Some(false)).contains("checked"), html(Some(false)))
+    assert(!html(None).contains("checked"), html(None))
+  }
+
+  test("a rejected submission ticks the box from what was sent, not from the stored value") {
+    def html(sent: Map[String, Seq[String]], stored: Option[Widget]): String =
+      Form[Widget]
+        .render("/widgets", Method.POST, stored, token, FormErrors.empty, sent)
+        .render
+    assert(html(data("inStock" -> "on"), None).contains(" checked>"))
+    assert(!html(data("inStock" -> "false"), Some(widget)).contains("checked"))
+    // An unticked box sends nothing, so the stored value is what is left to go on.
+    assert(html(data("name" -> "Bolt"), Some(widget)).contains(" checked>"))
   }
 
   test("a value is escaped by core's constructor, not by anything here") {

@@ -186,24 +186,6 @@ object Form {
     */
   private val Password = Field.PasswordInput
 
-  /** What a browser submits for a ticked checkbox with no `value`, which is how [[render]] emits
-    * every one.
-    */
-  private val Ticked = "on"
-
-  /** Whether a checkbox whose current text is `text` renders ticked.
-    *
-    * A box has two states and only the ticked one submits anything, so it is ticked exactly when
-    * `text` means what a ticked box would send. The field's own [[Field.read]] answers that rather
-    * than a test on the text here, because the text is the value's [[Field.show]], and a `Boolean`
-    * shows `false` as a word that is not empty.
-    */
-  private def ticked(field: Field[Any], text: String): Boolean =
-    (field.read(text), field.read(Ticked)) match {
-      case (Right(current), Right(on)) => current == on
-      case _                           => false
-    }
-
   private def make[A](
       modelName: String,
       labels: List[String],
@@ -232,6 +214,14 @@ object Form {
       private def text(value: A, i: Int): String =
         instances(i).show(value.asInstanceOf[Product].productElement(i))
 
+      /** A rejected submission's text wins over the stored value, as it does for every input. */
+      private def ticked(i: Int, submitted: Option[String], value: Option[A]): Boolean =
+        submitted match {
+          case Some(text) => instances(i).read(text).exists(instances(i).checked)
+          case None       =>
+            value.exists(v => instances(i).checked(v.asInstanceOf[Product].productElement(i)))
+        }
+
       def render(
           action: Url | String,
           method: Method,
@@ -252,7 +242,7 @@ object Form {
                 Attrs.tpe     := "checkbox",
                 Attrs.id      := f.name,
                 Attrs.name    := f.name,
-                Attrs.checked := current.exists(ticked(instances(i), _))
+                Attrs.checked := ticked(i, raw.get(f.name).flatMap(_.headOption), value)
               )
             else
               input(

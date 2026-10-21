@@ -32,8 +32,7 @@ trait Field[X] {
   def inputType: String
 
   /** The field's value as text: what an input is filled with, and what a show page or an index
-    * prints. A checkbox has no text to fill, so `Form.render` reads this back through [[read]] to
-    * decide whether the box is ticked.
+    * prints. A checkbox has no text to fill, so `Form.render` asks [[checked]] instead.
     */
   def show(x: X): String
 
@@ -44,6 +43,11 @@ trait Field[X] {
 
   /** The value to use when the key is not in the submission at all, if there is one. */
   def absent: Option[X] = None
+
+  /** Whether a checkbox holding `x` renders ticked. Only a field that renders as a checkbox has
+    * anything to say, so every other one is never ticked.
+    */
+  def checked(x: X): Boolean = false
 }
 
 object Field {
@@ -86,7 +90,8 @@ object Field {
     def show(x: Boolean): String                    = x.toString
     def read(text: String): Either[String, Boolean] =
       Right(text.trim.nonEmpty && !text.equalsIgnoreCase("false"))
-    override def absent: Option[Boolean] = Some(false)
+    override def absent: Option[Boolean]      = Some(false)
+    override def checked(x: Boolean): Boolean = x
   }
 
   given Field[UUID] = of[UUID]("text")(_.toString) { text =>
@@ -126,6 +131,7 @@ object Field {
     def inputType: String                             = inner.inputType
     def show(x: Option[X]): String                    = x.map(inner.show).getOrElse("")
     override def absent: Option[Option[X]]            = Some(None)
+    override def checked(x: Option[X]): Boolean       = x.exists(inner.checked)
     def read(text: String): Either[String, Option[X]] =
       if (text.trim.isEmpty) Right(None) else inner.read(text).map(Some(_))
   }
