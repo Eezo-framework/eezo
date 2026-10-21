@@ -3,7 +3,7 @@ package io.eezo.db.schema
 /** Renders every `Change` the differ can emit, and is the only place that renders DDL.
   *
   * Constraint names come from a hash of the expression, which holds together only because both
-  * sides of a drop/add cycle compute the same hash — see BACKLOG §27, and §25, which needs the same
+  * sides of a drop/add cycle compute the same hash: see BACKLOG §27, and §25, which needs the same
   * decision.
   */
 object Ddl {
@@ -15,14 +15,22 @@ object Ddl {
     s"ck_${table}_${column}_$h"
   }
 
+  private def checks(c: ColumnSnap): String = c.checks.map(e => s" check ($e)").mkString
+
+  /** The table `CheckSpelling` asks Postgres to spell the model's checks on. Rendered here so its
+    * checks are written exactly as `create table` and `add column` write them.
+    */
+  private[schema] def probeTable(name: String, columns: List[ColumnSnap]): String =
+    s"create temporary table ${q(name)} (" +
+      columns.map(c => s"${q(c.name)} ${c.pgType}${checks(c)}").mkString(", ") + ")"
+
   def render(c: Change): String = c match {
     case Change.CreateTable(t) =>
       val cols = t.columns
         .map { c =>
           val nn = if (c.nullable || c.primaryKey) "" else " not null"
           val pk = if (c.primaryKey) " primary key" else ""
-          val ck = c.checks.map(e => s" check ($e)").mkString
-          s"  ${q(c.name)} ${c.pgType}$nn$pk$ck"
+          s"  ${q(c.name)} ${c.pgType}$nn$pk${checks(c)}"
         }
         .mkString(",\n")
       s"create table ${q(t.name)} (\n$cols\n)"
@@ -31,8 +39,7 @@ object Ddl {
 
     case Change.AddColumn(t, c) =>
       val nn = if (c.nullable) "" else " not null"
-      val ck = c.checks.map(e => s" check ($e)").mkString
-      s"alter table ${q(t)} add column ${q(c.name)} ${c.pgType}$nn$ck"
+      s"alter table ${q(t)} add column ${q(c.name)} ${c.pgType}$nn${checks(c)}"
 
     case Change.DropColumn(t, c) => s"alter table ${q(t)} drop column ${q(c)}"
 

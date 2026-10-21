@@ -70,19 +70,7 @@ object Introspect {
       table
     )(rs => rs.getString(1) -> rs.getString(2)).toMap
 
-    // Column-level CHECKs, normalised to the shape our Check renderer emits.
-    val checks = query(
-      c,
-      """select a.attname, pg_get_constraintdef(con.oid)
-         from pg_constraint con
-         join pg_attribute a on a.attrelid = con.conrelid and a.attnum = any(con.conkey)
-         where con.contype = 'c'
-           and con.conrelid = (quote_ident(?) || '.' || quote_ident(?))::regclass
-           and array_length(con.conkey, 1) = 1""",
-      schema,
-      table
-    )(rs => rs.getString(1) -> rs.getString(2))
-      .groupMap(_._1)(p => normaliseCheck(p._2))
+    val checks = columnChecks(c, schema, table)
 
     query(
       c,
@@ -140,6 +128,28 @@ object Introspect {
       }
       .sortBy(_.name)
   }
+
+  /** Column-level CHECKs, normalised to the shape our Check renderer emits. Shared with
+    * `CheckSpelling`, whose probe must read its checks back exactly as the live ones are read, or
+    * the two spellings would differ by the reading and not by the check.
+    */
+  private[schema] def columnChecks(
+      c: Connection,
+      schema: String,
+      table: String
+  ): Map[String, List[String]] =
+    query(
+      c,
+      """select a.attname, pg_get_constraintdef(con.oid)
+         from pg_constraint con
+         join pg_attribute a on a.attrelid = con.conrelid and a.attnum = any(con.conkey)
+         where con.contype = 'c'
+           and con.conrelid = (quote_ident(?) || '.' || quote_ident(?))::regclass
+           and array_length(con.conkey, 1) = 1""",
+      schema,
+      table
+    )(rs => rs.getString(1) -> rs.getString(2))
+      .groupMap(_._1)(p => normaliseCheck(p._2))
 
   /** `CHECK ((length(title) <= 200))` → `length("title") <= 200` */
   private def normaliseCheck(def_ : String): String = {

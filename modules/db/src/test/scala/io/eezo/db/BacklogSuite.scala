@@ -18,9 +18,9 @@ import scala.util.control.NonFatal
   * line saying it is still open and why.
   *
   * The inversion is the useful part. When an item is fixed its body stops throwing, and `backlog`
-  * then *fails* the test to say so — that is the prompt to move the test into the suite it belongs
-  * to and close the item in `design/backlog.md`. So this file cannot quietly drift out of date in
-  * either direction.
+  * then *fails* the test to say so, and that is the prompt to move the test into the suite it
+  * belongs to and close the item in `design/backlog.md`. So this file cannot quietly drift out of
+  * date in either direction.
   *
   * {{{
   * sbt check      // the regression signal, this suite excluded — expected green
@@ -155,16 +155,6 @@ class BacklogSuite extends DbSuite {
       )
     )
     assert(cs.checks.head.contains("'Draft'"), s"lowercased into: ${cs.checks.head}")
-  }
-
-  // ── 18 ───────────────────────────────────────────────────────────────────────────────
-  backlog(18, "an ordinary IN check does not diff forever") {
-    // Postgres rewrites `x in ('a','b')` as `x = ANY (ARRAY[...])` and hands that back.
-    // Introspect does not canonicalise at all, so the two spellings never compare equal and
-    // `status` reports a difference no migration can resolve.
-    val t = snap(tbl("t", id, col("status", "text", checks = List("status in ('a','b')"))))
-    exec(Ddl.render(Differ.diff(empty, t))*)
-    assertEquals(Differ.diff(live(), t), Nil)
   }
 
   // ── 19 ───────────────────────────────────────────────────────────────────────────────

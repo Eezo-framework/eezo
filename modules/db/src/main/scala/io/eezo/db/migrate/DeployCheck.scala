@@ -1,6 +1,6 @@
 package io.eezo.db.migrate
 
-import io.eezo.db.schema.{Change, Differ, Introspect, SchemaSnap}
+import io.eezo.db.schema.{Change, CheckSpelling, SchemaSnap}
 
 import java.sql.Connection
 
@@ -13,7 +13,7 @@ object DeployCheck {
       code: SchemaSnap,
       schema: String = "public"
   ): Either[List[Change], Unit] = {
-    val d = Differ.diff(Introspect.snapshot(c, schema), code)
+    val d = CheckSpelling.drift(c, code, schema)
     if (d.isEmpty) Right(()) else Left(d)
   }
 }

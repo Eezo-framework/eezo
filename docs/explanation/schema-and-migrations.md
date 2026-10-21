@@ -34,6 +34,14 @@ different databases.
   + index uq_book_title on book
 ```
 
+Checks are compared in Postgres's own spelling. Postgres keeps a check as an expression and
+hands back its own rendering of it, so before the diff each of the model's checks is created on a
+temporary table, in a transaction that is rolled back, and read back the same way the live ones
+are. A check that really is missing is therefore listed the way Postgres writes it:
+`Check.Between(1, 5)` on `qty` shows as `(qty >= 1) and (qty <= 5)`. Only `status`, `sync` and
+the check after `migrate` do this; the snapshot and the migration files keep the spelling the
+model wrote.
+
 Each change is one of three kinds:
 
 - **Additive.** A new table, a new column, a new index, a dropped `not null`. Nothing existing

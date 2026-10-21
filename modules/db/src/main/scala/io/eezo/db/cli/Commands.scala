@@ -2,7 +2,16 @@ package io.eezo.db.cli
 
 import io.eezo.db.{DB, Schema, Tx}
 import io.eezo.db.migrate.{Decision, DeployCheck, Freeze, Migrator, Resolution}
-import io.eezo.db.schema.{Change, Ddl, Differ, Introspect}
+import io.eezo.db.schema.{
+  Change,
+  CheckSpelling,
+  ColumnSnap,
+  Ddl,
+  Differ,
+  Introspect,
+  SchemaSnap,
+  TableSnap
+}
 
 import java.nio.file.Path
 
@@ -24,21 +33,53 @@ object Commands {
 
   /** The live database against the model, as a diff. */
   def status(schema: Schema, dbSchema: String = "public")(using DB): StatusResult =
-    StatusResult(Differ.diff(Introspect.snapshot(Conn.connection, dbSchema), schema.snapshot))
+    StatusResult(CheckSpelling.drift(Conn.connection, schema.snapshot, dbSchema))
 
   /** The same diff, executed directly when `apply`: dev only, migrations are the reviewed path.
     *
     * A destructive or risky change refuses an unforced apply, exactly as `example/Cli.scala` did;
     * `force` applies everything, including what was blocked.
+    *
+    * The diff is reported in Postgres's spelling but run in the model's: Postgres does not always
+    * spell its own spelling back the same way (an `in` on a varchar gains a cast per element), so a
+    * check created from it would differ again on the next status, while one created from the
+    * model's text is exactly the one the comparison probed, as a frozen migration's is.
     */
   def sync(schema: Schema, apply: Boolean, force: Boolean, dbSchema: String = "public")(using
       Tx
   ): SyncResult = {
-    val changes = Differ.diff(Introspect.snapshot(Conn.connection, dbSchema), schema.snapshot)
+    val model   = schema.snapshot
+    val changes = CheckSpelling.drift(Conn.connection, model, dbSchema)
     val blocked = changes.filter(c => c.destructive || c.risky)
     val run     = apply && changes.nonEmpty && (blocked.isEmpty || force)
-    if (run) execute(Ddl.render(changes))
+    if (run) execute(Ddl.render(changes.map(inModelSpelling(model))))
     SyncResult(changes, blocked, applied = run)
+  }
+
+  private def inModelSpelling(model: SchemaSnap)(change: Change)(using Tx): Change = {
+    def column(table: String, name: String): Option[ColumnSnap] =
+      model.tables.find(_.name == table).flatMap(_.columns.find(_.name == name))
+    def own(table: String, col: ColumnSnap): ColumnSnap =
+      column(table, col.name).fold(col)(m => col.copy(checks = m.checks))
+    def spelled(table: String, col: ColumnSnap, check: String): List[String] =
+      CheckSpelling
+        .postgres(
+          Conn.connection,
+          SchemaSnap(List(TableSnap(table, List(col.copy(checks = List(check))), Nil)))
+        )
+        .tables
+        .flatMap(_.columns.flatMap(_.checks))
+    change match {
+      case Change.CreateTable(t) =>
+        Change.CreateTable(t.copy(columns = t.columns.map(own(t.name, _))))
+      case Change.AddColumn(t, c)   => Change.AddColumn(t, own(t, c))
+      case Change.AddCheck(t, c, e) =>
+        // Postgres hands a column's checks back as a set, so the model check this one was spelled
+        // from is the one that, spelled alone, comes back as it.
+        val source = column(t, c).flatMap(m => m.checks.find(ck => spelled(t, m, ck) == List(e)))
+        Change.AddCheck(t, c, source.getOrElse(e))
+      case other => other
+    }
   }
 
   /** Drift since the last freeze, written as a numbered, fingerprinted migration.
