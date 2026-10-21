@@ -326,7 +326,11 @@ class RouteGeneratorSuite extends munit.FunSuite {
 
   // ---------------------------------------------------------------- the derived half
 
-  test("every candidate gets a routesOf line, and the compiler decides which of them mount") {
+  /** The one call a candidate's row makes into `http`, in either reading of silence. */
+  private def derivedRow(fqn: String, guard: String): String =
+    s"io.eezo.http.Derivations.routesOf[$fqn](storeFor[$fqn], $guard)"
+
+  test("every candidate gets one call into http, and the compiler decides which of them mount") {
     val emitted =
       RouteGenerator.render(
         Seq.empty,
@@ -334,38 +338,67 @@ class RouteGeneratorSuite extends munit.FunSuite {
         dbOnClasspath = false
       )
     assert(clue(emitted).contains("// from src/main/scala/models/Widget.scala"))
-    assert(
-      clue(emitted).contains(
-        "routesOf[models.Widget](storeFor[models.Widget], " +
-          "guardFor[models.Widget])"
-      )
-    )
+    assert(clue(emitted).contains(derivedRow("models.Widget", "guardFor[models.Widget]")))
     assert(clue(emitted).contains("def table(): io.eezo.http.RouteTable"))
   }
 
-  test("a candidate's seven and its five are mounted over one store and one declaration") {
-    val emitted =
-      RouteGenerator.render(
+  test("the generated file names no derivation: which ones a model has is asked of http") {
+    // Adding a derivation to eezo must not change the text the generator writes, so the file
+    // holds no helper of its own that lists them and no call naming any one of them.
+    Seq(true, false).foreach { declared =>
+      val emitted = RouteGenerator.render(
         Seq.empty,
         Seq(ModelCandidate("models.Widget", "src/main/scala/models/Widget.scala")),
-        dbOnClasspath = false
+        dbOnClasspath = false,
+        authDeclared = declared
       )
-    assert(clue(emitted).contains(RouteGenerator.routesOf))
-    assert(
-      clue(RouteGenerator.routesOf).contains(
-        "    io.eezo.http.Resource.routesOf[A](store, guarded) ++\n" +
-          "      io.eezo.http.Api.routesOf[A](store, guarded)"
-      )
-    )
-    // The store is minted once per model, at the row, and handed to both: two would be a page and
-    // a program reading two different sets of rows.
-    assertEquals(clue(emitted).split("storeFor\\[models.Widget\\]").length - 1, 1)
+      assertEquals(clue(emitted).split("io\\.eezo\\.http\\.Derivations\\.routesOf").length - 1, 1)
+      assert(!clue(emitted).contains("private inline def routesOf"))
+      assert(!clue(emitted).contains("io.eezo.http.Resource"))
+      assert(!clue(emitted).contains("io.eezo.http.Api"))
+      // The store is minted once per model, at the row, and handed to the one call: two would be
+      // a page and a program reading two different sets of rows.
+      assertEquals(clue(emitted).split("storeFor\\[models.Widget\\]").length - 1, 1)
+    }
   }
 
-  test("the routes helper follows the derived rows, like storeFor does") {
-    val routesOnly =
-      RouteGenerator.render(Seq(route("widgets/Index.scala")), Seq.empty, dbOnClasspath = false)
-    assert(!clue(routesOnly).contains("def routesOf[A]"))
+  test("a model deriving its pages and its API is one candidate and one call, in both readings") {
+    val source =
+      """package models
+        |
+        |import io.eezo.core.Id
+        |import io.eezo.http.{Api, Form, Resource}
+        |
+        |case class Book(id: Id[Book], title: String) derives Form, Resource, Api
+        |""".stripMargin
+    val models = RouteGenerator.modelsIn("models/Book.scala", source)
+    assertEquals(models, Seq(ModelCandidate("models.Book", "src/main/scala/models/Book.scala")))
+
+    val lenient = RouteGenerator.render(Seq.empty, models, dbOnClasspath = false)
+    assert(clue(lenient).contains(derivedRow("models.Book", "guardFor[models.Book]")))
+    assertEquals(clue(lenient).split("Derivations\\.routesOf").length - 1, 1)
+
+    val strict =
+      RouteGenerator.render(Seq.empty, models, dbOnClasspath = false, authDeclared = true)
+    assert(
+      clue(strict).contains(
+        derivedRow("models.Book", "guardForModel[models.Book](\"models.Book\")")
+      )
+    )
+    assertEquals(clue(strict).split("Derivations\\.routesOf").length - 1, 1)
+  }
+
+  test("with no candidate the table neither mints a store nor calls into http for a model") {
+    Seq(true, false).foreach { declared =>
+      val routesOnly = RouteGenerator.render(
+        Seq(route("widgets/Index.scala")),
+        Seq.empty,
+        dbOnClasspath = false,
+        authDeclared = declared
+      )
+      assert(!clue(routesOnly).contains("storeFor"))
+      assert(!clue(routesOnly).contains("Derivations"))
+    }
   }
 
   test("each candidate mints its own store, because a store is per model and typed by it") {
@@ -399,7 +432,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
     assert(
       clue(emitted).indexOf("app.widgets.Index.index") < clue(emitted).indexOf(
-        "routesOf[models.Widget]"
+        "io.eezo.http.Derivations.routesOf[models.Widget]"
       )
     )
   }
@@ -501,12 +534,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
 
     val lenient = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = false)
     assert(clue(lenient).contains("guardFor[app.widgets.Index.type].mounting("))
-    assert(
-      clue(lenient).contains(
-        "routesOf[models.Widget](storeFor[models.Widget], " +
-          "guardFor[models.Widget])"
-      )
-    )
+    assert(clue(lenient).contains(derivedRow("models.Widget", "guardFor[models.Widget]")))
 
     val strict = RouteGenerator.render(routes, models, dbOnClasspath = true, authDeclared = true)
     assert(
@@ -514,8 +542,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
     )
     assert(
       clue(strict).contains(
-        """routesOf[models.Widget](storeFor[models.Widget], """ +
-          """guardForModel[models.Widget]("models.Widget"))"""
+        derivedRow("models.Widget", """guardForModel[models.Widget]("models.Widget")""")
       )
     )
   }
@@ -539,14 +566,18 @@ class RouteGeneratorSuite extends munit.FunSuite {
     val strict = RouteGenerator.render(routes, models, dbOnClasspath = false, authDeclared = true)
     assert(clue(strict).contains("private inline def guardFor[A](inline name: String)"))
     assert(clue(strict).contains("scala.compiletime.error("))
-    // A model with a `derives` clause but no `Resource`, such as the blog's `User`, mounts nothing
-    // and must not be asked to declare anything.
+    // A model with a `derives` clause that mounts nothing, such as the blog's `User`, must not be
+    // asked to declare anything; whether it mounts is http's answer, not a list written here, so
+    // a model that derives Api alone is asked exactly as one with a Resource is.
     assert(clue(strict).contains("private inline def guardForModel[A](inline name: String)"))
-    assert(clue(strict).contains("case _: io.eezo.http.Resource[A] => guardFor[A](name)"))
-    // A model that derives Api alone mounts five routes, so silence about who may reach them is
-    // the same error it is for the seven, rather than a public API nobody chose.
-    assert(clue(strict).contains("case _: io.eezo.http.Api[A]      => guardFor[A](name)"))
-    assert(clue(strict).contains("=> io.eezo.http.Guarded.public[A]"))
+    assert(
+      clue(strict).contains(
+        "    inline if (io.eezo.http.Derivations.mounts[A]) guardFor[A](name)\n" +
+          "    else io.eezo.http.Guarded.public[A]\n"
+      )
+    )
+    assert(!clue(strict).contains("case _: io.eezo.http.Resource[A]"))
+    assert(!clue(strict).contains("case _: io.eezo.http.Api[A]"))
   }
 
   test("the table takes distinct in both readings, because a guard carries its own pages") {
@@ -607,7 +638,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
   test("a model composes the table's naming, in both readings") {
     // A derived row is mounted behind its own declaration, and where silence is an error that
     // declaration is the model helper rather than the route one. The naming has to spell the same
-    // lookup the `routesOf` line beside it spells, which is why both are pinned together.
+    // lookup the derived row beside it spells, which is why both are pinned together.
     val lenient = RouteGenerator.render(Seq.empty, widget, dbOnClasspath = false)
     assert(clue(lenient).contains(namingBlock("        guardFor[models.Widget].identify\n")))
     assert(
@@ -615,7 +646,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
         "    io.eezo.http.RouteTable(\n" +
           "      (handwritten ++\n" +
           "      // from src/main/scala/models/Widget.scala\n" +
-          "      routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
+          "      io.eezo.http.Derivations.routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
           "      identify\n" +
           "    )"
       )
@@ -633,7 +664,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
         "    io.eezo.http.RouteTable(\n" +
           "      (handwritten ++\n" +
           "      // from src/main/scala/models/Widget.scala\n" +
-          "      routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
+          "      io.eezo.http.Derivations.routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
           "      identify\n" +
           "    )"
       )
@@ -660,7 +691,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
         "    io.eezo.http.RouteTable(\n" +
           "      (handwritten ++\n" +
           "      // from src/main/scala/models/Widget.scala\n" +
-          "      routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
+          "      io.eezo.http.Derivations.routesOf[models.Widget](storeFor[models.Widget], guardFor[models.Widget])).distinct,\n" +
           "      identify\n" +
           "    )"
       )
@@ -680,7 +711,7 @@ class RouteGeneratorSuite extends munit.FunSuite {
         "    io.eezo.http.RouteTable(\n" +
           "      (handwritten ++\n" +
           "      // from src/main/scala/models/Widget.scala\n" +
-          "      routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
+          "      io.eezo.http.Derivations.routesOf[models.Widget](storeFor[models.Widget], guardForModel[models.Widget](\"models.Widget\"))).distinct,\n" +
           "      identify\n" +
           "    )"
       )
@@ -750,7 +781,6 @@ class RouteGeneratorSuite extends munit.FunSuite {
       RouteGenerator.guardFor(authDeclared = true),
       RouteGenerator.guardFor(authDeclared = false),
       RouteGenerator.guardForModel,
-      RouteGenerator.routesOf,
       RouteGenerator.storeFor(dbOnClasspath = true),
       RouteGenerator.storeFor(dbOnClasspath = false)
     ).foreach { helper =>

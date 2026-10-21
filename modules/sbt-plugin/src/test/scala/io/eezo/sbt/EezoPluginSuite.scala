@@ -33,7 +33,7 @@ class EezoPluginSuite extends munit.FunSuite {
       "  )\n" +
       "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
-      "    * not the generator, decides which of them has a `Resource` or an `Api` and mounts them.\n" +
+      "    * not the generator, decides what each of them derives and mounts it.\n" +
       "    */\n" +
       "  def table(): io.eezo.http.RouteTable = {\n" +
       "    io.eezo.http.RouteTable(handwritten)\n" +
@@ -84,17 +84,6 @@ class EezoPluginSuite extends munit.FunSuite {
       "      case _                          => io.eezo.http.Guarded.public[A]\n" +
       "    }\n" +
       "\n" +
-      "  /** A candidate model's routes: the seven of its `Resource` and the five of its `Api`,\n" +
-      "    * over the one store and the one declaration, so a page and a program read and write\n" +
-      "    * the same rows. A model with neither mounts nothing.\n" +
-      "    */\n" +
-      "  private inline def routesOf[A](\n" +
-      "      store: io.eezo.core.Store[A],\n" +
-      "      guarded: io.eezo.http.Guarded[A]\n" +
-      "  ): Seq[io.eezo.http.Route] =\n" +
-      "    io.eezo.http.Resource.routesOf[A](store, guarded) ++\n" +
-      "      io.eezo.http.Api.routesOf[A](store, guarded)\n" +
-      "\n" +
       "  /** Who this application says is behind a request its table serves. */\n" +
       "  private val identify: io.eezo.http.Request => io.eezo.http.Request =\n" +
       "    io.eezo.http.RouteTable.naming(\n" +
@@ -106,13 +95,13 @@ class EezoPluginSuite extends munit.FunSuite {
       "    )\n" +
       "\n" +
       "  /** The table this application serves. One line per candidate model below: the compiler,\n" +
-      "    * not the generator, decides which of them has a `Resource` or an `Api` and mounts them.\n" +
+      "    * not the generator, decides what each of them derives and mounts it.\n" +
       "    */\n" +
       "  def table(): io.eezo.http.RouteTable = {\n" +
       "    io.eezo.http.RouteTable(\n" +
       "      (handwritten ++\n" +
       "      // from src/main/scala/eezoWitness/Model.scala\n" +
-      "      routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct,\n" +
+      "      io.eezo.http.Derivations.routesOf[eezoWitness.Model](storeFor[eezoWitness.Model], guardFor[eezoWitness.Model])).distinct,\n" +
       "      identify\n" +
       "    )\n" +
       "  }\n" +

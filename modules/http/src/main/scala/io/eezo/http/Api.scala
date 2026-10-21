@@ -45,8 +45,8 @@ object Api {
 
   def apply[A](using a: Api[A]): Api[A] = a
 
-  /** The routes of `A` if it has an `Api`, and nothing if it does not, which is what the sbt plugin
-    * emits beside [[Resource.routesOf]] for every candidate model.
+  /** The routes of `A` if it has an `Api`, and nothing if it does not, which is what
+    * [[Derivations.routesOf]] asks after [[Resource.routesOf]] for every candidate model.
     *
     * Unlike `Resource.routesOf`, nothing the declaration carries comes out in front. A guard's
     * login page is where a refused browser is sent, and a program is never sent to a page: it is

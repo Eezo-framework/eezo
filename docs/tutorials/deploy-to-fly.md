@@ -1,4 +1,4 @@
-# From nothing to Fly.io — the eezo deploy walkthrough
+# From nothing to Fly.io: the eezo deploy walkthrough
 
 The whole arc: scaffold an app, give it a model, ship it. Every output below is from a real run
 (2026-09-09, first field deploy). Time budget: ~15 minutes, most of it Fly's first image build.
@@ -40,8 +40,8 @@ eezo dev
 Serves on 8080 (add `override def port: Int = <n>` in `Main` if 8080 is taken), restarts on every
 save, and keeps serving the old code if you save a compile error. Two URLs worth visiting:
 
-- `http://localhost:8080/` — the scaffold page
-- `http://localhost:8080/eezo/health` — `ok`. The framework answers this on every eezo server;
+- `http://localhost:8080/`: the scaffold page
+- `http://localhost:8080/eezo/health`: `ok`. The framework answers this on every eezo server;
   it is what Fly's health checks and the deploy's post-deploy poll will hit.
 
 ## 3. A model, and its migration
@@ -84,8 +84,8 @@ import io.eezo.db.Schema
   override def schema: Schema = AppSchema
 ```
 
-`eezo routes` now shows 8 routes — yours plus seven derived CRUD routes at `/books`. Freeze the
-schema as the first migration (no database needed — freeze diffs the committed snapshot against
+`eezo routes` now shows 8 routes, yours plus seven derived CRUD routes at `/books`. Freeze the
+schema as the first migration (no database needed: freeze diffs the committed snapshot against
 your code):
 
 ```bash
@@ -103,7 +103,7 @@ wrote db/migrations/0001_initial_schema.sql
 
 That file is committed SQL with a fingerprint header, and it is exactly what will run on Fly.
 
-## 4. First deploy — designed to stop halfway
+## 4. First deploy, designed to stop halfway
 
 ```bash
 eezo deploy
@@ -117,8 +117,8 @@ Created app 'bookshelf-…' in organization '…'
 ```
 
 Three things happened: Fly created the app and picked your nearest region (`fly launch` under the
-hood — that detection is Fly's, not eezo's), eezo wrote `fly.toml` (yours: committed, editable,
-rewritten only if you delete it), and the deploy stopped **on purpose** — this app has
+hood; that detection is Fly's, not eezo's), eezo wrote `fly.toml` (yours: committed, editable,
+rewritten only if you delete it), and the deploy stopped **on purpose**: this app has
 migrations, `db migrate --apply` will run on deploy, and there is no database yet.
 
 The interesting line in the generated `fly.toml`:
@@ -140,7 +140,7 @@ fly postgres attach bookshelf-db --app <your-app-name>
 ```
 
 `attach` creates a database + user inside the cluster and sets the `DATABASE_URL` secret on your
-app. Do not save the printed URL anywhere — it lives in Fly's secret store, which is the point;
+app. Do not save the printed URL anywhere: it lives in Fly's secret store, which is the point;
 eezo parses `DATABASE_URL` natively (it also understands `EEZO_DB_URL`/`_USER`/`_PASS`). On a
 platform URL eezo requires TLS unless the URL says otherwise with its own `sslmode`, and Fly's
 attach says otherwise on purpose with `sslmode=disable`, so a database elsewhere that only speaks
@@ -151,7 +151,7 @@ without exposing anything:
 fly secrets list
 ```
 
-One row, `DATABASE_URL`, digest only. `Staged` status is normal — there are no machines yet.
+One row, `DATABASE_URL`, digest only. `Staged` status is normal: there are no machines yet.
 
 `EEZO_DB_POOL_SIZE` is the number of connections in the pool, default 10.
 
@@ -177,8 +177,8 @@ eezo deploy
   https://<app>.fly.dev
 ```
 
-Behind the scenes, `eezo build` staged `target/eezo/stage/` — every runtime jar, your
-`db/migrations`, and a generated Dockerfile (JRE-only, no sbt) — and Fly's remote builder turned
+Behind the scenes, `eezo build` staged `target/eezo/stage/` (every runtime jar, your
+`db/migrations`, and a generated Dockerfile, JRE-only, no sbt) and Fly's remote builder turned
 it into the image. The first build is the slow one (base image pull); later deploys are much
 faster.
 
@@ -205,13 +205,14 @@ CI is the same two commands, non-interactively: authenticate with `FLY_API_TOKEN
 
 ## Troubleshooting, from the field
 
-- **`eezo routes` shows fewer routes than expected** — check the generator's warnings. The scan
+- **`eezo routes` shows fewer routes than expected**: check the generator's warnings. The scan
   mounts top-level models (indented or not) and models nested in objects (as `Outer.Inner`); a
   model nested in a class, or an indented one in a significant-indentation file, cannot be mounted
-  by name and warns, naming the enclosure and the `Resource.routesOf` escape hatch.
-- **Health checks never go green** — `internal_port` in `fly.toml` must equal the app's `port`
+  by name and warns, naming the enclosure and the `io.eezo.http.Derivations.routesOf` escape
+  hatch.
+- **Health checks never go green**: `internal_port` in `fly.toml` must equal the app's `port`
   (default 8080). They drift when you override one and not the other.
-- **Migration failed** — the deploy stopped before traffic switched; the old version is still
+- **Migration failed**: the deploy stopped before traffic switched; the old version is still
   serving. `fly logs` (or the release logs in the Fly dashboard) has the migration's own output.
-- **Where are the deploy logs?** — `fly deploy`'s stream, plus the Fly dashboard for the release
+- **Where are the deploy logs?** `fly deploy`'s stream, plus the Fly dashboard for the release
   machine's logs. `eezo` deliberately does not swallow Fly's output during deploy.

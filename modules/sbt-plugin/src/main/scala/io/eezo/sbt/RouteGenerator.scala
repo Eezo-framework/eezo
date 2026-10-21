@@ -35,9 +35,9 @@ final case class HandwrittenRoute(
 /** A case class the generator will ask the compiler about, by name.
   *
   * "Candidate" rather than "model" on purpose: the generator never decides whether this type has a
-  * `Resource` or an `Api`. It emits a `routesOf[fqn]` row, whose two halves each resolve to `Nil`
-  * when there is no instance, so a false positive costs one line that mounts nothing and a comment
-  * that mentions `derives` is not worth stripping out.
+  * `Resource` or an `Api`. It emits one row asking `io.eezo.http.Derivations` for the type's
+  * routes, which resolve to `Nil` when it has neither, so a false positive costs one line that
+  * mounts nothing and a comment that mentions `derives` is not worth stripping out.
   *
   * @param fqn
   *   the fully qualified name, built from the file's `package` clauses
@@ -97,6 +97,11 @@ object RouteGenerator {
 
   private val Derives: Regex = new Regex("\\bderives\\b")
 
+  /** The one call a derived row makes, named once so the unscannable warning tells a user to write
+    * by hand exactly what the table would have written.
+    */
+  private val DerivedRoutes = "io.eezo.http.Derivations.routesOf"
+
   // ── the model scan's structural half ──────────────────────────────────────────────────────
   //
   // "Top level" used to mean "column zero", which is a heuristic with a failure on each side: an
@@ -119,7 +124,7 @@ object RouteGenerator {
     new Regex("\\b(object|class|trait|enum)\\s+([A-Za-z_][A-Za-z0-9_]*)")
 
   /** Anything that means "the next `{` is not the pending container's body": a member keyword or an
-    * `=`. Over-clearing is the safe direction — an unattributed brace pushes an anonymous frame,
+    * `=`. Over-clearing is the safe direction: an unattributed brace pushes an anonymous frame,
     * which can only demote a candidate to a warning, never mint a wrong name.
     */
   private val PendingClear: Regex =
@@ -131,7 +136,7 @@ object RouteGenerator {
   private val ContainerColon: Regex =
     new Regex("(?m)\\b(?:object|class|trait|enum)\\s+[A-Za-z_][A-Za-z0-9_]*[^\\n{}]*:[ \\t]*$")
 
-  /** Which characters are code — not comments (line, nested block) and not string or character
+  /** Which characters are code: not comments (line, nested block) and not string or character
     * literals. Interpolated `$${...}` blocks inside strings are masked with the string; their
     * braces are balanced within it, so depth is unaffected either way.
     */
@@ -337,20 +342,20 @@ object RouteGenerator {
   /** Every mountable `case class` in one file that carries a `derives` clause.
     *
     * Textual, and deliberately permissive rather than accurate: a false positive costs one line
-    * whose `routesOf[X]` resolves to `Nil`, a false *name* would break the generated file's
-    * compile, and a false negative mounts nothing in silence. So the rules mint a name only where
-    * the scan is sure of it, and everything else warns (see [[unscannableModels]]):
+    * whose `Derivations.routesOf[X]` resolves to `Nil`, a false *name* would break the generated
+    * file's compile, and a false negative mounts nothing in silence. So the rules mint a name only
+    * where the scan is sure of it, and everything else warns (see [[unscannableModels]]):
     *
-    *   - **depth zero, any column** — top level. Column stopped being the test the day an
+    *   - **depth zero, any column**: top level. Column stopped being the test the day an
     *     editor-indented model deployed and mounted nothing; brace depth is the structure. The one
     *     exception: in a file whose containers open with `:` (significant indentation), depth
     *     cannot see nesting, so there an indented depth-zero class is ambiguous and warns rather
     *     than guesses.
-    *   - **nested, every enclosing frame a named `object`** — mounted as `pkg.Outer.Inner`, the
+    *   - **nested, every enclosing frame a named `object`**: mounted as `pkg.Outer.Inner`, the
     *     stable path the compiler resolves.
-    *   - **nested in a class, trait, enum, or anonymous block** — no stable path exists; warns.
-    *   - **generic** — skipped without a warning: `Paged` alone is not a type, and a generic class
-    *     is not a model.
+    *   - **nested in a class, trait, enum, or anonymous block**: no stable path exists; warns.
+    *   - **generic**: skipped without a warning, since `Paged` alone is not a type, and a generic
+    *     class is not a model.
     */
   def modelsIn(relative: String, content: String): Seq[ModelCandidate] =
     if (!relative.endsWith(".scala")) Nil
@@ -379,8 +384,8 @@ object RouteGenerator {
     maskedIn(PackageClause, content, mask).map(_.group(1)).flatMap(_.split('.').toSeq)
   }
 
-  /** The generated file: one object, the handwritten rows under `app/` and then one `routesOf` line
-    * per candidate model, which mounts its `Resource` and its `Api`.
+  /** The generated file: one object, the handwritten rows under `app/` and then one row per
+    * candidate model, a call into `io.eezo.http.Derivations` that mounts whatever it derives.
     *
     * Handwritten first is what makes decision 18's precedence visible in the emitted text rather
     * than only in a merge step somebody can get wrong, since dispatch is first match in table
@@ -528,7 +533,7 @@ object RouteGenerator {
         val derived = sortedModels
           .map { model =>
             s"""      // from ${model.source}
-               |      routesOf[${model.fqn}](storeFor[${model.fqn}], ${modelGuard(
+               |      $DerivedRoutes[${model.fqn}](storeFor[${model.fqn}], ${modelGuard(
                 model.fqn
               )})""".stripMargin
           }
@@ -550,9 +555,6 @@ object RouteGenerator {
 
     val storeHelper = if (models.isEmpty) "" else storeFor(dbOnClasspath) + "\n"
 
-    // Called by the derived rows alone, so emitted with them, for `storeFor`'s reason.
-    val routesHelper = if (models.isEmpty) "" else routesOf + "\n"
-
     // Each helper follows the rows that call it, for the reason `storeFor` does: an uncalled
     // `private inline def` is what `-Wunused:all` reports, and a generated file has to compile
     // clean under the strictest options a user is entitled to turn on. `guardFor` is called by a
@@ -566,7 +568,7 @@ object RouteGenerator {
         guardFor(authDeclared) + "\n" + perModel
       }
 
-    val helper = storeHelper + guardHelpers + routesHelper + identifyBlock
+    val helper = storeHelper + guardHelpers + identifyBlock
 
     s"""// AUTO-GENERATED by eezo. Do not edit.
        |package io.eezo.generated
@@ -577,7 +579,7 @@ object RouteGenerator {
        |$handwrittenBlock
        |
        |$helper  /** The table this application serves. One line per candidate model below: the compiler,
-       |    * not the generator, decides which of them has a `Resource` or an `Api` and mounts them.
+       |    * not the generator, decides what each of them derives and mounts it.
        |    */
        |  def table(): io.eezo.http.RouteTable = {
        |$body
@@ -705,59 +707,33 @@ object RouteGenerator {
     * matters. Under the lenient reading there is nothing to spare a model from, so the rows call
     * `guardFor` directly and this is not emitted at all.
     *
-    * A candidate is any `case class` with a `derives` clause, and most of them mount nothing:
-    * `examples/blog`'s `User` derives `Table` alone, so `Resource.routesOf` answers `Nil` for it.
-    * Demanding a `Guarded` of a type that mounts no route would make the rule about the `derives`
-    * keyword rather than about routes, and would put a declaration in the companion of every model
-    * an application stores.
+    * A candidate is any `case class` with a `derives` clause, and many of them mount nothing:
+    * `examples/blog`'s `User` derives `Table` alone, so `Derivations.routesOf` answers `Nil` for
+    * it. Demanding a `Guarded` of a type that mounts no route would make the rule about the
+    * `derives` keyword rather than about routes, and would put a declaration in the companion of
+    * every model an application stores.
     *
-    * The gate cannot live at the call site. `Resource.routesOf` already asks the compiler whether
-    * there is a `Resource`, but an inline argument is expanded before the body it is passed to, so
+    * The gate cannot live at the call site. `Derivations.routesOf` already asks the compiler what
+    * the model derives, but an inline argument is expanded before the body it is passed to, so
     * `guardFor` would raise its error while `routesOf` was still deciding to throw the value away.
-    * Asking the same question one level earlier, here, is what makes the answer reach the error.
+    * Asking one level earlier, here, is what makes the answer reach the error.
+    *
+    * Which derivations mount is asked of `Derivations.mounts` rather than listed here, for the
+    * reason the row asks `Derivations.routesOf`: a derivation eezo gains is then guarded the day it
+    * mounts, with no template string to remember. It folds to a constant at the call site, so
+    * `inline if` expands only the branch it takes, and the error stays unexpanded for a model that
+    * mounts nothing.
     */
   private[sbt] val guardForModel: String =
-    """  /** Who may reach a derived model's routes. A model with no `Resource` and no `Api` mounts
-      |    * nothing, so it is not asked to declare anything.
+    """  /** Who may reach a derived model's routes. A model that mounts no route is not asked to
+      |    * declare anything, since it has no route to say it about.
       |    */
       |  private inline def guardForModel[A](inline name: String): io.eezo.http.Guarded[A] =
-      |    scala.compiletime.summonFrom {
-      |      case _: io.eezo.http.Resource[A] => guardFor[A](name)
-      |      case _: io.eezo.http.Api[A]      => guardFor[A](name)
-      |      case _                           => io.eezo.http.Guarded.public[A]
-      |    }
+      |    inline if (io.eezo.http.Derivations.mounts[A]) guardFor[A](name)
+      |    else io.eezo.http.Guarded.public[A]
       |""".stripMargin
 
-  /** What one derived row mounts: a model's HTML seven and its JSON five, in that order.
-    *
-    * A helper rather than two lines per row, because the two have to share the store, and a store
-    * is minted where the row names it: `storeFor` written twice would hand the pages one in memory
-    * store and the program another, and a row a program created would never show on a page. The
-    * parameters are by value, so an inline call evaluates each argument once and both halves read
-    * the same one. `inline` because each half asks the compiler whether its typeclass exists for a
-    * concrete model, which only the call site can answer.
-    *
-    * The seven come first so that a model mounting both reads down the listing the way it always
-    * did, its pages and then its API, and no JSON route can shadow a page: every path the five
-    * answer on is under `/api`.
-    *
-    * `private[sbt]` for the reason [[guardFor]] is: `RouteGeneratorSuite` pins this text against
-    * the copy `GeneratedGuardForSuite` compiles.
-    */
-  private[sbt] val routesOf: String =
-    """  /** A candidate model's routes: the seven of its `Resource` and the five of its `Api`,
-      |    * over the one store and the one declaration, so a page and a program read and write
-      |    * the same rows. A model with neither mounts nothing.
-      |    */
-      |  private inline def routesOf[A](
-      |      store: io.eezo.core.Store[A],
-      |      guarded: io.eezo.http.Guarded[A]
-      |  ): Seq[io.eezo.http.Route] =
-      |    io.eezo.http.Resource.routesOf[A](store, guarded) ++
-      |      io.eezo.http.Api.routesOf[A](store, guarded)
-      |""".stripMargin
-
-  /** The warnings for a `derives`-carrying `case class` that [[modelsIn]] cannot mount — the
+  /** The warnings for a `derives`-carrying `case class` that [[modelsIn]] cannot mount, the
     * silent-failure cases, each named for what it actually is. Found necessary on the first field
     * deploy, where an editor-indented model compiled, deployed, and mounted nothing.
     */
@@ -780,7 +756,7 @@ object RouteGenerator {
               .getOrElse("a block")
             s"$at: `case class ${c.name}` has a derives clause but is nested inside $culprit, " +
               "which is not a stable path the route table can name. Move it to the top level or " +
-              "into an object, or mount it explicitly with Resource.routesOf and Api.routesOf."
+              s"into an object, or mount it explicitly with $DerivedRoutes."
           }
       }
     }

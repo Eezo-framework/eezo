@@ -82,10 +82,11 @@ object Resource {
 
   /** The routes of `A` if it has a `Resource`, and nothing if it does not.
     *
-    * This is what the sbt plugin emits, one line per candidate case class, so that the **compiler**
-    * decides which models mount rather than a text scan guessing from a `derives` clause. It sees
-    * through a type alias and finds a hand-written `given Resource[A]`, neither of which a regex
-    * can, and a model with no instance yields `Nil` instead of failing to compile.
+    * [[Derivations.routesOf]] asks this for the line the sbt plugin emits per candidate case class,
+    * so that the **compiler** decides which models mount rather than a text scan guessing from a
+    * `derives` clause. It sees through a type alias and finds a hand-written `given Resource[A]`,
+    * neither of which a regex can, and a model with no instance yields `Nil` instead of failing to
+    * compile.
     *
     * What the declaration carries comes out in front of the model's own routes, so that guarding a
     * model is also what mounts the page its refusals redirect to. `Guarded.public` carries nothing,

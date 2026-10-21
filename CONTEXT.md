@@ -49,6 +49,14 @@ the Serde is handed the fields eezo decided, the key it minted or read from the 
 it filled, and puts each over whatever the body said, so a body need name neither.
 _Avoid_: codec, encoder, decoder, JSON format, serializer
 
+**Derivations**:
+The derivations that mount routes, asked about as one: the routes a model mounts, its Resource's
+seven and then its Api's five over one store, and whether it mounts any at all. Only the compiler
+can answer, since a type alias or a hand written instance counts as much as a `derives` clause, so
+the generated route table asks it once per model and lists none of them, and a derivation eezo
+gains changes nothing the generator writes.
+_Avoid_: mountables
+
 ### How Form and Resource relate
 
 Form is what a handler calls. Resource is what writes handlers, and every handler it writes calls

@@ -4,7 +4,7 @@ import munit.FunSuite
 
 /** The structural model scan: depth decides top-level, the object stack names the nested, and only
   * what structure genuinely cannot answer warns. The first two cases are the two failures of the
-  * column-zero rule this scan replaced — an editor-indented top-level model that deployed and
+  * column-zero rule this scan replaced: an editor-indented top-level model that deployed and
   * mounted nothing (found in the field), and a column-zero class nested in braces that would have
   * minted a name that does not compile.
   */
@@ -62,8 +62,11 @@ class UnscannableModelSuite extends FunSuite {
     assertEquals(candidates(content), Seq.empty[String])
     assertEquals(warnings(content).size, 1)
     assert(warnings(content).head.contains("class Holder"))
-    assert(warnings(content).head.contains("Resource.routesOf"))
-    assert(warnings(content).head.contains("Api.routesOf"))
+    // The one call to write by hand is the one the table would have written, so the model mounts
+    // whatever it derives, its pages, its API or both, over one store.
+    assert(warnings(content).head.contains("io.eezo.http.Derivations.routesOf"))
+    assert(!warnings(content).head.contains("Resource.routesOf"))
+    assert(!warnings(content).head.contains("Api.routesOf"))
   }
 
   test("an indented depth-zero class in a significant-indentation file is ambiguous: warns") {

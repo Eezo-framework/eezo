@@ -61,14 +61,15 @@ Every row carries a `// from` comment naming the file it came from. When a row f
 compile, the `def` on that row doesn't take a `Request` and return a `Response`, and the fix is
 in the file the comment names. The generated file is never edited.
 
-Models get the same treatment: one line per candidate case class, calling
-`routesOf[models.Book]`, which asks `Resource.routesOf` and `Api.routesOf` in turn over the one
-store. The generator doesn't decide whether `Book` has a `Resource` or an `Api`. It emits the
-line for any case class with a `derives` clause and lets the compiler answer, because each
-`routesOf` resolves to its routes when the instance exists, the seven pages or the five JSON
-routes under `/api`, and to nothing when it doesn't. A false positive costs one line that
-mounts nothing. A regex that tried to read the `derives` clause would get type aliases and
-hand written instances wrong.
+Models get the same treatment: one line per candidate case class, making the one call
+`io.eezo.http.Derivations.routesOf[models.Book]` with the model's store and its declaration, so
+its pages and its API share both. The generator doesn't decide whether `Book` has a `Resource`
+or an `Api`. It emits the line for any case class with a `derives` clause and lets the compiler
+answer, because that call resolves to the routes of whatever the model derives, the seven pages,
+then the five JSON routes under `/api`, and to nothing when it derives neither. A false positive
+costs one line that mounts nothing. A regex that tried to read the `derives` clause would get
+type aliases and hand written instances wrong. Which derivations mount is listed in `http`,
+beside them, so the line the generator writes stays the same when eezo gains one.
 
 What the generator *can* warn about is what text can decide: a file under `app/` that defines
 no `def` of the name its filename promises, and a `derives`-carrying model it can't name. The
