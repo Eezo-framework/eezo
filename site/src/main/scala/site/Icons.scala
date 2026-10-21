@@ -58,4 +58,18 @@ object Icons {
     icon(20, Attrs.attr("stroke-linejoin") := "round")(
       path(Attrs.attr("d") := "M20 14.5A8.5 8.5 0 0 1 9.5 4a8.5 8.5 0 1 0 10.5 10.5z")
     )
+
+  /** The X logo, a filled shape where the others are strokes. */
+  val x: Html =
+    svg(
+      Attrs.attr("viewBox")     := "0 0 24 24",
+      Attrs.width               := 17,
+      Attrs.height              := 17,
+      Attrs.attr("aria-hidden") := "true",
+      Attrs.attr("fill")        := "currentColor",
+      path(
+        Attrs.attr("d") :=
+          "M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+      )
+    )
 }

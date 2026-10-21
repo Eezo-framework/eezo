@@ -68,6 +68,15 @@ class RoutesSuite extends FunSuite {
     assert(html.contains("<script>hljs.highlightAll()</script>"), html)
   }
 
+  test("every page links the X account, as a glyph in the top bar and in words in the footer") {
+    for (path <- Seq("/", "/docs", "/docs/explanation/deployment")) {
+      val html = page(get(path))
+      assert(html.contains(s"""class="icon-link" href="${Pages.X}""""), s"$path: the top bar")
+      assert(html.contains("""aria-label="eezo on X""""), s"$path: the glyph is named")
+      assert(html.contains("@eezoframework on X</a>"), s"$path: the footer")
+    }
+  }
+
   test("highlight.js is served out of the jar") {
     val core = get("/assets/hljs/highlight.min.js")
     assertEquals(core.status, 200)

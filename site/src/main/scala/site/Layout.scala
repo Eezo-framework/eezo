@@ -122,10 +122,24 @@ object Layout {
           )
         ),
         searchButton,
-        theme
+        theme,
+        xLink
       )
     )
   }
+
+  /** The way to the project's X account: a glyph beside the theme toggle, in the top bar of every
+    * page. The stylesheet hides it on a narrow screen, where the footer still carries the link.
+    */
+  private[site] val xLink: Html =
+    a(
+      Attrs.cls                := "icon-link",
+      Attrs.href               := Pages.X,
+      Attrs.rel                := "noopener",
+      Attrs.attr("aria-label") := "eezo on X",
+      Attrs.title              := "@eezoframework on X",
+      Icons.x
+    )
 
   /** The way into the search dialog, with the shortcut beside it. Both spellings of the shortcut
     * are rendered and the stylesheet shows the one for the keyboard at hand.
@@ -163,7 +177,9 @@ object Layout {
           span(Attrs.cls := "chip chip-sun", "pre-release"),
           span(Attrs.cls := "version", Attrs.title := SiteInfo.eezoVersion, "eezo ", shortVersion),
           " · ",
-          a(Attrs.href := Pages.Repository, Attrs.rel := "noopener", "Source on GitHub")
+          a(Attrs.href := Pages.Repository, Attrs.rel := "noopener", "Source on GitHub"),
+          " · ",
+          a(Attrs.href := Pages.X, Attrs.rel := "noopener", "@eezoframework on X")
         )
       )
     )

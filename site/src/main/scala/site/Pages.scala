@@ -110,6 +110,9 @@ object Pages {
 
   val Repository: String = "https://github.com/Eezo-framework/eezo"
 
+  /** The project's account on X, linked from every page's top bar and footer. */
+  val X: String = "https://x.com/eezoframework"
+
   /** The marker a placeholder carries on its first line. Invisible on the page, since Markdown
     * passes an HTML comment through, and what turns the draft banner on.
     */

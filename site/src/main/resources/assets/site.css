@@ -544,7 +544,8 @@ html:not(.mac) .shortcut.mac {
 }
 
 .theme-toggle,
-.menu-toggle {
+.menu-toggle,
+.icon-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -558,9 +559,15 @@ html:not(.mac) .shortcut.mac {
 }
 
 .theme-toggle:hover,
-.menu-toggle:hover {
+.menu-toggle:hover,
+.icon-link:hover {
   transform: rotate(-12deg);
   background: var(--surface-2);
+}
+
+.icon-link {
+  color: var(--ink);
+  text-decoration: none;
 }
 
 .theme-form {
@@ -2093,6 +2100,11 @@ html:not(.mac) .shortcut.mac {
   }
 
   .topbar nav li:nth-child(2) {
+    display: none;
+  }
+
+  /* The footer keeps the link to X; the bar has no room for a fourth control. */
+  .topbar .icon-link {
     display: none;
   }
 

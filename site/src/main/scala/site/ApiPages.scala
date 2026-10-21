@@ -55,7 +55,7 @@ object ApiPages {
     )
   }
 
-  /** The same links the site's top bar carries, and the same theme toggle. */
+  /** The same links the site's top bar carries, the same theme toggle and the same X glyph. */
   private def nav(request: Request): Html =
     Tags.nav(
       Attrs.cls                := "site-links",
@@ -65,6 +65,7 @@ object ApiPages {
       a(Plain, Attrs.href := "/search", "Search"),
       a(Plain, Attrs.href := "/api/", Attrs.attr("aria-current") := "page", "API"),
       a(Plain, Attrs.href := Pages.Repository, Attrs.rel         := "noopener", "GitHub"),
-      Theme.toggle(request)
+      Theme.toggle(request),
+      Layout.xLink
     )
 }

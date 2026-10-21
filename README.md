@@ -12,6 +12,7 @@
   <a href="https://central.sonatype.com/artifact/io.eezo/eezo_3"><img src="https://img.shields.io/maven-central/v/io.eezo/eezo_3.svg?label=maven%20central" alt="Maven Central"></a>
   <a href="https://javadoc.io/doc/io.eezo/eezo_3"><img src="https://javadoc.io/badge2/io.eezo/eezo_3/javadoc.svg" alt="javadoc"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="License: MIT"></a>
+  <a href="https://x.com/eezoframework"><img src="https://img.shields.io/badge/follow-%40eezoframework-000000?logo=x&logoColor=white" alt="Follow @eezoframework on X"></a>
 </p>
 <p align="center">
   <a href="https://eezo.io">eezo.io</a> ·

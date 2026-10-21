@@ -199,7 +199,8 @@ pre,
   display: contents;
 }
 
-.theme-toggle {
+.theme-toggle,
+.icon-link {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -214,8 +215,13 @@ pre,
   transition: transform 0.2s ease;
 }
 
-.theme-toggle:hover {
+.theme-toggle:hover,
+.icon-link:hover {
   transform: rotate(-12deg);
+}
+
+.icon-link {
+  text-decoration: none;
 }
 
 .theme-toggle.to-dark {
