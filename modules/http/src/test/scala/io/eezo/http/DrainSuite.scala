@@ -1,5 +1,6 @@
 package io.eezo.http
 
+import java.net.InetSocketAddress
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
@@ -39,7 +40,9 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
           PathPattern.parse("/held"),
           _ => {
             entered.countDown()
-            release.await()
+            // The finally of `inFlight` always releases; the bound is for a test that never got
+            // that far, so a stuck handler ends on its own rather than holding a thread for good.
+            release.await(30, TimeUnit.SECONDS)
             Response.Ok(Html.text("finished"))
           }
         )
@@ -57,7 +60,11 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     serving(held.routes) { (server, port) =>
       try {
         val answer = client.sendAsync(
-          HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port/held")).GET().build(),
+          HttpRequest
+            .newBuilder(URI.create(s"http://$Loopback:$port/held"))
+            .timeout(requestTimeout)
+            .GET()
+            .build(),
           HttpResponse.BodyHandlers.ofString()
         )
         assert(held.entered.await(5, TimeUnit.SECONDS), "the held handler never started")
@@ -122,13 +129,15 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     inFlight(held) { (server, port, _) =>
       val stopper = stopping(server.jetty)
       // A client with no connection to reuse, so the late request needs a new one, which is the
-      // case a platform health check or a browser hitting a stopping machine is in.
-      val late = java.net.http.HttpClient.newHttpClient()
+      // case a platform health check or a browser hitting a stopping machine is in. It is bounded,
+      // so a request nobody answers fails this test inside the drain rather than outlasting it.
+      val late = java.net.http.HttpClient.newBuilder().connectTimeout(connectTimeout).build()
       try
         intercept[java.net.ConnectException](
           late.send(
             HttpRequest
               .newBuilder(URI.create(s"http://$Loopback:$port${HttpServer.HealthPath}"))
+              .timeout(requestTimeout)
               .build(),
             HttpResponse.BodyHandlers.ofString()
           )
@@ -228,7 +237,8 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     )
     var answer = ""
     serving(routes, dev = dev) { (server, port) =>
-      val socket = new java.net.Socket(Loopback, port)
+      val socket = new java.net.Socket()
+      socket.connect(new InetSocketAddress(Loopback, port), 5000)
       try {
         socket.setSoTimeout(5000)
         val out = socket.getOutputStream

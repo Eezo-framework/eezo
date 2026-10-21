@@ -6,6 +6,7 @@ import java.net.URI
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.time.Duration
 import java.util.concurrent.TimeUnit
 import java.util.logging.Level
 import java.util.logging.Logger
@@ -35,9 +36,27 @@ trait ServerFixtures { self: munit.FunSuite =>
 
   /** The client requests go out on, never following a redirect, which is what a suite reading a
     * `Location` header itself wants. A suite that wants one followed overrides this.
+    *
+    * It waits on a silent far end for [[connectTimeout]] and no longer, as does every request
+    * [[send]] makes for [[requestTimeout]]: a loopback port can be held by a process that never
+    * answers, and a client with no bound then blocks the whole run rather than failing one test.
     */
   protected val client: HttpClient =
-    HttpClient.newBuilder().followRedirects(HttpClient.Redirect.NEVER).build()
+    HttpClient
+      .newBuilder()
+      .followRedirects(HttpClient.Redirect.NEVER)
+      .connectTimeout(connectTimeout)
+      .build()
+
+  /** How long a connection may take to open. A loopback connect is answered at once or not at all,
+    * so this is generous only against a loaded runner.
+    */
+  protected def connectTimeout: Duration = Duration.ofSeconds(10)
+
+  /** How long a response may take to begin. Well past anything a suite's handler does on purpose,
+    * and well inside a CI job's limit, so a request that is never answered fails its own test.
+    */
+  protected def requestTimeout: Duration = Duration.ofSeconds(30)
 
   /** The one secret both suites sign and verify against. */
   protected val secret: Secret = Secret.parse("server secret, at least thirty two bytes")
@@ -137,7 +156,8 @@ trait ServerFixtures { self: munit.FunSuite =>
       headers: Seq[(String, String)] = Nil,
       form: Option[String] = None
   ): HttpResponse[String] = {
-    val builder = HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port$path"))
+    val builder =
+      HttpRequest.newBuilder(URI.create(s"http://$Loopback:$port$path")).timeout(requestTimeout)
     cookie.foreach(value => builder.header("Cookie", s"${SessionCookie.Name}=$value"))
     headers.foreach(builder.header(_, _))
     form.foreach(_ => builder.header("Content-Type", "application/x-www-form-urlencoded"))
