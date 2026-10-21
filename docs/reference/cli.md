@@ -21,7 +21,7 @@ layer can shadow it. No arguments runs the application.
 
 | command | layer | needs | what it does |
 |---|---|---|---|
-| `new <name>` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>` |
+| `new <name>`, `new .` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it |
 | `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |
@@ -148,6 +148,10 @@ the command's answer and not a build failure:
   src/main/scala/models/        empty
   .gitignore
 ```
+
+`eezo new .` writes the same files into the current directory.
+It refuses if the directory already has a build definition (`build.sbt`, `build.sc`, `build.mill`), a `project/` or a `src/` directory.
+A pre-existing `.gitignore` file will be appended.
 
 ## Related
 

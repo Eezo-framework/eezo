@@ -20,6 +20,7 @@ usage() {
 eezo — the framework launcher
 
   eezo new <name>       scaffold a new application in ./<name>
+  eezo new .            scaffold a new application in the current directory, named after it
   eezo dev              serve, restarting on every save
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
@@ -516,25 +517,59 @@ read_version_file() {
   }
 }
 
+# The scaffold's gitignore entries, either written to a new .gitignore file or appended if .gitignore already exists
+GITIGNORE_ENTRIES=(target/ .bsp/ .metals/ .bloop/)
+
+write_gitignore() { # <file>; sets GITIGNORE_ADDED to the entries it wrote
+  local file="$1" line
+  GITIGNORE_ADDED=()
+  for line in "${GITIGNORE_ENTRIES[@]}"; do
+    [ -f "$file" ] && grep -qxF "$line" "$file" && continue
+    GITIGNORE_ADDED+=("$line")
+  done
+  [ "${#GITIGNORE_ADDED[@]}" -gt 0 ] || return 0
+  if [ -s "$file" ] && [ -n "$(tail -c1 "$file")" ]; then echo >> "$file"; fi
+  printf '%s\n' "${GITIGNORE_ADDED[@]}" >> "$file"
+}
+
 scaffold() {
-  name="${1:-}"
-  [ -n "$name" ] || { echo "eezo: new needs a name: eezo new myapp" >&2; exit 1; }
-  [ ! -e "$name" ] || { echo "eezo: ./$name already exists" >&2; exit 1; }
+  dir="${1:-}"
+  [ -n "$dir" ] || { echo "eezo: new needs a name: eezo new myapp, or eezo new . for the current directory ($(basename "$PWD"))" >&2; exit 1; }
+  # Any reference to the current directory such as: ./, "$PWD", or a symlink to it
+  if [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$(pwd -P)" ]; then dir="."; fi
+  if [ "$dir" = "." ]; then
+    # In place: the app is named after the directory
+    name="$(basename "$PWD")"
+    local existing=() file
+    for file in build.sbt build.sc build.mill project src; do
+      [ ! -e "$file" ] && [ ! -L "$file" ] || existing+=("$file")
+    done
+    [ "${#existing[@]}" -eq 0 ] || {
+      echo "eezo: this directory already has ${existing[*]}; new scaffolds a project only where there is none" >&2
+      exit 1
+    }
+  else
+    name="$dir"
+    [ ! -e "$dir" ] || { echo "eezo: ./$dir already exists" >&2; exit 1; }
+  fi
   read_version_file
 
-  mkdir -p "$name/project" "$name/src/main/scala/app" "$name/src/main/scala/models"
+  local gitignore_existed=0
+  [ ! -f "$dir/.gitignore" ] || gitignore_existed=1
 
-  cat > "$name/project/build.properties" <<EOF
+  mkdir -p "$dir/project" "$dir/src/main/scala/app" "$dir/src/main/scala/models"
+
+  cat > "$dir/project/build.properties" <<EOF
 sbt.version=$SBT_VERSION
 EOF
 
-  cat > "$name/project/plugins.sbt" <<EOF
+  cat > "$dir/project/plugins.sbt" <<EOF
 // The route table generator: scans src/main/scala/app/ and your models into
 // io.eezo.generated.Routes, and provides the eezo* tasks (eezoDev, eezoStatus, ...).
 addSbtPlugin("io.eezo" % "sbt-eezo" % "$EEZO_VERSION")
 EOF
 
-  cat > "$name/build.sbt" <<EOF
+  cat > "$dir/build.sbt" <<EOF
 name         := "$name"
 scalaVersion := "$SCALA_VERSION"
 
@@ -549,7 +584,7 @@ run / fork           := true
 run / outputStrategy := Some(OutputStrategy.StdoutOutput)
 EOF
 
-  cat > "$name/src/main/scala/Main.scala" <<'EOF'
+  cat > "$dir/src/main/scala/Main.scala" <<'EOF'
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
@@ -574,7 +609,7 @@ object Main extends EezoApp {
 }
 EOF
 
-  cat > "$name/src/main/scala/app/Index.scala" <<'EOF'
+  cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
 package app
 
 import io.eezo.core.html.*
@@ -600,17 +635,14 @@ object Index {
 }
 EOF
 
-  cat > "$name/.gitignore" <<'EOF'
-target/
-.bsp/
-.metals/
-.bloop/
-EOF
+  write_gitignore "$dir/.gitignore"
 
-  echo "created ./$name (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  echo "created $name (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  [ "$gitignore_existed" -eq 0 ] || [ "${#GITIGNORE_ADDED[@]}" -eq 0 ] ||
+    echo "added ${GITIGNORE_ADDED[*]} to the existing .gitignore"
   echo
   echo "next:"
-  echo "  cd $name"
+  [ "$dir" = "." ] || echo "  cd $name"
   echo "  eezo dev           # serve on :8080, restart on save"
   echo "  eezo routes        # what is mounted"
 }
