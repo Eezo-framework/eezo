@@ -91,6 +91,17 @@ One merged derivation would break the first shape, because a model with no key c
 seven routes, and it would leave the third shape with no `Form` for the handwritten half to
 call. So they stay apart, and `Resource` requires a `Form` to exist.
 
+## Api: the same model, read by a program
+
+`Api` is the fourth derivation, and a sibling of `Resource` rather than a part of it. It mounts
+five JSON routes under `/api` for a program to call, over the same store and under the same
+declaration as the seven pages, and it reads and writes the model through an `api.Serde` where
+`Resource` goes through the `Form`. A model may want either without the other: a back office
+nobody calls has no use for JSON, and a model only a mobile client reads has no use for pages.
+So `derives Table, Form, Resource, Api` is a model with both, `derives Table, Api` is one with
+neither a form nor a page, and a case class with no `derives` clause at all is still a payload
+a handwritten API route can read and answer, as `Login` is a form that mounts nothing.
+
 ## Field: one type, one input
 
 `Field[X]` is the small piece under `Form`: for one Scala type, the input type, how to show a
@@ -126,6 +137,6 @@ that once per model.
 
 ## Where to go next
 
-The three derivations sit on two sides of the framework, and which sides your application has
-is the subject of [the two layers](layers.md). How the seven routes become rows in a table, and
-how a handwritten route wins over one of them, is [routing](routing.md).
+The four derivations sit on two sides of the framework, and which sides your application has
+is the subject of [the two layers](layers.md). How the seven routes and the five become rows in
+a table, and how a handwritten route wins over one of them, is [routing](routing.md).

@@ -199,6 +199,7 @@ object Pages {
               "evolve-the-schema",
               "configure-the-database",
               "add-authentication",
+              "serve-a-json-api",
               "add-a-live-component",
               "share-state-between-pages",
               "call-an-external-api",

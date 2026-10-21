@@ -24,9 +24,10 @@ guard owns the comparison. Your lookup says where the hash is and stops; the ver
 inside the guard, so the plain text never travels out to be compared.
 
 The guard carries its own three routes, `GET /login`, `POST /login` and `POST /logout`, and
-they come along with every declaration that uses the guard. Guard one route and the page it
-redirects to is mounted, without you writing a line. The login path is a `Url.Mounted`, so a
-guard under `/admin` logs in at `/admin/login`.
+they come along with every declaration that guards a page or a socket. Guard one route and the
+page it redirects to is mounted, without you writing a line. The login path is a `Url.Mounted`,
+so a guard under `/admin` logs in at `/admin/login`. A declaration that guards only API routes
+mounts no login page, because a program is never sent to one.
 
 A sign in lasts a fixed time from the moment it was made, two weeks by default, however active
 the user is. It isn't refreshed by use, because a sliding window would cost a `Set-Cookie` on
@@ -47,7 +48,14 @@ given Guarded[Index.type] = Guarded.public
 A guarded route's handler runs behind a wrapper that reads the session, finds the user, and
 either lets the request through with the user named on it or answers a 303 to the login page.
 The refused address is remembered in the session, so signing in lands where the browser was
-going. A guarded WebSocket route can't be redirected, so it's refused with a 403 instead.
+going. A guarded WebSocket route can't be redirected, so it's refused with a 403 instead. A
+guarded API route has no session to read, so the wrapper reads its Bearer header instead, and
+refuses with a 401; that is the second door, below.
+
+The actions a declaration names cover a model's pages and its JSON routes alike, since both
+sets come from the one `Actions`. `except(Index, Show)` on a model that derives `Resource` and
+`Api` leaves the list and the detail open on a page and under `/api`, and guards every write
+in both places.
 
 **Silence is an error.** In an application whose build names `eezo-auth`, every route mounted
 has to say who may reach it, and a route with no `Guarded` in scope is a compile error naming
@@ -70,6 +78,43 @@ page that wants to greet a signed in visitor reads the key through an ownership 
 `currentUser`, which answers `None` for an anonymous browser and throws nothing. Nobody is
 an ordinary visitor on a public page and a defect on a guarded one, and only the call site
 knows which.
+
+## The second door: a program and its token
+
+A program calling an API route has no session and never will: it sends
+`Authorization: Bearer <token>` with every request, and the token is one the application
+issued to a user, once. The guard is the same guard with a second way in, built from one more
+function:
+
+```scala
+given guard: Guard[User] = Guard[User](
+  find        = id => read(Table[User].findById(id)),
+  credentials = email => byEmail(email).map(user => (user.id, user.password)),
+  home        = Url.Mounted("/books"),
+  tokens      = hash => byToken(hash).map(_.id)
+)
+```
+
+`tokens` turns a `Token`, the hash of what the program sent, into the user's key or nothing.
+The guard hashes the header's value and asks; the plain text is neither stored nor looked up,
+for the same reason the password's isn't. A `Token` is an unsalted SHA 256 where a `Password`
+is a salted bcrypt, because the two answer different questions. A password is verified against
+the one row an email names, so its hash may differ on every write. A token arrives with
+nothing beside it, so the only way to its row is to hash it the same way twice and look the
+hash up. What makes that safe is how a token is made, not how it is hashed: `Token.gen()`
+draws 256 random bits, which nobody picks and nobody can walk.
+
+On a refusal there is no login page to send a program to, so the answer is a 401 with
+`WWW-Authenticate: Bearer`, as a problem whose detail says what was missing. A guard built
+without `tokens` refuses to wrap an API route at boot, naming the route: no program could ever
+be let through, and a route nobody can reach is a mistake worth finding before the first
+request.
+
+Issuing is the application's. `Token.gen()` gives the plain text to show once and the hash to
+store, in a `Column[Token]` beside the password; listing, revoking and expiring are pages the
+application writes. The shop keeps one token per user, so issuing a new one revokes the last.
+Inside a handler, `currentUser` is the same key it is on a page, so an owned model is owned
+through either door.
 
 ## Owned: are these rows theirs
 
@@ -115,6 +160,10 @@ Three things follow from the declaration, all decided when the route table is as
 The show page offers an Edit link and a Delete button only when the viewer owns the row. A
 stranger sees the fields and nothing to click.
 
+The same three hold on the model's JSON routes. A covered list answers the caller's rows, a
+foreign row is the same 404 or 403, and a `POST` body that names an owner is overwritten with
+the user the token names, so a program writes rows as itself and as nobody else.
+
 ## Passwords
 
 `Password` is the stored hash: a string that names its own algorithm and cost, bcrypt at
@@ -148,4 +197,5 @@ may join.
 
 The scope a covered route reads through is a store over the database, which is
 [the database layer](the-database-layer.md). The bound page is one piece of
-[the live layer](the-live-layer.md).
+[the live layer](the-live-layer.md). The token column, the lookup and the page that issues one
+are in [serve a JSON API](../how-to/serve-a-json-api.md).

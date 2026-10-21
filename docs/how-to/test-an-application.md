@@ -63,6 +63,29 @@ val response = Routes.table().dispatch(
 assertEquals(response.status, 303)
 ```
 
+## An API route with its token
+
+An API route reads no session and asks for no CSRF token, so the request is the body and the
+`Authorization` header, and `dispatch` runs it as the server would:
+
+```scala
+val response = Routes.table().dispatch(
+  Request(
+    Method.POST,
+    "/api/books",
+    Map.empty,
+    Map("Authorization" -> Seq(s"Bearer $plain")),
+    """{"title":"Dune","author":"Herbert","pages":412}""".getBytes,
+    Map.empty
+  )
+)
+assertEquals(response.status, 201)
+```
+
+`plain` is the text `Token.gen()` returned beside the hash the test stored on its user. Without
+the header the call throws `Unauthorized`; the 401 and its `WWW-Authenticate` header are the
+boundary's, which `dispatch` never reaches. The shop's `ApiSuite` is the complete pattern.
+
 ## Against a real database
 
 For anything that touches rows, use a throwaway Postgres from testcontainers and a second

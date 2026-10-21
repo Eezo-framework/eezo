@@ -12,7 +12,7 @@ object Landing {
       |    title: String,
       |    author: String,
       |    pages: Int
-      |) derives Table, Form, Resource
+      |) derives Table, Form, Resource, Api
       |""".stripMargin
 
   private val Routes: Vector[(String, String)] = Vector(
@@ -22,7 +22,12 @@ object Landing {
     "GET"    -> "/books/:id",
     "GET"    -> "/books/:id/edit",
     "PUT"    -> "/books/:id",
-    "DELETE" -> "/books/:id"
+    "DELETE" -> "/books/:id",
+    "GET"    -> "/api/books",
+    "POST"   -> "/api/books",
+    "GET"    -> "/api/books/:id",
+    "PUT"    -> "/api/books/:id",
+    "DELETE" -> "/api/books/:id"
   )
 
   private val Steps: Vector[(String, String, String)] = Vector(
@@ -39,8 +44,8 @@ object Landing {
     (
       "sun",
       "One declaration",
-      "derives Table, Form, Resource",
-      "Declare your model, and Eezo derives its tables & database API, its HTML form and all CRUD HTTP routes from one case class."
+      "derives Table, Form, Resource, Api",
+      "Declare your model, and Eezo derives its tables & database API, its HTML form, all CRUD HTTP routes and a JSON API from one case class."
     ),
     (
       "coral",
@@ -115,7 +120,7 @@ object Landing {
         h1("Your ", Tags.span(Attrs.cls := "hl", "data model"), " is the source of truth."),
         p(
           Attrs.cls := "lede",
-          "Declare a model, and Eezo derives tables, forms, and HTTP routes. ",
+          "Declare a model, and Eezo derives tables, forms, HTTP routes and a JSON API. ",
           "Server-side rendering with functional, direct-style Scala. ",
           "Fast dev feedback, deploys with one command."
         ),
@@ -148,7 +153,7 @@ object Landing {
         CodeBlock.render("scala", Model),
         ul(
           Attrs.cls                := "routes-pop",
-          Attrs.attr("aria-label") := "The seven routes the model mounts",
+          Attrs.attr("aria-label") := "The twelve routes the model mounts",
           Routes.zipWithIndex.map { case ((method, path), i) =>
             li(
               Attrs.cls           := s"sticker tilt-${i % 4}",

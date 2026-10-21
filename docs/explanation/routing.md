@@ -128,10 +128,11 @@ route is refused as forged and never reaches the login redirect.
 
 ## Handwritten beats derived
 
-Every route knows where it came from: handwritten, or derived by `Resource`. When both kinds
-land on the same method and path, the handwritten one is served and the derived one is dropped
-from the table entirely. That's the ordinary way to take over one page of a resource and keep
-the other six, and it's reported at boot so you know it happened.
+Every route knows where it came from: handwritten, or derived by `Resource` or `Api`. When both
+kinds land on the same method and path, the handwritten one is served and the derived one is
+dropped from the table entirely. That's the ordinary way to take over one page of a resource
+and keep the other six, or one of the five JSON routes and keep the other four, and it's
+reported at boot so you know it happened.
 
 Shadowing is different. A handwritten `GET /books/latest` ahead of a derived `GET /books/:id`
 is legal and is how first-match is meant to be used. Only when an earlier pattern swallows

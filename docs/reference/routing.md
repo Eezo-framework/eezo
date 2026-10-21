@@ -37,8 +37,13 @@ A trailing slash is ignored on both the pattern and the path.
 Handwritten routes first, sorted most static first: segment by segment, a literal before
 `:name` before `*rest`; a shorter path after a longer one when the ranks tie; then by path
 text, then by method. Derived routes follow, model by model in fully-qualified-name order,
-each model's seven in the order `Index, New, Show, Edit, Create, Update, Destroy`. The table
-is matched in that order and never re-sorted.
+each model's seven in the order `Index, New, Show, Edit, Create, Update, Destroy`, then its
+five JSON routes under `/api/<plural>` in the order `Index, Show, Create, Update, Destroy`.
+The table is matched in that order and never re-sorted.
+
+`/api` is not reserved. The five derived routes mount under it, and a handwritten file under
+`app/api/` sits beside them, first in the table like every handwritten route. A handwritten
+route is an API route when its handler takes an `api.Request`.
 
 ## Precedence
 
@@ -60,6 +65,9 @@ doesn't have the handler's shape, and the fix is in the file the comment names.
 
 The file also holds, when there are rows that need them:
 
+- one `Derivations.routesOf[A]` call per candidate model, which answers the seven of its
+  `Resource` and then the five of its `Api`, each nothing when the model has no instance, over
+  one store, so a row a program created shows on the page.
 - `storeFor[A]`, which picks each derived model's store: a scoped one for a model declaring
   `Owned`, a `JdbcStore` for a model with a `Table` when `eezo-db` is on the compile classpath,
   an `InMemoryStore` otherwise.

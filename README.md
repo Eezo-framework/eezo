@@ -53,7 +53,9 @@ As you change your data model, Eezo detects schema changes. When you're ready, y
 
 A case class also gets 7 CRUD routes: index, new, create, show, edit, update and destroy,
 served in a browser over rows in Postgres, with no need for a controller, repository or template
-written by hand. You can add your own routes as a plain `def` in a file, and the file path becomes the HTTP route path.
+written by hand. Add `Api` to the `derives` clause and the same case class answers a program
+with 5 JSON routes under `/api`, guarded by the same declaration as its pages.
+You can add your own routes as a plain `def` in a file, and the file path becomes the HTTP route path.
 You can also override a derived route on the same path.
 
 Handlers are ordinary functions from a request to a response.

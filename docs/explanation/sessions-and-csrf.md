@@ -87,7 +87,10 @@ How it works, in order:
 
 There's no opt-out and no exemption for a prefix. The drift page `eezo dev` serves carries the
 token like any form, because a localhost dev server is a classic drive-by target: any open tab
-can `POST` to it.
+can `POST` to it. An API route is outside the check by kind rather than by exemption: no
+session takes part in it, so there is no cookie for another site to ride on and no token to
+return. A program proves itself with the API token in its `Authorization` header instead, which
+a browser never sends on its own.
 
 ## Putting it in a form
 

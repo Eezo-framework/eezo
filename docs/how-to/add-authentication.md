@@ -116,6 +116,45 @@ otherwise. Outside a mount, pass the finished address: `logoutForm(request, Url.
 `User.guard.current(request)` is the signed-in user on a guarded route. On a public route there
 may be nobody, and asking is an error, so don't.
 
+## 8. A token for programs
+
+A guard that wraps an API route, one a program calls with `Authorization: Bearer`, needs a way
+from a token to a user. Store the hash on the user and hand the guard a lookup:
+
+```scala
+import io.eezo.auth.{Guard, Password, Token}
+
+case class User(id: Id[User], email: String, password: Password, token: Option[Token])
+    derives Table
+
+object User {
+  given Column[Password] = Column[String].imap(Password.stored)(_.value)
+  given Column[Token]    = Column[String].imap(Token.stored)(_.value)
+
+  def byToken(hash: Token): Option[User] =
+    read(Table[User].where(_.token === Some(hash)).first())
+
+  given guard: Guard[User] = Guard[User](
+    find = id => read(Table[User].findById(id)),
+    credentials = email => byEmail(email).map(user => (user.id, user.password)),
+    home = Url.Mounted("/"),
+    tokens = hash => byToken(hash).map(_.id)
+  )
+}
+```
+
+`Token.gen()` gives the plain text and its hash. Show the plain text once, from a page behind
+the session, and store the hash; writing a new one revokes the last:
+
+```scala
+val (plain, hash) = Token.gen()
+transact(Table[User].update(user.copy(token = Some(hash))))
+```
+
+A program's refusal is a 401 with `WWW-Authenticate: Bearer`, never a redirect. A guard
+without `tokens` that wraps an API route fails the boot, naming the route. The rest is in
+[serve a JSON API](serve-a-json-api.md).
+
 ## Production notes
 
 - Set `EEZO_SECRET` where the application runs. Without it eezo signs sessions with a throwaway

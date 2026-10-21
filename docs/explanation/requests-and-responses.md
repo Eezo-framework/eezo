@@ -36,6 +36,32 @@ captured segment, and a value that won't convert is a 400 with the parameter nam
 groups and multi-selects produce repeats and a single-valued map would drop them in silence.
 Multipart is out of scope today.
 
+## The API request
+
+A handler that takes an `api.Request` instead is an API route: one a program calls, with no
+browser session taking part.
+
+```scala
+final case class Request(
+    method: Method,
+    path: String,
+    query: Map[String, Seq[String]],
+    headers: Map[String, Seq[String]],
+    body: Array[Byte],
+    pathParams: Map[String, String],
+    currentUser: Option[String] = None
+)
+```
+
+A type of its own rather than a `Request` with an empty session, because the type a handler
+takes is the one place a route says what it is, with no declaration elsewhere to forget. What a
+browser carries is absent rather than empty: no session, no flash, no form, no CSRF token. The
+`Cookie` header is still among the headers as sent, because a header is what a program chose
+to send and not something eezo read for it. `request.as[Book]` reads the body through the
+model's `Serde` and throws the 400 or the 422 rather than returning them, since there is no
+form to render again. `currentUser` is who the guard says sent it, read off the Bearer header
+and never off a session. The five routes a model mounts with `derives Api` are API routes too.
+
 ## The `_method` override
 
 A browser issues `GET` and `POST` from markup and nothing else, and the derived routes need
@@ -98,10 +124,11 @@ way. `Response.Redirect(url)` carries a `Location`. Everything else goes through
 is the header that needs both. The request's headers are a map, because reading wants lookup.
 A header value can be a `Url`, which is how a `Location` of `Url.Mounted` travels with a mount.
 
-**The body has three cases.** `Body.Html` is a page from the DSL, rendered once on the way out.
-`Body.Bytes` is anything already encoded. `Body.Empty` is a redirect's. A fourth, streaming,
-is reserved and absent, because nothing has needed it yet and the renderer already writes into
-a builder, so it can arrive without reshaping anything.
+**The body has four cases.** `Body.Html` is a page from the DSL, rendered once on the way out.
+`Body.Json` is text a `Serde` wrote, sent as `application/json` unless the response names its
+own type. `Body.Bytes` is anything already encoded. `Body.Empty` is a redirect's. A fifth,
+streaming, is reserved and absent, because nothing has needed it yet and the renderer already
+writes into a builder, so it can arrive without reshaping anything.
 
 **The session is carried as a value.** A handler reads `request.session` and, when it wants a
 change kept, returns `response.withSession(amended)`. Signing it needs the secret, which the
