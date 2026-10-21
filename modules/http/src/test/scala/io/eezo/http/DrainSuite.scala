@@ -2,7 +2,6 @@ package io.eezo.http
 
 import java.net.InetSocketAddress
 import java.net.URI
-import java.net.http.HttpRequest
 import java.net.http.HttpResponse
 import java.nio.charset.StandardCharsets
 import java.time.Duration
@@ -42,7 +41,9 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
             entered.countDown()
             // The finally of `inFlight` always releases; the bound is for a test that never got
             // that far, so a stuck handler ends on its own rather than holding a thread for good.
-            release.await(30, TimeUnit.SECONDS)
+            // It is the request's own bound, since a handler outliving the request that waits on
+            // it holds a thread for nobody.
+            release.await(requestTimeout.toMillis, TimeUnit.MILLISECONDS)
             Response.Ok(Html.text("finished"))
           }
         )
@@ -60,11 +61,7 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     serving(held.routes) { (server, port) =>
       try {
         val answer = client.sendAsync(
-          HttpRequest
-            .newBuilder(URI.create(s"http://$Loopback:$port/held"))
-            .timeout(requestTimeout)
-            .GET()
-            .build(),
+          request(port, "/held").GET().build(),
           HttpResponse.BodyHandlers.ofString()
         )
         assert(held.entered.await(5, TimeUnit.SECONDS), "the held handler never started")
@@ -124,27 +121,59 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
-  test("a request that arrives once stop has begun is refused while the drain is still open") {
-    val held = new Held
+  /** How long the late request waits on a far end that says nothing, to connect and then to be
+    * answered. Both are shorter than [[HttpServer.StopTimeout]], so a request that is going to be
+    * judged is judged while the drain is still open, and neither is so short that a loaded runner
+    * turns a refusal, which is immediate, into a timeout.
+    */
+  private val lateTimeout = Duration.ofSeconds(1)
+
+  /** Sends a request that arrives once stop has begun, and asserts the server refuses it while the
+    * drain is still open. Returns the port when the request timed out instead, and `None` once the
+    * server has refused it.
+    *
+    * A timeout is not a refusal. The server refuses by closing its listening socket, so a
+    * connection that is neither refused nor answered did not reach the server at all, the case
+    * `reachable` describes: the port is shared with a process that holds it and says nothing.
+    * Reading that as a refusal would pass a test that proved nothing, and waiting on it was the
+    * hang this bound replaced, so the caller tries again on a fresh server instead.
+    */
+  private def lateRequest(): Option[Int] = {
+    val held     = new Held
+    var timedOut = Option.empty[Int]
     inFlight(held) { (server, port, _) =>
       val stopper = stopping(server.jetty)
       // A client with no connection to reuse, so the late request needs a new one, which is the
-      // case a platform health check or a browser hitting a stopping machine is in. It is bounded,
-      // so a request nobody answers fails this test inside the drain rather than outlasting it.
-      val late = java.net.http.HttpClient.newBuilder().connectTimeout(connectTimeout).build()
-      try
-        intercept[java.net.ConnectException](
-          late.send(
-            HttpRequest
-              .newBuilder(URI.create(s"http://$Loopback:$port${HttpServer.HealthPath}"))
-              .timeout(requestTimeout)
-              .build(),
-            HttpResponse.BodyHandlers.ofString()
-          )
+      // case a platform health check or a browser hitting a stopping machine is in.
+      val late = java.net.http.HttpClient.newBuilder().connectTimeout(lateTimeout).build()
+      try {
+        val answered = late.send(
+          request(port, HttpServer.HealthPath, lateTimeout).build(),
+          HttpResponse.BodyHandlers.ofString()
         )
-      finally late.close()
-      assert(stopper.isAlive, "the drain closed before the late request was refused")
+        fail(s"the late request was answered ${answered.statusCode()} instead of refused")
+      } catch {
+        case _: java.net.http.HttpTimeoutException => timedOut = Some(port)
+        case _: java.net.ConnectException          =>
+          assert(stopper.isAlive, "the drain closed before the late request was refused")
+      } finally late.close()
     }
+    timedOut
+  }
+
+  test("a request that arrives once stop has begun is refused while the drain is still open") {
+    def refused(attempts: Int, timedOutOn: List[Int]): Unit =
+      lateRequest() match {
+        case None                       => ()
+        case Some(port) if attempts > 1 => refused(attempts - 1, port :: timedOutOn)
+        case Some(port)                 =>
+          fail(
+            s"the late request timed out instead of being refused, on ports " +
+              s"${(port :: timedOutOn).reverse.mkString(", ")}: each is one another process " +
+              "holds on the loopback"
+          )
+      }
+    refused(attempts = 3, timedOutOn = Nil)
   }
 
   test("a handler that never finishes holds stop for the stop timeout and no longer") {
@@ -236,11 +265,12 @@ class DrainSuite extends munit.FunSuite with ServerFixtures {
       )
     )
     var answer = ""
+    val bound  = 5000
     serving(routes, dev = dev) { (server, port) =>
       val socket = new java.net.Socket()
-      socket.connect(new InetSocketAddress(Loopback, port), 5000)
+      socket.connect(new InetSocketAddress(Loopback, port), bound)
       try {
-        socket.setSoTimeout(5000)
+        socket.setSoTimeout(bound)
         val out = socket.getOutputStream
         out.write(
           ("GET /upload HTTP/1.1\r\nHost: localhost\r\nContent-Type: text/plain\r\n" +
