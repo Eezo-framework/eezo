@@ -26,6 +26,13 @@ under modules, so upickle and not eezoUpickle, except sbt-plugin, whose id is sb
 examples build resolves eezo from the local ivy cache, so after a module change run
 `bin/fast publishLocalForExample` first. The verdict is the munit summary at the end of the
 output.
+
+To format one file, name the project that owns it and give the path absolute, since every
+project of the aggregate resolves a relative one against its own directory and fails:
+
+  bin/fast "http/Test/scalafmtOnly $PWD/modules/http/src/test/scala/io/eezo/http/ApiSuite.scala"
+
+and http/scalafmtOnly for a main source.
 EOF
 }
 
