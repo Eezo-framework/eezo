@@ -64,7 +64,9 @@ tables. The examples under `examples/` each do this.
 
 The schema is created only when the catalog says it is missing, so a production role that owns an
 existing schema but may not create one on the database still connects. `search_path` is the schema
-alone: objects in `public`, such as an extension's types and functions, are not on it.
+alone: objects in `public`, such as an extension's types and functions, are not on it. An
+application that needs those too sets the path itself in `databaseInit`, which runs after the
+schema step: `set search_path to bookshelf, public`.
 
 `databaseInit` is for any other per connection setting, such as `application_name` or a statement
 timeout. It runs after the schema step on every pooled connection and needs no `super` call:
