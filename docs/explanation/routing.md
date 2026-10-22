@@ -7,7 +7,7 @@ nothing in it is found by reflection.
 ## A generator, before the compiler
 
 The sbt plugin reads `src/main/scala/app/` and writes one Scala file,
-`target/scala-3.8.4/src_managed/main/io/eezo/generated/Routes.scala`. It runs as a source
+`target/scala-3.9.0/src_managed/main/io/eezo/generated/Routes.scala`. It runs as a source
 generator, so it's done before your code compiles, and it works on text alone: filenames,
 directory names, `package` clauses and `case class` declarations. It never asks the compiler
 anything, because the compiler hasn't run yet.

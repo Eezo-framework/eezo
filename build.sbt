@@ -195,7 +195,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
   .settings(
     name := "sbt-eezo",
     pomFacts,
-    // The build level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
+    // The build level Scala 3.9.0 cannot build an sbt 1 plugin, so a plain `sbt compile`
     // would fail.
     scalaVersion       := Toolchain.PluginScalaVersion,
     crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.ScalaVersion),
@@ -210,7 +210,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         // checked on the Scala 3 axis only.
         case "2.12" =>
           common ++ Seq("-Xsource:3", "-release:8", "-Xfatal-warnings", "-Ywarn-unused")
-        // 3.8.4 already defaults to 17; stated so a compiler upgrade cannot move it in silence.
+        // 3.9.0 already defaults to 17; stated so a compiler upgrade cannot move it in silence.
         case _ => common ++ Seq("-release:17", "-Werror", "-Wunused:all", "-Wvalue-discard")
       }
     },

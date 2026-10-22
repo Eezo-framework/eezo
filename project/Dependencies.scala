@@ -10,7 +10,7 @@ object Dependencies {
   object V {
     val munit          = "1.3.4"
     val postgresql     = "42.7.1"
-    val testcontainers = "1.21.3"
+    val testcontainers = "1.21.4"
 
     /** spring-security-crypto. Picked because it is the one bcrypt implementation on the JVM that
       * ships as a jar with no transitive dependency of its own, so `eezo-auth` costs an application

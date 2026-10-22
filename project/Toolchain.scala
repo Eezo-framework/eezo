@@ -9,8 +9,8 @@ import java.util.Properties
   */
 object Toolchain {
 
-  /** The pinned language version. eezo tracks Scala 3.8.x. */
-  val ScalaVersion = "3.8.4"
+  /** The pinned language version. eezo tracks Scala 3.9.x. */
+  val ScalaVersion = "3.9.0"
 
   /** The Scala version the sbt 1 axis of `sbt-eezo` is built with. sbt 1 runs on Scala 2.12 and a
     * plugin has to match it, so this is sbt's version to choose, not eezo's.

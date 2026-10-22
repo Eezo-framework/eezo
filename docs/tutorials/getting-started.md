@@ -25,7 +25,7 @@ eezo new bookshelf
 ```
 
 ```
-created ./bookshelf (eezo 0.2.0, Scala 3.8.4, sbt 1.12.14)
+created ./bookshelf (eezo 0.2.0, Scala 3.9.0, sbt 1.12.14)
 
 next:
   cd bookshelf
@@ -50,7 +50,7 @@ That's the whole application. Open the files one at a time.
 
 ```scala
 name         := "bookshelf"
-scalaVersion := "3.8.4"
+scalaVersion := "3.9.0"
 
 enablePlugins(EezoPlugin)
 
@@ -234,7 +234,7 @@ order the table is matched in, most specific first. With two pages that doesn't 
 have `/books/new` next to `/books/:id`, it's what keeps `new` from being read as an id.
 
 The table is a Scala file you can read, at
-`target/scala-3.8.4/src_managed/main/io/eezo/generated/Routes.scala`. One row per file:
+`target/scala-3.9.0/src_managed/main/io/eezo/generated/Routes.scala`. One row per file:
 
 ```scala
 io.eezo.http.Route.Http(

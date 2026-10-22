@@ -80,7 +80,7 @@ change.
 | axis | Scala | floor |
 |---|---|---|
 | sbt 1 | 2.12.21 | 1.5.8 |
-| sbt 2 | 3.8.4 | 2.0.6 |
+| sbt 2 | 3.9.0 | 2.0.6 |
 
 One source file set, compiled on both axes. The source stays inside the subset both compilers
 accept, and building both is the only check that it does. The plugin's bytecode targets are
