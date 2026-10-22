@@ -517,26 +517,26 @@ read_version_file() {
   }
 }
 
-# The scaffold's gitignore entries, either written to a new .gitignore file or appended if .gitignore already exists
-GITIGNORE_ENTRIES=(target/ .bsp/ .metals/ .bloop/)
-
-write_gitignore() { # <file>; sets GITIGNORE_ADDED to the entries it wrote
-  local file="$1" line
-  GITIGNORE_ADDED=()
-  for line in "${GITIGNORE_ENTRIES[@]}"; do
-    [ -f "$file" ] && grep -qxF "$line" "$file" && continue
-    GITIGNORE_ADDED+=("$line")
+# The scaffold's gitignore entries, either written to a new .gitignore file or appended if .gitignore
+# already exists, in which case it names the entries it appended
+write_gitignore() { # <file>
+  local file="$1" existed=0 line added=()
+  [ ! -f "$file" ] || existed=1
+  for line in target/ .bsp/ .metals/ .bloop/; do
+    [ "$existed" -eq 1 ] && grep -qxF "$line" "$file" && continue
+    added+=("$line")
   done
-  [ "${#GITIGNORE_ADDED[@]}" -gt 0 ] || return 0
+  [ "${#added[@]}" -gt 0 ] || return 0
   if [ -s "$file" ] && [ -n "$(tail -c1 "$file")" ]; then echo >> "$file"; fi
-  printf '%s\n' "${GITIGNORE_ADDED[@]}" >> "$file"
+  printf '%s\n' "${added[@]}" >> "$file"
+  [ "$existed" -eq 0 ] || echo "added ${added[*]} to the existing .gitignore"
 }
 
 scaffold() {
   dir="${1:-}"
   [ -n "$dir" ] || { echo "eezo: new needs a name: eezo new myapp, or eezo new . for the current directory ($(basename "$PWD"))" >&2; exit 1; }
   # Any reference to the current directory such as: ./, "$PWD", or a symlink to it
-  if [ -d "$dir" ] && [ "$(cd "$dir" && pwd -P)" = "$(pwd -P)" ]; then dir="."; fi
+  if [ "$dir" -ef . ]; then dir="."; fi
   if [ "$dir" = "." ]; then
     # In place: the app is named after the directory
     name="$(basename "$PWD")"
@@ -548,14 +548,19 @@ scaffold() {
       echo "eezo: this directory already has ${existing[*]}; new scaffolds a project only where there is none" >&2
       exit 1
     }
+    [ ! -L .gitignore ] || {
+      echo "eezo: .gitignore here is a symlink; new appends its entries only to a plain .gitignore" >&2
+      exit 1
+    }
+    [ ! -e .gitignore ] || { [ -f .gitignore ] && [ -w .gitignore ]; } || {
+      echo "eezo: .gitignore here is not a file new can append to; make it a writable file or remove it" >&2
+      exit 1
+    }
   else
     name="$dir"
     [ ! -e "$dir" ] || { echo "eezo: ./$dir already exists" >&2; exit 1; }
   fi
   read_version_file
-
-  local gitignore_existed=0
-  [ ! -f "$dir/.gitignore" ] || gitignore_existed=1
 
   mkdir -p "$dir/project" "$dir/src/main/scala/app" "$dir/src/main/scala/models"
 
@@ -635,11 +640,8 @@ object Index {
 }
 EOF
 
+  echo "created $name at $(cd "$dir" && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
   write_gitignore "$dir/.gitignore"
-
-  echo "created $name (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
-  [ "$gitignore_existed" -eq 0 ] || [ "${#GITIGNORE_ADDED[@]}" -eq 0 ] ||
-    echo "added ${GITIGNORE_ADDED[*]} to the existing .gitignore"
   echo
   echo "next:"
   [ "$dir" = "." ] || echo "  cd $name"

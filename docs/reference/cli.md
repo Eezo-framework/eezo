@@ -151,7 +151,8 @@ the command's answer and not a build failure:
 
 `eezo new .` writes the same files into the current directory.
 It refuses if the directory already has a build definition (`build.sbt`, `build.sc`, `build.mill`), a `project/` or a `src/` directory.
-A pre-existing `.gitignore` file will be appended.
+An existing `.gitignore` keeps its lines; the entries it lacks are appended to it, and `new` names them.
+It refuses a `.gitignore` that is a symlink or that it cannot append to.
 
 ## Related
 

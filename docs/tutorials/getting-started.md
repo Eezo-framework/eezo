@@ -25,7 +25,7 @@ eezo new bookshelf
 ```
 
 ```
-created ./bookshelf (eezo 0.2.0, Scala 3.8.4, sbt 1.12.14)
+created bookshelf at /home/<username>/projects/bookshelf (eezo 0.2.0, Scala 3.8.4, sbt 1.12.14)
 
 next:
   cd bookshelf
