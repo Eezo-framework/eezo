@@ -11,6 +11,7 @@
 # https://eezo.io/install writes with the released version.
 
 set -euo pipefail
+unset CDPATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
@@ -552,7 +553,7 @@ scaffold() {
       echo "eezo: .gitignore here is a symlink; new appends its entries only to a plain .gitignore" >&2
       exit 1
     }
-    [ ! -e .gitignore ] || { [ -f .gitignore ] && [ -w .gitignore ]; } || {
+    [ ! -e .gitignore ] || { [ -f .gitignore ] && [ -r .gitignore ] && [ -w .gitignore ]; } || {
       echo "eezo: .gitignore here is not a file new can append to; make it a writable file or remove it" >&2
       exit 1
     }
@@ -640,7 +641,7 @@ object Index {
 }
 EOF
 
-  echo "created $name at $(cd "$dir" && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  echo "created $name at $(cd -- "$dir" 2> /dev/null && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
   write_gitignore "$dir/.gitignore"
   echo
   echo "next:"
