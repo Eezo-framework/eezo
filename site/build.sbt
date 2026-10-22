@@ -23,7 +23,7 @@ libraryDependencies ++= Seq(
   // dependency of the site, and one the framework does not take: two small jars, no transitive
   // dependency, BSD licensed.
   "org.commonmark" % "commonmark"                % "0.30.1",
-  "org.commonmark" % "commonmark-ext-gfm-tables" % "0.30.0",
+  "org.commonmark" % "commonmark-ext-gfm-tables" % "0.30.1",
   // highlight.js, the browser bundle, for the code blocks. `Provided`: the generator below takes
   // the three files the pages load out of the jar at build time, so the jar itself never ships.
   "org.webjars"    % "highlightjs" % HighlightJs % Provided,
