@@ -49,19 +49,22 @@ overridden `boot` that still wants to serve calls it.
 |---|---|---|
 | `schema: Schema` | abstract | per command |
 | `boot(): Unit` | abstract on `DbApp`; `EezoApp` supplies the http layer's | the program |
-| `databaseSchema: String` | `"public"` | by the commands that introspect |
+| `databaseSchema: String` | `"public"` | on every physical connection the pool opens, and by the commands that introspect |
 | `databaseUrl: String` | from the environment, above | when a `Database` is built |
 | `databaseUser: String` | from the environment | same |
 | `databasePassword: String` | from the environment | same |
 | `databasePoolSize: Int` | from the environment, 10 | same |
 | `databaseAcquireTimeout: Duration` | from the environment, 5 s | same |
-| `databaseInit: Connection -> Unit` | nothing | on every physical connection the pool opens |
+| `databaseInit: Connection -> Unit` | nothing | on every physical connection the pool opens, after the schema step |
 
 A `Database` is built per command and per program run, installed around it, and closed after.
-`databaseInit` is where `search_path`, `application_name` and statement timeouts go. An
-application that keeps its tables in a schema other than `public` sets both `databaseSchema`
-and a `databaseInit` that sets `search_path`, because the first is what the drift commands
-read and the second is what every query runs under.
+`databaseSchema` is where the application's tables live and what the drift commands read. Any
+name but `public` makes every physical connection create that schema when the catalog says it is
+missing and set `search_path` to it alone, so the DDL, the migration ledger and every query land
+where `status` looks; `public` runs nothing and leaves Postgres's own `search_path`. The name is
+quoted as an identifier, so it is used exactly as written. `databaseInit` is where
+`application_name`, statement timeouts and any other per connection setting go; it runs after the
+schema step and needs no `super` call to keep it.
 
 ## `LiveApp`
 

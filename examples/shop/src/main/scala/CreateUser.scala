@@ -1,5 +1,3 @@
-import java.sql.Connection
-
 import io.eezo.auth.Password
 import io.eezo.core.Id
 import io.eezo.db.*
@@ -14,14 +12,6 @@ object CreateUser extends DbApp {
 
   /** Same Postgres schema as `Main`, so the account lands where the app reads it. */
   override def databaseSchema: String = "shop"
-
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "shop"""")
-      st.execute("""set search_path to "shop"""")
-    } finally st.close()
-  }
 
   override def boot(): Unit = {
     val email  = sys.env("SHOP_EMAIL")

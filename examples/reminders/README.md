@@ -12,9 +12,9 @@ deliver every reminder that is due and not yet sent, and mark it sent, in one `t
 is a line on stdout. `DbApp` brings `main`, the `Database` it installs around `boot`, and the eight
 schema commands. There is no `EezoPlugin` on this project, because there are no routes to generate.
 
-The job keeps its table in a Postgres schema named `reminders` (`databaseSchema` plus the
-`databaseInit` hook; `Main.scala` says why both halves exist), so it shares the dev database with
-the other examples without their drift bleeding into each other.
+The job keeps its table in a Postgres schema named `reminders` (`databaseSchema` in `Main.scala`,
+the one override that does it), so it shares the dev database with the other examples without
+their drift bleeding into each other.
 
 ```bash
 docker run -d --name eezo-pg -p 5442:5432 \

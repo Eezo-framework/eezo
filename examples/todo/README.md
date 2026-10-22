@@ -1,4 +1,4 @@
-# The todo app — a guided tour of the eezo CLI
+# The todo app: a guided tour of the eezo CLI
 
 | | |
 |---|---|
@@ -11,7 +11,7 @@ routes, and a Postgres schema of its own. Everything the CLI currently does can 
 this directory. Every output block below was captured from a real run.
 
 The Store↔Table integration landed (`JdbcStore`). A model
-deriving `Table` — like `Todo` — now gets derived CRUD backed by Postgres, so todos you create in
+deriving `Table`, like `Todo`, now gets derived CRUD backed by Postgres, so todos you create in
 the browser survive restarts, and the migrate-before-serve order in this guide is load-bearing:
 browse `/todos` before the table exists and you'll meet a real database error.
 
@@ -38,24 +38,24 @@ sbt
 
 The app serves on **8090** (`Main.scala` overrides `port` so the tour never collides with
 whatever your machine runs on 8080) and keeps its tables in a Postgres schema named `todo`
-(`databaseSchema` + the `databaseInit` hook — see `Main.scala` for why both halves exist).
+(`databaseSchema` in `Main.scala`, the one override that does it).
 
 ## 1. The code
 
-- `src/main/scala/models/Todo.scala` — the model. `derives Table, Form, Resource` is the whole
+- `src/main/scala/models/Todo.scala`: the model. `derives Table, Form, Resource` is the whole
   declaration: table, HTML form, seven CRUD routes.
-- `src/main/scala/AppSchema.scala` — registers the table and adds what types alone cannot say:
+- `src/main/scala/AppSchema.scala`: registers the table and adds what types alone cannot say:
   `table[Todo].index(_.done).unique(_.title)`. The selectors are typed; rename a field and the
   index breaks at compile time.
-- `src/main/scala/app/Index.scala` — `GET /` by filename convention. A handler is a plain
+- `src/main/scala/app/Index.scala`: `GET /` by filename convention. A handler is a plain
   `Request => Response` on a virtual thread.
-- `src/main/scala/app/Health.scala` — a custom name mounts a GET at its own segment:
+- `src/main/scala/app/Health.scala`: a custom name mounts a GET at its own segment:
   `GET /health`.
-- `src/main/scala/Main.scala` — the entry point: name `schema` and `routes`, done. `main` is
+- `src/main/scala/Main.scala`: the entry point; name `schema` and `routes`, done. `main` is
   inherited from `EezoApp` and dispatches. `EezoApp` is the umbrella's trait, both layers stacked;
   an application with one layer extends that layer's trait instead (`../hello`, `../reminders`).
 
-## 2. The route table — no database needed
+## 2. The route table, no database needed
 
 ```
 sbt:examples> todo/run routes
@@ -75,7 +75,7 @@ sbt:examples> todo/run routes
 ```
 
 Handwritten routes first (most-static-first, so `/todos/new` beats `/todos/:id`), then the seven
-derived ones. This command never opens a database connection — stop Postgres and it still answers.
+derived ones. This command never opens a database connection: stop Postgres and it still answers.
 `todo/eezoRoutes` is the same thing as an sbt task.
 
 ## 3. Status → freeze → migrate: the reviewed path
@@ -94,9 +94,9 @@ sbt:examples> todo/run db status
   + index uq_todo_title on todo
 ```
 
-(The task "fails" — drift is exit code 1 on purpose, so CI can gate on it.)
+(The task "fails": drift is exit code 1 on purpose, so CI can gate on it.)
 
-Freeze it as the first migration. Everything after `freeze` that is not a flag is the name — no
+Freeze it as the first migration. Everything after `freeze` that is not a flag is the name, no
 quoting needed:
 
 ```
@@ -113,7 +113,7 @@ sbt:examples> todo/run db freeze initial schema
 wrote db/migrations/0001_initial_schema.sql
 ```
 
-Open `todo/db/migrations/0001_initial_schema.sql` — committed SQL with a fingerprint header (edit
+Open `todo/db/migrations/0001_initial_schema.sql`: committed SQL with a fingerprint header (edit
 it by hand and `migrate` will refuse, telling you to change the model and re-freeze instead).
 `todo/db/schema.json` is the snapshot the *next* freeze diffs against.
 
@@ -158,7 +158,7 @@ sbt:examples> todo/run
 ```
 
 Open <http://localhost:8090>. Click through: the homepage (try `/?name=you`), `/health`, and
-`/todos` — create a couple of todos, edit one, delete one. That whole CRUD flow is derived from
+`/todos`: create a couple of todos, edit one, delete one. That whole CRUD flow is derived from
 the case class; the form's optional `notes` and the `done` checkbox come from `Option[String]` and
 `Boolean`. Ctrl+C (or `enter` in the sbt shell) stops it.
 
@@ -172,9 +172,9 @@ sbt:todo> eezoDev
 First run compiles and starts the app (`eezo dev: started Main`), with the drift check and route
 listing on. Now, **without stopping anything**:
 
-1. Edit `app/Index.scala` — change the `h1` text — and save.
+1. Edit `app/Index.scala`, change the `h1` text, and save.
 2. Watch the console: recompile, restart.
-3. Refresh <http://localhost:8090> — your change is live. Budget is well under a second of
+3. Refresh <http://localhost:8090>: your change is live. Budget is well under a second of
    compile plus ~a quarter second of JVM boot.
 
 Break the file on purpose (delete a `)`) and save: the compile fails, **the old server keeps
@@ -190,7 +190,7 @@ With `eezoDev` still running, add a field to `Todo`:
     priority: Option[Int]
 ```
 
-Save. The restarted server prints a warning but serves — a column the database lacks breaks
+Save. The restarted server prints a warning but serves: a column the database lacks breaks
 nothing until code touches it:
 
 ```
@@ -214,14 +214,13 @@ refuses to route: every path on <http://localhost:8090> answers **503** with the
 - two buttons: **apply to the dev database** (sync, no migration written) or
   **freeze as a migration and apply it** (name field + your decisions → `000N_*.sql` + applied)
 
-Pick either. The page re-checks on every refresh, so it flips to *"resolved ✓ — save any file to
-restart"* — save a file (or press `enter` and rerun `eezoDev`) and the app serves again. If an
-action fails, the database's own error renders on the page — for example, adding a non-null
-column over existing rows is a `[risky]` change that Postgres may refuse; that refusal is the
-flag doing its job.
+Pick either. The page re-checks on every refresh, so it flips to *"resolved ✓"*; save a file (or
+press `enter` and rerun `eezoDev`) and the app serves again. If an action fails, the database's
+own error renders on the page: for example, adding a non-null column over existing rows is a
+`[risky]` change that Postgres may refuse; that refusal is the flag doing its job.
 
 The decisions are on the page rather than in the terminal because under `eezoDev` the forked app
-shares stdin with sbt's watch — a console prompt would race it for every keystroke.
+shares stdin with sbt's watch, and a console prompt would race it for every keystroke.
 
 ## 8. Start over
 
@@ -253,8 +252,8 @@ drop + sync when you don't care about migrations.)
 `eezo new myapp` scaffolds one against the locally published eezo, and inside it `eezo routes`,
 `eezo db status --json`, `eezo dev` forward to the same dispatch these `todo/run ...` commands hit.
 
-**For agents and scripts:** every command takes `--json` — same exit codes, machine-readable
-body, each change carrying its `sql` alongside the `destructive`/`risky` classification. Try
-`todo/run db status --json`. `freeze` swaps its prompt for a policy flag: `--accept-all` or
-`--skip-destructive` (bare `--json` implies the latter, so a machine caller never hangs on a
-prompt).
+**For agents and scripts:** every command takes `--json`, with the same exit codes and a
+machine-readable body, each change carrying its `sql` alongside the `destructive`/`risky`
+classification. Try `todo/run db status --json`. `freeze` swaps its prompt for a policy flag:
+`--accept-all` or `--skip-destructive` (bare `--json` implies the latter, so a machine caller
+never hangs on a prompt).

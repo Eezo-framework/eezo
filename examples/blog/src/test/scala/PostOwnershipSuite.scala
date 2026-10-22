@@ -1,6 +1,5 @@
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.sql.Connection
 import java.util.UUID
 
 import io.eezo.core.Id
@@ -94,17 +93,16 @@ class PostOwnershipSuite extends munit.FunSuite {
     *
     * A second `DbApp` for the same reason `CreateUser` is one: `withDatabase` is `protected`, so
     * installing a `Database` is something only a subclass can ask for, and a test is a front end
-    * like any other. The schema, the per connection hook and `AppSchema` are `Main`'s own values
-    * rather than copies, so a change to where the blog keeps its tables moves this with it.
+    * like any other. The schema and `AppSchema` are `Main`'s own values rather than copies, so a
+    * change to where the blog keeps its tables moves this with it.
     */
   private object BlogDb extends DbApp {
-    override def schema: Schema                   = Main.schema
-    override def databaseUrl: String              = postgres.getJdbcUrl
-    override def databaseUser: String             = postgres.getUsername
-    override def databasePassword: String         = postgres.getPassword
-    override def databaseSchema: String           = Main.databaseSchema
-    override def databaseInit: Connection => Unit = Main.databaseInit
-    override def boot(): Unit                     = ()
+    override def schema: Schema           = Main.schema
+    override def databaseUrl: String      = postgres.getJdbcUrl
+    override def databaseUser: String     = postgres.getUsername
+    override def databasePassword: String = postgres.getPassword
+    override def databaseSchema: String   = Main.databaseSchema
+    override def boot(): Unit             = ()
 
     /** The one thing this object exists to publish: a `Database` installed around a block, which is
       * what `sbt run` does around `boot` and what every handler below reaches through.

@@ -1,4 +1,3 @@
-import java.sql.Connection
 import java.time.LocalDate
 
 import io.eezo.db.*
@@ -25,19 +24,11 @@ object Main extends DbApp {
   override def schema: Schema = AppSchema
 
   /** This app keeps its table in a Postgres schema of its own, so it can share the dev database
-    * with the other examples without their drift bleeding into each other. Two halves, told once
-    * each: the init hook runs on **every** pooled connection (search_path is per connection), and
-    * `databaseSchema` points the drift commands' catalog reads at the same name.
+    * with the other examples without their drift bleeding into each other. Naming it is enough:
+    * eezo creates the schema and sets search_path to it on **every** pooled connection, because
+    * search_path is per connection, and the drift commands read the same name.
     */
   override def databaseSchema: String = "reminders"
-
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "reminders"""")
-      st.execute("""set search_path to "reminders"""")
-    } finally st.close()
-  }
 
   override def boot(): Unit = {
     val reminders = Table[Reminder]
