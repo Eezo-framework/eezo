@@ -9,6 +9,7 @@ import java.sql.{Connection, SQLException}
 import java.time.Duration
 import java.util.concurrent.{ConcurrentLinkedQueue, CountDownLatch, TimeUnit}
 import java.util.concurrent.atomic.AtomicReference
+import scala.annotation.tailrec
 
 /** The pool against a real Postgres: what it reuses, when it opens, and how it fails.
   *
@@ -168,6 +169,9 @@ class PoolSuite extends PgSuite {
   test(
     "with the database down, the first read waits the acquire timeout and fails in eezo's words"
   ) {
+    // Nothing here says whether the driver's refusal has been recorded when the timeout fires: the
+    // two are independent timers, and which comes first depends on how busy the machine is. The
+    // driver's word is asserted below, once it has had time to arrive.
     val timeout = Duration.ofMillis(500)
     val pool    = new Pool(Refusing.jdbcUrl(), "nobody", "hunter2", _ => (), size = 1, timeout)
     installing(new Database(pool)) {
@@ -175,9 +179,33 @@ class PoolSuite extends PgSuite {
       val e      = intercept[ConnectionUnavailable](read { backend() })
       val waited = millisSince(start)
       assert(waited >= timeout.toMillis - 50, s"the borrow gave up after $waited ms")
-      assert(e.getMessage.contains("refused"), s"the driver's failure is missing: ${e.getMessage}")
+      assert(
+        e.getMessage.contains("no database connection within 500 ms from the pool of size 1"),
+        e.getMessage
+      )
       assert(!e.getMessage.contains("hunter2"), e.getMessage)
       assert(!e.getMessage.contains("detached"), s"no detached block is involved: ${e.getMessage}")
+    }
+  }
+
+  /** Borrows until the pool has the driver's failure on record, or the deadline passes, and answers
+    * the last refusal either way. HikariCP records a failed connect on its own thread, so a borrow
+    * that gives up first reports that none is recorded yet; the next one finds it.
+    */
+  @tailrec
+  private def unavailableOnceDriverFails(deadline: Long): ConnectionUnavailable = {
+    val e = intercept[ConnectionUnavailable](read { backend() })
+    if (e.getMessage.contains("refused") || System.nanoTime() >= deadline) e
+    else unavailableOnceDriverFails(deadline)
+  }
+
+  test("with the database down, a read after the driver has failed says what the driver said") {
+    val pool =
+      new Pool(Refusing.jdbcUrl(), "nobody", "hunter2", _ => (), size = 1, Duration.ofMillis(500))
+    installing(new Database(pool)) {
+      val e = unavailableOnceDriverFails(System.nanoTime() + Duration.ofSeconds(10).toNanos)
+      assert(e.getMessage.contains("refused"), s"the driver's failure is missing: ${e.getMessage}")
+      assert(!e.getMessage.contains("hunter2"), e.getMessage)
     }
   }
 

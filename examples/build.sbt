@@ -92,7 +92,7 @@ lazy val blog = (project in file("blog"))
       // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
       // in-memory substitute is the half `modules/http` already tests. Test scope, so nothing the
       // blog runs with carries it.
-      "org.testcontainers" % "postgresql" % "1.21.3" % Test
+      Dependencies.testcontainersPg
     ),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir
@@ -121,7 +121,7 @@ lazy val shop = (project in file("shop"))
       layer("eezo-upickle"),
       "com.lihaoyi" %% "upickle" % "4.4.3",
       "org.scalameta" %% "munit" % "1.3.4" % Test,
-      "org.testcontainers" % "postgresql" % "1.21.3" % Test
+      Dependencies.testcontainersPg
     ),
     // `Stripe` reads its two secrets when the route table is built, and a suite builds the table,
     // so the suite runs in a JVM of its own that can be handed stand ins. Nothing in it calls
