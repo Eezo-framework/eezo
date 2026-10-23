@@ -1,5 +1,3 @@
-import java.sql.Connection
-
 import io.eezo.auth.Password
 import io.eezo.core.Id
 import io.eezo.db.*
@@ -33,14 +31,6 @@ object CreateUser extends DbApp {
   override def schema: Schema = AppSchema
 
   override def databaseSchema: String = "blog"
-
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "blog"""")
-      st.execute("""set search_path to "blog"""")
-    } finally st.close()
-  }
 
   override def boot(): Unit = {
     val email    = required("EEZO_BLOG_EMAIL")

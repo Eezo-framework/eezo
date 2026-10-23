@@ -18,8 +18,8 @@ where they came from and wraps only the derived ones in `Route.under("/admin")`,
 routes and the URLs the pages emit together; `app/Index.scala` explains the one link that has to
 name `/admin` by hand.
 
-The blog keeps its table in a Postgres schema named `blog` (`databaseSchema` plus the `databaseInit`
-hook), so it shares the dev database with the other examples.
+The blog keeps its table in a Postgres schema named `blog` (`databaseSchema` in `Main.scala`, the
+one override that does it), so it shares the dev database with the other examples.
 
 ```bash
 docker run -d --name eezo-pg -p 5442:5432 \

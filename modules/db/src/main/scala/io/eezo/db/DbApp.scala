@@ -48,11 +48,6 @@ trait DbApp extends Dispatch with DbInit {
     */
   def schema: Schema
 
-  /** The Postgres schema the drift commands introspect. `search_path` is set per connection in
-    * [[databaseInit]]; this is the same name, told to the side that reads catalogs.
-    */
-  def databaseSchema: String = "public"
-
   /** The program: what `sbt run` does, once, with a `Database` installed. Abstract, because a
     * database only application is its program. The umbrella supplies the http layer's default,
     * which is to serve.
