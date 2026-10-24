@@ -50,10 +50,9 @@
 # step the gate names any process listening on 8080 and carries on; a red ClientSuite under that
 # line is the squatter, not the code.
 #
-# Two suites are timing sensitive and can go red under machine load with no code cause.
-# PoolSuite's "with the database down, the first read waits the acquire timeout" fires its 500 ms
-# acquire timeout before the driver's refusal is recorded. LiveServerSuite's abnormal drop rejoin
-# can time out on a slow runner. A lone red in one of those: rerun once before diagnosing.
+# One suite is timing sensitive and can go red under machine load with no code cause:
+# LiveServerSuite's abnormal drop rejoin can time out on a slow runner. A lone red there: rerun
+# once before diagnosing.
 #
 # `bin/gate --dry-run` prints the steps and the lock paths without running sbt, and changes
 # nothing, not even the git config.
