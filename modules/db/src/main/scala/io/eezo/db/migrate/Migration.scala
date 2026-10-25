@@ -32,10 +32,29 @@ object Migration {
   def parse(content: String): Option[(String, List[String])] = {
     val declared = content.linesIterator.collectFirst { case Header(f) => f }
     val body     = content.linesIterator.filterNot(_.trim.startsWith("--")).mkString("\n")
-    val stmts    = body.split(";").map(_.trim).filter(_.nonEmpty).toList
-    // Naive: a semicolon inside a string literal or a $$-quoted body splits a statement in two,
-    // and the comment filter above eats a `--` inside a literal. BACKLOG §26.
+    val stmts    = splitStatements(body)
+    // Still naive about a $$-quoted body, which a migration for a function or trigger would
+    // need: a semicolon there would still split a statement in two. Plain DDL, everything
+    // `freeze` generates today, has none.
     declared.map(_ -> stmts)
+  }
+
+  /** Splits on `;`, skipping one found inside a single-quoted literal so a value like
+    * `'semicolon; inside text'` does not become two broken statements.
+    */
+  private def splitStatements(body: String): List[String] = {
+    var inLiteral = false
+    var start     = 0
+    var done      = List.empty[String]
+    for (i <- body.indices) {
+      val c = body(i)
+      if (c == '\'') inLiteral = !inLiteral
+      else if (c == ';' && !inLiteral) {
+        done = body.substring(start, i) :: done
+        start = i + 1
+      }
+    }
+    (body.substring(start) :: done).reverse.map(_.trim).filter(_.nonEmpty)
   }
 
   def verify(content: String): Either[String, List[String]] =
