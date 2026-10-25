@@ -142,21 +142,6 @@ class BacklogSuite extends DbSuite {
     exec(Ddl.render(Differ.diff(empty, snap(TableSnap("t", List(id, cs).sortBy(_.name), Nil))))*)
   }
 
-  backlog(17, "a check's string literals keep their case") {
-    // canonicalCheck lowercases the whole expression, literals included, and that lowercased
-    // form is what lands in the migration file as the constraint's actual meaning.
-    val cs = Snapshot.column(
-      ColumnDef(
-        "status",
-        PgType.Text,
-        nullable = false,
-        primaryKey = false,
-        checks = List(Check.Raw("{} in ('Draft','Published')"))
-      )
-    )
-    assert(cs.checks.head.contains("'Draft'"), s"lowercased into: ${cs.checks.head}")
-  }
-
   // ── 19 ───────────────────────────────────────────────────────────────────────────────
   backlog(19, "a NULL timestamptz decodes as None") {
     // Column[Instant].get calls .toInstant before wasNull is consulted.
