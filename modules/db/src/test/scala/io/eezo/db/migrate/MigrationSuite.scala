@@ -55,6 +55,12 @@ class MigrationSuite extends FunSuite {
     val recommented = migration.render.replace("-- initial", "-- initial (reviewed)")
     assertEquals(Migration.verify(recommented), Right(stmts))
   }
+
+  test("a semicolon inside a string literal does not split the statement") {
+    val withLiteral = List("""insert into "post" ("title") values ('semicolon; inside text')""")
+    val rendered    = Migration(1, "seed", withLiteral, Migration.fingerprint(withLiteral)).render
+    assertEquals(Migration.verify(rendered), Right(withLiteral))
+  }
 }
 
 /** Migration authoring: numbering, resolutions, and the snapshot written alongside. */
