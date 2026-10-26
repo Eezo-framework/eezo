@@ -27,7 +27,7 @@ libraryDependencies ++= Seq(
   // highlight.js, the browser bundle, for the code blocks. `Provided`: the generator below takes
   // the three files the pages load out of the jar at build time, so the jar itself never ships.
   "org.webjars"    % "highlightjs" % HighlightJs % Provided,
-  "org.scalameta" %% "munit"       % "1.3.4"     % Test
+  "org.scalameta" %% "munit"       % "1.3.6"     % Test
 )
 
 scalacOptions ++= Seq(
