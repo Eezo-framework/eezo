@@ -25,7 +25,7 @@ jobs:
     steps:
       # sbt-dynver reads the tag out of the git history, so a shallow clone would leave it with
       # no version to derive.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -72,7 +72,7 @@ jobs:
           echo "::error::the site deploys from main or a release tag, not from ${GITHUB_REF}"
           exit 1
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
