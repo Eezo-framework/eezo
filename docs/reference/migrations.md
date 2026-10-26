@@ -66,8 +66,8 @@ create unique index "uq_book_title" on "book" ("title");
 - The name is the one you gave, lower-cased, with every run of non-alphanumerics made one `_`.
 - The fingerprint is the first eight bytes of the SHA-256 of the statements joined by newlines,
   as hex. `migrate` recomputes it before running anything and refuses the batch on a mismatch.
-- Statements are split on `;`. A semicolon inside a string literal splits a statement in two,
-  so a hand-written statement avoids one.
+- Statements are split on `;` outside a single quoted literal. A semicolon inside a `$$` quoted
+  body still splits a statement, so a hand-written function or trigger body avoids one.
 
 ## The ledger
 
