@@ -61,6 +61,59 @@ class MigrationSuite extends FunSuite {
     val rendered    = Migration(1, "seed", withLiteral, Migration.fingerprint(withLiteral)).render
     assertEquals(Migration.verify(rendered), Right(withLiteral))
   }
+
+  test("a double quoted identifier with an apostrophe does not swallow the next statement") {
+    val withIdent = List(
+      """create table "o'clock" ("id" int)""",
+      """create index "ix" on "o'clock" ("id")"""
+    )
+    val rendered = Migration(1, "seed", withIdent, Migration.fingerprint(withIdent)).render
+    assertEquals(Migration.verify(rendered), Right(withIdent))
+  }
+
+  test("a trailing comment with an apostrophe does not swallow the next statement") {
+    val withComment = List(
+      """update "post" set "n" = 0 -- don't ask why""",
+      """create index "ix_post" on "post" ("n")"""
+    )
+    val content =
+      s"""-- eezo migration 1
+         |-- seed
+         |-- fingerprint: ${Migration.fingerprint(withComment)}
+         |
+         |${withComment(0)}
+         |;
+         |
+         |${withComment(1)};
+         |""".stripMargin
+    assertEquals(Migration.verify(content), Right(withComment))
+  }
+
+  test("a semicolon right after a doubled quote stays inside the literal") {
+    val withDoubled = List("""insert into "t" ("v") values ('a''; b')""")
+    val rendered    = Migration(1, "seed", withDoubled, Migration.fingerprint(withDoubled)).render
+    assertEquals(Migration.verify(rendered), Right(withDoubled))
+  }
+
+  test("a literal ending in a doubled quote still finds the real terminator after it") {
+    val stmts    = List("""select 'a'';'""", "select 1")
+    val rendered = Migration(1, "seed", stmts, Migration.fingerprint(stmts)).render
+    assertEquals(Migration.verify(rendered), Right(stmts))
+  }
+
+  test("an unbalanced quote falls back to the plain split rather than losing everything after") {
+    val stmts   = List("select 'unterminated", "select 1")
+    val content =
+      s"""-- eezo migration 1
+         |-- seed
+         |-- fingerprint: ${Migration.fingerprint(stmts)}
+         |
+         |${stmts(0)};
+         |
+         |${stmts(1)};
+         |""".stripMargin
+    assertEquals(Migration.verify(content), Right(stmts))
+  }
 }
 
 /** Migration authoring: numbering, resolutions, and the snapshot written alongside. */
