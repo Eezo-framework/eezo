@@ -622,22 +622,87 @@ import io.eezo.core.html.*
 import io.eezo.http.Request
 import io.eezo.http.Response
 
-/** `app/Index.scala` mounts `GET /`, calling `def index` — the filename is the route. */
+/** `app/Index.scala` mounts `GET /`, calling `def index`: the filename is the route.
+  *
+  * The page is a value built once, when the object loads, and handed to every request as is.
+  * Nothing on it changes between requests, so nothing is rebuilt per request.
+  */
 object Index {
 
   def index(request: Request): Response = {
     val _ = request
-    Response.Ok(
-      Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("eezo")),
-        body(
+    Response.Ok(page)
+  }
+
+  private val docs = "https://eezo.io/docs"
+
+  private val page: Html =
+    Html.doctype ++ html(
+      Attrs.lang := "en",
+      head(
+        meta(Attrs.charset := "utf-8"),
+        meta(Attrs.name := "viewport", Attrs.content := "width=device-width, initial-scale=1"),
+        title("eezo"),
+        style(css)
+      ),
+      body(
+        main(
           h1("it works"),
-          p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
-        )
+          p(Attrs.cls := "lead", "This page is ", code("app/Index.scala"), ", served at ", code("/"), "."),
+          h2("Next"),
+          ol(
+            li(
+              "Add a case class with ", code("derives Form, Resource"), " under ",
+              code("src/main/scala/models/"), " and it mounts seven routes."
+            ),
+            li("Run ", code("eezo routes"), " to see what is mounted."),
+            li("Change this file and save. The server restarts and the tab reloads.")
+          ),
+          h2("Read"),
+          ul(
+            Attrs.cls := "links",
+            li(a(Attrs.href := s"$docs/tutorials/getting-started", "Getting started")),
+            li(a(Attrs.href := s"$docs/how-to", "How-to guides")),
+            li(a(Attrs.href := s"$docs/explanation", "Explanation")),
+            li(a(Attrs.href := s"$docs/reference", "Reference")),
+            li(a(Attrs.href := s"$docs/reference/cli", "The command line"))
+          )
+        ),
+        footer(a(Attrs.href := "https://eezo.io", "eezo"))
       )
     )
-  }
+
+  // Text inside `style` is escaped like any other text, so the sheet uses no quotes, no `>` and
+  // no `&`, and it needs none.
+  private def css: String =
+    """:root { color-scheme: light dark; }
+      |body {
+      |  margin: 0; min-height: 100vh; display: flex; flex-direction: column;
+      |  font: 17px/1.55 system-ui, sans-serif; color: #1d1b3a; background: #fffbf2;
+      |}
+      |main { flex: 1; width: min(38rem, 100% - 3rem); margin: 0 auto; padding: 4rem 0 2rem; }
+      |h1 { font-size: 2.75rem; line-height: 1.1; margin: 0 0 .5rem; letter-spacing: -.02em; }
+      |h2 { font-size: .85rem; text-transform: uppercase; letter-spacing: .08em; color: #5f5c7d; margin: 2.5rem 0 .75rem; }
+      |.lead { font-size: 1.15rem; color: #5f5c7d; margin: 0; }
+      |ol, ul { padding-left: 1.4rem; margin: 0; }
+      |li { margin: .35rem 0; }
+      |.links { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: .5rem; }
+      |.links li { margin: 0; }
+      |.links a { display: inline-block; padding: .4rem .85rem; border: 1px solid #d9d2f0; border-radius: 999px; text-decoration: none; }
+      |.links a:hover { border-color: #4630c9; background: #fff3cf; }
+      |a { color: #4630c9; }
+      |code { font: .9em ui-monospace, Menlo, Consolas, monospace; background: #fff3cf; padding: .1em .35em; border-radius: .3em; }
+      |footer { text-align: center; padding: 1.5rem; font-size: .85rem; color: #5f5c7d; }
+      |footer a { color: inherit; }
+      |@media (prefers-color-scheme: dark) {
+      |  body { color: #ece7f8; background: #1d1b3a; }
+      |  h2, .lead, footer { color: #a8a3c8; }
+      |  a { color: #b9adff; }
+      |  .links a { border-color: #3b3760; }
+      |  .links a:hover { border-color: #b9adff; background: #2a2750; }
+      |  code, .links a:hover { background: #2a2750; }
+      |}
+      |""".stripMargin
 }
 EOF
 

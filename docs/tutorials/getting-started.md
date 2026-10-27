@@ -113,19 +113,27 @@ object Index {
 
   def index(request: Request): Response = {
     val _ = request
-    Response.Ok(
-      Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("eezo")),
-        body(
+    Response.Ok(page)
+  }
+
+  private val page: Html =
+    Html.doctype ++ html(
+      head(meta(Attrs.charset := "utf-8"), title("eezo"), style(css)),
+      body(
+        main(
           h1("it works"),
-          p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("sbt \"run routes\""), " lists them.")
+          h2("Read"),
+          ul(li(a(Attrs.href := "https://eezo.io/docs", "The docs")))
         )
       )
     )
-  }
+
+  private def css: String = "body { font: 17px/1.55 system-ui, sans-serif; }"
 }
 ```
+
+(The scaffold's page has more on it: a short stylesheet, the next steps and links into these
+docs. It's been cut down here to its shape.)
 
 Your first page, and the first rule of eezo routing: **the filename is the route.** A file called
 `Index.scala` under `app/` mounts `GET /` and calls a method called `index`. The plugin saw the
@@ -137,6 +145,10 @@ need to block in there, say on a database call, you block.
 The page is built with eezo's HTML DSL. `html`, `head`, `body`, `h1` and the rest are functions,
 attributes are written `Attrs.charset := "utf-8"`, and strings become escaped text. There's no
 template language, and your views are type-checked like everything else.
+
+The page is an `Html` value, and here it's a `val`: nothing on it depends on the request, so it's
+built once when the object loads and every request gets the same tree. A page that reads the
+request builds its tree in the handler instead, as the second page below does.
 
 The `val _ = request` line is there because the scaffold doesn't read the request. You'll
 delete it as soon as you do.
