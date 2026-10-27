@@ -86,7 +86,7 @@ Deploying is done with `eezo deploy` on Fly.io.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.eezo" % "sbt-eezo" % "0.2.0")
+addSbtPlugin("io.eezo" % "sbt-eezo" % "0.3.0")
 ```
 
 `build.sbt`:
@@ -96,7 +96,7 @@ scalaVersion := "3.8.4"
 
 enablePlugins(EezoPlugin)
 
-libraryDependencies += "io.eezo" %% "eezo" % "0.2.0"
+libraryDependencies += "io.eezo" %% "eezo" % "0.3.0"
 
 scalacOptions ++= Seq("-release", "25", "-deprecation", "-feature", "-unchecked", "-no-indent")
 
