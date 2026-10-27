@@ -119,7 +119,9 @@ given Field[Isbn] = Field.of("text")(_.value)(text =>
 ```
 
 Three arguments: the input type, the value as text, and text to either a value or the message
-the user sees. Override `absent` for a type that has a meaning when the key is missing.
+the user sees. A type that has a meaning when the key is missing gives itself a `Parser` whose
+`absent` says what that meaning is, and builds its Field on it with
+`new Field[X](inputType, show)`.
 
 A column:
 

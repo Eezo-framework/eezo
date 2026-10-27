@@ -33,9 +33,16 @@ One of the seven route roles a Resource can mount. A model subtracts from the fu
 companion, and a handwritten route may take over the role it subtracted.
 _Avoid_: verb, endpoint, operation
 
+**Parser**:
+How text from outside becomes a value of one Scala type, and what a missing text means for it. It
+knows nothing of forms or inputs, so a form field and anything else that reads text share one
+reading and one message for a value that will not read.
+_Avoid_: decoder, reader, codec, converter
+
 **Field**:
-How one Scala type reads from and shows as a single form input: its input type, its rendered text,
-its parsed value and what an absent submission means for it.
+How one Scala type reads from and shows as a single form input. A Field is composed over a Parser,
+which reads the text and says what an absent submission means, and adds how a browser input spells
+that text: its input type, its rendered text and whether a checkbox renders ticked.
 _Avoid_: column, property, attribute
 
 **Serde**:

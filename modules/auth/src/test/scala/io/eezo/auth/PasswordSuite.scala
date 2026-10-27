@@ -2,6 +2,7 @@ package io.eezo.auth
 
 import java.nio.charset.StandardCharsets
 
+import io.eezo.core.Parser
 import io.eezo.http.Field
 
 class PasswordSuite extends munit.FunSuite {
@@ -98,5 +99,25 @@ class PasswordSuite extends munit.FunSuite {
     val stored = Password.stored("$2b$04$6oCIgC4QzztRP0Q1ZTYV2.rK6diTucKojirfE2pCcbTXpbuFq6hju")
     assert(Password.matches(Some(stored), Password.Plain("secret")))
     assert(!Password.matches(Some(stored), Password.Plain("wrong")))
+  }
+
+  test("a password reads through its own Parser, which hashes and refuses what the Field refuses") {
+    val parser = summon[Parser[Password]]
+    assert(Field[Password].parser eq parser)
+    assertEquals(parser.read(""), Left("is required"))
+    assertEquals(parser.read("e" * 73), Left("is longer than the 72 bytes bcrypt reads"))
+    assertEquals(parser.absent, None)
+    val stored = parser.read("hunter2").toOption.get
+    assert(stored.verify(Password.Plain("hunter2")))
+    assertNotEquals(stored.value, "hunter2")
+  }
+
+  test("a plain password reads through its own Parser, unhashed and with the same refusals") {
+    val parser = summon[Parser[Password.Plain]]
+    assert(Field[Password.Plain].parser eq parser)
+    assertEquals(parser.read(""), Left("is required"))
+    assertEquals(parser.read("世" * 25), Left("is longer than the 72 bytes bcrypt reads"))
+    assertEquals(parser.absent, None)
+    assert(Password.hash(Password.Plain("hunter2")).verify(parser.read("hunter2").toOption.get))
   }
 }
