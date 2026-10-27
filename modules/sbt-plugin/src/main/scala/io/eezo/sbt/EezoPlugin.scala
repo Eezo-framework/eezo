@@ -63,9 +63,10 @@ object EezoPlugin extends AutoPlugin {
     @transient val eezoFreeze: InputKey[Unit] =
       inputKey[Unit]("Forwards to `run db freeze <name>`: writes a migration from the model diff.")
 
-    // The dev loop's two halves. `eezoRestart` is the kernel: kill the app's JVM, fork it again
-    // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev`, the
-    // command a user actually types, is a command alias over it, defined in `globalSettings`.
+    // The dev loop's kernel for the sbt shell: kill the app's JVM, fork it again on the fresh
+    // classpath, return. `eezoDev`, the command a user actually types, is the dev console
+    // (`dev.DevCommand`, registered in `globalSettings`), which forks through the same
+    // `DevProcess` with the output piped to its panes instead.
     @transient val eezoRestart: TaskKey[Unit] =
       taskKey[Unit]("(Re)starts the application in dev mode in a background JVM.")
 
@@ -160,8 +161,9 @@ object EezoPlugin extends AutoPlugin {
         }
       )
       .value,
-    eezoStop        := DevProcess.stop(quiet = false, log = message => println(message)),
-    eezoJavaVersion := "25",
+    eezoStop         := DevProcess.stop(quiet = false, log = message => println(message)),
+    eezoDevClasspath := EezoClasspath.files.value,
+    eezoJavaVersion  := "25",
     // The stylesheet, built inside the same classpath request that compiles the project, so that
     // `eezoRestart`, `test`, `package` and `eezoStage` all carry a stylesheet that matches the
     // sources beside it, with nothing to commit and nothing to remember. The trigger is what makes
@@ -221,17 +223,25 @@ object EezoPlugin extends AutoPlugin {
     }
   )
 
-  /** `eezoDev`: restart on every edit. The watch is sbt's own (`watchTriggers` above already covers
-    * the source tree, and `eezoRestart`'s classpath dependency pulls the compile), so the loop is
-    * one alias rather than machinery: research/build-reload.md measured resident `~` at 148 to 300
-    * ms from save to rebuilt, which is the budget this rides on.
+  /** `eezoDev`: the dev console, a command of its own (`dev.DevCommand`) rather than an alias for
+    * `~eezoRestart`. It owns the terminal, watches the source tree itself with a debounce
+    * (research/build-reload.md §1.5 measured sbt's `~` building twice on a multi-file save), asks
+    * for `eezoDevClasspath` on each change, and forks the application with its output piped into a
+    * pane. `eezoRestart` and `eezoStop` stay as tasks for the sbt shell.
     *
     * `dev` is the http layer's command. On a database only application (`DbApp` alone) it is
-    * unknown, so `eezoDev` prints the unknown command line on every save; a rerun on save loop for
-    * a job is sbt's own `~run`.
+    * unknown, so the console's application exits at once with the unknown command line; a rerun on
+    * save loop for a job is sbt's own `~run`.
     */
   override lazy val globalSettings: Seq[Setting[?]] =
-    addCommandAlias("eezoDev", "~eezoRestart")
+    Seq(commands += dev.DevCommand.command)
+
+  /** The application's runtime classpath, as the dev console asks for it: a key of its own rather
+    * than `eezoRestart`, which prints its marker line and forks, when the console wants the
+    * classpath alone and does the rest itself. `@transient` for the reason `eezoGenerateRoutes` is.
+    */
+  @transient private[sbt] val eezoDevClasspath: TaskKey[Seq[File]] =
+    taskKey[Seq[File]]("The runtime classpath, compiled: what the dev console forks on.")
 
   /** `eezoSync --apply` → `run db sync --apply`: the task's own arguments, appended after the
     * command. One helper so the three input tasks cannot drift apart.

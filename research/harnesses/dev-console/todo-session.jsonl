@@ -1,0 +1,36 @@
+{"expect": "eezo dev", "timeout": 400}
+{"expect": "serving on http://localhost:8090", "timeout": 300}
+{"sleep": 1.5}
+{"mark": "routes-pane"}
+{"send": "3"}
+{"sleep": 0.6}
+{"mark": "schema-pane"}
+{"send": "4"}
+{"sleep": 0.6}
+{"mark": "help"}
+{"send": "?"}
+{"sleep": 0.6}
+{"send": "x"}
+{"send": "1"}
+{"sleep": 0.5}
+{"mark": "break"}
+{"append": ["todo/src/main/scala/app/Health.scala", "\nobject Broken { val x: Int = \"no\" }\n"]}
+{"expect": "Found:", "timeout": 120}
+{"sleep": 1.5}
+{"mark": "resize-small"}
+{"resize": [11, 40]}
+{"sleep": 1.5}
+{"mark": "resize-big"}
+{"resize": [30, 110]}
+{"sleep": 1.5}
+{"mark": "fix"}
+{"copy": ["/tmp/Health.scala.bak", "todo/src/main/scala/app/Health.scala"]}
+{"expect": "serving on http://localhost:8090", "timeout": 120}
+{"sleep": 1.5}
+{"mark": "status"}
+{"send": "4"}
+{"send": "S"}
+{"expect": "db status", "timeout": 60}
+{"sleep": 10}
+{"mark": "quit"}
+{"send": "q"}

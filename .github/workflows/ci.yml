@@ -102,7 +102,10 @@ jobs:
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.
       # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
       # a build cannot be enabled by that same build. `blog` is what covers the derived half: its
-      # seven routes exist only in the file the generator writes.
+      # seven routes exist only in the file the generator writes. `eezoDev --once` is the dev
+      # console without a terminal, cut short: it builds `hello`, forks it, waits for it to serve,
+      # stops it, and fails the command when it did not serve, which is the loop's one end to end
+      # check that needs no keyboard.
       #
       # `blog` has a `tailwind.css`, so its build fetches the Tailwind CLI into `~/.eezo/tools` once
       # per version; cached here so the download is paid once per runner image and version rather
@@ -117,7 +120,7 @@ jobs:
       - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample
-          cd examples && sbt -batch scalafmtCheckAll test
+          cd examples && sbt -batch scalafmtCheckAll test "project hello" "eezoDev --once"
 
       # The documentation site is an eezo application too, with a build of its own against the
       # released eezo, the way a user's application is built. Its suite renders every page out of

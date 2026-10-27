@@ -30,6 +30,39 @@ class JsonSuite extends munit.FunSuite {
     }
   }
 
+  test("compact(j) is one line and parses back to j") {
+    val j = Json.Obj(
+      List(
+        "command" -> Json.Str("status"),
+        "inSync"  -> Json.Bool(false),
+        "changes" -> Json.Arr(
+          List(
+            Json.Obj(
+              List(
+                "describe"    -> Json.Str("- book.notes"),
+                "destructive" -> Json.Bool(true),
+                "sql"         -> Json.Str("alter table \"book\"\n  drop column \"notes\"")
+              )
+            ),
+            Json.Arr(Nil),
+            Json.Obj(Nil)
+          )
+        ),
+        "nothing" -> Json.Null,
+        "n"       -> Json.Num(-7)
+      )
+    )
+    val line = Json.compact(j)
+    assert(!line.contains('\n'), line)
+    assertEquals(
+      line,
+      """{"command":"status","inSync":false,"changes":[{"describe":"- book.notes",""" +
+        """"destructive":true,"sql":"alter table \"book\"\n  drop column \"notes\""},[],{}],""" +
+        """"nothing":null,"n":-7}"""
+    )
+    assertEquals(Json.parse(line), Right(j))
+  }
+
   test("every escape the writer emits comes back") {
     val j = Json.Str("a\"b\\c\nd\re\tfg")
     assertEquals(Json.parse(Json.render(j)), Right(j))
