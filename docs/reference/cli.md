@@ -7,10 +7,11 @@ tutorials build; the version string in them changes with every commit.
 ## Two layers
 
 `bin/eezo` is a shell script. Four of its commands are its own: `new`, `build`, `deploy` and
-`upgrade`. `dev` runs the sbt task `eezoDev` and shows a console built from its output: a spinner for the
-compile, the application's boot lines and logs, and none of sbt's narration. Everything else forwards to the application's own
-`main` as `sbt "run <command> <args>"`, so `eezo db status` and `sbt "run db status"` are the
-same code path, and so is the sbt task `eezoStatus`.
+`upgrade`. `dev` hands the terminal to the sbt command `eezoDev`, the dev console that the plugin
+draws: the log, the compile errors, the route table and the schema drift as panes, and the schema
+commands on keys ([the dev loop](../explanation/the-dev-loop.md) describes it). Everything else
+forwards to the application's own `main` as `sbt "run <command> <args>"`, so `eezo db status` and
+`sbt "run db status"` are the same code path, and so is the sbt task `eezoStatus`.
 
 The application's `main` is inherited from its entry trait. Each layer adds its commands: the
 http layer's two at the top level, and the database layer's eight under one namespace, `db`, so
@@ -22,7 +23,7 @@ layer can shadow it. No arguments runs the application.
 | command | layer | needs | what it does |
 |---|---|---|---|
 | `new <name>`, `new .` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it |
-| `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
+| `dev` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes and the drift as panes, `s` `f` `m` for the schema commands; `q` or Ctrl-C stops it; without a terminal only `eezoDev --once` runs |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |
 | `db status [--json]` | database layer | a database | the model against the live database |
@@ -132,8 +133,14 @@ the command's answer and not a build failure:
   `examples/project/build.properties`; `upgrade` refuses to run there.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
-  sbt itself runs with `-error -batch`, so only compile errors and the application's output
-  reach the terminal. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
+  The forwarded commands run sbt with `-error -batch`, so only compile errors and the
+  application's output reach the terminal. `dev` runs it with `--server -error` and the terminal
+  attached, `-Dsbt.supershell=false` added, since the console needs the keyboard and draws the
+  screen itself; `--server` is what keeps an sbt 2 project out of sbt's thin client, which the
+  console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
+- **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins. A project on a
+  plugin from before the console (0.3.0) has only the `~eezoRestart` alias, and for it the
+  launcher builds the older line console from sbt's output, as it did before.
 - **`fly.toml`**, for the app name and region on deploy.
 
 ## What `new` writes
