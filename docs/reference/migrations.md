@@ -66,8 +66,17 @@ create unique index "uq_book_title" on "book" ("title");
 - The name is the one you gave, lower-cased, with every run of non-alphanumerics made one `_`.
 - The fingerprint is the first eight bytes of the SHA-256 of the statements joined by newlines,
   as hex. `migrate` recomputes it before running anything and refuses the batch on a mismatch.
-- Statements are split on `;` outside a single quoted literal. A semicolon inside a `$$` quoted
-  body still splits a statement, so a hand-written function or trigger body avoids one.
+- Statements are split on `;`, except one inside a single quoted literal or a double quoted
+  identifier. A `--` comment runs to the end of its line and a quote inside it opens nothing, but
+  a `;` there still ends the statement, because that is where the terminator of a statement ending
+  in a comment sits.
+- Two readings of the file are prepared, the one that rule gives and a plain split on every `;`,
+  and the declared fingerprint picks between them. A file that verified under the plain split
+  still verifies. When neither reading matches the fingerprint, `migrate` refuses the batch.
+- Not understood: a `$$` quoted body, a backslash escaped quote, and a `;` inside a comment's own
+  text. These split where a reader would not expect, so a hand-written statement avoids them. The
+  plain reading still accepts some of them, which is why `freeze` output and files written before
+  this rule existed keep verifying.
 
 ## The ledger
 

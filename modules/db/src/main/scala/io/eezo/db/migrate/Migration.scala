@@ -29,26 +29,37 @@ object Migration {
 
   private val Header = """-- fingerprint: ([0-9a-f]+)""".r
 
+  /** The statements a migration file holds, and the fingerprint it declares.
+    *
+    * Two candidate splits are offered, and the declared fingerprint chooses between them: the
+    * scanned one, which knows about quoting, and the plain one this method used before it knew
+    * anything. The scanned split wins when it matches, the plain split is taken when the scanned
+    * one does not match and it does, and when neither matches the scanned one is returned so that
+    * `verify` reports the mismatch it would have reported anyway. A file that verified under the
+    * plain split therefore still verifies, whatever the scanner makes of its quoting.
+    *
+    * Still naive about a `$$`-quoted body, and about a line inside a literal whose own text begins
+    * with `--`, which the line filter above drops as if it were a header. Neither arrives from
+    * anything `freeze` renders itself, but `Decision.Manual` SQL reaches the file verbatim, so a
+    * hand-written function or trigger body can carry either (issue 352).
+    */
   def parse(content: String): Option[(String, List[String])] = {
     val declared = content.linesIterator.collectFirst { case Header(f) => f }
     val body     = content.linesIterator.filterNot(_.trim.startsWith("--")).mkString("\n")
-    val stmts    = splitStatements(body)
-    // Still naive about a $$-quoted body, and about a comment line that starts where a
-    // literal happens to continue (the filter above drops it as if it were a header line).
-    // Neither shows up in anything `freeze` generates on its own, but `Decision.Manual` SQL
-    // reaches this file verbatim, so a hand-written function or trigger body can carry either.
-    declared.map(_ -> stmts)
+    val scanned  = splitStatements(body)
+    val plain    = body.split(";").map(_.trim).filter(_.nonEmpty).toList
+    declared.map { f =>
+      if (fingerprint(scanned) == f || fingerprint(plain) != f) f -> scanned else f -> plain
+    }
   }
 
-  /** Splits on `;`, skipping one found inside a single-quoted literal, a double-quoted identifier,
-    * or a `--` comment, so a value like `'semicolon; inside text'`, an identifier like `"o'clock"`,
-    * or a trailing `-- comment with an apostrophe` does not break a statement in two or swallow the
-    * one after it.
+  /** Splits on `;`, skipping one inside a single-quoted literal or a double-quoted identifier, so a
+    * value like `'semicolon; inside text'` and an identifier like `"o'clock"` stay whole.
     *
-    * Falls back to the plain split, exactly as before this method existed, if a literal or an
-    * identifier is still open at the end: that reads as a quote this scanner cannot follow rather
-    * than one it should trust, and a statement already split wrong is a smaller problem than every
-    * statement after it disappearing into one that never closes.
+    * A `--` comment runs to the end of its line, and inside it a quote is inert: an apostrophe in
+    * `-- don't` opens nothing. A `;` there still terminates, because `render` writes the statement
+    * terminator on the same line as the statement, so the one that closes a statement ending in a
+    * comment sits inside that comment's text.
     */
   private def splitStatements(body: String): List[String] = {
     var inLiteral = false
@@ -59,25 +70,22 @@ object Migration {
     var i         = 0
     while (i < body.length) {
       val c = body(i)
-      if (inComment) {
-        if (c == '\n') inComment = false
-      } else if (inLiteral) {
+      if (c == '\n') inComment = false
+      if (inComment) ()
+      else if (inLiteral) {
         if (c == '\'') inLiteral = false
       } else if (inIdent) {
         if (c == '"') inIdent = false
       } else if (c == '\'') inLiteral = true
       else if (c == '"') inIdent = true
       else if (c == '-' && i + 1 < body.length && body(i + 1) == '-') inComment = true
-      else if (c == ';') {
+      if (c == ';' && !inLiteral && !inIdent) {
         done = body.substring(start, i) :: done
         start = i + 1
       }
       i += 1
     }
-    val parts =
-      if (inLiteral || inIdent) body.split(";").toList
-      else (body.substring(start) :: done).reverse
-    parts.map(_.trim).filter(_.nonEmpty)
+    (body.substring(start) :: done).reverse.map(_.trim).filter(_.nonEmpty)
   }
 
   def verify(content: String): Either[String, List[String]] =
