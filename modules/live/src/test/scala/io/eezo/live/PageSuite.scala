@@ -195,7 +195,11 @@ class PageSuite extends munit.FunSuite {
     // Attached straight after the mount, nothing moved: the join's frame is empty.
     page.attach(send)
     page.resync(forced = false)
-    page.event(Event("click")) // a blocking call, so the resync before it is on the wire
+    // The loop sends a resync frame after the changes of the batch it drained it with, so a click
+    // enqueued before the loop took the resync would put its patch on the wire first. Waiting for
+    // the join frame makes the click a batch of its own.
+    eventually(frames.size == 1)
+    page.event(Event("click")) // a blocking call, so its patch is on the wire too
     assertEquals(frames.peek(), Nil, "nothing was owed to a client holding the mounted tree")
     assertEquals(frames.size, 2)
 
