@@ -30,6 +30,7 @@ The plugin does nothing until a project enables it. An application with no route
 | `eezoMigrate <args>` | `run db migrate <args>` |
 | `eezoFreeze <args>` | `run db freeze <args>` |
 | `eezoStage` | stages `target/eezo/stage/`, returns the directory |
+| `eezoTailwind` | builds `assets/tailwind.css` from the `tailwind.css` at the project root with the Tailwind CLI; a resource generator, so it runs whenever the classpath is asked for, cached on the sources' hashes; does nothing without the file |
 
 The five forwards go through `Compile / run`, so they inherit everything the build decided
 about running: `fork`, the working directory, `javaOptions`, `javaHome`. `eezoRestart` reads the
@@ -43,6 +44,10 @@ console.
 | `eezoJavaVersion` | `"25"` | the JRE tag `eezoStage` writes into the Dockerfile |
 | `Compile / run / connectInput` | `true` | set by the plugin so `freeze` can prompt |
 | `Compile / eezoGenerateRoutes / watchTriggers` | `src/main/scala/**/*.scala` | what the watch reacts to |
+| `eezoTailwindVersion` | `"4.3.3"` | the Tailwind release `eezoTailwind` fetches |
+| `eezoTailwindInput` | `baseDirectory.value / "tailwind.css"` | the stylesheet `eezoTailwind` compiles; absent means no Tailwind |
+| `eezoTailwindCli` | `None` | a Tailwind CLI already on the machine, instead of the fetched one |
+| `Compile / eezoTailwind / watchTriggers` | the input file | so an edit to the stylesheet alone restarts the dev loop |
 
 `run / fork := true` is the scaffold's, not the plugin's, and it's needed: the application
 runs on the JDK floor, and sbt's own JVM may not be on it.
@@ -57,6 +62,18 @@ of the build strands the running child until sbt exits, and makes a fresh secret
 
 `dev` is the http layer's command, so `eezoDev` on a `DbApp` prints the unknown command line on
 every save. A job's rerun-on-save loop is sbt's own `~run`.
+
+## The stylesheet
+
+`eezoTailwind` is a resource generator, so every task that asks for the classpath, `eezoRestart`,
+`test`, `package` and `eezoStage`, builds the stylesheet first and finds it at
+`assets/tailwind.css` in `resourceManaged`. The CLI is the standalone binary of the release named
+by `eezoTailwindVersion`, fetched once per version into `~/.eezo/tools` (or `EEZO_HOME/tools`),
+verified against the release's `sha256sums.txt`, and run with the project directory as its
+working directory. Its inputs are the stylesheet and every file under the unmanaged source and
+resource directories, hashed; a stamp carrying the version and the CLI's path is hashed with them,
+so a bumped version misses the cache. A CLI that exits with an error fails the task with its
+diagnostics in the message. [Style with Tailwind](../how-to/style-with-tailwind.md) is the setup.
 
 ## The generated file
 

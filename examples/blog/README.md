@@ -105,11 +105,11 @@ renders a Sign out button for a browser that is signed in and nothing at all for
 The guard builds the form rather than the application, because a `POST` has to carry the CSRF token
 and a hand written form that forgot it would be refused with a 403 at the route it posts to.
 
-The button is on `/` and not on the editing screens because those are derived: a derived page comes
-back in a plain envelope with nowhere to put a control, and whether an application can replace that
-envelope is still an open question. The address is written out because `/` is outside the mount, the
-same reason the "All posts" link on that page names `/admin` by hand; a page inside a mount takes
-`logoutForm`'s default and never spells the prefix.
+The button is on `/` and not on the editing screens because those are derived: a derived page is
+content eezo wrote, and the frame around it, `views/Layout.scala`, is the one place the application
+could add a control to every page at once. The address is written out because `/` is outside the
+mount, the same reason the "All posts" link on that page names `/admin` by hand; a page inside a
+mount takes `logoutForm`'s default and never spells the prefix.
 
 ### The first user, without a sign up page
 
@@ -127,6 +127,19 @@ only way to make one from text is to hash it.
 `sbt "blog/run dev"` (or `blog/eezoDev`) runs the drift check before serving and answers the drift
 page while the drift is dangerous; `../todo/README.md` walks through that loop and the rest of the
 schema commands.
+
+## Styled with Tailwind
+
+`tailwind.css` at the project root is the whole setup. The sbt plugin sees it and runs the Tailwind
+CLI inside every build, over `src/` as the file's `source("src")` says, and writes the result to
+`assets/tailwind.css` in the jar; nothing is committed, and the CLI is fetched once per version
+into `~/.eezo/tools`. `views/Layout.scala` is the frame every page comes back in, named in
+`Main.scala`, and it links the stylesheet under the versioned address `Assets.url` gives it. The
+components under `components/` carry utility classes where they used to carry inline styles, and
+the base layer in `tailwind.css` gives the derived pages and the login page, which carry no
+classes, a look of their own. `TailwindSuite` asserts that the stylesheet is on the classpath at
+test time and holds a class only the components use, which is the plugin's generator having run.
+[Style with Tailwind](../../docs/how-to/style-with-tailwind.md) is the recipe.
 
 ## Why both derivations compile here
 

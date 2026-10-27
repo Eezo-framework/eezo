@@ -27,6 +27,8 @@ class HttpAppSuite extends munit.FunSuite {
     override def boot(): Unit = booted = true
 
     override protected def devServer(): Unit = developed = true
+
+    def framework: Seq[Route] = frameworkRoutes
   }
 
   test("no arguments is the application: boot runs") {
@@ -86,5 +88,9 @@ class HttpAppSuite extends munit.FunSuite {
     assertEquals(app.maxBodySize, HttpConfig.DefaultMaxBodySize)
     assert(!app.problems.isDefinedAt(new RuntimeException("anything")))
     assertEquals(app.layout, Layout.plain)
+  }
+
+  test("the asset route is a framework route, so every way of serving carries it") {
+    assertEquals(new Recording().framework.map(_.describe), Seq("GET /assets/*file"))
   }
 }

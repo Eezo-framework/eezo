@@ -1,6 +1,7 @@
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
+import io.eezo.http.Layout
 import io.eezo.http.Provenance
 import io.eezo.http.Route
 import io.eezo.http.RouteTable
@@ -48,6 +49,9 @@ object Main extends EezoApp {
     * search_path is per connection, and the drift commands read the same name.
     */
   override def databaseSchema: String = "blog"
+
+  /** The frame around every page, with the stylesheet Tailwind builds; `views/Layout.scala`. */
+  override def layout: Layout = views.Layout
 
   override def routes: RouteTable = {
     val table                  = Routes.table()

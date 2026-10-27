@@ -64,7 +64,7 @@ final class Signup extends Component[SignupState] {
 
   def render(s: SignupState): Html =
     div(
-      Attrs.style := "font-family: system-ui; max-width: 30rem; margin: 3rem auto",
+      Attrs.cls := "space-y-3",
       h1("live signup"),
       form(
         Live.onSubmit("save"),

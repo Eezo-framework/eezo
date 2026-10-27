@@ -16,10 +16,5 @@ object Index {
   given Guarded[Index.type] = Guarded.public
 
   def index(request: Request): Response =
-    Response.Ok(
-      Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("shared board")),
-        body(Live.mount(request, new Board))
-      )
-    )
+    Response.Ok(title("shared board") ++ Live.mount(request, new Board))
 }

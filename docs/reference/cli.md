@@ -130,6 +130,10 @@ the command's answer and not a build failure:
   checkout of the repository, `.eezo-version` at its root wins, written by
   `sbt publishLocalForExample` with the locally published version, and `sbt.version` comes from
   `examples/project/build.properties`; `upgrade` refuses to run there.
+- **`~/.eezo/tools/`** is the sbt plugin's rather than the launcher's: the tools it fetches,
+  one directory per version. Today that is the Tailwind CLI, `tailwindcss-<version>/`, which
+  `eezoTailwind` downloads once and every project on the machine shares. `EEZO_HOME` moves it with
+  the version file.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
   sbt itself runs with `-error -batch`, so only compile errors and the application's output

@@ -82,6 +82,25 @@ object EezoPlugin extends AutoPlugin {
 
     val eezoJavaVersion: SettingKey[String] =
       settingKey[String]("Java version of the deployment base image (eclipse-temurin JRE).")
+
+    // The stylesheet generator. `@transient` for the reason `eezoGenerateRoutes` is: the result is
+    // a `Seq[File]`, and the generator keeps a cache of its own below.
+    @transient val eezoTailwind: TaskKey[Seq[File]] =
+      taskKey[Seq[File]](
+        "Builds assets/tailwind.css from the tailwind.css at the project root with the Tailwind " +
+          "CLI, as a resource generator; does nothing when the file is absent."
+      )
+
+    val eezoTailwindVersion: SettingKey[String] =
+      settingKey[String]("The Tailwind CSS release eezoTailwind fetches, when no CLI is named.")
+
+    val eezoTailwindInput: SettingKey[File] =
+      settingKey[File]("The stylesheet eezoTailwind compiles; its absence means no Tailwind.")
+
+    val eezoTailwindCli: SettingKey[Option[File]] =
+      settingKey[Option[File]](
+        "A Tailwind CLI already on this machine, used instead of the one eezoTailwind fetches."
+      )
   }
 
   import autoImport._
@@ -143,6 +162,16 @@ object EezoPlugin extends AutoPlugin {
       .value,
     eezoStop        := DevProcess.stop(quiet = false, log = message => println(message)),
     eezoJavaVersion := "25",
+    // The stylesheet, built inside the same classpath request that compiles the project, so that
+    // `eezoRestart`, `test`, `package` and `eezoStage` all carry a stylesheet that matches the
+    // sources beside it, with nothing to commit and nothing to remember. The trigger is what makes
+    // an edit to the stylesheet itself, which no compile reads, restart the dev loop.
+    eezoTailwindVersion    := Tailwind.DefaultVersion,
+    eezoTailwindInput      := baseDirectory.value / "tailwind.css",
+    eezoTailwindCli        := None,
+    Compile / eezoTailwind := tailwind.value,
+    Compile / resourceGenerators += (Compile / eezoTailwind).taskValue,
+    Compile / eezoTailwind / watchTriggers += Glob(eezoTailwindInput.value),
     // The staged layout is the whole deployment contract: lib/ holds every runtime jar (this
     // project's own classes via packageBin, so directory classpath entries are not shipped raw),
     // db/ holds the committed migrations (present even when empty, so the Dockerfile's COPY never
@@ -465,6 +494,76 @@ object EezoPlugin extends AutoPlugin {
 
     cached(inputs).toSeq
   }
+
+  /** Builds the stylesheet when the project has a `tailwind.css`, and nothing otherwise.
+    *
+    * Tailwind reads the sources for the class names they use, so the sources are this generator's
+    * inputs the way `app/` is the route generator's, and the same `FileFunction.cached` keeps a
+    * save that changed nothing it reads from running the CLI again. The stamp carries the version
+    * and the CLI's path, the two inputs no source file holds, so a bumped `eezoTailwindVersion`
+    * misses the cache with no source change. The CLI writes into the task's own cache directory and
+    * the result is copied to `resourceManaged` only when its bytes differ, for the reason
+    * `writeIfChanged` gives: an unchanged stylesheet must not move the timestamp `copyResources`
+    * reads.
+    *
+    * A CLI that exits non zero fails this task with its diagnostics in the message. Under the dev
+    * loop that is the same path a compile error takes: the launcher prints the failure, and the
+    * previous application keeps serving.
+    *
+    * Every `.value` is read before the first branch, because sbt's task macro rejects one inside an
+    * `if` or a closure; and none of them is `fullClasspath`, `products` or `compile`, for the
+    * reason `generate` gives above.
+    */
+  private def tailwind: Def.Initialize[Task[Seq[File]]] = Def.task {
+    val log         = streams.value.log
+    val cache       = streams.value.cacheDirectory
+    val input       = eezoTailwindInput.value
+    val version     = eezoTailwindVersion.value
+    val named       = eezoTailwindCli.value
+    val root        = baseDirectory.value
+    val destination = (Compile / resourceManaged).value / "assets" / "tailwind.css"
+    val scanned     =
+      (Compile / unmanagedSourceDirectories).value ++ (Compile / unmanagedResourceDirectories).value
+
+    if (!input.isFile) {
+      if (destination.exists) IO.delete(destination)
+      Seq.empty
+    } else {
+      val cli = named.getOrElse(
+        Tailwind.ensureBinary(
+          version,
+          Tailwind.toolsDir(sys.env.get("EEZO_HOME"), sys.props("user.home")),
+          message => log.info(message)
+        )
+      )
+      val sources = scanned.flatMap(dir => (dir ** "*").get().filter(_.isFile)).toSet
+      val stamp   = cache / "eezo-tailwind.version"
+      IO.write(stamp, s"$version\n${cli.getAbsolutePath}\n")
+      val built = cache / "tailwind.css"
+
+      val cached = FileFunction.cached(cache / "eezo-tailwind", FilesInfo.hash, FilesInfo.hash) {
+        (changed: Set[File]) =>
+          val _ = changed
+          Tailwind.run(cli, input, built, root) match {
+            case Right(())     => ()
+            case Left(printed) =>
+              sys.error(s"eezoTailwind: tailwindcss failed on ${input.getName}\n$printed")
+          }
+          copyIfChanged(built, destination)
+          Set(destination)
+      }
+      cached(sources + input + stamp).toSeq
+    }
+  }
+
+  /** `writeIfChanged` for bytes: the built stylesheet reaches `resourceManaged` only when it
+    * differs from what is there.
+    */
+  private def copyIfChanged(source: File, destination: File): Unit =
+    if (
+      !destination.exists() ||
+      !java.util.Arrays.equals(IO.readBytes(source), IO.readBytes(destination))
+    ) IO.copyFile(source, destination)
 
   /** `sourceGenerators` runs on every evaluation and the hashed input set covers the whole source
     * tree, so an edit to a file with no routes and no models in it reaches this point. Writing

@@ -26,6 +26,12 @@ a new row in the table on the same save. It caches on the hash of the sources it
 writes the generated file only when its content changed, so a save that doesn't touch a route
 doesn't invalidate the compile that follows.
 
+The stylesheet is built in the same step when the project has a `tailwind.css` at its root: the
+plugin runs the Tailwind CLI as a resource generator, cached the same way on the sources it
+reads, so the class you just typed is styled when the page reloads, with no second process. A
+Tailwind error fails the task the way a compile error does, and the previous application keeps
+serving. [Style with Tailwind](../how-to/style-with-tailwind.md) is the setup.
+
 ## The console
 
 `eezo dev` shows the loop and nothing around it. A spinner runs while sbt loads and while each

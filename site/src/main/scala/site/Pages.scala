@@ -207,6 +207,7 @@ object Pages {
               "test-an-application",
               "run-a-job",
               "use-logback",
+              "style-with-tailwind",
               "deploy"
             )
           )()

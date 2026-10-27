@@ -35,6 +35,11 @@
 # colima socket when nothing else set it, and pins the API version whenever DOCKER_HOST names a
 # colima socket, however it got there.
 #
+# The examples step builds the blog's stylesheet with the Tailwind CLI, which the plugin fetches
+# from GitHub into ~/.eezo/tools once per version. The first run on a machine needs the network
+# for that one download; a red examples step that names eezoTailwind and a URL is the download,
+# not the code.
+#
 # In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
 # nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir file.
 # An uncommitted local-worktree.sbt at the worktree root turns that setting off. The gate writes

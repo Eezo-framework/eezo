@@ -63,13 +63,15 @@ trait HttpApp extends Dispatch {
   def boot(): Unit = serve(routes)
 
   /** Routes the framework itself contributes, appended to whatever table [[serve]] is given so that
-    * every caller — `boot`'s default, a user's own `serve` in an overridden `boot`, `dev` — serves
-    * them without knowing they exist. Empty here: `eezo-live`'s `LiveApp` overrides it with the
-    * live socket and its client script, and `EezoApp` mixes that in. Appended, so the user's table
-    * keeps winning any path both name; they show in the boot listing (they are served, and the
-    * listing does not lie) but not in `eezo routes`, which is the user's table.
+    * every caller, `boot`'s default, a user's own `serve` in an overridden `boot`, `dev`, serves
+    * them without knowing they exist. Here it is the asset route, the catch all under `/assets`,
+    * which serves the files under `assets/` in the jar, the stylesheet the sbt plugin builds among
+    * them; `eezo-live`'s `LiveApp` adds the live socket and its client script, and `EezoApp` mixes
+    * that in. Appended, so the user's table keeps winning any path both name; they show in the boot
+    * listing (they are served, and the listing does not lie) but not in `eezo routes`, which is the
+    * user's table.
     */
-  protected def frameworkRoutes: Seq[Route] = Nil
+  protected def frameworkRoutes: Seq[Route] = Seq(Assets.route)
 
   /** The only caller of `HttpServer.run`: boots the server on this trait's overrides and blocks
     * until it stops. `dev` turns the listing and the reload client on.
