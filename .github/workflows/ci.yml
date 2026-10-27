@@ -106,12 +106,13 @@ jobs:
       #
       # `blog` has a `tailwind.css`, so its build fetches the Tailwind CLI into `~/.eezo/tools` once
       # per version; cached here so the download is paid once per runner image and version rather
-      # than on every run, and keyed on the version the plugin defaults to.
+      # than on every run. The version is `tailwindVersion` in build.sbt, so the key hashes that
+      # file: a bump misses the cache, and nothing here has to be kept in step by hand.
       - name: Cache the fetched tools
         uses: actions/cache@v4
         with:
           path: ~/.eezo/tools
-          key: eezo-tools-${{ runner.os }}-tailwindcss-4.3.3
+          key: eezo-tools-${{ runner.os }}-${{ hashFiles('build.sbt') }}
 
       - name: Build the example applications
         run: |

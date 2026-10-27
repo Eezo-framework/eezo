@@ -6,6 +6,8 @@ import java.nio.charset.StandardCharsets
 import java.nio.file.{FileAlreadyExistsException, Files, StandardCopyOption}
 import java.security.MessageDigest
 
+import sbt.internal.util.MessageOnlyException
+
 /** The Tailwind CLI, as the resource generator `eezoTailwind` fetches and runs it.
   *
   * Tailwind reads the application's sources for the class names they use and writes the rules those
@@ -27,10 +29,19 @@ import java.security.MessageDigest
   */
 private[sbt] object Tailwind {
 
-  /** The release the plugin fetches when a build names none. */
-  val DefaultVersion: String = "4.3.3"
+  /** The release the plugin fetches when a build names none: `tailwindVersion` in eezo's own
+    * build.sbt, which writes it into the generated `TailwindVersion`.
+    */
+  val DefaultVersion: String = TailwindVersion.Default
 
   private val Releases: String = "https://github.com/tailwindlabs/tailwindcss/releases/download"
+
+  /** A failure with the message alone: sbt prints a `MessageOnlyException` as it prints a compile
+    * error, without the stack trace that a `sys.error` from a task drags along, and none of these
+    * failures has a stack worth reading. The dev console shows the message the way it shows the
+    * compiler's diagnostics.
+    */
+  private def refuse(message: String): Nothing = throw new MessageOnlyException(message)
 
   /** The one sentence every failure to obtain the binary ends with. */
   private val Hatch: String =
@@ -126,11 +137,11 @@ private[sbt] object Tailwind {
     else {
       val name = asset(sys.props("os.name"), sys.props("os.arch")) match {
         case Right(name)  => name
-        case Left(reason) => sys.error(s"eezoTailwind: $reason; $Hatch")
+        case Left(reason) => refuse(s"eezoTailwind: $reason; $Hatch")
       }
       val url      = downloadUrl(version, name)
       val expected = expectedSha256(fetchText(sumsUrl(version)), name).getOrElse(
-        sys.error(s"eezoTailwind: the release v$version lists no digest for $name; $Hatch")
+        refuse(s"eezoTailwind: the release v$version lists no digest for $name; $Hatch")
       )
       Files.createDirectories(target.getParentFile.toPath)
       val part = Files.createTempFile(target.getParentFile.toPath, "tailwindcss", ".part")
@@ -139,7 +150,7 @@ private[sbt] object Tailwind {
         fetchFile(url, part.toFile)
         val actual = sha256(part.toFile)
         if (actual != expected)
-          sys.error(
+          refuse(
             s"eezoTailwind: $url does not match the digest the release lists for it " +
               s"(expected $expected, downloaded $actual); $Hatch"
           )
@@ -175,7 +186,7 @@ private[sbt] object Tailwind {
     connection.setReadTimeout(60000)
     connection.setInstanceFollowRedirects(true)
     val status = connection.getResponseCode
-    if (status != 200) sys.error(s"eezoTailwind: $url answered $status; $Hatch")
+    if (status != 200) refuse(s"eezoTailwind: $url answered $status; $Hatch")
     connection
   }
 

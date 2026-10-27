@@ -187,6 +187,11 @@ lazy val eezo = (project in file("modules/eezo"))
   // `live`'s test classpath happens to carry.
   .settings(libraryDependencies += jettyWsClient)
 
+// The Tailwind CSS release the plugin fetches for an application that names none in its build.
+// Here rather than in the plugin's source, so a bump is a one line change beside every other
+// version this build pins; the plugin reads it through the generated `TailwindVersion` below.
+lazy val tailwindVersion = "4.3.3"
+
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross built for sbt 1 and sbt 2 from one source. See
 // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md` for why.
@@ -195,6 +200,21 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
   .settings(
     name := "sbt-eezo",
     pomFacts,
+    // `tailwindVersion` above, written into the plugin as a source so that both axes compile it
+    // like any other and no resource lookup happens at task time.
+    Compile / sourceGenerators += Def.task {
+      val file = (Compile / sourceManaged).value / "io" / "eezo" / "sbt" / "TailwindVersion.scala"
+      val text =
+        s"""package io.eezo.sbt
+           |
+           |/** Written by the build from `tailwindVersion` in build.sbt; do not edit. */
+           |private[sbt] object TailwindVersion {
+           |  val Default: String = "$tailwindVersion"
+           |}
+           |""".stripMargin
+      if (!file.exists || IO.read(file) != text) IO.write(file, text)
+      Seq(file)
+    }.taskValue,
     // The build level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
     // would fail.
     scalaVersion       := Toolchain.PluginScalaVersion,

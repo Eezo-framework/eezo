@@ -47,7 +47,7 @@ console.
 | `eezoTailwindVersion` | `"4.3.3"` | the Tailwind release `eezoTailwind` fetches |
 | `eezoTailwindInput` | `baseDirectory.value / "tailwind.css"` | the stylesheet `eezoTailwind` compiles; absent means no Tailwind |
 | `eezoTailwindCli` | `None` | a Tailwind CLI already on the machine, instead of the fetched one |
-| `Compile / eezoTailwind / watchTriggers` | the input file | so an edit to the stylesheet alone restarts the dev loop |
+| `watchTriggers` | `+= tailwind.css` | project level, so an edit to the stylesheet alone restarts the dev loop |
 
 `run / fork := true` is the scaffold's, not the plugin's, and it's needed: the application
 runs on the JDK floor, and sbt's own JVM may not be on it.

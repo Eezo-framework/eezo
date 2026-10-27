@@ -165,13 +165,18 @@ object EezoPlugin extends AutoPlugin {
     // The stylesheet, built inside the same classpath request that compiles the project, so that
     // `eezoRestart`, `test`, `package` and `eezoStage` all carry a stylesheet that matches the
     // sources beside it, with nothing to commit and nothing to remember. The trigger is what makes
-    // an edit to the stylesheet itself, which no compile reads, restart the dev loop.
+    // an edit to the stylesheet itself, which no compile reads, restart the dev loop. It is set
+    // on the project and not on the task, and the difference was measured: the watch collects
+    // `watchTriggers` from the tasks the watched task depends on, and a generator is reached
+    // through the `resourceGenerators` setting rather than as a task dependency, so a trigger
+    // scoped to `Compile / eezoTailwind` is never read. The project scope reaches every task of
+    // the project by delegation, `~eezoRestart` and `~test` alike.
     eezoTailwindVersion    := Tailwind.DefaultVersion,
     eezoTailwindInput      := baseDirectory.value / "tailwind.css",
     eezoTailwindCli        := None,
     Compile / eezoTailwind := tailwind.value,
     Compile / resourceGenerators += (Compile / eezoTailwind).taskValue,
-    Compile / eezoTailwind / watchTriggers += Glob(eezoTailwindInput.value),
+    watchTriggers += Glob(eezoTailwindInput.value),
     // The staged layout is the whole deployment contract: lib/ holds every runtime jar (this
     // project's own classes via packageBin, so directory classpath entries are not shipped raw),
     // db/ holds the committed migrations (present even when empty, so the Dockerfile's COPY never
@@ -506,9 +511,10 @@ object EezoPlugin extends AutoPlugin {
     * `writeIfChanged` gives: an unchanged stylesheet must not move the timestamp `copyResources`
     * reads.
     *
-    * A CLI that exits non zero fails this task with its diagnostics in the message. Under the dev
-    * loop that is the same path a compile error takes: the launcher prints the failure, and the
-    * previous application keeps serving.
+    * A CLI that exits non zero fails this task with its diagnostics in the message, and with
+    * nothing else: a `MessageOnlyException`, so sbt prints the message as it prints a compile error
+    * and no stack trace. Under the dev loop that is the same path a compile error takes: the
+    * launcher prints the failure, and the previous application keeps serving.
     *
     * Every `.value` is read before the first branch, because sbt's task macro rejects one inside an
     * `if` or a closure; and none of them is `fullClasspath`, `products` or `compile`, for the
@@ -547,7 +553,9 @@ object EezoPlugin extends AutoPlugin {
           Tailwind.run(cli, input, built, root) match {
             case Right(())     => ()
             case Left(printed) =>
-              sys.error(s"eezoTailwind: tailwindcss failed on ${input.getName}\n$printed")
+              throw new sbt.internal.util.MessageOnlyException(
+                s"eezoTailwind: tailwindcss failed on ${input.getName}\n$printed"
+              )
           }
           copyIfChanged(built, destination)
           Set(destination)

@@ -25,7 +25,7 @@ final class Counter extends Component[Int] {
   def render(count: Int): Html =
     div(
       Attrs.cls := "mt-16 text-center",
-      h1("eezo live counter"),
+      h1("eezo live counter rotate-3"),
       p(Attrs.cls := "my-4 text-6xl font-light tabular-nums", span(count)),
       div(
         Attrs.cls := "flex justify-center gap-2",
