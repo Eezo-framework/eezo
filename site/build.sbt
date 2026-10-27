@@ -22,12 +22,12 @@ libraryDependencies ++= Seq(
   // CommonMark, parsed to an AST the site walks into eezo's own `Html` nodes. The one third party
   // dependency of the site, and one the framework does not take: two small jars, no transitive
   // dependency, BSD licensed.
-  "org.commonmark" % "commonmark"                % "0.30.1",
+  "org.commonmark" % "commonmark"                % "0.31.0",
   "org.commonmark" % "commonmark-ext-gfm-tables" % "0.31.0",
   // highlight.js, the browser bundle, for the code blocks. `Provided`: the generator below takes
   // the three files the pages load out of the jar at build time, so the jar itself never ships.
   "org.webjars"    % "highlightjs" % HighlightJs % Provided,
-  "org.scalameta" %% "munit"       % "1.3.4"     % Test
+  "org.scalameta" %% "munit"       % "1.3.6"     % Test
 )
 
 scalacOptions ++= Seq(

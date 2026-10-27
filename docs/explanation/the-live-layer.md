@@ -83,8 +83,10 @@ it, and the server logs it loud and answers with a full resync. If you ever see 
 patch` in a console, that's the alarm, and it's worth a bug report.
 
 The client sends a `join` when it's ready, which carries the mount prefix its DOM was rendered
-with, so a mounted page's later renders are rebased to match. Then events, pings, and failure
-reports. A malformed frame is answered with an error frame and a warning, and the page loop
+with, so a mounted page's later renders are rebased to match. The answer is a `patches` frame:
+the whole tree if anything moved while no socket was attached, empty otherwise, so a script
+that touched the DOM after the first render, a syntax highlighter say, keeps its work. Then
+events, pings, and failure reports. A malformed frame is answered with an error frame and a warning, and the page loop
 survives it. Every inbound frame is untrusted input, capped and validated before it becomes an
 `Event`.
 
@@ -102,8 +104,8 @@ seconds. A page whose socket dropped without a close frame is kept for sixty, th
 
 ## When the connection goes
 
-- **A network blip inside the grace window** rejoins the same page: state intact, one full
-  tree resync.
+- **A network blip inside the grace window** rejoins the same page: state intact, and one full
+  tree resync if anything moved meanwhile.
 - **Past the window**, the page was reaped, the server answers the reconnect with 4404, and the
   client reloads itself into a fresh page.
 - **The server restarts**: every page is gone with the process, and the client retries, capped

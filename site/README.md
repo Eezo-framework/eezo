@@ -84,11 +84,12 @@ bash`, `/install/eezo`, which serves the repository's `bin/eezo` for that instal
 and `POST /theme`. Markdown is parsed with commonmark-java and walked into eezo's own `Html`
 nodes, so a page is one tree from the header to the footer. Code blocks are coloured by
 highlight.js in the browser: the build takes its bundle and the Scala and nginx grammars out of
-the webjar, the page loads them at the end of the body, and `hljs.highlightAll()` is one of the
-two scripts the site has of its own. The palette for its classes is in `site.css`. The other is
-`keys.js`, a few lines for the keyboard, which the live layer cannot hear: Ctrl-K or Cmd-K presses
-the search button, Escape presses its close button, and the search input is focused once it has
-been patched in.
+the webjar, the page loads them at the end of the body, and `code.js`, one of the two scripts the
+site has of its own, runs it over every block once the page is parsed and again over any block
+the live layer replaces, since a patch carries the server's uncoloured markup. The palette for
+its classes is in `site.css`. The other script is `keys.js`, a few lines for the keyboard, which
+the live layer cannot hear: Ctrl-K or Cmd-K presses the search button, Escape presses its close
+button, and the search input is focused once it has been patched in.
 
 Everything else that moves on a page is the live layer, as one component per page: `Page`
 renders the header with its search button, the search dialog, the navigation drawer on a docs

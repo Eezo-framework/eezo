@@ -65,7 +65,7 @@ class RoutesSuite extends FunSuite {
     assert(!html.contains("site.js"), html)
     assert(html.contains("hljs/highlight.min.js?v="), html)
     assert(html.contains("hljs/scala.min.js?v="), html)
-    assert(html.contains("<script>hljs.highlightAll()</script>"), html)
+    assert(html.contains("code.js?v="), "the highlighter runs from a served script")
   }
 
   test("every page links the X account, as a glyph in the top bar and in words in the footer") {

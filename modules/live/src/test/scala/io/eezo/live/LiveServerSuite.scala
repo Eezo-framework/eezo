@@ -64,13 +64,15 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
     }
   }
 
-  test("join answers with a full resync, and an event with its fine-grained patch") {
+  test("join on a page nothing moved answers an empty frame, and an event its fine-grained patch") {
     serving { rig =>
       val wire = rig.connect(rig.mountedPageId())
       wire.join()
-      val resync = wire.frame()
-      assert(resync.contains("\"setChildren\""), resync)
-      assert(resync.contains("<span>0</span>"), resync)
+      // The client's DOM is what the mount rendered, so there is nothing to replay: a whole-tree
+      // frame here would undo what a script did to that DOM, a syntax highlighter for one.
+      val answer = wire.frame()
+      assert(answer.contains("\"patches\""), answer)
+      assert(!answer.contains("\"setChildren\""), answer)
 
       wire.event("inc")
       val patch = wire.frame()
@@ -388,7 +390,7 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
     }
   }
 
-  test("an abnormal drop keeps the page: a rejoin resyncs onto the same state") {
+  test("an abnormal drop keeps the page: a rejoin continues from the same state") {
     serving { rig =>
       val pageId = rig.mountedPageId()
       val first  = rig.connect(pageId)
@@ -400,10 +402,36 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
       first.drop() // a hard transport close: the server sees 1006 and opens the grace window
       val _ = first.closeCode()
 
+      // Nothing moved while the socket was away, so the rejoin gets no resync: the tab's DOM is
+      // still right. The state is the first socket's, as the next event shows.
+      val second = rig.connect(pageId)
+      second.join()
+      val answer = second.frame()
+      assert(!answer.contains("\"setChildren\""), answer)
+      second.event("inc")
+      val patch = second.frame()
+      assert(patch.contains("\"2\""), patch)
+      second.close()
+    }
+  }
+
+  test("a rejoin after something moved during the grace window resyncs onto the moved state") {
+    serving { rig =>
+      val pageId = rig.mountedPageId()
+      val first  = rig.connect(pageId)
+      first.join()
+      val _ = first.frame()
+      first.event("inc")
+      val _ = first.frame()
+      first.drop()
+      val _ = first.closeCode()
+
+      bumps.publish(()) // no socket attached: the frame drops, and the page remembers the drop
       val second = rig.connect(pageId)
       second.join()
       val resync = second.frame()
-      assert(resync.contains("<span>1</span>"), resync)
+      assert(resync.contains("\"setChildren\""), resync)
+      assert(resync.contains("<span>2</span>"), resync)
       second.close()
     }
   }
@@ -418,7 +446,11 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
 
       val wire = rig.connect(rig.mountedPageId("/admin/counter"))
       wire.join(base = "/admin")
+      val _ = wire.frame() // empty: the rewritten response is what the client holds
+      // A forced resync carries the tree rebased to the reported prefix, and not twice.
+      wire.send("""{"kind":"failed","reasons":["expected <div> at [0,1], found #text"]}""")
       val resync = wire.frame()
+      assert(resync.contains("\"setChildren\""), resync)
       assert(resync.contains("/admin/posts/0"), resync)
       assert(!resync.contains("/admin/admin"), resync)
 

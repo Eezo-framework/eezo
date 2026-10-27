@@ -4,4 +4,4 @@
 addSbtPlugin("io.eezo" % "sbt-eezo" % EezoVersion.value)
 
 // The same formatter and configuration as the framework, checked in CI.
-addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.1")
+addSbtPlugin("org.scalameta" % "sbt-scalafmt" % "2.6.2")

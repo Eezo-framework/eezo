@@ -84,14 +84,15 @@ trait LiveServerFixtures { self: munit.FunSuite =>
       new Wire(ws.connect(listener, upgrade).get(), listener)
     }
 
-    /** A socket that joins `pageId`, is answered with the full resync every join is owed, and hangs
-      * up: the whole visit a suite drives when admission is the only thing under test.
+    /** A socket that joins `pageId`, is answered with the patches frame every join gets (empty,
+      * since nothing moved), and hangs up: the whole visit a suite drives when admission is the
+      * only thing under test.
       */
     def joins(pageId: String, headers: Seq[(String, String)] = Nil): Unit = {
       val wire = connect(pageId, headers)
       wire.join()
-      val resync = wire.frame()
-      assert(resync.contains("\"setChildren\""), resync)
+      val answer = wire.frame()
+      assert(answer.contains("\"patches\""), answer)
       wire.close()
     }
   }
