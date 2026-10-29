@@ -81,7 +81,12 @@ private[sbt] object Builder {
       column = if (position.pointer.isPresent) position.pointer.get.intValue + 1 else 0,
       severity = severity,
       message = p.message,
-      rendered = if (p.rendered.isPresent) Some(p.rendered.get) else None
+      // The compiler's own rendering names the file by its absolute path on its second line; the
+      // project's prefix is cut there too, so the excerpt reads the way the header does.
+      rendered =
+        if (p.rendered.isPresent)
+          Some(p.rendered.get.replace(base.getAbsolutePath + File.separator, ""))
+        else None
     )
   }
 

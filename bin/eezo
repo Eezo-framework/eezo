@@ -164,17 +164,22 @@ forward_live() {
 # A project pinned to an sbt-eezo from before the console (DEV_CONSOLE_SINCE) still has only the
 # `~eezoRestart` alias, so for those the console below is built here from sbt's output, as it was
 # before: two marker lines from the plugin, sbt's [error] lines, and the application's own
-# output. A checkout's build (`.eezo-version` beside this script, a `+` in the version) is always
-# the current plugin.
+# output. The pin is read off the project, not off this script's checkout: `site/` pins a release
+# in its own build even though it sits beside a snapshot.
 # ---------------------------------------------------------------------------------------------
 
 DEV_CONSOLE_SINCE="0.3.0"
 
-# Whether the project in the current directory has a plugin with the console command.
+# Whether the project in the current directory has a plugin with the console command: the
+# `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
+# `EezoVersion.value`, the literal in project/project/EezoVersion.scala, is DEV_CONSOLE_SINCE or
+# later. A `+` in the version is a locally published snapshot, always the current plugin, and a
+# project that pins neither way (the examples build reads `.eezo-version`) is taken to be current.
 dev_console_in_plugin() {
-  [ -f "$ROOT/.eezo-version" ] && return 0
   local pinned
   pinned="$(sed -nE 's/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | head -1)"
+  [ -n "$pinned" ] ||
+    pinned="$(sed -nE 's/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | head -1)"
   [ -n "$pinned" ] || return 0
   case "$pinned" in *+*) return 0 ;; esac
   [ "$(printf '%s\n%s\n' "$DEV_CONSOLE_SINCE" "$pinned" | sort -V | head -1)" = "$DEV_CONSOLE_SINCE" ]

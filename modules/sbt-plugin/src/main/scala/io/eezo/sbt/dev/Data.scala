@@ -39,7 +39,24 @@ private[sbt] final case class RouteRow(
     path: String,
     provenance: String,
     api: Boolean
-)
+) {
+
+  /** Under the prefix the framework reserves: a route eezo mounts for itself, the live socket and
+    * its client script, the health check, rather than one the application wrote or derived. The
+    * application reports those as handwritten, since the framework builds them the way a
+    * handwritten route is built; the console names them for what they are.
+    */
+  def eezo: Boolean =
+    path == RouteRow.ReservedPrefix || path.startsWith(RouteRow.ReservedPrefix + "/")
+}
+
+private[sbt] object RouteRow {
+
+  /** `RouteTable.ReservedPrefix` in the http module, spelled again here because the plugin cannot
+    * depend on it.
+    */
+  val ReservedPrefix: String = "/eezo"
+}
 
 private[sbt] final case class Orphan(
     page: String,

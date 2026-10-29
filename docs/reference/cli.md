@@ -139,9 +139,10 @@ the command's answer and not a build failure:
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
   The forwarded commands run sbt with `-error -batch`, so only compile errors and the
   application's output reach the terminal. `dev` runs it with `--server -error` and the terminal
-  attached, `-Dsbt.supershell=false` added, since the console needs the keyboard and draws the
-  screen itself; `--server` is what keeps an sbt 2 project out of sbt's thin client, which the
-  console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
+  attached, `-Dsbt.supershell=false` added so that sbt draws no progress while the build loads,
+  since the console needs the keyboard and draws the screen itself (once running, the console
+  keeps sbt's progress off on its own, so a bare `sbt eezoDev` is clean too); `--server` is what
+  keeps an sbt 2 project out of sbt's thin client, which the console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
 - **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins. A project on a
   plugin from before the console (0.3.0) has only the `~eezoRestart` alias, and for it the
   launcher builds the older line console from sbt's output, as it did before.

@@ -96,7 +96,7 @@ private[sbt] object Panes {
           val table = rows.map { r =>
             val method = Cyan(padRight(r.method, methodWidth))
             val path   = padRight(shorten(r.path, pathWidth, theme.ellipsis), pathWidth)
-            val tail   = Dim(r.provenance + (if (r.api) "  api" else ""))
+            val tail   = Dim((if (r.eezo) "eezo" else r.provenance) + (if (r.api) "  api" else ""))
             truncate(s"$method  $path  $tail", width)
           }
           val warnings =
@@ -153,16 +153,28 @@ private[sbt] object Panes {
             )
         (title +: changes) ++ advice
     }
+    // The last command's answer is one line here, in the colour of its exit code: green for done,
+    // yellow for the command's own answer (drift found, a refusal), red for a failure. What it
+    // printed is in the log.
     val outcome: Vector[String] = m.outcome match {
       case None    => Vector.empty
       case Some(o) =>
-        val head =
-          if (o.ok || (o.action == Action.Status && o.code == 1)) Bold(s"$$ eezo ${o.action.label}")
-          else Red(s"${theme.fail} eezo ${o.action.label} exited ${o.code}")
-        ("" +: head +: Describe.outcome(o).flatMap(l => wrap(l, width)))
+        val (style, mark) =
+          if (o.ok) (Green, theme.ok)
+          else if (o.code == 1 && o.json.isDefined) (Yellow, theme.warn)
+          else (Red, theme.fail)
+        val line =
+          style(s"$mark eezo ${o.action.label}: ${Describe.summary(o)}") +
+            Dim(s"  ${theme.bullet} output in ${Tab.Log.number} ${Tab.Log.name}")
+        val detail = o.action match {
+          case Action.Migrate(false) if o.json.exists(_("outcome").strOr("") == "pending") =>
+            o.json.toVector.flatMap(_("pending").arr).map(p => Dim(s"  ${p("file").strOr("?")}"))
+          case _ => Vector.empty
+        }
+        ("" +: truncate(line, width) +: detail)
     }
     val running = m.busy
-      .map(a => Vector("", Dim(s"${theme.spinner(m.spinner)} running eezo ${a.label}")))
+      .map(a => Vector("", Cyan(s"${theme.spinner(m.spinner)} eezo ${a.label}")))
       .getOrElse(Vector.empty)
     state ++ outcome ++ running
   }
@@ -190,7 +202,7 @@ private[sbt] object Panes {
         )
       else Vector.empty
     val keys = Vector(
-      ("1-4", "the panes: log, errors, routes, schema"),
+      ("1-4", "the panes: errors, routes, schema, log"),
       ("tab", "next pane"),
       ("j k", "scroll (also arrows, PgUp, PgDn, g, G)"),
       ("r", "rebuild and restart now"),
@@ -211,8 +223,40 @@ private[sbt] object Describe {
   def status(d: Drift): String =
     if (d.inSync) "in sync" else s"${d.changes.size} difference(s) between model and database"
 
+  /** One line for the answer: what the pane shows beside the glyph. */
+  def summary(o: Outcome): String =
+    if (o.unknownCommand) "no database layer"
+    else
+      o.json match {
+        case None    => if (o.ok) "done" else s"exited ${o.code}"
+        case Some(j) =>
+          o.action match {
+            case Action.Status  => status(Drift.fromJson(j))
+            case Action.Sync(_) =>
+              if (j("applied").boolOr(false)) "applied to the dev database"
+              else if (j("refused").boolOr(false))
+                s"refused: ${j("blocked").arr.size} change(s) need review"
+              else if (j("changes").arr.isEmpty) "in sync"
+              else s"exited ${o.code}"
+            case Action.Freeze(_, _) =>
+              j("migration").str.map(path => s"wrote $path").getOrElse("nothing to freeze")
+            case Action.Migrate(_) =>
+              j("outcome").strOr("") match {
+                case "tampered" => "migration integrity check failed"
+                case "upToDate" => "no pending migrations"
+                case "pending"  => s"${j("pending").arr.size} pending; Enter applies"
+                case "applied"  => s"${j("applied").arr.size} migration(s) applied"
+                case other      => s"exited ${o.code} ($other)"
+              }
+          }
+      }
+
+  /** What the command said, line by line, for the log: its stdout as text, or the JSON it printed
+    * read back into the words the terminal front end uses. Its stderr is not here; the caller adds
+    * that, filtered.
+    */
   def outcome(o: Outcome): Vector[String] = o.json match {
-    case None    => o.out ++ o.err
+    case None    => o.out
     case Some(j) =>
       val body = o.action match {
         case Action.Status =>
@@ -252,7 +296,7 @@ private[sbt] object Describe {
             case other      => Vector(s"unexpected outcome: $other")
           }
       }
-      (body ++ o.err).filter(_.nonEmpty)
+      body.filter(_.nonEmpty)
   }
 
   private def pending(ps: Vector[JValue]): Vector[String] =
@@ -283,7 +327,7 @@ private[sbt] object View {
       {
         val header: Vector[String] =
           if (layout.compact) Vector(spread(tabsRow(m, layout), brief(m), w))
-          else Vector(spread(title(m), status(m), w), tabsRow(m, layout))
+          else Vector(spread(title(m), appStatus(m) + " ", w), tabsRow(m, layout))
         val rule   = Dim(theme.rule * w)
         val pane   = paneRows(m, layout)
         val footer = if (layout.footerRows == 0) Vector.empty else Vector(footerRow(m, layout))
@@ -308,8 +352,11 @@ private[sbt] object View {
   private def title(m: Model)(implicit theme: Theme): String =
     Bold(s" eezo dev") + Dim(s" ${theme.bullet} ") + Bold(m.project)
 
-  private def status(m: Model)(implicit theme: Theme): String = {
-    val build = m.build match {
+  /** The build, as the footer's right end shows it: the spinner and the trigger while compiling,
+    * then the glyph and the time, or the error count.
+    */
+  private def buildStatus(m: Model)(implicit theme: Theme): String =
+    m.build match {
       case BuildState.Idle                      => Dim("idle")
       case BuildState.Compiling(trigger, since) =>
         val elapsed = math.max(0L, m.now - since)
@@ -323,15 +370,20 @@ private[sbt] object View {
           s"${theme.fail} ${ds.count(_.isError)} error${if (ds.count(_.isError) == 1) "" else "s"}"
         )
     }
-    val app = m.app match {
+
+  /** The application, as the header's right end shows it: the address it serves on, or why not. */
+  private def appStatus(m: Model)(implicit theme: Theme): String =
+    m.app match {
       case AppState.Stopped          => Dim("stopped")
       case AppState.Starting(_)      => Dim("starting")
       case AppState.Running(Some(u)) => Bold(u)
       case AppState.Running(None)    => Green("serving")
       case AppState.Exited(code)     => Red(s"${theme.warn} exited $code")
     }
-    s"$build ${Dim(theme.bullet)} $app "
-  }
+
+  /** Build and application together, for the one row of the tiny layout. */
+  private def status(m: Model)(implicit theme: Theme): String =
+    s"${buildStatus(m)} ${Dim(theme.bullet)} ${appStatus(m)} "
 
   /** The status with the words left out, for a row shared with the tabs: the build's glyph and
     * time, and the application only when it is not simply running.
@@ -375,9 +427,13 @@ private[sbt] object View {
       }
       val name  = if (layout.narrow) t.short else t.name
       val label = s"${t.number} $name$count"
-      if (t == m.tab) Reverse(Bold(s" $label ")) else Dim(" ") + label + Dim(" ")
+      if (t == m.tab) Reverse(Bold(s" $label "))
+      else if (layout.narrow) label
+      else Dim(" ") + label + Dim(" ")
     }
-    " " + tabs.mkString(" ")
+    // Narrow, the idle tabs lose their own padding, so that four tabs with their counts and the
+    // brief status after them fit in forty columns.
+    " " + tabs.mkString(if (layout.narrow) "  " else " ")
   }
 
   private def paneRows(m: Model, layout: Layout)(implicit theme: Theme): Vector[String] = {
@@ -394,16 +450,18 @@ private[sbt] object View {
       else Vector.empty
     val always = Vector(key("r", "restart")) ++ db ++ Vector(key("?", "help"), key("q", "quit"))
     val keys   = if (layout.narrow) always.take(1) ++ always.takeRight(2) else always
-    val busy   = m.busy.map(a => Dim(s"${theme.spinner(m.spinner)} ${a.label}  ")).getOrElse("")
-    val all    = Panes.lines(m, m.tab, Panes.width(m)).size
+    val busy = m.busy.map(a => Cyan(s"${theme.spinner(m.spinner)} ${a.label}") + "  ").getOrElse("")
+    val all  = Panes.lines(m, m.tab, Panes.width(m)).size
     val offset = Update.effectiveOffset(m)
     val pos    =
       if (all <= layout.paneHeight) ""
       else {
         val last = math.min(all, offset + layout.paneHeight)
-        Dim(s"$last/$all ${if (m.tab == Tab.Log && m.follow) theme.down else theme.up}")
+        Dim(s"$last/$all ${if (m.tab == Tab.Log && m.follow) theme.down else theme.up}") + "  "
       }
-    spread(" " + keys.mkString("  "), busy + pos + " ", m.width)
+    // The build's state ends the row, bottom right, where the eye returns between saves.
+    val build = if (layout.narrow) brief(m) else buildStatus(m) + " "
+    spread(" " + keys.mkString("  "), pos + busy + build, m.width)
   }
 
   private def promptRow(m: Model, p: Prompt)(implicit theme: Theme): String = {

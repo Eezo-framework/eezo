@@ -24,7 +24,9 @@ private[sbt] object PlainRenderer {
     // values are not printed again.
     case Event.RoutesReported(_) | Event.DriftReported(_) => Vector.empty
     case Event.ActionStarted(action)                      => Vector(s"$$ eezo ${action.label}")
-    case Event.ActionFinished(outcome)                    => Describe.outcome(outcome)
+    case Event.ActionFinished(outcome)                    =>
+      (Describe.outcome(outcome) ++ LineProtocol.quiet(outcome.err)) :+
+        s"${if (outcome.ok) theme.ok else theme.fail} eezo ${outcome.action.label}: ${Describe.summary(outcome)}"
     case Event.Serving(_) | Event.AppStopped | Event.Pressed(_) | Event.Resized(_, _) |
         Event.Tick(_) =>
       Vector.empty

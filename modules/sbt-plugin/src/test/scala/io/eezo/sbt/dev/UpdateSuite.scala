@@ -257,7 +257,7 @@ class UpdateSuite extends munit.FunSuite {
   }
 
   test("tabs by number and by Tab, help by ?, quit by q and Ctrl-C") {
-    val (m, _) = run(start, Event.Pressed(Key.Char('3')))
+    val (m, _) = run(start, Event.Pressed(Key.Char('2')))
     assertEquals(m.tab, Tab.Routes)
     val (cycled, _) = run(m, Event.Pressed(Key.Tab), Event.Pressed(Key.Tab))
     assertEquals(cycled.tab, Tab.Log)

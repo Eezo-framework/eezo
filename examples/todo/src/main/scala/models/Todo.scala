@@ -19,6 +19,7 @@ import io.eezo.http.Resource
 case class Todo(
     id: Id[Todo],
     title: String,
+    subtitle: String,
     notes: Option[String],
     done: Boolean
 ) derives Table,

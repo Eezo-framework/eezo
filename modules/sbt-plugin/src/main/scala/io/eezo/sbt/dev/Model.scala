@@ -42,12 +42,16 @@ private[sbt] object SchemaState {
 private[sbt] sealed abstract class Tab(val number: Int, val name: String, val short: String)
 
 private[sbt] object Tab {
-  case object Log    extends Tab(1, "log", "log")
-  case object Errors extends Tab(2, "errors", "err")
-  case object Routes extends Tab(3, "routes", "rt")
-  case object Schema extends Tab(4, "schema", "db")
+  case object Errors extends Tab(1, "errors", "err")
+  case object Routes extends Tab(2, "routes", "rt")
+  case object Schema extends Tab(3, "schema", "db")
 
-  val all: Vector[Tab] = Vector(Log, Errors, Routes, Schema)
+  /** Last, since it is the one pane that is never short: the three before it are the answers, the
+    * log is where the output went.
+    */
+  case object Log extends Tab(4, "log", "log")
+
+  val all: Vector[Tab] = Vector(Errors, Routes, Schema, Log)
 
   def numbered(n: Int): Option[Tab] = all.find(_.number == n)
 }
@@ -252,7 +256,16 @@ private[sbt] object Update {
 
   // ---- actions -------------------------------------------------------------------------------
 
-  private def finished(m: Model, o: Outcome): (Model, Vector[Effect]) = {
+  /** The outcome's lines go to the log, every one of them: what the command said, then what it
+    * wrote on stderr less the pool's own records. The schema pane keeps one line, the summary, so
+    * the pane answers the question and the log holds the evidence.
+    */
+  private def finished(told: Model, o: Outcome): (Model, Vector[Effect]) = {
+    val m = LineProtocol
+      .quiet(o.err)
+      .foldLeft(
+        Describe.outcome(o).foldLeft(told)((acc, l) => acc.append(LogLine(l, LogLine.App)))
+      )((acc, l) => acc.append(LogLine(l, LogLine.Err)))
     val after: (Model, Vector[Effect]) =
       if (o.unknownCommand)
         (
@@ -307,12 +320,8 @@ private[sbt] object Update {
     (clampAll(next), effects ++ rebuild)
   }
 
-  private def failed(m: Model, o: Outcome): Model = {
-    val lines = Describe.outcome(o)
-    lines.foldLeft(m.note(s"${o.action.label} exited ${o.code}", LogLine.Fail)) { (acc, l) =>
-      acc.note(l, LogLine.Err)
-    }
-  }
+  private def failed(m: Model, o: Outcome): Model =
+    m.note(s"${o.action.label} exited ${o.code}", LogLine.Fail)
 
   // ---- keys ----------------------------------------------------------------------------------
 

@@ -64,10 +64,11 @@ private[sbt] object DevCommand {
     }
 
     // The session the console's tasks run under: console logging off, since the screen is the
-    // console's, and the progress bars off, since they draw outside any logger. Errors still reach
-    // the streams appender, so `last compile` works after a failed build as it always did.
-    // Set in every scope a task's streams could read it from, because sbt's own default is not in
-    // `Global`: sbt 1 sets it per project, and sbt 2 reads it closer to the compile than that.
+    // console's. Errors still reach the streams appender, so `last compile` works after a failed
+    // build as it always did. Set in every scope a task's streams could read it from, because
+    // sbt's own default is not in `Global`: sbt 1 sets it per project, and sbt 2 reads it closer
+    // to the compile than that. The super shell is a state attribute, not a setting, and goes
+    // separately below.
     val silent               = new PrintStream(new OutputStream { def write(b: Int): Unit = () })
     val project              = extracted.currentRef
     def quietOut: ConsoleOut = ConsoleOut.printStreamOut(silent)
@@ -80,11 +81,11 @@ private[sbt] object DevCommand {
         project / Compile / compile / logManager :=
           LogManager.defaults(extraAppenders.value, quietOut),
         project / Compile / compileIncremental / logManager :=
-          LogManager.defaults(extraAppenders.value, quietOut),
-        Global / useSuperShell := false
+          LogManager.defaults(extraAppenders.value, quietOut)
       ),
       state
     )
+    val still = TerminalAccess.withoutProgress(quiet)
 
     val base    = extracted.get(baseDirectory)
     val watched = extracted.get(Compile / unmanagedSourceDirectories) ++
@@ -93,7 +94,7 @@ private[sbt] object DevCommand {
     // resource generator, and `~` learns of it through `watchTriggers`, which this watch does not
     // read. Watched whether or not it exists yet, so adding Tailwind to a running project counts.
     val files            = Seq(extracted.get(EezoPlugin.autoImport.eezoTailwindInput))
-    val (s1, jvmOptions) = extracted.runTask(Compile / run / javaOptions, quiet)
+    val (s1, jvmOptions) = extracted.runTask(Compile / run / javaOptions, still)
     val loop             = new Loop(
       state = s1,
       project = extracted.get(name),

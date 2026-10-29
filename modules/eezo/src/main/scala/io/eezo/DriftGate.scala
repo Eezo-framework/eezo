@@ -33,10 +33,10 @@ import scala.util.control.NonFatal
   * parameter), so the page, the console and the terminal are three fronts over one mechanism.
   *
   * The drift is checked again on **every GET**, so resolving it, from the page or from a second
-  * terminal, turns the refusal into "resolved ✓ — save a file to restart" on the next refresh
-  * rather than a stale refusal. What a refresh cannot do is serve the app: the route table and the
-  * app's state are minted at process boot, and restart is eezo's reload model: the next file save
-  * is the restart.
+  * terminal, turns the refusal into "resolved ✓, save a file to restart" on the next refresh rather
+  * than a stale refusal. What a refresh cannot do is serve the app: the route table and the app's
+  * state are minted at process boot, and restart is eezo's reload model: the next file save is the
+  * restart.
   *
   * An app with no declared schema skips the check entirely, even against a reachable database with
   * tables in it: `status` answers that question honestly (drop everything), but refusing to *serve*

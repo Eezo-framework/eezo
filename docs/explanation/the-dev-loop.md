@@ -39,26 +39,30 @@ one is done.
 
 ## The console
 
-`eezo dev` takes the whole terminal. The top row names the project and says what the loop is
-doing: a spinner while a compile runs, labelled with the file that triggered it, then `✓ built
-in 0.4s`, or `✗ 2 errors`, and beside it the address the application serves on, or that it
-exited. Under it, four panes, one key each:
+`eezo dev` takes the whole terminal. The top row names the project and, at its right end, the
+address the application serves on, or that it is starting, stopped, or exited. The bottom right
+is the build: a spinner while a compile runs, labelled with the file that triggered it, then
+`✓ built in 0.4s`, or `✗ 2 errors`. Between them, four panes, one key each:
 
-- **1 log**: everything the application prints or logs, a stack trace included, following its
-  tail until you scroll up.
-- **2 errors**: the compiler's diagnostics as values, one block each: the file, line and
+- **1 errors**: the compiler's diagnostics as values, one block each: the file, line and
   column, then the compiler's own rendering with the excerpt and the caret. Warnings after
   errors. The pane opens by itself when a build fails; the tab shows the count.
-- **3 routes**: the route table the running application mounted, as an aligned table, with the
-  warnings boot would print under it: a derived route a handwritten one replaced, a route that
-  shadows another, a form page whose submit target is not mounted.
-- **4 schema**: the drift the dev server found at boot, each change in the colour of its class,
+- **2 routes**: the route table the running application mounted, as an aligned table, each
+  route with where it came from: `handwritten`, `derived`, or `eezo` for the ones the framework
+  mounts under `/eezo`, the live socket and its script. Under it, the warnings boot would print:
+  a derived route a handwritten one replaced, a route that shadows another, a form page whose
+  submit target is not mounted.
+- **3 schema**: the drift the dev server found at boot, each change in the colour of its class,
   and the schema commands as keys: `s` applies the drift to the dev database (it asks first when
   a change loses data or can fail, and adds `--force` only then), `f` writes it as a named
   migration and applies that, `m` lists the pending migrations and applies them on Enter, `S`
   diffs the model against the database again. Each runs the same command `eezo db` runs, as a
   child on the build's classpath, and the console restarts the application when one succeeds.
-  An application with no database layer has no schema pane.
+  The pane keeps one line per command: a spinner while it runs, then its answer in the colour
+  of its exit code; everything the command printed is in the log. An application with no
+  database layer has no schema pane.
+- **4 log**: everything the application prints or logs, a stack trace included, and the output
+  of every schema command, following its tail until you scroll up.
 
 The bottom row is the keys that apply right now, and where a question is asked: a migration's
 name, or whether to force. `r` rebuilds and restarts without a save, `c` clears the log, `?` lists
