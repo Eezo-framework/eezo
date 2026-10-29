@@ -144,8 +144,8 @@ the command's answer and not a build failure:
   keeps sbt's progress off on its own, so a bare `sbt eezoDev` is clean too); `--server` is what
   keeps an sbt 2 project out of sbt's thin client, which the console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
 - **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins. A project on a
-  plugin from before the console (0.3.0) has only the `~eezoRestart` alias, and for it the
-  launcher builds the older line console from sbt's output, as it did before.
+  plugin from before the console (0.3.0 and earlier) has only the `~eezoRestart` alias, and for
+  it the launcher builds the older line console from sbt's output, as it did before.
 - **`fly.toml`**, for the app name and region on deploy.
 
 ## What `new` writes
