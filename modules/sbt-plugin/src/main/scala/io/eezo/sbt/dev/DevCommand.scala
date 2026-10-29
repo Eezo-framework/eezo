@@ -128,6 +128,8 @@ private[sbt] final class Loop(
 
   private val events   = new LinkedBlockingQueue[Event]
   private val stopping = new AtomicBoolean(false)
+  // Fed by the keys thread, expired by the tick thread; each holds its monitor while it does.
+  private val decoder  = new KeyDecoder
   private val debounce =
     new Debounce[String](quietMillis = 100, clock = () => System.currentTimeMillis)
 
@@ -326,8 +328,10 @@ private[sbt] final class Loop(
   private def tick(): Unit =
     while (!stopping.get) {
       Thread.sleep(100)
-      events.add(Event.Tick(System.currentTimeMillis)): Unit
+      val now = System.currentTimeMillis
+      events.add(Event.Tick(now)): Unit
       debounce.due().foreach(paths => events.add(Event.Changed(paths)): Unit)
+      decoder.synchronized(decoder.expire(now)).foreach(k => events.add(Event.Pressed(k)): Unit)
       if (interactive) {
         val (w, h) = (terminal.getWidth, terminal.getHeight)
         if (w > 0 && h > 0 && (w != model.width || h != model.height))
@@ -336,26 +340,20 @@ private[sbt] final class Loop(
     }
 
   /** Reads the terminal's input by blocking on it: sbt's input stream pumps a byte from the
-    * terminal only while a reader is waiting in `read`, so polling `available` would never see one.
-    * A lone Escape is told apart from the start of a sequence by waiting fifty milliseconds for the
-    * rest of it, which is what `available` is good for once the first byte has arrived.
+    * terminal only while a reader is waiting in `read`, so this thread must always be back in
+    * `read`, and nothing else about the stream, `available` included, says whether more is coming.
+    * A lone Escape is therefore the tick thread's finding, through [[KeyDecoder.expire]].
     */
   private def readKeys(): Unit = {
-    val in      = terminal.inputStream
-    val decoder = new KeyDecoder
+    val in = terminal.inputStream
     try
       while (!stopping.get) {
         val b = in.read()
         if (b < 0) stopping.set(true)
-        else {
-          decoder.feed(b).foreach(k => events.add(Event.Pressed(k)): Unit)
-          if (b == 27) {
-            val until = System.currentTimeMillis + 50
-            while (in.available() == 0 && System.currentTimeMillis < until) Thread.sleep(5)
-            if (in.available() == 0)
-              decoder.timeout().foreach(k => events.add(Event.Pressed(k)): Unit)
-          }
-        }
+        else
+          decoder
+            .synchronized(decoder.feed(b, System.currentTimeMillis))
+            .foreach(k => events.add(Event.Pressed(k)): Unit)
       }
     catch {
       case _: InterruptedException                     => ()
