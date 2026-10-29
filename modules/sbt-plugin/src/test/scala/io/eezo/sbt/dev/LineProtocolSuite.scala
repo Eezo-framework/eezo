@@ -116,4 +116,22 @@ class LineProtocolSuite extends munit.FunSuite {
       Vector(Event.AppLine("[eezo] ⚠ drift check skipped", err = true))
     )
   }
+
+  test("quiet drops the INFO records of a stream read whole and keeps the rest") {
+    val lines = Vector(
+      "Oct 29, 2026 11:45:04 AM com.zaxxer.hikari.HikariDataSource <init>",
+      "INFO: eezo - Starting...",
+      "Oct 29, 2026 11:45:04 AM org.eclipse.jetty.server.Server doStart",
+      "WARNING: port in use",
+      "plain line"
+    )
+    assertEquals(
+      LineProtocol.quiet(lines),
+      Vector(
+        "Oct 29, 2026 11:45:04 AM org.eclipse.jetty.server.Server doStart",
+        "WARNING: port in use",
+        "plain line"
+      )
+    )
+  }
 }

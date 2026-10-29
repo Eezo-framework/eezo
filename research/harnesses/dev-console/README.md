@@ -15,7 +15,11 @@ python3 ../research/harnesses/dev-console/ptyrun.py /tmp/tui.txt 24 80 -- \
 
 `todo-session.jsonl` is the session the console was first checked with: boot, the four panes,
 the help, a broken file, two resizes, the fix, a status command, quit. The raw transcript is a
-stream of absolute cursor moves; split it on `ESC[<row>;1H` to read it row by row.
+stream of absolute cursor moves; `screens.py <transcript> <rows> <cols> [marks]` replays it
+through a small emulator and prints the screen as it stood at each mark, which is how the
+frames are read. A newline inside the alternate screen is the thing to look for in the raw
+bytes: nothing the console writes contains one, so any that appears came from sbt, and each one
+scrolls the frame.
 
 Not a benchmark and not a suite: the console's behaviour is pinned by the plugin's own tests, and
 this is the way to watch the real thing on a machine with no screen.

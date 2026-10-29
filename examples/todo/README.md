@@ -201,7 +201,7 @@ nothing until code touches it:
   + todo.priority integer null
 ```
 
-Keep it: press `4` for the schema pane, then `f`, name the migration `add priority`, and the
+Keep it: press `3` for the schema pane, then `f`, name the migration `add priority`, and the
 console freezes it, applies it and restarts; or `todo/run db freeze add priority` then
 `todo/run db migrate --apply` from a second terminal, or the drift page below, which does both in
 one submit. Next restart boots clean.
@@ -218,12 +218,12 @@ refuses to route: every path on <http://localhost:8090> answers **503** with the
   **freeze as a migration and apply it** (name field + your decisions → `000N_*.sql` + applied)
 
 Pick either. The page re-checks on every refresh, so it flips to *"resolved ✓"*; save a file (or
-press `enter` and rerun `eezoDev`) and the app serves again. If an action fails, the database's
+press `r` in the console) and the app serves again. If an action fails, the database's
 own error renders on the page: for example, adding a non-null column over existing rows is a
 `[risky]` change that Postgres may refuse; that refusal is the flag doing its job.
 
-The decisions are on the page rather than in the terminal because under `eezoDev` the forked app
-shares stdin with sbt's watch, and a console prompt would race it for every keystroke.
+The same decisions are a keypress away in the console: `s` syncs, `f` freezes with a name and a
+keep or drop policy. The page stays the place to decide each change on its own.
 
 ## 8. Start over
 

@@ -9,12 +9,12 @@ import java.util.concurrent.TimeUnit
   *
   * This is the ~100 lines `research/build-reload.md` §3.2 said eezo should write instead of
   * depending on sbt-revolver (sbt 1 only, dormant since 2023); revolver's process handling is the
-  * reference for the corner cases here — kill before rebind, a JVM shutdown hook so an exiting sbt
+  * reference for the corner cases here: kill before rebind, a JVM shutdown hook so an exiting sbt
   * never strands the app, `destroyForcibly` for a child that ignores the polite signal.
   *
   * State lives in this object rather than in sbt's state because the process must survive task
   * evaluations and die with the JVM; the shutdown hook is registered once, on first use. A `reload`
-  * of the build makes a fresh classloader and a fresh object, which strands a running child — the
+  * of the build makes a fresh classloader and a fresh object, which strands a running child; the
   * hook still reaps it at sbt exit, and a restart from the new loader binds a new one. Plain JDK
   * process APIs throughout, because this source compiles for sbt 1 on Scala 2.12 and sbt 2 on Scala 3.
   *

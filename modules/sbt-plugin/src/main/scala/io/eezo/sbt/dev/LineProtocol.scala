@@ -80,4 +80,21 @@ private[sbt] object LineProtocol {
 
   def isNoiseLevel(line: String): Boolean =
     line.startsWith("INFO: ") || line.startsWith("CONFIG: ") || line.startsWith("FINE: ")
+
+  /** `lines` with the same records dropped, for a stream that was read whole rather than line by
+    * line: the stderr of a schema command, which opens and closes a pool and logs four records
+    * doing it.
+    */
+  def quiet(lines: Vector[String]): Vector[String] = {
+    val kept = Vector.newBuilder[String]
+    var i    = 0
+    while (i < lines.size) {
+      if (isRecordHeader(lines(i)) && i + 1 < lines.size && isNoiseLevel(lines(i + 1))) i += 2
+      else {
+        kept += lines(i)
+        i += 1
+      }
+    }
+    kept.result()
+  }
 }

@@ -1,9 +1,11 @@
 package sbt.internal.eezo
 
+import sbt.State
 import sbt.internal.util.Terminal
 
 /** The handful of `sbt.internal.util.Terminal` members the dev console needs that sbt marks
-  * `private[sbt]`, re-exported from a package under `sbt` so the qualifier admits them.
+  * `private[sbt]`, and the one state attribute, re-exported from a package under `sbt` so the
+  * qualifier admits them.
   *
   * This is the one file of the plugin that lives outside `io.eezo.sbt`, and the only place that
   * touches sbt's terminal layer by name: every other file reaches the terminal through it, so an
@@ -58,4 +60,20 @@ object TerminalAccess {
       f
     } finally setAttributes(terminal, before)
   }
+
+  /** `state` without sbt's super shell: the task progress object sbt made at boot when the property
+    * allowed it, which the task engine finds under a state attribute and lets redraw its
+    * `| => project / task 1s` lines under whatever else is on the screen. Each redraw is a newline
+    * and a few erase sequences, and under the console, with the cursor parked on the last cell,
+    * every newline scrolls the whole frame up a row. The `useSuperShell` setting is read once at
+    * boot to make the object, so a session setting is too late; removing the attributes from the
+    * state the console runs its tasks under is not. Two attributes: the object itself, and the per
+    * command copy sbt's main loop stores while a command runs, which is where the engine looks
+    * first. Named by label, the same on sbt 1 and 2, because the second key is not in the sbt 1.5
+    * API the plugin compiles against.
+    */
+  def withoutProgress(state: State): State =
+    state.attributes.keys
+      .filter(k => k.label == "activeTaskProgress" || k.label == "currentCommandProgress")
+      .foldLeft(state)((s, k) => s.remove(k))
 }
