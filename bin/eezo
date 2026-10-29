@@ -168,7 +168,7 @@ forward_live() {
 # in its own build even though it sits beside a snapshot.
 # ---------------------------------------------------------------------------------------------
 
-DEV_CONSOLE_SINCE="0.3.0"
+DEV_CONSOLE_SINCE="0.4.0"
 
 # Whether the project in the current directory has a plugin with the console command: the
 # `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
