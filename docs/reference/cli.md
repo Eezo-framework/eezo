@@ -21,7 +21,7 @@ layer can shadow it. No arguments runs the application.
 
 | command | layer | needs | what it does |
 |---|---|---|---|
-| `new <name>`, `new .` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it |
+| `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
 | `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |

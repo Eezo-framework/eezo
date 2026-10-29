@@ -22,6 +22,9 @@ treats it that way: generated, never committed, rebuilt when the sources change.
 Every subsequent build will check the file, fetch the Tailwind CLI (if not there already), 
 scan the `src` directory for CSS classes, then write `assets/tailwind.css` into the jar's resources.
 
+A new application can start with this file and the link below already in place:
+`eezo new myapp --tailwind` writes both.
+
 ## The link
 
 The layout names the stylesheet through `Assets.url`, which includes the file's version into the

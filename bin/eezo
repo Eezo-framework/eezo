@@ -22,6 +22,7 @@ eezo — the framework launcher
 
   eezo new <name>       scaffold a new application in ./<name>
   eezo new .            scaffold a new application in the current directory, named after it
+      --tailwind        with a tailwind.css at the root and the stylesheet linked from the page
   eezo dev              serve, restarting on every save
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
@@ -534,7 +535,20 @@ write_gitignore() { # <file>
 }
 
 scaffold() {
-  dir="${1:-}"
+  # One name and, anywhere beside it, `--tailwind`: the scaffold then writes a `tailwind.css` at
+  # the root, which is what turns the plugin's stylesheet generator on, and links the stylesheet
+  # from the one page it writes. The file is the switch; the flag only writes it.
+  local dir="" tailwind=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --tailwind) tailwind=1 ;;
+      --*) echo "eezo: new does not know the flag '$arg'; it takes a name and --tailwind" >&2; exit 1 ;;
+      *)
+        [ -z "$dir" ] || { echo "eezo: new takes one name, got '$dir' and '$arg'" >&2; exit 1; }
+        dir="$arg"
+        ;;
+    esac
+  done
   [ -n "$dir" ] || { echo "eezo: new needs a name: eezo new myapp, or eezo new . for the current directory ($(basename "$PWD"))" >&2; exit 1; }
   # Any reference to the current directory such as: ./, "$PWD", or a symlink to it
   if [ "$dir" -ef . ]; then dir="."; fi
@@ -615,7 +629,52 @@ object Main extends EezoApp {
 }
 EOF
 
-  cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
+  if [ "$tailwind" -eq 1 ]; then
+    cat > "$dir/tailwind.css" <<'EOF'
+/* The stylesheet eezo builds. The sbt plugin sees this file at the project root and runs the
+   Tailwind CLI over it on every build, writing assets/tailwind.css into the jar; nothing here is
+   committed but this file. source("src") keeps the scan to the sources. The how-to "Style with
+   Tailwind" in the docs has the rest. */
+@import "tailwindcss" source("src");
+EOF
+    cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
+package app
+
+import io.eezo.core.html.*
+import io.eezo.http.Assets
+import io.eezo.http.Request
+import io.eezo.http.Response
+
+/** `app/Index.scala` mounts `GET /`, calling `def index`: the filename is the route.
+  *
+  * The stylesheet is the one the build writes from `tailwind.css` at the project root, linked
+  * under the versioned address `Assets.url` gives it. Once the application has a second page, the
+  * link moves into a `Layout` named in `Main`, so every page gets it.
+  */
+object Index {
+
+  def index(request: Request): Response = {
+    val _ = request
+    Response.Ok(
+      Html.doctype ++ html(
+        head(
+          meta(Attrs.charset := "utf-8"),
+          title("eezo"),
+          link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("tailwind.css"))
+        ),
+        body(
+          Attrs.cls := "mx-auto max-w-xl p-8 font-sans text-stone-800",
+          h1(Attrs.cls := "text-3xl font-semibold", "it works"),
+          p(Attrs.cls := "mt-4", "Add a case class with ", code("derives Form, Resource"), " under models/ "),
+          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
+        )
+      )
+    )
+  }
+}
+EOF
+  else
+    cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
 package app
 
 import io.eezo.core.html.*
@@ -705,6 +764,7 @@ object Index {
       |""".stripMargin
 }
 EOF
+  fi
 
   echo "created $name at $(cd -- "$dir" 2> /dev/null && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
   write_gitignore "$dir/.gitignore"
@@ -712,6 +772,7 @@ EOF
   echo "next:"
   [ "$dir" = "." ] || echo "  cd $name"
   echo "  eezo dev           # serve on :8080, restart on save"
+  [ "$tailwind" -eq 0 ] || echo "                     # the first build fetches the Tailwind CLI once, into ~/.eezo/tools"
   echo "  eezo routes        # what is mounted"
 }
 

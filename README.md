@@ -235,7 +235,7 @@ final class Board extends Component[List[Order]] {
 ## The command line
 
 ```
-eezo new <name>       scaffold a new application in ./<name>
+eezo new <name>       scaffold a new application in ./<name>; --tailwind styles it
 eezo dev              serve, restarting on every save
 eezo routes           what is mounted
 eezo db status        the drift between the models and the database
