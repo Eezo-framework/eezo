@@ -274,6 +274,12 @@ and replacing the running application with a fresh one. A failed compile leaves 
 application serving.
 _Avoid_: hot reload, watch mode, revolver
 
+**Dev console**:
+What `eezo dev` draws on the terminal: the dev loop's state, the application's log, the compile
+errors, the route table and the schema drift as panes, and the schema commands as keys. One sbt
+command of the plugin, so the sbt shell has it too.
+_Avoid_: TUI, dashboard, watch mode, REPL
+
 **Dev server**:
 The application started in development: the same routes, plus the drift check at boot, the route
 listing, and the reload client on every page.

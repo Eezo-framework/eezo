@@ -4,7 +4,7 @@ class KeyDecoderSuite extends munit.FunSuite {
 
   private def decode(bytes: Int*): Vector[Key] = {
     val d = new KeyDecoder
-    bytes.toVector.flatMap(d.feed) ++ d.timeout()
+    bytes.toVector.flatMap(b => d.feed(b)) ++ d.timeout()
   }
 
   test("printable bytes are characters, control bytes are their keys") {
@@ -40,6 +40,28 @@ class KeyDecoderSuite extends munit.FunSuite {
 
   test("escape followed by a plain key is Escape then the key") {
     assertEquals(decode(27, 'q'), Vector(Key.Escape, Key.Char('q')))
+  }
+
+  test("a lone escape expires after the quiet time; a sequence that keeps coming does not") {
+    val d = new KeyDecoder
+    assertEquals(d.feed(27, now = 1000L), Vector.empty)
+    assertEquals(d.expire(1000L + KeyDecoder.Quiet - 1), Vector.empty)
+    assertEquals(d.expire(1000L + KeyDecoder.Quiet), Vector(Key.Escape))
+    assertEquals(d.expire(5000L), Vector.empty)
+    assertEquals(d.feed(27, now = 2000L) ++ d.feed('['), Vector.empty)
+    assertEquals(d.expire(2000L + KeyDecoder.Quiet - 1), Vector.empty)
+    assertEquals(d.feed('A'), Vector(Key.Up))
+  }
+
+  test("a sequence that stalls is dropped at the quiet time, not typed") {
+    val d = new KeyDecoder
+    assertEquals(d.feed(27, now = 3000L) ++ d.feed('['), Vector.empty)
+    assertEquals(d.expire(3000L + KeyDecoder.Quiet), Vector.empty)
+    assertEquals(d.feed('A'), Vector(Key.Char('A')))
+  }
+
+  test("a wheel notch arrives as one write of several arrows, each delivered") {
+    assertEquals(decode(27, '[', 'A', 27, '[', 'A', 27, '[', 'A'), Vector(Key.Up, Key.Up, Key.Up))
   }
 
   test("keys typed back to back decode independently") {

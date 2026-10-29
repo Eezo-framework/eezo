@@ -62,7 +62,9 @@ is the build: a spinner while a compile runs, labelled with the file that trigge
   of its exit code; everything the command printed is in the log. An application with no
   database layer has no schema pane.
 - **4 log**: everything the application prints or logs, a stack trace included, and the output
-  of every schema command, following its tail until you scroll up.
+  of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and
+  PgDn, `g` and `G` scroll; so does the mouse wheel, in terminals that turn it into arrows on the
+  alternate screen, which VS Code, iTerm2, GNOME Terminal and Windows Terminal do.
 
 The bottom row is the keys that apply right now, and where a question is asked: a migration's
 name, or whether to force. `r` rebuilds and restarts without a save, `c` clears the log, `?` lists

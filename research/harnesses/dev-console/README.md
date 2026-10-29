@@ -14,7 +14,10 @@ python3 ../research/harnesses/dev-console/ptyrun.py /tmp/tui.txt 24 80 -- \
 ```
 
 `todo-session.jsonl` is the session the console was first checked with: boot, the four panes,
-the help, a broken file, two resizes, the fix, a status command, quit. The raw transcript is a
+the help, a broken file, two resizes, the fix, a status command, three arrows up in one write as
+a wheel notch sends them, a page up, `G`, quit. The arrows matter: they are escape sequences, and
+whether those survive the trip through sbt's input stream is something only a pty shows, since
+the decoder's own tests are fed bytes directly. The raw transcript is a
 stream of absolute cursor moves; `screens.py <transcript> <rows> <cols> [marks]` replays it
 through a small emulator and prints the screen as it stood at each mark, which is how the
 frames are read. A newline inside the alternate screen is the thing to look for in the raw

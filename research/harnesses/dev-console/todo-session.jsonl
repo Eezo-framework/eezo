@@ -32,5 +32,14 @@
 {"send": "S"}
 {"expect": "db status", "timeout": 60}
 {"sleep": 10}
+{"mark": "scroll-up"}
+{"send": "\u001b[A\u001b[A\u001b[A"}
+{"sleep": 0.5}
+{"mark": "scroll-page-up"}
+{"send": "\u001b[5~"}
+{"sleep": 0.5}
+{"mark": "scroll-end"}
+{"send": "G"}
+{"sleep": 0.5}
 {"mark": "quit"}
 {"send": "q"}
