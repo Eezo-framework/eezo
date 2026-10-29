@@ -5,6 +5,7 @@ import java.util.UUID
 
 import org.springframework.security.crypto.bcrypt.BCrypt
 
+import io.eezo.core.Parser
 import io.eezo.http.Field
 
 /** The stored hash of a user's password: one self describing string that names its own algorithm
@@ -17,8 +18,8 @@ import io.eezo.http.Field
   *
   * Being opaque is what keeps the two directions apart. A `String` read out of a row is a hash and
   * becomes one through [[Password.stored]]; a `String` typed into a browser is not, and the only
-  * door from there is [[Password.hash]] or the [[Field]] below, both of which hash. Nothing in
-  * between can pass one for the other by having the same underlying type.
+  * door from there is [[Password.hash]] or the [[Parser]] below, and the [[Field]] built on it, all
+  * of which hash. Nothing in between can pass one for the other by having the same underlying type.
   */
 opaque type Password = String
 
@@ -38,7 +39,7 @@ object Password {
   /** The longest text bcrypt reads, in bytes.
     *
     * bcrypt's own limit, not eezo's: the algorithm reads 72 bytes of key and stops. Stated here so
-    * that [[Field.read]] refuses a longer text with a message about the value, rather than letting
+    * that [[check]] refuses a longer text with a message about the value, rather than letting
     * spring-security-crypto throw an `IllegalArgumentException` that reaches the browser as a 500.
     * Truncating instead would be worse than either: two different passwords that share a 72 byte
     * prefix would both open the account, in silence.
@@ -88,14 +89,21 @@ object Password {
       * here says so, where letting it through would answer "wrong password" to a user whose
       * password is right and merely long.
       */
-    given Field[Plain] = field(Plain.apply)
+    given Parser[Plain] = parser(Plain.apply)
+
+    given Field[Plain] = field
   }
 
-  /** What both fields share: a password box, so a browser never paints the characters and a
-    * password manager recognises it, a `show` that is empty for every value, and [[check]].
+  /** What both parsers share: [[check]], before anything is made of the text. The refusal lives in
+    * the Parser rather than the Field so that whatever else reads a password, not only a form,
+    * meets it too.
     */
-  private def field[A](make: String => A): Field[A] =
-    Field.of[A](Field.PasswordInput)(_ => "")(check(_).map(make))
+  private def parser[A](make: String => A): Parser[A] = text => check(text).map(make)
+
+  /** What both fields add over their parser: a password box, so a browser never paints the
+    * characters and a password manager recognises it, and a `show` that is empty for every value.
+    */
+  private def field[A: Parser]: Field[A] = new Field[A](Field.PasswordInput, _ => "")
 
   /** The one refusal both fields share, so that a length the storage side rejects and a length the
     * login side accepts cannot drift apart.
@@ -180,12 +188,17 @@ object Password {
     def verify(plain: Plain): Boolean = BCrypt.checkpw(plain.text, password)
   }
 
+  /** Text read as a stored hash, by hashing it. Reading hashes, which is what puts the hashing
+    * between the text and the case class rather than in a handler somebody has to remember to
+    * write.
+    */
+  given Parser[Password] = parser(text => hash(Plain(text)))
+
   /** The stored hash as a form field.
     *
     * `show` is empty for every value, a real hash included, so no page ever paints one: a hash is
     * not a secret from the database, but it is an offline attack for anyone who reads the page it
-    * was rendered into. `read` hashes, which is what puts the hashing between the browser and the
-    * case class rather than in a handler somebody has to remember to write.
+    * was rendered into.
     */
-  given Field[Password] = field(text => hash(Plain(text)))
+  given Field[Password] = field
 }
