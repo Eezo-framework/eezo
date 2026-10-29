@@ -57,12 +57,15 @@ object ConfigMacro {
       val tpe      = repr.memberType(p)
       tpe.asType match {
         case '[t] =>
-          val parser = Expr.summon[Parser[t]]
+          val parser   = Expr.summon[Parser[t]]
+          val optional = tpe.dealias.typeSymbol == TypeRepr.of[Option[Any]].typeSymbol
           // `Parser.option` lifts any inner Parser, so an Option field lacks the inner one, and
           // a given for the whole Option would replace the lift that reads blank text as None.
+          // The guard keeps a Some or None field, which conforms to Option[x] but which the
+          // invariant Parser.option never serves, asking for its own Parser.
           val shown = Type.of[t] match {
-            case '[Option[x]] => Type.show[x]
-            case _            => Type.show[t]
+            case '[Option[x]] if optional => Type.show[x]
+            case _                        => Type.show[t]
           }
           if (clash)
             report.error(
@@ -87,7 +90,6 @@ object ConfigMacro {
                 val value = Select(Ref(companion), getter).asExprOf[t]
                 '{ Some(() => $value) }
               }
-            val optional = tpe.dealias.typeSymbol == TypeRepr.of[Option[Any]].typeSymbol
             val redacted = tpe =:= TypeRepr.of[Redacted] || tpe =:= TypeRepr.of[Option[Redacted]]
             '{
               (

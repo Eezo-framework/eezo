@@ -222,6 +222,19 @@ class ConfigSuite extends munit.FunSuite {
     assert(!errors.contains("Parser[scala.Option"), errors)
   }
 
+  test("a Some field is not an Option, so the Parser asked for is its own") {
+    val errors = compileErrors("case class Surely(port: Some[Int]) derives Config")
+    assert(
+      errors.contains(
+        """|No Parser for scala.Some[scala.Int] at field `port`, so PORT cannot be read.
+           |Provide one in scope:
+           |  given Parser[scala.Some[scala.Int]] = text => ... // Right(value), or Left("is not a ...")
+           |""".stripMargin
+      ),
+      errors
+    )
+  }
+
   test("a class that cannot be read field by field is refused instead of miscompiled") {
     val generic = compileErrors("case class Two[T](t: T) derives Config")
     assert(
