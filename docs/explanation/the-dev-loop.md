@@ -79,11 +79,17 @@ What is kept out: sbt's own narration, its loading, its progress bars, its timin
 `java.util.logging` records Jetty and HikariCP write at INFO on every boot, which say the same
 thing every time. Their warnings still come through.
 
-Without a terminal, in a pipe or in CI, the console has nobody to stop it, so it runs only as
-`sbt "eezoDev --once"`: the same events printed as lines, the compile, the diagnostics, the
-application's boot, cut short once the application serves or exits, and the command fails when
-it did not serve, which is what a build check wants. A watch without a terminal is refused rather
-than left running after its reader is gone.
+The screen is for a person at a keyboard. An agent writing the application, a log file or a
+pipe cannot read cursor movements or press `s`, so `eezo dev --no-tui` runs the same loop as
+lines: `compiling (Index.scala changed)`, the diagnostics as the compiler printed them, `built
+in 0.4s`, `started Main`, the application's output, a line per schema command's result. The
+watch, the debounce, the restart and the quiet Jetty and HikariCP records are the same; only the
+drawing is gone. Ctrl-C, or killing sbt, stops the loop and the application with it.
+
+Without a terminal and without that flag, in a pipe or in CI, the console has nobody to stop
+it, so it runs only as `sbt "eezoDev --once"`: the plain lines, cut short once the application
+serves or exits, and the command fails when it did not serve, which is what a build check wants.
+A watch nobody asked for as lines is refused rather than left running after its reader is gone.
 
 The console learns what the application mounted and what drifted from three lines the
 application prints at boot: `serving on <url>`, and, when the plugin asks for them with

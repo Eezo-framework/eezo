@@ -25,40 +25,49 @@ import java.util.concurrent.atomic.AtomicBoolean
   * `DevActions`. `Model`, `Update` and `View` decide everything; this file is the threads and the
   * terminal.
   *
-  * Without a terminal (a pipe, CI, `-batch`, sbt's thin client) only `--once` runs: the same loop
-  * printing its events as lines through `PlainRenderer`, cut short at the first serve or exit, with
-  * a failed state when the application did not serve; a smoke test for an examples build. A watch
-  * with nobody to stop it is refused, since it would outlive its reader.
+  * `--plain` is the same loop printing its events as lines through `PlainRenderer` instead of
+  * drawing: for a pipe, a log, or an agent driving the build, none of which can read a screen or
+  * press a key. Without a terminal and without that flag only `--once` runs: the plain loop cut
+  * short at the first serve or exit, with a failed state when the application did not serve; a
+  * smoke test for an examples build. A watch that was not asked for as lines is refused there,
+  * since it would outlive its reader.
   */
 private[sbt] object DevCommand {
 
   val Name: String = "eezoDev"
 
-  val command: Command = Command.args(Name, "[--once]")((state, args) => console(state, args))
+  val command: Command =
+    Command.args(Name, "[--once|--plain]")((state, args) => console(state, args))
 
   // Not `run`: that name is `Keys.run`, which the keys below are scoped by.
   private def console(state: State, args: Seq[String]): State = {
     val once        = args.contains("--once")
+    val plain       = args.contains("--plain")
     val terminal    = TerminalAccess.current
-    val interactive = !once && terminal.getWidth > 0 && terminal.isAnsiSupported
+    val interactive = !once && !plain && terminal.getWidth > 0 && terminal.isAnsiSupported
     val extracted   = Project.extract(state)
 
-    // The console draws on sbt's own terminal and must not run behind a thin client: the client
+    // The console writes to sbt's own terminal and must not run behind a thin client: the client
     // returns at the first failed task and leaves the loop, and the application, running in a
     // server nobody is looking at. The console channel is the one sbt itself reads; anything
     // else is a client. `--once` is fine either way, since it ends on its own.
-    // Without a terminal the loop has nobody to stop it: a pipe, a CI job and sbt's thin client
-    // (whose server sees no terminal either) would each leave it, and the application, running
-    // after the reader is gone. So no terminal means `--once` or nothing.
+    // Without a terminal the loop has nobody to stop it: a pipe or a CI job would leave it, and
+    // the application, running after the reader is gone. So no terminal means `--once`, or
+    // `--plain`, which says the lines are what is wanted and that the reader will stop the loop.
     val channel   = state.currentCommand.flatMap(_.source).map(_.channelName)
     val onConsole = TerminalAccess.isConsole && channel.forall(_.startsWith("console"))
-    if (!once && !(interactive && onConsole)) {
+    if (!once && !onConsole) {
       System.out.println(
-        s"[eezo dev] $Name needs a terminal of its own" +
-          (if (onConsole) ""
-           else s" and this sbt is a client of a server (channel ${channel.getOrElse("?")})") +
-          s". Run it from one (`eezo dev`, or `sbt --server $Name` on an sbt 2 project), or " +
-          s"`$Name --once` to build, start, and stop without one."
+        s"[eezo dev] $Name runs on sbt's own terminal, and this sbt is a client of a server " +
+          s"(channel ${channel.getOrElse("?")}). Run `eezo dev`, or `sbt --server $Name` on an " +
+          s"sbt 2 project; `$Name --once` builds, starts and stops from anywhere."
+      )
+      return state.fail
+    }
+    if (!once && !plain && !interactive) {
+      System.out.println(
+        s"[eezo dev] $Name needs a terminal to draw on. `$Name --plain` runs the same loop " +
+          s"printing lines, for a pipe or an agent; `$Name --once` builds, starts and stops."
       )
       return state.fail
     }

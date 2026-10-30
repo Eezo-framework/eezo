@@ -23,7 +23,7 @@ layer can shadow it. No arguments runs the application.
 | command | layer | needs | what it does |
 |---|---|---|---|
 | `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
-| `dev` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes and the drift as panes, `s` `f` `m` for the schema commands; `q` or Ctrl-C stops it; without a terminal only `eezoDev --once` runs |
+| `dev [--no-tui]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes and the drift as panes, `s` `f` `m` for the schema commands; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`), for a pipe, a log or an agent; without a terminal and without it only `eezoDev --once` runs |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |
 | `db status [--json]` | database layer | a database | the model against the live database |
