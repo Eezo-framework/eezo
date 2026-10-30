@@ -26,23 +26,24 @@ import java.util.concurrent.atomic.AtomicBoolean
   * terminal.
   *
   * `--plain` is the same loop printing its events as lines through `PlainRenderer` instead of
-  * drawing: for a pipe, a log, or an agent driving the build, none of which can read a screen or
-  * press a key. Without a terminal and without that flag only `--once` runs: the plain loop cut
-  * short at the first serve or exit, with a failed state when the application did not serve; a
-  * smoke test for an examples build. A watch that was not asked for as lines is refused there,
-  * since it would outlive its reader.
+  * drawing, and `--json` as one JSON object per line through `JsonRenderer`: for a pipe, a log, or
+  * an agent driving the build, none of which can read a screen or press a key. Without a terminal
+  * and without either flag only `--once` runs: the plain loop cut short at the first serve or exit,
+  * with a failed state when the application did not serve; a smoke test for an examples build. A
+  * watch that was not asked for as lines is refused there, since it would outlive its reader.
   */
 private[sbt] object DevCommand {
 
   val Name: String = "eezoDev"
 
   val command: Command =
-    Command.args(Name, "[--once|--plain]")((state, args) => console(state, args))
+    Command.args(Name, "[--once|--plain|--json]")((state, args) => console(state, args))
 
   // Not `run`: that name is `Keys.run`, which the keys below are scoped by.
   private def console(state: State, args: Seq[String]): State = {
     val once        = args.contains("--once")
-    val plain       = args.contains("--plain")
+    val json        = args.contains("--json")
+    val plain       = args.contains("--plain") || json
     val terminal    = TerminalAccess.current
     val interactive = !once && !plain && terminal.getWidth > 0 && terminal.isAnsiSupported
     val extracted   = Project.extract(state)
@@ -67,7 +68,8 @@ private[sbt] object DevCommand {
     if (!once && !plain && !interactive) {
       System.out.println(
         s"[eezo dev] $Name needs a terminal to draw on. `$Name --plain` runs the same loop " +
-          s"printing lines, for a pipe or an agent; `$Name --once` builds, starts and stops."
+          s"printing lines and `$Name --json` one JSON object per line, for a pipe or an agent; " +
+          s"`$Name --once` builds, starts and stops."
       )
       return state.fail
     }
@@ -114,6 +116,7 @@ private[sbt] object DevCommand {
       jvmOptions = jvmOptions,
       terminal = terminal,
       interactive = interactive,
+      json = json,
       once = once
     )
     val ok = loop.run()
@@ -132,6 +135,7 @@ private[sbt] final class Loop(
     jvmOptions: Seq[String],
     terminal: Terminal,
     interactive: Boolean,
+    json: Boolean,
     once: Boolean
 ) {
 
@@ -139,6 +143,7 @@ private[sbt] final class Loop(
   private val stopping = new AtomicBoolean(false)
   // Fed by the keys thread, expired by the tick thread; each holds its monitor while it does.
   private val decoder  = new KeyDecoder
+  private val asJson   = new JsonRenderer
   private val debounce =
     new Debounce[String](quietMillis = 100, clock = () => System.currentTimeMillis)
 
@@ -236,8 +241,11 @@ private[sbt] final class Loop(
   }
 
   private def step(e: Event): Unit = {
-    if (!interactive) PlainRenderer.lines(e).foreach(line => { out.println(line); out.flush() })
+    if (!interactive && !json)
+      PlainRenderer.lines(e).foreach(line => { out.println(line); out.flush() })
     val (next, effects) = Update(model, e)
+    if (json)
+      asJson.lines(e, next, effects).foreach(line => { out.println(line); out.flush() })
     model = next
     effects.foreach(perform)
     if (once) e match {

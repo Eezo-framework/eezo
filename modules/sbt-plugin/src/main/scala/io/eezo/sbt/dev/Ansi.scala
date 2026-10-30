@@ -109,6 +109,26 @@ private[sbt] object Ansi {
     columns
   }
 
+  /** `s` without its escape sequences: the compiler colours its diagnostics, and a value handed to
+    * a program, the JSON event stream, wants the text alone.
+    */
+  def strip(s: String): String = {
+    val sb = new StringBuilder
+    var i  = 0
+    while (i < s.length) {
+      val c = s.charAt(i)
+      if (c == Esc && i + 1 < s.length && s.charAt(i + 1) == '[') {
+        i += 2
+        while (i < s.length && !isFinalByte(s.charAt(i))) i += 1
+        i += 1
+      } else {
+        sb.append(c)
+        i += 1
+      }
+    }
+    sb.toString
+  }
+
   private def isFinalByte(c: Char): Boolean = c >= '@' && c <= '~'
 
   /** `s` cut to at most `columns` columns, with the escape sequences it contains left intact and
