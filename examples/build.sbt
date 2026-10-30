@@ -87,7 +87,7 @@ lazy val blog = (project in file("blog"))
     libraryDependencies ++= Seq(
       layer("eezo"),
       layer("eezo-auth"),
-      "org.scalameta" %% "munit" % "1.3.4" % Test,
+      "org.scalameta" %% "munit" % "1.3.6" % Test,
       // `PostOwnershipSuite` drives the real route table over real rows, so it needs a real
       // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
       // in-memory substitute is the half `modules/http` already tests. Test scope, so nothing the
@@ -120,7 +120,7 @@ lazy val shop = (project in file("shop"))
       layer("eezo-auth"),
       layer("eezo-upickle"),
       "com.lihaoyi" %% "upickle" % "4.4.3",
-      "org.scalameta" %% "munit" % "1.3.4" % Test,
+      "org.scalameta" %% "munit" % "1.3.6" % Test,
       Dependencies.testcontainersPg
     ),
     // `Stripe` reads its two secrets when the route table is built, and a suite builds the table,
