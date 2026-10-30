@@ -123,14 +123,9 @@ lazy val shop = (project in file("shop"))
       "org.scalameta" %% "munit" % "1.3.4" % Test,
       Dependencies.testcontainersPg
     ),
-    // `Stripe` reads its two secrets when the route table is built, and a suite builds the table,
-    // so the suite runs in a JVM of its own that can be handed stand ins. Nothing in it calls
-    // Stripe, so no real key is ever needed or read.
+    // SPIKE, seam B: the stand in secrets are gone, because nothing reads the environment when the
+    // table is built.
     Test / fork := true,
-    Test / envVars := Map(
-      "STRIPE_SECRET_KEY"     -> "sk_test_unused",
-      "STRIPE_WEBHOOK_SECRET" -> "whsec_unused"
-    ),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir
   )

@@ -8,14 +8,13 @@ import io.eezo.db.Scopes.*
 import io.eezo.http.{BadRequest, Guarded, NotFound, Request, Response}
 import io.eezo.http.client.{Auth, Http, Reply}
 
-import config.Settings
 import models.{Order, Product}
 import stripe.Stripe
 
 object Create {
   given Guarded[Create.type] = Guarded.public
 
-  def create(request: Request)(using Settings): Response = {
+  def create(request: Request): Response = {
     val id      = request.param[Id[Product]]("id")
     val product = read(Table[Product].findById(id)).getOrElse(throw NotFound(request.path))
     val order   =
