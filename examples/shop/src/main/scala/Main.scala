@@ -3,6 +3,8 @@ import io.eezo.db.Schema
 import io.eezo.generated.Routes
 import io.eezo.http.{Layout, RouteTable}
 
+import config.Settings
+
 object Main extends EezoApp {
 
   override def schema: Schema     = AppSchema
@@ -15,4 +17,14 @@ object Main extends EezoApp {
     * commands read the same name.
     */
   override def databaseSchema: String = "shop"
+
+  /** SPIKE: the prints bracket the table build, so the console shows whether the Config is read
+    * while the table is built or later.
+    */
+  override def boot(): Unit = {
+    println("[spike] boot: building the table")
+    val table = routes
+    println("[spike] boot: table built, binding")
+    serve(table)
+  }
 }
