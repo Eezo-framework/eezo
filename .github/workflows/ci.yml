@@ -109,7 +109,7 @@ jobs:
       # than on every run. The version is `tailwindVersion` in build.sbt, so the key hashes that
       # file: a bump misses the cache, and nothing here has to be kept in step by hand.
       - name: Cache the fetched tools
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.eezo/tools
           key: eezo-tools-${{ runner.os }}-${{ hashFiles('build.sbt') }}
