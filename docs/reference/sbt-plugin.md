@@ -21,7 +21,7 @@ The plugin does nothing until a project enables it. An application with no route
 | task | what it does |
 |---|---|
 | `eezoGenerateRoutes` | writes `Routes.scala`; runs on every compile as a source generator, cached on the sources' hashes |
-| `eezoDev [--once]` | a command, not a task: the dev console. Watches the sources, compiles on every save, forks `Main dev` with its output piped into a pane, and draws the log, the errors, the routes and the drift on the terminal; the schema commands on keys. Without a terminal only `--once` runs: it builds, starts, prints the events as lines, waits for the application to serve, stops, and fails when it did not |
+| `eezoDev [--once\|--plain]` | a command, not a task: the dev console. Watches the sources, compiles on every save, forks `Main dev` with its output piped into a pane, and draws the log, the errors, the routes and the drift on the terminal; the schema commands on keys. `--plain` is the same loop printed as lines, no screen and no keys, which `eezo dev --no-tui` passes; a pipe or an agent reads it and Ctrl-C stops it. Without a terminal and without `--plain` only `--once` runs: it builds, starts, prints the events as lines, waits for the application to serve, stops, and fails when it did not |
 | `eezoRestart` | prints `eezo dev: building`, compiles, kills the running application, forks a fresh JVM running `Main dev` with its output inherited, prints `eezo dev: started <Main>`; `~eezoRestart` is the loop without the console |
 | `eezoStop` | stops the forked application, if any |
 | `eezoRoutes` | `run routes` |

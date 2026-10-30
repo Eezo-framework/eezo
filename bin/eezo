@@ -24,6 +24,8 @@ eezo — the framework launcher
   eezo new .            scaffold a new application in the current directory, named after it
       --tailwind        with a tailwind.css at the root and the stylesheet linked from the page
   eezo dev              the dev console: serve, restart on save, errors, routes, schema
+      --no-tui          the same loop as lines, no screen and no keys: for a pipe, a log,
+                        or an agent writing the application
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -158,8 +160,10 @@ forward_live() {
 # with the log, the compile errors, the route table and the schema drift as panes, and the schema
 # commands on keys. So this script hands sbt the terminal and gets out of the way: no pipe, no
 # `-batch` (the sbt launcher spells that as `</dev/null`, which would leave the console no
-# keyboard), and sbt's own progress bars off. Without a terminal (a pipe, CI) only
-# `eezoDev --once` runs, which prints the same events as lines and stops by itself.
+# keyboard), and sbt's own progress bars off. `--no-tui` asks the plugin for the same loop as
+# lines (`eezoDev --plain`): no screen, no keys, so a pipe, a log file or an agent driving the
+# build can read it; Ctrl-C, or killing sbt, stops it and the application with it. Without a
+# terminal and without the flag only `eezoDev --once` runs, which stops by itself.
 #
 # A project pinned to an sbt-eezo from before the console (DEV_CONSOLE_SINCE) still has only the
 # `~eezoRestart` alias, so for those the console below is built here from sbt's output, as it was
@@ -185,14 +189,26 @@ dev_console_in_plugin() {
   [ "$(printf '%s\n%s\n' "$DEV_CONSOLE_SINCE" "$pinned" | sort -V | head -1)" = "$DEV_CONSOLE_SINCE" ]
 }
 
-dev() {
+dev() { # [--no-tui]
   need_sbt
+  local command="eezoDev"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-tui) command="eezoDev --plain" ;;
+      *)
+        echo "eezo dev: unknown option $1 (the one option is --no-tui)" >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
   if dev_console_in_plugin; then
     # `--server`: on an sbt 2 project the sbt script runs a thin client by default, and the
     # console must run in the process that owns this terminal.
     SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -Dsbt.supershell=false" \
-      exec sbt --server -error eezoDev
+      exec sbt --server -error "$command"
   fi
+  # The older plugin's console is lines already, so `--no-tui` changes nothing here.
   dev_legacy
 }
 
@@ -755,7 +771,8 @@ case "$cmd" in
     scaffold "$@"
     ;;
   dev)
-    dev
+    shift
+    dev "$@"
     ;;
   build)
     need_sbt
