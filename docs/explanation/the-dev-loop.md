@@ -84,7 +84,12 @@ pipe cannot read cursor movements or press `s`, so `eezo dev --no-tui` runs the 
 lines: `compiling (Index.scala changed)`, the diagnostics as the compiler printed them, `built
 in 0.4s`, `started Main`, the application's output, a line per schema command's result. The
 watch, the debounce, the restart and the quiet Jetty and HikariCP records are the same; only the
-drawing is gone. Ctrl-C, or killing sbt, stops the loop and the application with it.
+drawing is gone. `eezo dev --json` is the same again as one JSON object per line, with the
+diagnostics as values and a build number that ties a `compiling` to its `built` or `failed`, so
+a tool waits for an answer rather than matching text; the [plugin
+reference](../reference/sbt-plugin.md) lists the events. The scaffold writes an `AGENTS.md` that
+says so to a coding agent before it starts. Ctrl-C, or killing sbt, stops the loop and the
+application with it.
 
 Without a terminal and without that flag, in a pipe or in CI, the console has nobody to stop
 it, so it runs only as `sbt "eezoDev --once"`: the plain lines, cut short once the application
