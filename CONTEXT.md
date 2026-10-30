@@ -64,6 +64,15 @@ the generated route table asks it once per model and lists none of them, and a d
 gains changes nothing the generator writes.
 _Avoid_: mountables
 
+**Config**:
+A case class an application reads from its environment, through a Config derived for it. Each field
+is read from the variable spelled as its name in upper snake case, through its Parser. A field with
+a default takes the default when its variable is absent, an `Option` field is `None`, and any other
+absent field is missing, whatever its Parser says absence means. A read that fails names every
+missing and malformed variable at once and never the text it found. A field whose variable would
+start with `EEZO_` does not compile, since that prefix is the framework's own.
+_Avoid_: settings, properties, parameters, env vars
+
 ### How Form and Resource relate
 
 Form is what a handler calls. Resource is what writes handlers, and every handler it writes calls
@@ -130,6 +139,13 @@ The one key an application signs its sessions with, set where the application is
 never written in its code. Without one the application runs on a throwaway that lasts as long as
 the process, which is right on a laptop and wrong in production.
 _Avoid_: secret key base, signing key, app key, salt
+
+**Redacted**:
+Text an application must not leak, such as an API key, held so that printing it shows
+`Redacted(redacted)` and comparing it takes the same time whatever it holds. The Secret is the one
+key a session is signed with and belongs to the framework; a Redacted is any value of the
+application's own that must stay out of logs and pages, with no length rule and no fixed variable.
+_Avoid_: secret, sensitive string, masked value
 
 ### Authentication
 
