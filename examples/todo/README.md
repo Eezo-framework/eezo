@@ -169,17 +169,18 @@ sbt:examples> project todo
 sbt:todo> eezoDev
 ```
 
-First run compiles and starts the app (`eezo dev: started Main`), with the drift check and route
-listing on. Now, **without stopping anything**:
+First run compiles and starts the app, with the drift check and route listing on: the console
+takes the terminal, the log pane shows the boot, the header shows the address. Now, **without
+stopping anything**:
 
 1. Edit `app/Index.scala`, change the `h1` text, and save.
 2. Watch the console: recompile, restart.
 3. Refresh <http://localhost:8090>: your change is live. Budget is well under a second of
    compile plus ~a quarter second of JVM boot.
 
-Break the file on purpose (delete a `)`) and save: the compile fails, **the old server keeps
-serving**. Fix it and save: back in the loop. `enter` stops the watch; `eezoStop` kills the app if
-you want it gone before then.
+Break the file on purpose (delete a `)`) and save: the compile fails, the errors pane opens with
+the diagnostic, **the old server keeps serving**. Fix it and save: back in the loop. `3` is the
+route table, `4` the schema, `?` every key, `q` stops the loop and the app.
 
 ## 6. Additive drift: banner, but serving
 
@@ -200,8 +201,10 @@ nothing until code touches it:
   + todo.priority integer null
 ```
 
-Keep it: `todo/run db freeze add priority` then `todo/run db migrate --apply` from a second terminal
-(or the drift page below does both in one submit). Next restart boots clean.
+Keep it: press `3` for the schema pane, then `f`, name the migration `add priority`, and the
+console freezes it, applies it and restarts; or `todo/run db freeze add priority` then
+`todo/run db migrate --apply` from a second terminal, or the drift page below, which does both in
+one submit. Next restart boots clean.
 
 ## 7. Destructive drift: the interactive refusal page
 
@@ -215,12 +218,12 @@ refuses to route: every path on <http://localhost:8090> answers **503** with the
   **freeze as a migration and apply it** (name field + your decisions → `000N_*.sql` + applied)
 
 Pick either. The page re-checks on every refresh, so it flips to *"resolved ✓"*; save a file (or
-press `enter` and rerun `eezoDev`) and the app serves again. If an action fails, the database's
+press `r` in the console) and the app serves again. If an action fails, the database's
 own error renders on the page: for example, adding a non-null column over existing rows is a
 `[risky]` change that Postgres may refuse; that refusal is the flag doing its job.
 
-The decisions are on the page rather than in the terminal because under `eezoDev` the forked app
-shares stdin with sbt's watch, and a console prompt would race it for every keystroke.
+The same decisions are a keypress away in the console: `s` syncs, `f` freezes with a name and a
+keep or drop policy. The page stays the place to decide each change on its own.
 
 ## 8. Start over
 

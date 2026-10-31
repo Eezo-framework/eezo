@@ -23,7 +23,9 @@ eezo — the framework launcher
   eezo new <name>       scaffold a new application in ./<name>
   eezo new .            scaffold a new application in the current directory, named after it
       --tailwind        with a tailwind.css at the root and the stylesheet linked from the page
-  eezo dev              serve, restarting on every save
+  eezo dev              the dev console: serve, restart on save, errors, routes, schema
+      --no-tui          the same loop as lines, no screen and no keys: for a pipe or a log
+      --json            the same loop as one JSON object per line: for an agent or a tool
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -153,15 +155,67 @@ forward_live() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# dev — the console. sbt runs the watch loop (`eezoDev`, the plugin's `~eezoRestart`) at its warn
-# level, so compile warnings and errors come through and sbt's own narration does not. The
-# console is built here from three sources: the plugin's two marker lines ("eezo dev: building"
-# before each compile, "eezo dev: started <Main>" after each fork), sbt's [error] lines, and the
-# application's own output, which the forked JVM inherits into this same pipe. A spinner stands
-# in for sbt's loading and the compile; the application's boot lines (the drift banner, the route
-# table, the address) and anything it logs pass through; the java.util.logging records Jetty and
-# HikariCP write at INFO are dropped, because they are the only lines nobody asked for.
+# dev — the console. It lives in the sbt plugin: `eezoDev` is a command of sbt-eezo that owns the
+# terminal, watches the sources, compiles, forks the application, and draws a full screen console
+# with the log, the compile errors, the route table and the schema drift as panes, and the schema
+# commands on keys. So this script hands sbt the terminal and gets out of the way: no pipe, no
+# `-batch` (the sbt launcher spells that as `</dev/null`, which would leave the console no
+# keyboard), and sbt's own progress bars off. `--no-tui` asks the plugin for the same loop as
+# lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`): no
+# screen, no keys, so a pipe, a log file or an agent driving the build can read it; Ctrl-C, or
+# killing sbt, stops it and the application with it. Without a terminal and without a flag only
+# `eezoDev --once` runs, which stops by itself.
+#
+# A project pinned to an sbt-eezo from before the console (DEV_CONSOLE_SINCE) still has only the
+# `~eezoRestart` alias, so for those the console below is built here from sbt's output, as it was
+# before: two marker lines from the plugin, sbt's [error] lines, and the application's own
+# output. The pin is read off the project, not off this script's checkout: `site/` pins a release
+# in its own build even though it sits beside a snapshot.
 # ---------------------------------------------------------------------------------------------
+
+DEV_CONSOLE_SINCE="0.4.0"
+
+# Whether the project in the current directory has a plugin with the console command: the
+# `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
+# `EezoVersion.value`, the literal in project/project/EezoVersion.scala, is DEV_CONSOLE_SINCE or
+# later. A `+` in the version is a locally published snapshot, always the current plugin, and a
+# project that pins neither way (the examples build reads `.eezo-version`) is taken to be current.
+dev_console_in_plugin() {
+  local pinned
+  pinned="$(sed -nE 's/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | head -1)"
+  [ -n "$pinned" ] ||
+    pinned="$(sed -nE 's/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | head -1)"
+  [ -n "$pinned" ] || return 0
+  case "$pinned" in *+*) return 0 ;; esac
+  [ "$(printf '%s\n%s\n' "$DEV_CONSOLE_SINCE" "$pinned" | sort -V | head -1)" = "$DEV_CONSOLE_SINCE" ]
+}
+
+dev() { # [--no-tui | --json]
+  need_sbt
+  local command="eezoDev"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-tui) command="eezoDev --plain" ;;
+      --json) command="eezoDev --json" ;;
+      *)
+        echo "eezo dev: unknown option $1 (the options are --no-tui and --json)" >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
+  if dev_console_in_plugin; then
+    # `--server`: on an sbt 2 project the sbt script runs a thin client by default, and the
+    # console must run in the process that owns this terminal.
+    SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -Dsbt.supershell=false" \
+      exec sbt --server -error "$command"
+  fi
+  # The older plugin's console is lines already, so `--no-tui` changes nothing here, and it has
+  # no event stream, so `--json` gets the lines too.
+  dev_legacy
+}
+
+# ---- the console built here, for a project on an older plugin ------------------------------
 
 DEV_STATUS=""
 DEV_WATCHING="watching for changes; Ctrl-C stops"
@@ -247,8 +301,7 @@ dev_console() {
   done
 }
 
-dev() {
-  need_sbt
+dev_legacy() {
   set +e
   sbt_at -warn eezoDev 2>&1 | dev_console
   local code="${PIPESTATUS[0]}"
@@ -534,6 +587,49 @@ write_gitignore() { # <file>
   [ "$existed" -eq 0 ] || echo "added ${added[*]} to the existing .gitignore"
 }
 
+# The note a coding agent reads before touching the project: which form of `eezo dev` it can
+# follow, what to wait for, and that the forwarded commands answer in JSON. Written once; a
+# project that has its own AGENTS.md keeps it.
+write_agents_note() { # <path>
+  [ ! -e "$1" ] || return 0
+  cat > "$1" <<'EOF'
+# For agents
+
+This is an [eezo](https://eezo.io) application. The dev loop draws a full screen console for a
+person; an agent uses the same loop as a stream it can read.
+
+## The dev loop
+
+```
+eezo dev --json > dev.log 2>&1 &
+```
+
+builds the project, starts the application, and restarts it on every save, printing one JSON
+object per line, each with an `event` field:
+
+- `compiling` with a `build` number and the `trigger` file, then `built` or `failed` with the
+  same number. `failed` carries `diagnostics`, each with `path`, `line`, `column`, `severity`,
+  `message` and the compiler's `rendered` excerpt. The previous application keeps serving
+  through a failed build.
+- `started`, then `serving` with the `url`. Wait for it before making requests. `exited` with
+  the `code` when the application dies.
+- `line` with `stream` and `text`: the application's own output, routine boot records removed.
+- `routes` and `drift` at every start, the `eezo routes --json` and `eezo db status --json`
+  bodies, `drift` with `blocking` set when the drift gate holds the pages.
+
+Stop the loop with a signal to the sbt process; the application stops with it. `eezo dev
+--no-tui` prints the same events as text, and `sbt "eezoDev --once"` builds, waits for the
+application to serve, stops, and exits nonzero when it did not.
+
+## The commands
+
+`eezo routes`, `eezo db status`, `eezo db sync --apply`, `eezo db freeze <name>` and
+`eezo db migrate --apply` are the application's own commands; every one takes `--json`.
+Exit code 1 is the command's answer, drift found or a change refused, not a failure of the
+build. `eezo db` alone lists them, and `eezo help` lists everything the application answers.
+EOF
+}
+
 scaffold() {
   # One name and, anywhere beside it, `--tailwind`: the scaffold then writes a `tailwind.css` at
   # the root, which is what turns the plugin's stylesheet generator on, and links the stylesheet
@@ -701,6 +797,8 @@ object Index {
 EOF
   fi
 
+  write_agents_note "$dir/AGENTS.md"
+
   echo "created $name at $(cd -- "$dir" 2> /dev/null && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
   write_gitignore "$dir/.gitignore"
   echo
@@ -721,7 +819,8 @@ case "$cmd" in
     scaffold "$@"
     ;;
   dev)
-    dev
+    shift
+    dev "$@"
     ;;
   build)
     need_sbt

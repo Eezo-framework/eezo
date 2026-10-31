@@ -1,13 +1,14 @@
 package io.eezo
 
-import io.eezo.db.cli.{Commands, Render, StatusResult}
+import io.eezo.db.cli.{Commands, Render, RenderJson, StatusResult}
+import io.eezo.core.internal.Json
 import io.eezo.core.html.{Attrs, Html, Mod}
 import io.eezo.core.html.Tags.*
 import io.eezo.db.Schema
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.migrate.Decision
 import io.eezo.db.schema.Change
-import io.eezo.http.{Csrf, Handler, Method, PathPattern, Response, Route, RouteTable}
+import io.eezo.http.{Csrf, DevMarkers, Handler, Method, PathPattern, Response, Route, RouteTable}
 
 import scala.util.control.NonFatal
 
@@ -23,19 +24,19 @@ import scala.util.control.NonFatal
   * cannot be reached at all is a warning too, not a refusal: `eezo dev` with Postgres down still
   * serves whatever does not need it.
   *
-  * **The decisions live on the page, not in the terminal.** Under `eezoDev` the forked app shares
-  * one stdin with sbt's watch ("press enter to interrupt"), so a boot time console prompt would
-  * race the watch for every keystroke, the reason sbt-revolver never did interactive forked apps
-  * either. The drift page instead carries the same choices the CLI's freeze prompt offers, per
-  * destructive change, posted back to two reserved routes. Both handlers feed the *same* layer 1
-  * functions the terminal does (`Commands.sync`, `Commands.freeze`'s `decide` parameter), so the
-  * form is a third front end over one mechanism.
+  * **The decisions live on the page and in the dev console, never at this process's own stdin.**
+  * The forked app has no terminal of its own: the dev console owns it, and reads the drift off the
+  * marker line this object prints (`DevMarkers`), offering `sync`, `freeze` and `migrate` as keys
+  * that run the same commands in a child of their own. The drift page carries the same choices the
+  * CLI's freeze prompt offers, per destructive change, posted back to two reserved routes. Every
+  * front end feeds the *same* layer 1 functions (`Commands.sync`, `Commands.freeze`'s `decide`
+  * parameter), so the page, the console and the terminal are three fronts over one mechanism.
   *
   * The drift is checked again on **every GET**, so resolving it, from the page or from a second
-  * terminal, turns the refusal into "resolved ✓ — save a file to restart" on the next refresh
-  * rather than a stale refusal. What a refresh cannot do is serve the app: the route table and the
-  * app's state are minted at process boot, and restart is eezo's reload model: the next file save
-  * is the restart.
+  * terminal, turns the refusal into "resolved ✓, save a file to restart" on the next refresh rather
+  * than a stale refusal. What a refresh cannot do is serve the app: the route table and the app's
+  * state are minted at process boot, and restart is eezo's reload model: the next file save is the
+  * restart.
   *
   * An app with no declared schema skips the check entirely, even against a reachable database with
   * tables in it: `status` answers that question honestly (drop everything), but refusing to *serve*
@@ -60,7 +61,11 @@ private[eezo] object DriftGate {
     * either way. Runs under the installed `Database`.
     */
   def apply(schema: Schema, databaseSchema: String): Option[RouteTable] = {
-    val drift = currentDrift(schema, databaseSchema)
+    val checked = tryDrift(schema, databaseSchema)
+    val drift   = checked.getOrElse(Nil)
+    // The drift as a value, for the dev console; not printed when the database could not be
+    // asked, so the console shows "unknown" rather than a clean bill it never earned.
+    if (DevMarkers.enabled) checked.foreach(d => println(marker(d)))
     if (blockers(drift).nonEmpty) {
       println(Render.status(StatusResult(drift)))
       println("""
@@ -81,14 +86,31 @@ private[eezo] object DriftGate {
     drift.filter(c => c.destructive || c.risky)
 
   private def currentDrift(schema: Schema, databaseSchema: String): List[Change] =
+    tryDrift(schema, databaseSchema).getOrElse(Nil)
+
+  /** The drift, or `None` when the database could not be asked, which is a warning and not a
+    * refusal: `eezo dev` with Postgres down still serves whatever does not need it.
+    */
+  private def tryDrift(schema: Schema, databaseSchema: String): Option[List[Change]] =
     try {
-      if (schema.snapshot.tables.isEmpty) Nil
-      else read { Commands.status(schema, databaseSchema).changes }
+      if (schema.snapshot.tables.isEmpty) Some(Nil)
+      else Some(read { Commands.status(schema, databaseSchema).changes })
     } catch {
       case NonFatal(e) =>
         System.err.println(s"[eezo] ⚠ drift check skipped, database unreachable: ${e.getMessage}")
-        Nil
+        None
     }
+
+  /** The drift marker line: `db status --json`'s shape plus `blocking`, this object's decision, so
+    * the console need not repeat the rule that makes it.
+    */
+  private[eezo] def marker(drift: List[Change]): String = {
+    val status = RenderJson.statusJson(StatusResult(drift))
+    DevMarkers.line(
+      "drift",
+      status.copy(fields = status.fields :+ ("blocking" -> Json.Bool(blockers(drift).nonEmpty)))
+    )
+  }
 
   /** The refusal table: the page on every GET, and the two actions it posts to. */
   private def driftTable(schema: Schema, databaseSchema: String): RouteTable = {

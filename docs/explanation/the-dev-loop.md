@@ -5,9 +5,8 @@ compile is not an outage.
 
 ## The loop
 
-`eezo dev` is sbt's own watch, over the source tree, around one task of the plugin,
-`eezoRestart`. On every change the task does three things, in
-this order:
+`eezo dev` is one sbt command of the plugin, `eezoDev`, the dev console. It watches the source
+tree itself, and on every change does three things, in this order:
 
 1. **Compile.** The task asks for the project's full classpath, and asking for it compiles the
    project first. If the compile fails, the task fails here, and nothing after it runs.
@@ -32,22 +31,76 @@ reads, so the class you just typed is styled when the page reloads, with no seco
 Tailwind error fails the task the way a compile error does, and the previous application keeps
 serving. [Style with Tailwind](../how-to/style-with-tailwind.md) is the setup.
 
+The watch is the console's own rather than sbt's `~`, over the source and resource directories
+and the stylesheet, with a hundred milliseconds of quiet between the last file event and the
+build, so an editor that writes several files on one save, a rename across a package for one,
+compiles once. A save that lands while a compile is running is remembered and compiles once that
+one is done.
+
 ## The console
 
-`eezo dev` shows the loop and nothing around it. A spinner runs while sbt loads and while each
-compile runs, labelled with the file that triggered it. Then the application's own boot lines:
-the drift banner if there is one, the route table, and `serving on http://localhost:8080`. A
-status line under them says the loop is watching and that Ctrl-C stops it. A compile error is
-the compiler's diagnostics as they are, followed by one line saying the previous build keeps
-serving. Anything else the application prints or logs passes through, a stack trace included.
+`eezo dev` takes the whole terminal. The top row names the project and, at its right end, the
+address the application serves on, or that it is starting, stopped, or exited. The bottom right
+is the build: a spinner while a compile runs, labelled with the file that triggered it, then
+`✓ built in 0.4s`, or `✗ 2 errors`. Between them, four panes, one key each:
 
-What is kept out: sbt's own narration, its loading, its watch prompts, its timings, and the
+- **1 errors**: the compiler's diagnostics as values, one block each: the file, line and
+  column, then the compiler's own rendering with the excerpt and the caret. Warnings after
+  errors. The pane opens by itself when a build fails; the tab shows the count.
+- **2 routes**: the route table the running application mounted, as an aligned table, each
+  route with where it came from: `handwritten`, `derived`, or `eezo` for the ones the framework
+  mounts under `/eezo`, the live socket and its script. Under it, the warnings boot would print:
+  a derived route a handwritten one replaced, a route that shadows another, a form page whose
+  submit target is not mounted.
+- **3 schema**: the drift the dev server found at boot, each change in the colour of its class,
+  and the schema commands as keys: `s` applies the drift to the dev database (it asks first when
+  a change loses data or can fail, and adds `--force` only then), `f` writes it as a named
+  migration and applies that, `m` lists the pending migrations and applies them on Enter, `S`
+  diffs the model against the database again. Each runs the same command `eezo db` runs, as a
+  child on the build's classpath, and the console restarts the application when one succeeds.
+  The pane keeps one line per command: a spinner while it runs, then its answer in the colour
+  of its exit code; everything the command printed is in the log. An application with no
+  database layer has no schema pane.
+- **4 log**: everything the application prints or logs, a stack trace included, and the output
+  of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and
+  PgDn, `g` and `G` scroll; so does the mouse wheel, in terminals that turn it into arrows on the
+  alternate screen, which VS Code, iTerm2, GNOME Terminal and Windows Terminal do.
+
+The bottom row is the keys that apply right now, and where a question is asked: a migration's
+name, or whether to force. `r` rebuilds and restarts without a save, `c` clears the log, `?` lists
+every key, `q` or Ctrl-C stops the loop and the application with it.
+
+The layout follows the terminal. Under sixty columns the tabs shorten and the footer keeps only
+the keys that matter most; under twelve rows the header and the tabs share one row and the
+footer goes; under six rows there is only the status row. Colour is sixteen colours and off under
+`NO_COLOR`; the box drawing and the glyphs fall back to ASCII when the terminal is not UTF-8.
+
+What is kept out: sbt's own narration, its loading, its progress bars, its timings, and the
 `java.util.logging` records Jetty and HikariCP write at INFO on every boot, which say the same
 thing every time. Their warnings still come through.
 
-The launcher builds this from sbt's output, run at the warn level, and two marker lines the
-plugin prints: `eezo dev: building` before each compile and `eezo dev: started Main` after each
-fork. Running `sbt eezoDev` without the launcher shows that raw stream, markers and all.
+The screen is for a person at a keyboard. An agent writing the application, a log file or a
+pipe cannot read cursor movements or press `s`, so `eezo dev --no-tui` runs the same loop as
+lines: `compiling (Index.scala changed)`, the diagnostics as the compiler printed them, `built
+in 0.4s`, `started Main`, the application's output, a line per schema command's result. The
+watch, the debounce, the restart and the quiet Jetty and HikariCP records are the same; only the
+drawing is gone. `eezo dev --json` is the same again as one JSON object per line, with the
+diagnostics as values and a build number that ties a `compiling` to its `built` or `failed`, so
+a tool waits for an answer rather than matching text; the [plugin
+reference](../reference/sbt-plugin.md) lists the events. The scaffold writes an `AGENTS.md` that
+says so to a coding agent before it starts. Ctrl-C, or killing sbt, stops the loop and the
+application with it.
+
+Without a terminal and without that flag, in a pipe or in CI, the console has nobody to stop
+it, so it runs only as `sbt "eezoDev --once"`: the plain lines, cut short once the application
+serves or exits, and the command fails when it did not serve, which is what a build check wants.
+A watch nobody asked for as lines is refused rather than left running after its reader is gone.
+
+The console learns what the application mounted and what drifted from three lines the
+application prints at boot: `serving on <url>`, and, when the plugin asks for them with
+`EEZO_DEV_MARKERS`, `eezo dev: routes <json>` and `eezo dev: drift <json>`, the same values
+`eezo routes --json` and `eezo db status --json` print, on one line each. `sbt eezoDev` from the
+sbt shell is the same console; `sbt "run dev"` by hand is the application alone, without them.
 
 ## What the browser does
 
@@ -69,7 +122,9 @@ reloads into a fresh page with a fresh `init`.
 Before the dev server serves, it diffs the database against the model. Additive drift is a
 banner and the application serves. Destructive or risky drift is a page in place of the
 application, with the two actions on it, re-checked on every `GET` so resolving it from the
-page or from another terminal shows up on the next refresh. A database that can't be reached
+page or from another terminal shows up on the next refresh. The console shows the same drift in
+its schema pane, switches to it when the drift blocks, and offers the same actions as keys;
+resolved from there, the application is restarted at once. A database that can't be reached
 is a warning, and everything that doesn't need it serves. [Schema and
 migrations](schema-and-migrations.md) has the detail.
 

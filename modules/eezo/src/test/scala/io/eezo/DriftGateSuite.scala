@@ -4,6 +4,7 @@ import java.net.URI
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 
 import io.eezo.core.html.Html
+import io.eezo.core.internal.Json
 import io.eezo.db.schema.Change
 import io.eezo.http.*
 
@@ -54,5 +55,40 @@ class DriftGateSuite extends munit.FunSuite {
       assertEquals(response.body(), markup(token))
       assert(clue(response.body()).startsWith(Html.doctype.render))
     } finally server.stop()
+  }
+
+  test("the drift marker is one line of the status shape, carrying the gate's blocking decision") {
+    val blocking = DriftGate.marker(drift)
+    assert(blocking.startsWith("eezo dev: drift "), blocking)
+    assert(!blocking.contains('\n'))
+    val json = Json.parse(blocking.stripPrefix("eezo dev: drift ")).fold(fail(_), identity)
+    json match {
+      case Json.Obj(fields) =>
+        assertEquals(fields.collectFirst { case ("command", v) => v }, Some(Json.Str("status")))
+        assertEquals(fields.collectFirst { case ("blocking", v) => v }, Some(Json.Bool(true)))
+        assertEquals(fields.collectFirst { case ("inSync", v) => v }, Some(Json.Bool(false)))
+      case other => fail(other.toString)
+    }
+  }
+
+  test("additive drift and no drift are not blocking") {
+    val additive = DriftGate.marker(
+      List(
+        Change.AddColumn(
+          "posts",
+          io.eezo.db.schema.ColumnSnap(
+            "body",
+            "text",
+            nullable = true,
+            primaryKey = false,
+            checks = Nil,
+            references = None
+          )
+        )
+      )
+    )
+    assert(additive.contains("\"blocking\":false"), additive)
+    val clean = DriftGate.marker(Nil)
+    assert(clean.contains("\"inSync\":true") && clean.contains("\"blocking\":false"), clean)
   }
 }
