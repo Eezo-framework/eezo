@@ -66,17 +66,21 @@ create unique index "uq_book_title" on "book" ("title");
 - The name is the one you gave, lower-cased, with every run of non-alphanumerics made one `_`.
 - The fingerprint is the first eight bytes of the SHA-256 of the statements joined by newlines,
   as hex. `migrate` recomputes it before running anything and refuses the batch on a mismatch.
-- Statements are split on `;`, except one inside a single quoted literal or a double quoted
-  identifier. A `--` comment runs to the end of its line and a quote inside it opens nothing, but
-  a `;` there still ends the statement, because that is where the terminator of a statement ending
-  in a comment sits.
-- Two readings of the file are prepared, the one that rule gives and a plain split on every `;`,
-  and the declared fingerprint picks between them. A file that verified under the plain split
-  still verifies. When neither reading matches the fingerprint, `migrate` refuses the batch.
-- Not understood: a `$$` quoted body, a backslash escaped quote, and a `;` inside a comment's own
-  text. These split where a reader would not expect, so a hand-written statement avoids them. The
-  plain reading still accepts some of them, which is why `freeze` output and files written before
-  this rule existed keep verifying.
+- Statements are split on `;`, except one inside a single quoted literal, a double quoted
+  identifier, a dollar quoted body, or a block comment. A dollar quote is `$$` or `$tag$` and runs
+  to the next copy of that same opener. A block comment is `/* */` and may nest. A `--` comment
+  runs to the end of its line and a quote inside it opens nothing, but a `;` there still ends the
+  statement, because that is where the terminator of a statement ending in a comment sits. A line
+  that is only a `--` comment is left out of the statements, unless that line is inside a literal,
+  a dollar quote, or a block comment.
+- Two readings of the file are prepared. The scanned one follows the rule above, over the raw
+  file. The plain one removes every line that begins with `--` and then splits on every `;`. The
+  declared fingerprint picks between them. A file that verified under the plain split still
+  verifies. When neither reading matches the fingerprint, `migrate` refuses the batch.
+- Not understood: a backslash escaped quote, and a `;` inside a `--` comment's own text. These
+  split where a reader would not expect, so a statement written by hand avoids them. The plain
+  reading still accepts some of them, which is why `freeze` output and files written before this
+  rule existed keep verifying.
 
 ## The ledger
 

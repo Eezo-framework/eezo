@@ -112,6 +112,52 @@ class MigrationSuite extends FunSuite {
     )
   )
 
+  roundTrips("a dollar quoted body keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $$ begin perform 1; end $$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a tagged dollar quote keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $fn$ begin perform 1; end $fn$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar quoted body keeps a comment line and a semicolon")(
+    List(
+      "create function f() returns void as $$\nbegin\n  -- keep this line\n  perform 1;\nend\n$$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar sign inside an unquoted identifier does not open a dollar quote")(
+    List("create table foo$tag$ (v text default 'a; b')")
+  )
+
+  roundTrips("a line of a literal that starts with a comment mark is kept")(
+    List(
+      "insert into t (v) values ('first\n-- not a comment\na; b')",
+      "select 1"
+    )
+  )
+
+  roundTrips("a block comment with an apostrophe does not swallow a later semicolon")(
+    List(
+      "update post set n = 0 /* don't */",
+      "insert into post (t) values ('a; b')"
+    )
+  )
+
+  roundTrips("an apostrophe in an identifier does not swallow a later semicolon")(
+    List(
+      """create table "o'clock" ("id" int)""",
+      """insert into "o'clock" ("v") values ('a; b')"""
+    )
+  )
+
   /** The comment state earns its place here and nowhere else in this suite.
     *
     * The comment carries a quote that closes nothing, and the statement after it carries a `;`
