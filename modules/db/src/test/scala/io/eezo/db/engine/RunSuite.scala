@@ -90,6 +90,30 @@ class RunSuite extends FunSuite {
     assertEquals(released.times, 1)
   }
 
+  test("a rollback that fails after the body throws rides along on the body's failure") {
+    val boom     = new RuntimeException("boom")
+    val refused  = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("rollback" -> refused))
+    val released = new Released
+    val e        = intercept[RuntimeException](
+      Run.transacting(stub.connection, released.release)(throw boom)
+    )
+    assert(e.eq(boom), s"expected the body's own failure, got $e")
+    assertEquals(e.getSuppressed.toList, List(refused))
+    assertEquals(released.times, 1)
+  }
+
+  test("a rollback that fails after the commit fails rides along on the commit's failure") {
+    val boom     = new SQLException("could not serialize access", "40001")
+    val refused  = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("commit" -> boom, "rollback" -> refused))
+    val released = new Released
+    val e        = intercept[SQLException](Run.transacting(stub.connection, released.release)(()))
+    assert(e.eq(boom), s"expected the commit failure itself, got $e")
+    assertEquals(e.getSuppressed.toList, List(refused))
+    assertEquals(released.times, 1)
+  }
+
   test("a read leaves auto commit alone and releases once, whether its body returns or throws") {
     val stub     = new Stub(Map.empty)
     val released = new Released
