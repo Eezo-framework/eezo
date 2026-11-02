@@ -191,13 +191,25 @@ object ConfigMacro {
       ConfigFactory.parseFile(new File(p), ConfigParseOptions.defaults().setAllowMissing(true)).root()
     }
 
+    // The class edit alone. Summoning a product mirror makes the compiler record, in the unit
+    // that summons it, a dependency on the class and a use of its primary constructor's name,
+    // so that the incremental compiler resynthesizes the mirror when the constructor changes. A
+    // summon from inside the expansion is recorded against the entry object all the same: a
+    // field added to or removed from any class of the tree changes its constructor, and the
+    // entry object is recompiled and checked again. The mirror itself is thrown away.
+    def tracked(tpe: TypeRepr): Unit =
+      tpe.asType match {
+        case '[t] => Expr.summon[scala.deriving.Mirror.ProductOf[t]].foreach(_ => ())
+      }
+
     var failed = false
     var seen   = Map.empty[TypeRepr, String]
 
     def variable(path: String): String =
       path.replace('.', '_').replaceAll("([a-z0-9])([A-Z])", "$1_$2").toUpperCase(java.util.Locale.ROOT)
 
-    def walk(tpe: TypeRepr, prefix: String): Unit =
+    def walk(tpe: TypeRepr, prefix: String): Unit = {
+      tracked(tpe)
       shape.fields(tpe, here).foreach { f =>
         val at = if (prefix.isEmpty) f.name else s"$prefix.${f.name}"
         f.kind match {
@@ -257,6 +269,7 @@ object ConfigMacro {
             }
         }
       }
+    }
 
     walk(TypeRepr.of[A], "")
     if (failed)
