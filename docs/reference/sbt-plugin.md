@@ -49,7 +49,7 @@ console.
 | `eezoTailwindVersion` | `"4.3.3"` | the Tailwind release `eezoTailwind` fetches |
 | `eezoTailwindInput` | `baseDirectory.value / "tailwind.css"` | the stylesheet `eezoTailwind` compiles; absent means no Tailwind |
 | `eezoTailwindCli` | `None` | a Tailwind CLI already on the machine, instead of the fetched one |
-| `watchTriggers` | `+= tailwind.css`, `+= src/main/resources/application.conf` | project level, so an edit to the stylesheet or the file alone restarts the dev loop |
+| `watchTriggers` | `+= tailwind.css`, `++= src/main/resources/**/*.conf`, `*.json`, `*.properties` | project level, so an edit to the stylesheet or to a config file alone restarts the dev loop |
 
 `run / fork := true` is the scaffold's, not the plugin's, and it's needed: the application
 runs on the JDK floor, and sbt's own JVM may not be on it.
@@ -96,11 +96,14 @@ change.
 
 When `eezoConfigClass` names a class, a second file sits beside it,
 `io/eezo/generated/ConfigFile.scala`. It holds one call, `Config.checked[<class>](<path>)`, with
-the absolute path of `src/main/resources/application.conf`, and the file's SHA-256 in its first
-line. The call checks the file against the class at compile time. The digest is there because the
-incremental compiler never looks inside a macro: an edit to the file alone changes the unit's
-text, so the unit is compiled and checked again. With `None` the plugin writes no such file and
-deletes one left from before.
+the absolute path of `src/main/resources/application.conf`, and a digest in its first line over
+that file and every `.conf`, `.json` and `.properties` file under `src/main/resources`. The call
+checks the file against the class at compile time. The digest is there because the incremental
+compiler never looks inside a macro: an edit to the file, or to a file it includes from that
+directory, changes the unit's text, so the unit is compiled and checked again. An `include` that
+reaches outside `src/main/resources`, by absolute path, by a `..` path or from the classpath, is
+not in the digest: an edit to it alone is checked on the next clean compile, not the next
+incremental one. With `None` the plugin writes no such file and deletes one left from before.
 
 ## sbt versions
 
