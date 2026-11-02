@@ -1,6 +1,4 @@
-// Two package clauses, so that `DevProcess` and `EezoPlugin` are in scope by name, and so that
-// this package's `Action` can be named `dev.Action` below: sbt 1 has an `sbt.Action` of its own,
-// and the wildcard import of `sbt._` would shadow a sibling file's on one axis and not the other.
+// Two package clauses, so that `DevProcess` and `EezoPlugin` are in scope by name.
 package io.eezo.sbt
 package dev
 
@@ -10,7 +8,15 @@ import sbt.internal.LogManager
 import sbt.internal.eezo.TerminalAccess
 import sbt.internal.util.{ConsoleOut, Terminal}
 
-import java.io.{BufferedReader, File, InputStreamReader, OutputStream, PrintStream}
+import java.io.{
+  BufferedReader,
+  File,
+  FileDescriptor,
+  FileOutputStream,
+  InputStreamReader,
+  OutputStream,
+  PrintStream
+}
 import java.nio.file.Path
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicBoolean
@@ -22,8 +28,8 @@ import java.util.concurrent.atomic.AtomicBoolean
   * under, so that nothing but the console's frames reaches the screen. Compile diagnostics come
   * back as values from `Builder`, the application's output arrives line by line through
   * `DevProcess` and `LineProtocol`, and the schema commands run as one-off children through
-  * `DevActions`. `Model`, `Update` and `View` decide everything; this file is the threads and the
-  * terminal.
+  * `SchemaCommands`. `Model`, `Update` and `View` decide everything; this file is the threads and
+  * the terminal.
   *
   * `--plain` is the same loop printing its events as lines through `PlainRenderer` instead of
   * drawing, and `--json` as one JSON object per line through `JsonRenderer`: for a pipe, a log, or
@@ -38,6 +44,27 @@ private[sbt] object DevCommand {
 
   val command: Command =
     Command.args(Name, "[--once|--plain|--json]")((state, args) => console(state, args))
+
+  // The refusals, as values, so that a suite reads them whole.
+
+  def clientRefusal(channel: Option[String]): String =
+    s"[eezo dev] $Name runs on sbt's own terminal, and this sbt is a client of a server " +
+      s"(channel ${channel.getOrElse("?")}). Run `eezo dev`, or `sbt --server $Name` on an " +
+      s"sbt 2 project; `$Name --once` builds, starts and stops from anywhere."
+
+  def terminalRefusal: String =
+    s"[eezo dev] $Name needs a terminal to draw on. `$Name --plain` runs the same loop " +
+      s"printing lines and `$Name --json` one JSON object per line, for a pipe or an agent; " +
+      s"`$Name --once` builds, starts and stops."
+
+  /** At a project without the plugin, the aggregate root of a build of several for one. */
+  def projectRefusal(candidates: Seq[String]): String =
+    s"[eezo dev] $Name runs in a project that enables EezoPlugin, and the current one does not." +
+      (candidates match {
+        case Seq()    => ""
+        case Seq(one) => s" `project $one` first."
+        case many     => s" One of `project ${many.mkString("`, `project ")}` first."
+      })
 
   // Not `run`: that name is `Keys.run`, which the keys below are scoped by.
   private def console(state: State, args: Seq[String]): State = {
@@ -58,19 +85,21 @@ private[sbt] object DevCommand {
     val channel   = state.currentCommand.flatMap(_.source).map(_.channelName)
     val onConsole = TerminalAccess.isConsole && channel.forall(_.startsWith("console"))
     if (!once && !onConsole) {
-      System.out.println(
-        s"[eezo dev] $Name runs on sbt's own terminal, and this sbt is a client of a server " +
-          s"(channel ${channel.getOrElse("?")}). Run `eezo dev`, or `sbt --server $Name` on an " +
-          s"sbt 2 project; `$Name --once` builds, starts and stops from anywhere."
-      )
+      System.out.println(clientRefusal(channel))
       return state.fail
     }
     if (!once && !plain && !interactive) {
-      System.out.println(
-        s"[eezo dev] $Name needs a terminal to draw on. `$Name --plain` runs the same loop " +
-          s"printing lines and `$Name --json` one JSON object per line, for a pipe or an agent; " +
-          s"`$Name --once` builds, starts and stops."
-      )
+      System.out.println(terminalRefusal)
+      return state.fail
+    }
+    // The command is global, the settings it reads are the plugin's: at a project without it, the
+    // root of a build of several applications for one, say so rather than throw.
+    val stylesheet = EezoPlugin.autoImport.eezoTailwindInput
+    if (extracted.getOpt(stylesheet).isEmpty) {
+      val candidates = extracted.structure.allProjectRefs
+        .filter(ref => extracted.getOpt(ref / stylesheet).isDefined)
+        .map(_.project)
+      System.out.println(projectRefusal(candidates))
       return state.fail
     }
 
@@ -104,7 +133,7 @@ private[sbt] object DevCommand {
     // The stylesheet is the one input outside those directories: `eezoTailwind` reads it as a
     // resource generator, and `~` learns of it through `watchTriggers`, which this watch does not
     // read. Watched whether or not it exists yet, so adding Tailwind to a running project counts.
-    val files            = Seq(extracted.get(EezoPlugin.autoImport.eezoTailwindInput))
+    val files            = Seq(extracted.get(stylesheet))
     val (s1, jvmOptions) = extracted.runTask(Compile / run / javaOptions, still)
     val loop             = new Loop(
       state = s1,
@@ -112,12 +141,14 @@ private[sbt] object DevCommand {
       base = base,
       watched = watched,
       files = files,
+      ignored = Seq(extracted.get(target)),
       javaHome = extracted.get(Compile / run / javaHome),
       jvmOptions = jvmOptions,
       terminal = terminal,
       interactive = interactive,
       json = json,
-      once = once
+      once = once,
+      direct = onConsole
     )
     val ok = loop.run()
     if (once && !ok) state.fail else state
@@ -131,12 +162,14 @@ private[sbt] final class Loop(
     base: File,
     watched: Seq[File],
     files: Seq[File],
+    ignored: Seq[File],
     javaHome: Option[File],
     jvmOptions: Seq[String],
     terminal: Terminal,
     interactive: Boolean,
     json: Boolean,
-    once: Boolean
+    once: Boolean,
+    direct: Boolean
 ) {
 
   private val events   = new LinkedBlockingQueue[Event]
@@ -149,6 +182,7 @@ private[sbt] final class Loop(
 
   @volatile private var built: Option[Builder.Built] = None
   @volatile private var building: Boolean            = false
+  @volatile private var buildThread: Option[Thread]  = None
   @volatile private var child: Option[Process]       = None
   @volatile private var replacing: Boolean           = false
   @volatile private var outcome: Boolean             = false
@@ -161,10 +195,14 @@ private[sbt] final class Loop(
         .getOrElse(java.nio.charset.Charset.defaultCharset.name)
     )
 
-  // The screen is written straight to the terminal; the plain lines go through `System.out`,
-  // which sbt routes to whatever is reading its output, a pipe or a CI log included.
+  // The screen is written straight to the terminal. The lines go to sbt's own standard output,
+  // the descriptor itself, when this sbt is the one at the console: sbt's `System.out` is a proxy
+  // that swallows the error of a pipe whose reader is gone, and the loop must see that error to
+  // stop. Behind a thin client, `--once` only, `System.out` is what sbt routes to the client.
   private val out =
-    if (interactive) new PrintStream(terminal.outputStream, false, "UTF-8") else System.out
+    if (interactive) new PrintStream(terminal.outputStream, false, "UTF-8")
+    else if (direct) new PrintStream(new FileOutputStream(FileDescriptor.out), false, "UTF-8")
+    else System.out
 
   private var model: Model =
     Model.initial(
@@ -175,7 +213,7 @@ private[sbt] final class Loop(
     )
 
   def run(): Boolean = {
-    val watcher = new Watcher(watched, files, path => debounce.offer(relative(path)))
+    val watcher = new Watcher(watched, files, ignored, path => debounce.offer(relative(path)))
     val ticker  = thread("eezo-dev-tick")(tick())
     try {
       watcher.start()
@@ -184,6 +222,9 @@ private[sbt] final class Loop(
     } finally {
       stopping.set(true)
       watcher.close()
+      // A compile in flight runs on the quiet session; the shell must not have the terminal back,
+      // and the next command must not run, while it does.
+      buildThread.foreach(_.join())
       DevProcess.stop(quiet = true)
     }
     outcome
@@ -241,11 +282,9 @@ private[sbt] final class Loop(
   }
 
   private def step(e: Event): Unit = {
-    if (!interactive && !json)
-      PlainRenderer.lines(e).foreach(line => { out.println(line); out.flush() })
+    if (!interactive && !json) PlainRenderer.lines(e).foreach(emit)
     val (next, effects) = Update(model, e)
-    if (json)
-      asJson.lines(e, next, effects).foreach(line => { out.println(line); out.flush() })
+    if (json) asJson.lines(e, next, effects).foreach(emit)
     model = next
     effects.foreach(perform)
     if (once) e match {
@@ -256,21 +295,29 @@ private[sbt] final class Loop(
     }
   }
 
+  /** One line of the plain or JSON front. A `PrintStream` swallows the error of a closed pipe, so
+    * it is asked for it: when the reader is gone, `head` done with its lines for one, the loop
+    * stops rather than run on with the application behind it.
+    */
+  private def emit(line: String): Unit = {
+    out.println(line)
+    out.flush()
+    if (out.checkError()) stopping.set(true)
+  }
+
   // ---- effects -------------------------------------------------------------------------------
 
   private def perform(effect: Effect): Unit = effect match {
-    case Effect.Build   => build()
-    case Effect.Restart => restart()
-    case Effect.Stop    =>
-      replacing = true; DevProcess.stop(quiet = true); events.add(Event.AppStopped): Unit
-    case Effect.Run(action) => action_(action)
-    case Effect.Quit        => stopping.set(true)
+    case Effect.Build        => build()
+    case Effect.Restart      => restart()
+    case Effect.Run(command) => runCommand(command)
+    case Effect.Quit         => stopping.set(true)
   }
 
   private def build(): Unit =
     if (!building) {
       building = true
-      thread("eezo-dev-build") {
+      val t = thread("eezo-dev-build") {
         val started = System.currentTimeMillis
         val event   =
           try
@@ -283,13 +330,16 @@ private[sbt] final class Loop(
             }
           finally building = false
         events.add(event): Unit
-      }.start()
+      }
+      buildThread = Some(t)
+      t.start()
     }
 
   private def restart(): Unit = built match {
     case None =>
       events.add(Event.AppLine("[eezo dev] nothing built yet to start", err = true)): Unit
     case Some(b) =>
+      if (child.exists(_.isAlive)) events.add(Event.AppStopped): Unit
       replacing = true
       val process = DevProcess.launch(
         javaHome,
@@ -300,8 +350,10 @@ private[sbt] final class Loop(
         base,
         piped = true
       )
-      replacing = false
+      // The new child is in place before `replacing` clears, so the old one's waiter, which checks
+      // both, never reads its exit as the application's.
       child = Some(process)
+      replacing = false
       val protocol = new LineProtocol
       thread("eezo-dev-stdout")(
         pump(process.getInputStream, line => protocol.synchronized(protocol.stdout(line)))
@@ -318,25 +370,25 @@ private[sbt] final class Loop(
       events.add(Event.AppStarted(b.mainClass)): Unit
   }
 
-  private def action_(action: dev.Action): Unit = built match {
+  private def runCommand(command: SchemaCommand): Unit = built match {
     case None =>
       events.add(Event.AppLine("[eezo dev] nothing built yet to run it on", err = true)): Unit
     case Some(b) =>
-      events.add(Event.ActionStarted(action)): Unit
-      thread("eezo-dev-action") {
+      events.add(Event.CommandStarted(command)): Unit
+      thread("eezo-dev-command") {
         val result =
-          try DevActions.run(javaHome, jvmOptions, b.classpath, b.mainClass, base, action)
+          try SchemaCommands.run(javaHome, jvmOptions, b.classpath, b.mainClass, base, command)
           catch {
             case e: Exception =>
               Outcome(
-                action,
+                command,
                 -1,
                 None,
                 Vector.empty,
                 Vector(s"${e.getClass.getSimpleName}: ${e.getMessage}")
               )
           }
-        events.add(Event.ActionFinished(result)): Unit
+        events.add(Event.CommandFinished(result)): Unit
       }.start()
   }
 

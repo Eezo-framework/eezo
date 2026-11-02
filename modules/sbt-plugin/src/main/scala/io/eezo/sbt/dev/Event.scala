@@ -1,7 +1,7 @@
 package io.eezo.sbt.dev
 
 /** Everything that can happen to the console, from every thread it has, as one value each. The
-  * command's threads (the watcher, the child's two readers, the key reader, the tick, the action
+  * command's threads (the watcher, the child's two readers, the key reader, the tick, the command
   * runner) only ever enqueue one of these; the loop thread alone applies them to the model.
   */
 private[sbt] sealed trait Event
@@ -11,8 +11,6 @@ private[sbt] object Event {
   /** The debounced set of files that changed, as paths relative to the project. */
   final case class Changed(paths: Set[String]) extends Event
 
-  /** A build began, for `trigger` when a file set it off. */
-  final case class BuildStarted(trigger: Option[String])                      extends Event
   final case class BuildSucceeded(warnings: Vector[Diagnostic], millis: Long) extends Event
   final case class BuildFailed(diagnostics: Vector[Diagnostic], millis: Long) extends Event
 
@@ -29,8 +27,8 @@ private[sbt] object Event {
   final case class RoutesReported(listing: RouteListing) extends Event
   final case class DriftReported(drift: Drift)           extends Event
 
-  final case class ActionStarted(action: Action)    extends Event
-  final case class ActionFinished(outcome: Outcome) extends Event
+  final case class CommandStarted(command: SchemaCommand) extends Event
+  final case class CommandFinished(outcome: Outcome)      extends Event
 
   final case class Pressed(key: Key)                extends Event
   final case class Resized(width: Int, height: Int) extends Event
@@ -43,9 +41,8 @@ private[sbt] object Event {
 private[sbt] sealed trait Effect
 
 private[sbt] object Effect {
-  case object Build                    extends Effect
-  case object Restart                  extends Effect
-  case object Stop                     extends Effect
-  final case class Run(action: Action) extends Effect
-  case object Quit                     extends Effect
+  case object Build                            extends Effect
+  case object Restart                          extends Effect
+  final case class Run(command: SchemaCommand) extends Effect
+  case object Quit                             extends Effect
 }

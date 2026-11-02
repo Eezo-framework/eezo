@@ -121,10 +121,16 @@ private[sbt] object Change {
 
 /** The model against the database. `blocking` is what the dev server decided: the drift page is
   * served instead of the application. The status command does not carry it, so a status read on
-  * demand derives it the way the server does, from the classes of the changes.
+  * demand derives it the way the server does, from the classes of the changes. `unreachable` is the
+  * error when the database could not be asked: the application has a database layer, and the
+  * console says so rather than showing a clean bill it never earned.
   */
-private[sbt] final case class Drift(changes: Vector[Change], blocking: Boolean) {
-  def inSync: Boolean             = changes.isEmpty
+private[sbt] final case class Drift(
+    changes: Vector[Change],
+    blocking: Boolean,
+    unreachable: Option[String] = None
+) {
+  def inSync: Boolean             = unreachable.isEmpty && changes.isEmpty
   def destructive: Vector[Change] = changes.filter(_.destructive)
   def dangerous: Vector[Change]   = changes.filter(c => c.destructive || c.risky)
 }
@@ -132,24 +138,28 @@ private[sbt] final case class Drift(changes: Vector[Change], blocking: Boolean) 
 private[sbt] object Drift {
   def fromJson(j: JValue): Drift = {
     val changes = j("changes").arr.map(Change.fromJson)
-    Drift(changes, j("blocking").bool.getOrElse(changes.exists(c => c.destructive || c.risky)))
+    Drift(
+      changes,
+      j("blocking").bool.getOrElse(changes.exists(c => c.destructive || c.risky)),
+      j("unreachable").str
+    )
   }
 }
 
 /** A schema command the console runs as a one-off child, `Main db <args>`. */
-private[sbt] sealed trait Action {
+private[sbt] sealed trait SchemaCommand {
   def args: Vector[String]
   def label: String
 }
 
-private[sbt] object Action {
+private[sbt] object SchemaCommand {
 
-  case object Status extends Action {
+  case object Status extends SchemaCommand {
     val args: Vector[String] = Vector("db", "status", "--json")
     val label: String        = "db status"
   }
 
-  final case class Sync(force: Boolean) extends Action {
+  final case class Sync(force: Boolean) extends SchemaCommand {
     def args: Vector[String] =
       Vector("db", "sync", "--apply") ++ (if (force) Vector("--force")
                                           else Vector.empty) :+ "--json"
@@ -159,14 +169,14 @@ private[sbt] object Action {
   /** `dropAll` is the freeze policy for destructive changes: `--accept-all` writes them into the
     * migration, `--skip-destructive`, which `--json` implies, keeps the data and skips them.
     */
-  final case class Freeze(name: String, dropAll: Boolean) extends Action {
+  final case class Freeze(name: String, dropAll: Boolean) extends SchemaCommand {
     def args: Vector[String] =
       Vector("db", "freeze") ++ name.split("\\s+").toVector.filter(_.nonEmpty) :+
         (if (dropAll) "--accept-all" else "--skip-destructive") :+ "--json"
     def label: String = s"db freeze $name"
   }
 
-  final case class Migrate(apply: Boolean) extends Action {
+  final case class Migrate(apply: Boolean) extends SchemaCommand {
     def args: Vector[String] =
       Vector("db", "migrate") ++ (if (apply) Vector("--apply") else Vector.empty) :+ "--json"
     def label: String = if (apply) "db migrate --apply" else "db migrate"
@@ -177,7 +187,7 @@ private[sbt] object Action {
   * both streams for the log.
   */
 private[sbt] final case class Outcome(
-    action: Action,
+    command: SchemaCommand,
     code: Int,
     json: Option[JValue],
     out: Vector[String],

@@ -35,20 +35,64 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(effects, Vector(Effect.Build))
     assertEquals(compiling.build, BuildState.Compiling(Some("Index.scala"), 1000L))
 
-    val (dirty, none) = run(compiling, Event.Changed(Set("Other.scala")))
+    val (queued, none) = run(compiling, Event.Changed(Set("Other.scala")))
     assertEquals(none, Vector.empty[Effect])
-    assert(dirty.dirty)
+    assertEquals(queued.queued, Some(Set("Other.scala")))
 
-    val (built, after) = run(dirty, Event.BuildSucceeded(Vector.empty, 300L))
+    val (built, after) = run(queued, Event.BuildSucceeded(Vector.empty, 300L))
     assertEquals(after, Vector(Effect.Restart, Effect.Build))
-    assert(!built.dirty)
-    assertEquals(built.build, BuildState.Built(300L, Vector.empty))
+    assertEquals(built.queued, None)
+    assertEquals(built.build, BuildState.Compiling(Some("Other.scala"), 1000L))
+    assert(built.log.exists(_.text == "built in 0.3s"))
+  }
+
+  test("a save during the remembered build is remembered in turn, and runs third") {
+    val (first, _)  = run(start, Event.Changed(Set("A.scala")))
+    val (second, _) =
+      run(first, Event.Changed(Set("B.scala")), Event.BuildSucceeded(Vector.empty, 1L))
+    assert(second.compiling)
+    val (third, none) = run(second, Event.Changed(Set("C.scala")))
+    assertEquals(none, Vector.empty[Effect])
+    assertEquals(third.queued, Some(Set("C.scala")))
+    val (last, effects) = run(third, Event.BuildSucceeded(Vector.empty, 1L))
+    assertEquals(effects, Vector(Effect.Restart, Effect.Build))
+    assertEquals(last.build, BuildState.Compiling(Some("C.scala"), 1000L))
+    val (done, nothing) = run(last, Event.BuildSucceeded(Vector.empty, 1L))
+    assertEquals(nothing, Vector(Effect.Restart))
+    assertEquals(done.build, BuildState.Built(1L, Vector.empty))
+  }
+
+  test("a save during a build that fails, or that could not run, is still compiled") {
+    val (failed, afterFailure) = run(
+      start,
+      Event.Changed(Set("A.scala")),
+      Event.Changed(Set("B.scala")),
+      Event.BuildFailed(Vector(error), 1L)
+    )
+    assertEquals(afterFailure, Vector(Effect.Build, Effect.Build))
+    assertEquals(failed.build, BuildState.Compiling(Some("B.scala"), 1000L))
+    val (broken, afterError) = run(
+      start,
+      Event.Changed(Set("A.scala")),
+      Event.Changed(Set("B.scala")),
+      Event.BuildError("no main class")
+    )
+    assertEquals(afterError, Vector(Effect.Build, Effect.Build))
+    assertEquals(broken.build, BuildState.Compiling(Some("B.scala"), 1000L))
+  }
+
+  test("seconds are spelled with a point whatever the machine's language") {
+    val before = java.util.Locale.getDefault
+    try {
+      java.util.Locale.setDefault(java.util.Locale.ITALIAN)
+      assertEquals(Update.seconds(400L), "0.4s")
+    } finally java.util.Locale.setDefault(before)
   }
 
   test("a failed build restarts nothing, opens the errors pane, and keeps the app") {
     val running           = start.copy(app = AppState.Running(Some("http://localhost:8090")))
-    val (failed, effects) =
-      run(running, Event.BuildStarted(None), Event.BuildFailed(Vector(error), 200L))
+    val (compiling, _)    = run(running, Event.Changed(Set.empty))
+    val (failed, effects) = run(compiling, Event.BuildFailed(Vector(error), 200L))
     assertEquals(effects, Vector.empty[Effect])
     assertEquals(failed.tab, Tab.Errors)
     assertEquals(failed.errors, Vector(error))
@@ -90,7 +134,7 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(none, Vector.empty[Effect])
     assertEquals(asked.prompt, Some(Prompt.ConfirmForce(1)))
     val (_, forced) = run(asked, Event.Pressed(Key.Enter))
-    assertEquals(forced, Vector(Effect.Run(Action.Sync(force = true))))
+    assertEquals(forced, Vector(Effect.Run(SchemaCommand.Sync(force = true))))
     val (cancelled, nothing) = run(asked, Event.Pressed(Key.Escape))
     assertEquals(nothing, Vector.empty[Effect])
     assertEquals(cancelled.prompt, None)
@@ -98,7 +142,7 @@ class UpdateSuite extends munit.FunSuite {
 
   test("s on additive drift syncs at once, and an applied sync restarts the app") {
     val (m, effects) = run(start, Event.DriftReported(additive), Event.Pressed(Key.Char('s')))
-    assertEquals(effects, Vector(Effect.Run(Action.Sync(force = false))))
+    assertEquals(effects, Vector(Effect.Run(SchemaCommand.Sync(force = false))))
     val applied = JsonReader
       .parse(
         """{"command":"sync","applied":true,"refused":false,"changes":[{"describe":"+ x"}],"blocked":[]}"""
@@ -106,9 +150,9 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (after, more) = run(
       m,
-      Event.ActionStarted(Action.Sync(force = false)),
-      Event.ActionFinished(
-        Outcome(Action.Sync(force = false), 0, applied, Vector.empty, Vector.empty)
+      Event.CommandStarted(SchemaCommand.Sync(force = false)),
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Sync(force = false), 0, applied, Vector.empty, Vector.empty)
       )
     )
     assertEquals(more, Vector(Effect.Restart))
@@ -123,8 +167,8 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (m, effects) = run(
       start,
-      Event.ActionFinished(
-        Outcome(Action.Sync(force = false), 1, refused, Vector.empty, Vector.empty)
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Sync(force = false), 1, refused, Vector.empty, Vector.empty)
       )
     )
     assertEquals(effects, Vector.empty[Effect])
@@ -144,9 +188,9 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(none, Vector.empty[Effect])
     assertEquals(policy.prompt, Some(Prompt.FreezePolicy("drop notes", 1)))
     val (_, keep) = run(policy, Event.Pressed(Key.Char('k')))
-    assertEquals(keep, Vector(Effect.Run(Action.Freeze("drop notes", dropAll = false))))
+    assertEquals(keep, Vector(Effect.Run(SchemaCommand.Freeze("drop notes", dropAll = false))))
     val (_, drop) = run(policy, Event.Pressed(Key.Char('d')))
-    assertEquals(drop, Vector(Effect.Run(Action.Freeze("drop notes", dropAll = true))))
+    assertEquals(drop, Vector(Effect.Run(SchemaCommand.Freeze("drop notes", dropAll = true))))
 
     val wrote = JsonReader
       .parse(
@@ -155,11 +199,17 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (_, next) = run(
       policy.copy(prompt = None),
-      Event.ActionFinished(
-        Outcome(Action.Freeze("drop notes", dropAll = true), 0, wrote, Vector.empty, Vector.empty)
+      Event.CommandFinished(
+        Outcome(
+          SchemaCommand.Freeze("drop notes", dropAll = true),
+          0,
+          wrote,
+          Vector.empty,
+          Vector.empty
+        )
       )
     )
-    assertEquals(next, Vector(Effect.Run(Action.Migrate(apply = true))))
+    assertEquals(next, Vector(Effect.Run(SchemaCommand.Migrate(apply = true))))
     val applied = JsonReader
       .parse(
         """{"command":"migrate","outcome":"applied","applied":[{"number":2,"file":"0002_drop_notes.sql","statements":[]}],"drift":[]}"""
@@ -167,8 +217,8 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (_, last) = run(
       policy.copy(prompt = None),
-      Event.ActionFinished(
-        Outcome(Action.Migrate(apply = true), 0, applied, Vector.empty, Vector.empty)
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Migrate(apply = true), 0, applied, Vector.empty, Vector.empty)
       )
     )
     assertEquals(last, Vector(Effect.Restart))
@@ -184,12 +234,12 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(none, Vector.empty[Effect])
     assertEquals(m.prompt, Some(Prompt.FreezeName("")))
     val (_, effects) = run(m, Event.Pressed(Key.Char('x')), Event.Pressed(Key.Enter))
-    assertEquals(effects, Vector(Effect.Run(Action.Freeze("x", dropAll = false))))
+    assertEquals(effects, Vector(Effect.Run(SchemaCommand.Freeze("x", dropAll = false))))
   }
 
   test("m lists pending migrations, Enter applies them") {
     val (_, effects) = run(start, Event.Pressed(Key.Char('m')))
-    assertEquals(effects, Vector(Effect.Run(Action.Migrate(apply = false))))
+    assertEquals(effects, Vector(Effect.Run(SchemaCommand.Migrate(apply = false))))
     val pending = JsonReader
       .parse(
         """{"command":"migrate","outcome":"pending","pending":[{"number":2,"file":"0002_x.sql","statements":["x"]}]}"""
@@ -197,20 +247,42 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (asked, _) = run(
       start,
-      Event.ActionFinished(
-        Outcome(Action.Migrate(apply = false), 0, pending, Vector.empty, Vector.empty)
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Migrate(apply = false), 0, pending, Vector.empty, Vector.empty)
       )
     )
     assertEquals(asked.prompt, Some(Prompt.ConfirmMigrate(1)))
     val (_, apply) = run(asked, Event.Pressed(Key.Enter))
-    assertEquals(apply, Vector(Effect.Run(Action.Migrate(apply = true))))
+    assertEquals(apply, Vector(Effect.Run(SchemaCommand.Migrate(apply = true))))
+  }
+
+  test("serving without a drift report means no database layer: the pane and its keys go") {
+    val (onSchema, _) = run(start, Event.Pressed(Key.Char('3')))
+    assertEquals(onSchema.tab, Tab.Schema)
+    val (served, _) =
+      run(onSchema, Event.AppStarted("Main"), Event.Serving("http://localhost:8080"))
+    assertEquals(served.schema, SchemaState.NoDatabase)
+    assertEquals(served.tab, Tab.Log)
+    assertEquals(served.tabs, Vector(Tab.Errors, Tab.Routes, Tab.Log))
+    val (still, effects) = run(served, Event.Pressed(Key.Char('3')), Event.Pressed(Key.Char('s')))
+    assertEquals(still.tab, Tab.Log)
+    assertEquals(effects, Vector.empty[Effect])
+    val (cycled, _) = run(served, Event.Pressed(Key.Char('2')), Event.Pressed(Key.Tab))
+    assertEquals(cycled.tab, Tab.Log)
+
+    val reported   = Drift(Vector.empty, blocking = false, unreachable = Some("connection refused"))
+    val (known, _) =
+      run(start, Event.DriftReported(reported), Event.Serving("http://localhost:8080"))
+    assertEquals(known.schema, SchemaState.Known(reported))
+    assert(known.hasDatabase)
+    assert(!reported.inSync)
   }
 
   test("an application without a database layer loses the schema keys after the first answer") {
     val (m, _) = run(
       start,
-      Event.ActionFinished(
-        Outcome(Action.Status, 2, None, Vector.empty, Vector("[eezo] unknown command: db"))
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Status, 2, None, Vector.empty, Vector("[eezo] unknown command: db"))
       )
     )
     assertEquals(m.schema, SchemaState.NoDatabase)
@@ -232,20 +304,21 @@ class UpdateSuite extends munit.FunSuite {
       .toOption
     val (m, _) = run(
       start,
-      Event.ActionFinished(Outcome(Action.Status, 1, drifted, Vector.empty, Vector.empty))
+      Event.CommandFinished(Outcome(SchemaCommand.Status, 1, drifted, Vector.empty, Vector.empty))
     )
     assertEquals(m.schema, SchemaState.Known(blocking))
   }
 
-  test("a change during an action waits for it") {
-    val (busy, none) = run(start, Event.ActionStarted(Action.Status), Event.Changed(Set("A.scala")))
+  test("a change during a schema command waits for it") {
+    val (busy, none) =
+      run(start, Event.CommandStarted(SchemaCommand.Status), Event.Changed(Set("A.scala")))
     assertEquals(none, Vector.empty[Effect])
-    assert(busy.dirty)
+    assertEquals(busy.queued, Some(Set("A.scala")))
     val (_, effects) = run(
       busy,
-      Event.ActionFinished(
+      Event.CommandFinished(
         Outcome(
-          Action.Status,
+          SchemaCommand.Status,
           0,
           JsonReader.parse("""{"inSync":true,"changes":[]}""").toOption,
           Vector.empty,
@@ -254,6 +327,14 @@ class UpdateSuite extends munit.FunSuite {
       )
     )
     assertEquals(effects, Vector(Effect.Build))
+  }
+
+  test("a stopped application is stopped until it starts again") {
+    val running      = start.copy(app = AppState.Running(Some("http://localhost:8090")))
+    val (stopped, _) = run(running, Event.AppStopped)
+    assertEquals(stopped.app, AppState.Stopped)
+    val (started, _) = run(stopped, Event.AppStarted("Main"))
+    assertEquals(started.app, AppState.Starting("Main"))
   }
 
   test("tabs by number and by Tab, help by ?, quit by q and Ctrl-C") {

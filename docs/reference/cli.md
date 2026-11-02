@@ -159,6 +159,7 @@ the command's answer and not a build failure:
   src/main/scala/app/Index.scala   GET /
   src/main/scala/models/        empty
   .gitignore
+  AGENTS.md                     how a coding agent follows the dev loop; an existing one is kept
 ```
 
 `eezo new .` writes the same files into the current directory.

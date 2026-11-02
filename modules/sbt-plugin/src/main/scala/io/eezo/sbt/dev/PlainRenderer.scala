@@ -9,7 +9,6 @@ private[sbt] object PlainRenderer {
     case Event.Changed(paths) =>
       val trigger = paths.toVector.sorted.headOption.map(p => p.substring(p.lastIndexOf('/') + 1))
       Vector(s"compiling${trigger.map(t => s" ($t changed)").getOrElse("")}")
-    case Event.BuildStarted(_)                  => Vector.empty
     case Event.BuildSucceeded(warnings, millis) =>
       s"${theme.ok} built in ${Update.seconds(millis)}" +: warnings.flatMap(diagnostic)
     case Event.BuildFailed(diagnostics, _) =>
@@ -23,10 +22,10 @@ private[sbt] object PlainRenderer {
     // The application prints its own listing and its own drift banner beside the markers, so the
     // values are not printed again.
     case Event.RoutesReported(_) | Event.DriftReported(_) => Vector.empty
-    case Event.ActionStarted(action)                      => Vector(s"$$ eezo ${action.label}")
-    case Event.ActionFinished(outcome)                    =>
+    case Event.CommandStarted(command)                    => Vector(s"$$ eezo ${command.label}")
+    case Event.CommandFinished(outcome)                   =>
       (Describe.outcome(outcome) ++ LineProtocol.quiet(outcome.err)) :+
-        s"${if (outcome.ok) theme.ok else theme.fail} eezo ${outcome.action.label}: ${Describe.summary(outcome)}"
+        s"${if (outcome.ok) theme.ok else theme.fail} eezo ${outcome.command.label}: ${Describe.summary(outcome)}"
     case Event.Serving(_) | Event.AppStopped | Event.Pressed(_) | Event.Resized(_, _) |
         Event.Tick(_) =>
       Vector.empty

@@ -96,13 +96,13 @@ private[sbt] final case class Model(
     routes: Option[RouteListing],
     schema: SchemaState,
     outcome: Option[Outcome],
-    busy: Option[Action],
+    busy: Option[SchemaCommand],
     tab: Tab,
     offsets: Map[Tab, Int],
     follow: Boolean,
     prompt: Option[Prompt],
     help: Boolean,
-    dirty: Boolean,
+    queued: Option[Set[String]],
     spinner: Int
 ) {
 
@@ -123,6 +123,9 @@ private[sbt] final case class Model(
   }
 
   def hasDatabase: Boolean = schema != SchemaState.NoDatabase
+
+  /** The panes this application has: the schema pane goes with the database layer. */
+  def tabs: Vector[Tab] = if (hasDatabase) Tab.all else Tab.all.filterNot(_ == Tab.Schema)
 
   def drift: Option[Drift] = schema match {
     case SchemaState.Known(d) => Some(d)
@@ -159,7 +162,7 @@ private[sbt] object Model {
       follow = true,
       prompt = None,
       help = false,
-      dirty = false,
+      queued = None,
       spinner = 0
     )
 }
@@ -174,36 +177,25 @@ private[sbt] object Update {
 
     case Event.Resized(w, h) => (clampAll(m.copy(width = w, height = h)), none)
 
-    case Event.Changed(paths) =>
-      val trigger = paths.toVector.sorted.headOption.map(p => p.substring(p.lastIndexOf('/') + 1))
-      startBuild(m, trigger)
-
-    case Event.BuildStarted(trigger) =>
-      (m.copy(build = BuildState.Compiling(trigger, m.now)), none)
+    case Event.Changed(paths) => startBuild(m, paths)
 
     case Event.BuildSucceeded(warnings, millis) =>
       val built = m
-        .copy(
-          build = BuildState.Built(millis, warnings),
-          app = AppState.Starting("..."),
-          dirty = false
-        )
+        .copy(build = BuildState.Built(millis, warnings), app = AppState.Starting("..."))
         .note(s"built in ${seconds(millis)}", LogLine.Ok)
       val next =
         if (built.tab == Tab.Errors && warnings.isEmpty) built.copy(tab = Tab.Log) else built
-      (clampAll(next), Vector(Effect.Restart) ++ (if (m.dirty) Vector(Effect.Build) else none))
+      val (resumed, rebuild) = queuedBuild(clampAll(next))
+      (resumed, Effect.Restart +: rebuild)
 
     case Event.BuildFailed(diagnostics, millis) =>
       val failed = m
-        .copy(build = BuildState.Failed(diagnostics, millis), dirty = false, tab = Tab.Errors)
+        .copy(build = BuildState.Failed(diagnostics, millis), tab = Tab.Errors)
         .note("build failed; the previous build keeps serving. Fix it and save.", LogLine.Fail)
-      (
-        clampAll(failed.copy(offsets = failed.offsets.updated(Tab.Errors, 0))),
-        if (m.dirty) Vector(Effect.Build) else none
-      )
+      queuedBuild(clampAll(failed.copy(offsets = failed.offsets.updated(Tab.Errors, 0))))
 
     case Event.BuildError(message) =>
-      (m.copy(build = BuildState.Idle, dirty = false).note(message, LogLine.Fail), none)
+      queuedBuild(m.copy(build = BuildState.Idle).note(message, LogLine.Fail))
 
     case Event.AppStarted(mainClass) =>
       (m.copy(app = AppState.Starting(mainClass)).note(s"started $mainClass"), none)
@@ -220,7 +212,12 @@ private[sbt] object Update {
     case Event.AppLine(text, err) =>
       (m.append(LogLine(text, if (err) LogLine.Err else LogLine.App)), none)
 
-    case Event.Serving(url) => (m.copy(app = AppState.Running(Some(url))), none)
+    case Event.Serving(url) =>
+      // An application with a database layer reports its drift before it binds, so one that serves
+      // without a word has none: the schema pane goes, and so do its keys.
+      val schema = if (m.schema == SchemaState.Unknown) SchemaState.NoDatabase else m.schema
+      val tab    = if (schema == SchemaState.NoDatabase && m.tab == Tab.Schema) Tab.Log else m.tab
+      (m.copy(app = AppState.Running(Some(url)), schema = schema, tab = tab), none)
 
     case Event.RoutesReported(listing) =>
       (clampAll(m.copy(routes = Some(listing))), none)
@@ -241,18 +238,33 @@ private[sbt] object Update {
         else known
       (clampAll(next), none)
 
-    case Event.ActionStarted(action) =>
-      (m.copy(busy = Some(action), outcome = None).note(s"$$ eezo ${action.label}"), none)
+    case Event.CommandStarted(command) =>
+      (m.copy(busy = Some(command), outcome = None).note(s"$$ eezo ${command.label}"), none)
 
-    case Event.ActionFinished(outcome) =>
+    case Event.CommandFinished(outcome) =>
       finished(m.copy(busy = None, outcome = Some(outcome)), outcome)
 
     case Event.Pressed(key) => pressed(m, key)
   }
 
-  private def startBuild(m: Model, trigger: Option[String]): (Model, Vector[Effect]) =
-    if (m.compiling || m.busy.isDefined) (m.copy(dirty = true), none)
-    else (m.copy(build = BuildState.Compiling(trigger, m.now), dirty = false), Vector(Effect.Build))
+  /** A build for `paths`, or, while one runs or a schema command does, the paths remembered for the
+    * build that follows it.
+    */
+  private def startBuild(m: Model, paths: Set[String]): (Model, Vector[Effect]) =
+    if (m.compiling || m.busy.isDefined)
+      (m.copy(queued = Some(m.queued.getOrElse(Set.empty) ++ paths)), none)
+    else {
+      val trigger = paths.toVector.sorted.headOption.map(p => p.substring(p.lastIndexOf('/') + 1))
+      (m.copy(build = BuildState.Compiling(trigger, m.now), queued = None), Vector(Effect.Build))
+    }
+
+  /** The remembered build, started now that nothing is in its way: the model says it is compiling,
+    * with its own trigger, so a save during it is remembered in turn rather than dropped.
+    */
+  private def queuedBuild(m: Model): (Model, Vector[Effect]) = m.queued match {
+    case Some(paths) if !m.compiling && m.busy.isEmpty => startBuild(m.copy(queued = None), paths)
+    case _                                             => (m, none)
+  }
 
   // ---- actions -------------------------------------------------------------------------------
 
@@ -273,15 +285,15 @@ private[sbt] object Update {
           none
         )
       else
-        o.action match {
-          case Action.Status =>
+        o.command match {
+          case SchemaCommand.Status =>
             o.json match {
               case Some(j) if o.code == 0 || o.code == 1 =>
                 val drift = Drift.fromJson(j)
                 (m.copy(schema = SchemaState.Known(drift)).note(Describe.status(drift)), none)
               case _ => (failed(m, o), none)
             }
-          case Action.Sync(force) =>
+          case SchemaCommand.Sync(force) =>
             o.json match {
               case Some(j) if j("applied").boolOr(false) =>
                 (m.note("applied to the dev database", LogLine.Ok), Vector(Effect.Restart))
@@ -291,18 +303,18 @@ private[sbt] object Update {
               case Some(j) if j("changes").arr.isEmpty => (m.note("in sync", LogLine.Ok), none)
               case _                                   => (failed(m, o), none)
             }
-          case Action.Freeze(_, _) =>
+          case SchemaCommand.Freeze(_, _) =>
             o.json match {
               case Some(j) if o.ok && j("migration").str.isDefined =>
                 (
                   m.note(s"wrote ${j("migration").strOr("")}", LogLine.Ok),
-                  Vector(Effect.Run(Action.Migrate(apply = true)))
+                  Vector(Effect.Run(SchemaCommand.Migrate(apply = true)))
                 )
               case Some(_) if o.ok =>
                 (m.note("nothing to freeze: the snapshot already matches the model"), none)
               case _ => (failed(m, o), none)
             }
-          case Action.Migrate(apply) =>
+          case SchemaCommand.Migrate(apply) =>
             o.json.map(_("outcome").strOr("")) match {
               case Some("pending") =>
                 val n = o.json.map(_("pending").arr.size).getOrElse(0)
@@ -315,13 +327,13 @@ private[sbt] object Update {
               case _                => (failed(m, o), none)
             }
         }
-    val (next, effects) = after
-    val rebuild         = if (next.dirty && next.busy.isEmpty) Vector(Effect.Build) else none
-    (clampAll(next), effects ++ rebuild)
+    val (next, effects)    = after
+    val (resumed, rebuild) = queuedBuild(clampAll(next))
+    (resumed, effects ++ rebuild)
   }
 
   private def failed(m: Model, o: Outcome): Model =
-    m.note(s"${o.action.label} exited ${o.code}", LogLine.Fail)
+    m.note(s"${o.command.label} exited ${o.code}", LogLine.Fail)
 
   // ---- keys ----------------------------------------------------------------------------------
 
@@ -336,11 +348,11 @@ private[sbt] object Update {
     case Key.Char('q') | Key.CtrlC | Key.CtrlD => (m, Vector(Effect.Quit))
     case Key.Char('?')                         => (m.copy(help = true), none)
     case Key.Char(c) if c >= '1' && c <= '4'   =>
-      (m.copy(tab = Tab.numbered(c - '0').getOrElse(m.tab)), none)
-    case Key.Tab     => (m.copy(tab = Tab.all((Tab.all.indexOf(m.tab) + 1) % Tab.all.size)), none)
+      (m.copy(tab = m.tabs.find(_.number == c - '0').getOrElse(m.tab)), none)
+    case Key.Tab     => (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + 1) % m.tabs.size)), none)
     case Key.BackTab =>
-      (m.copy(tab = Tab.all((Tab.all.indexOf(m.tab) + Tab.all.size - 1) % Tab.all.size)), none)
-    case Key.Char('r') => startBuild(m, None)
+      (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + m.tabs.size - 1) % m.tabs.size)), none)
+    case Key.Char('r') => startBuild(m, Set.empty)
     case Key.Char('c') =>
       (m.copy(log = Vector.empty, offsets = m.offsets.updated(Tab.Log, 0), follow = true), none)
     case Key.Char('s') if m.hasDatabase && m.busy.isEmpty =>
@@ -348,14 +360,14 @@ private[sbt] object Update {
         case Some(d) if d.inSync             => (m.note("in sync", LogLine.Ok), none)
         case Some(d) if d.dangerous.nonEmpty =>
           (m.copy(prompt = Some(Prompt.ConfirmForce(d.dangerous.size))), none)
-        case _ => (m, Vector(Effect.Run(Action.Sync(force = false))))
+        case _ => (m, Vector(Effect.Run(SchemaCommand.Sync(force = false))))
       }
     case Key.Char('f') if m.hasDatabase && m.busy.isEmpty =>
       (m.copy(prompt = Some(Prompt.FreezeName(""))), none)
     case Key.Char('m') if m.hasDatabase && m.busy.isEmpty =>
-      (m, Vector(Effect.Run(Action.Migrate(apply = false))))
+      (m, Vector(Effect.Run(SchemaCommand.Migrate(apply = false))))
     case Key.Char('S') if m.hasDatabase && m.busy.isEmpty =>
-      (m, Vector(Effect.Run(Action.Status)))
+      (m, Vector(Effect.Run(SchemaCommand.Status)))
     case Key.Up | Key.Char('k')       => (scroll(m, -1), none)
     case Key.Down | Key.Char('j')     => (scroll(m, 1), none)
     case Key.PageUp                   => (scroll(m, -page(m)), none)
@@ -370,9 +382,9 @@ private[sbt] object Update {
     (p, key) match {
       case (_, Key.Escape | Key.CtrlC)                         => cancel
       case (Prompt.ConfirmForce(_), Key.Enter | Key.Char('y')) =>
-        (m.copy(prompt = None), Vector(Effect.Run(Action.Sync(force = true))))
+        (m.copy(prompt = None), Vector(Effect.Run(SchemaCommand.Sync(force = true))))
       case (Prompt.ConfirmMigrate(_), Key.Enter | Key.Char('y')) =>
-        (m.copy(prompt = None), Vector(Effect.Run(Action.Migrate(apply = true))))
+        (m.copy(prompt = None), Vector(Effect.Run(SchemaCommand.Migrate(apply = true))))
       case (Prompt.FreezeName(buffer), Key.Enter) =>
         val name = buffer.trim
         if (name.isEmpty) (m, none)
@@ -380,16 +392,19 @@ private[sbt] object Update {
           m.drift.map(_.destructive.size).filter(_ > 0) match {
             case Some(n) => (m.copy(prompt = Some(Prompt.FreezePolicy(name, n))), none)
             case None    =>
-              (m.copy(prompt = None), Vector(Effect.Run(Action.Freeze(name, dropAll = false))))
+              (
+                m.copy(prompt = None),
+                Vector(Effect.Run(SchemaCommand.Freeze(name, dropAll = false)))
+              )
           }
       case (Prompt.FreezeName(buffer), Key.Backspace) =>
         (m.copy(prompt = Some(Prompt.FreezeName(buffer.dropRight(1)))), none)
       case (Prompt.FreezeName(buffer), Key.Char(c)) =>
         (m.copy(prompt = Some(Prompt.FreezeName(buffer + c))), none)
       case (Prompt.FreezePolicy(name, _), Key.Char('k') | Key.Enter) =>
-        (m.copy(prompt = None), Vector(Effect.Run(Action.Freeze(name, dropAll = false))))
+        (m.copy(prompt = None), Vector(Effect.Run(SchemaCommand.Freeze(name, dropAll = false))))
       case (Prompt.FreezePolicy(name, _), Key.Char('d')) =>
-        (m.copy(prompt = None), Vector(Effect.Run(Action.Freeze(name, dropAll = true))))
+        (m.copy(prompt = None), Vector(Effect.Run(SchemaCommand.Freeze(name, dropAll = true))))
       case (_, Key.Char('n')) => cancel
       case _                  => (m, none)
     }
@@ -426,5 +441,7 @@ private[sbt] object Update {
       t -> math.max(0, math.min(o, maxOffset(m, t)))
     })
 
-  def seconds(millis: Long): String = f"${millis / 1000.0}%.1fs"
+  /** `0.4s`, with the point whatever the machine's language: a suite and a tool read it. */
+  def seconds(millis: Long): String =
+    String.format(java.util.Locale.ROOT, "%.1fs", Double.box(millis / 1000.0))
 }

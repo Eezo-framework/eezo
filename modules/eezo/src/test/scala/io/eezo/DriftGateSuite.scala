@@ -57,6 +57,21 @@ class DriftGateSuite extends munit.FunSuite {
     } finally server.stop()
   }
 
+  test("an unreachable database is a marker too, with the reason, so the console knows the layer") {
+    val line = DriftGate.marker(Nil, unreachable = Some("connection refused"))
+    val json = Json.parse(line.stripPrefix("eezo dev: drift ")).fold(fail(_), identity)
+    json match {
+      case Json.Obj(fields) =>
+        assertEquals(
+          fields.collectFirst { case ("unreachable", v) => v },
+          Some(Json.Str("connection refused"))
+        )
+        assertEquals(fields.collectFirst { case ("blocking", v) => v }, Some(Json.Bool(false)))
+      case other => fail(other.toString)
+    }
+    assert(!DriftGate.marker(Nil).contains("unreachable"))
+  }
+
   test("the drift marker is one line of the status shape, carrying the gate's blocking decision") {
     val blocking = DriftGate.marker(drift)
     assert(blocking.startsWith("eezo dev: drift "), blocking)
