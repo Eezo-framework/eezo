@@ -107,7 +107,7 @@ object Scopes {
           try c.rollback(sp)
           catch {
             case NonFatal(r) =>
-              e.addSuppressed(r)
+              if (r ne e) e.addSuppressed(r)
               throw e
           }
           e match {
@@ -121,7 +121,7 @@ object Scopes {
   /** A transaction that commits independently of the caller's.
     *
     * Takes the body rather than merely clearing the marker, because a lexically nested `transact`
-    * would be rejected by `summonFrom` — so `detached` opens the scope itself.
+    * would be rejected by `summonFrom`, so `detached` opens the scope itself.
     */
   def detached[A](body: Tx ?-> A): A = Scope.detached(Run.tx(body))
 }

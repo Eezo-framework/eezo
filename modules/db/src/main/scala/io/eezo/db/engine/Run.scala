@@ -48,8 +48,8 @@ object Run {
     try {
       val h = new TxHandle(c)
       try {
-        // outside the rollback below: a connection still in auto commit refuses a rollback, and
-        // that refusal would replace the failure the caller needs to see
+        // outside the rollback below: a connection still in auto commit refuses a rollback, so a
+        // failed setAutoCommit must not reach it, or the caller gets a spurious suppressed refusal
         c.setAutoCommit(false)
         try {
           val a = body(using h)
@@ -57,9 +57,14 @@ object Run {
           a
         } catch {
           case e: Throwable =>
-            // a rollback that fails too rides along, so the caller still sees why the body failed
+            // a rollback that fails too rides along, so the caller still sees why the body failed;
+            // an exit built without suppression cannot carry it, so then the rollback's is thrown
             try c.rollback()
-            catch { case NonFatal(r) => e.addSuppressed(r) }
+            catch {
+              case NonFatal(r) =>
+                if (r ne e) e.addSuppressed(r)
+                if (!e.getSuppressed.exists(_ eq r)) throw r
+            }
             throw e
         }
       } finally h.retire()
