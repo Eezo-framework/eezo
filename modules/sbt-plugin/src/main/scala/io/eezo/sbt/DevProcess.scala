@@ -9,12 +9,12 @@ import java.util.concurrent.TimeUnit
   *
   * This is the ~100 lines `research/build-reload.md` §3.2 said eezo should write instead of
   * depending on sbt-revolver (sbt 1 only, dormant since 2023); revolver's process handling is the
-  * reference for the corner cases here — kill before rebind, a JVM shutdown hook so an exiting sbt
+  * reference for the corner cases here: kill before rebind, a JVM shutdown hook so an exiting sbt
   * never strands the app, `destroyForcibly` for a child that ignores the polite signal.
   *
   * State lives in this object rather than in sbt's state because the process must survive task
   * evaluations and die with the JVM; the shutdown hook is registered once, on first use. A `reload`
-  * of the build makes a fresh classloader and a fresh object, which strands a running child — the
+  * of the build makes a fresh classloader and a fresh object, which strands a running child; the
   * hook still reaps it at sbt exit, and a restart from the new loader binds a new one. Plain JDK
   * process APIs throughout, because this source compiles for sbt 1 on Scala 2.12 and sbt 2 on Scala 3.
   *
@@ -56,7 +56,13 @@ private[sbt] object DevProcess {
     java.lang.Runtime.getRuntime.addShutdownHook(reaper)
   }
 
-  /** Kills the previous application, if any, then forks the next one.
+  /** The variable that turns the application's marker lines on (`DevMarkers` in the http module,
+    * spelled again here for the reason `SecretVar` is): set on every child the console forks.
+    */
+  private[sbt] val MarkersVar: String = "EEZO_DEV_MARKERS"
+
+  /** Kills the previous application, if any, then forks the next one with its output inherited into
+    * sbt's console: the `eezoRestart` task's kernel, for `sbt eezoRestart` by hand.
     *
     * The kill completes before the fork starts, so the new process never races the old one for the
     * port: `research/http-server.md` measured the rebind itself at 0.7 ms, but only once the socket
@@ -71,36 +77,77 @@ private[sbt] object DevProcess {
       workingDirectory: File,
       log: String => Unit
   ): Unit = {
+    launch(javaHome, jvmOptions, classpath, mainClass, args, workingDirectory, piped = false): Unit
+    log(s"eezo dev: started $mainClass")
+  }
+
+  /** The dev console's fork: the previous application killed, the next one started with its stdout
+    * and stderr piped to the caller, each its own stream so a marker line on stdout can never be
+    * split by a log record on stderr, its stdin closed, since the console owns the terminal, and
+    * the marker lines turned on. The caller drains both pipes.
+    */
+  def launch(
+      javaHome: Option[File],
+      jvmOptions: Seq[String],
+      classpath: Seq[File],
+      mainClass: String,
+      args: Seq[String],
+      workingDirectory: File,
+      piped: Boolean
+  ): Process = {
     hook
     stop(quiet = true)
 
-    val javaBin = javaHome
-      .map(home => new File(new File(home, "bin"), "java"))
-      .getOrElse(new File(new File(new File(sys.props("java.home")), "bin"), "java"))
+    val builder = new ProcessBuilder(command(javaHome, jvmOptions, classpath, mainClass, args))
+    builder.directory(workingDirectory)
+    if (piped) {
+      builder.redirectOutput(ProcessBuilder.Redirect.PIPE)
+      builder.redirectError(ProcessBuilder.Redirect.PIPE)
+      builder.redirectInput(ProcessBuilder.Redirect.PIPE)
+    } else
+      // The app's output belongs in the same console as the compile that produced it: inherited,
+      // so that a reader of sbt's output reads the app's with it.
+      builder.inheritIO()
+    // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
+    val environment = builder.environment()
+    secretFor(Option(environment.get(SecretVar)))
+      .foreach(secret => environment.put(SecretVar, secret): Unit)
+    if (piped) environment.put(MarkersVar, "1"): Unit
 
+    val process = builder.start()
+    if (piped) process.getOutputStream.close()
+    running = Some(process)
+    process
+  }
+
+  /** `java <options> -cp <classpath> <main> <args>`, the one spelling every fork and every one-off
+    * command of the console uses.
+    */
+  private[sbt] def command(
+      javaHome: Option[File],
+      jvmOptions: Seq[String],
+      classpath: Seq[File],
+      mainClass: String,
+      args: Seq[String]
+  ): java.util.List[String] = {
     val command = new java.util.ArrayList[String]
-    command.add(javaBin.getAbsolutePath)
+    command.add(javaBin(javaHome))
     jvmOptions.foreach(option => command.add(option): Unit)
     command.add("-cp")
     command.add(classpath.map(_.getAbsolutePath).mkString(File.pathSeparator))
     command.add(mainClass)
     args.foreach(arg => command.add(arg): Unit)
-
-    val builder = new ProcessBuilder(command)
-    builder.directory(workingDirectory)
-    // The app's output belongs in the same console as the compile that produced it: inherited,
-    // so that `eezo dev`, which reads sbt's output through a pipe, reads the app's with it.
-    builder.inheritIO()
-    // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
-    val environment = builder.environment()
-    secretFor(Option(environment.get(SecretVar)))
-      .foreach(secret => environment.put(SecretVar, secret): Unit)
-
-    val process = builder.start()
-    running = Some(process)
-    // `Process.pid` is Java 9+, and the sbt 1 axis compiles with `-release:8`, so no pid here.
-    log(s"eezo dev: started $mainClass")
+    command
   }
+
+  private def javaBin(javaHome: Option[File]): String =
+    javaHome
+      .map(home => new File(new File(home, "bin"), "java"))
+      .getOrElse(new File(new File(new File(sys.props("java.home")), "bin"), "java"))
+      .getAbsolutePath
+
+  /** Whether the application the console started is still alive. */
+  def alive: Boolean = running.exists(_.isAlive)
 
   /** Stops the running application, politely and then not. */
   def stop(quiet: Boolean = false, log: String => Unit = _ => ()): Unit = {

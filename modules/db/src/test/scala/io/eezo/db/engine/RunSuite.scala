@@ -1,5 +1,6 @@
 package io.eezo.db.engine
 
+import io.eezo.db.Scopes.attempt
 import munit.FunSuite
 
 import java.lang.reflect.{InvocationHandler, Method, Proxy}
@@ -11,9 +12,8 @@ import java.sql.{Connection, SQLException}
   */
 class RunSuite extends FunSuite {
 
-  /** A stub whose rollback quietly succeeded would hide the bug these tests guard against: an
-    * unexpected rollback has to surface as an exception the caller would see instead of the one
-    * that mattered.
+  /** Any call can be made to fail by name. A failing rollback makes an unexpected rollback visible
+    * twice: in `calls` and in the `getSuppressed` of the exception the caller sees.
     */
   private final class Stub(fail: Map[String, Throwable]) {
     @volatile var calls: Vector[String] = Vector.empty
@@ -87,6 +87,70 @@ class RunSuite extends FunSuite {
     val e        = intercept[SQLException](Run.transacting(stub.connection, released.release)(()))
     assert(e.eq(boom), s"expected the commit failure itself, got $e")
     assertEquals(stub.calls, Vector("setAutoCommit(false)", "commit()", "rollback()"))
+    assertEquals(released.times, 1)
+  }
+
+  test("a rollback that fails after the body throws rides along on the body's failure") {
+    val boom     = new RuntimeException("boom")
+    val refused  = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("rollback" -> refused))
+    val released = new Released
+    val e        = intercept[RuntimeException](
+      Run.transacting(stub.connection, released.release)(throw boom)
+    )
+    assert(e.eq(boom), s"expected the body's own failure, got $e")
+    assertEquals(e.getSuppressed.toList, List(refused))
+    assertEquals(released.times, 1)
+  }
+
+  test("a rollback that fails after the commit fails rides along on the commit's failure") {
+    val boom     = new SQLException("could not serialize access", "40001")
+    val refused  = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("commit" -> boom, "rollback" -> refused))
+    val released = new Released
+    val e        = intercept[SQLException](Run.transacting(stub.connection, released.release)(()))
+    assert(e.eq(boom), s"expected the commit failure itself, got $e")
+    assertEquals(e.getSuppressed.toList, List(refused))
+    assertEquals(released.times, 1)
+  }
+
+  test("a rollback that throws the commit's own failure leaves it as is") {
+    val boom     = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("commit" -> boom, "rollback" -> boom))
+    val released = new Released
+    val e        = intercept[SQLException](Run.transacting(stub.connection, released.release)(()))
+    assert(e.eq(boom), s"expected the commit failure itself, got $e")
+    assertEquals(e.getSuppressed.toList, Nil)
+    assertEquals(released.times, 1)
+  }
+
+  test("a rollback that fails after an exit that takes no suppressed exception is thrown instead") {
+    val exit     = new RuntimeException("exit", null, false, false) {}
+    val refused  = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("rollback" -> refused))
+    val released = new Released
+    val e        = intercept[SQLException](
+      Run.transacting(stub.connection, released.release)(throw exit)
+    )
+    assert(e.eq(refused), s"expected the rollback failure, got $e")
+    assertEquals(released.times, 1)
+  }
+
+  test("a savepoint rollback that throws the body's own failure leaves it as is") {
+    val boom     = new SQLException("connection reset", "08006")
+    val stub     = new Stub(Map("rollback(null)" -> boom))
+    val released = new Released
+    val e        = intercept[SQLException](
+      Run.transacting(stub.connection, released.release)(
+        attempt[SQLException](throw boom)
+      )
+    )
+    assert(e.eq(boom), s"expected the body's own failure, got $e")
+    assertEquals(e.getSuppressed.toList, Nil)
+    assertEquals(
+      stub.calls,
+      Vector("setAutoCommit(false)", "setSavepoint()", "rollback(null)", "rollback()")
+    )
     assertEquals(released.times, 1)
   }
 

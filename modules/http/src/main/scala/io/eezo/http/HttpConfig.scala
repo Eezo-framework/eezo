@@ -13,7 +13,8 @@ private[eezo] final case class HttpConfig(
     dev: Boolean = HttpConfig.DefaultDev,
     problems: PartialFunction[Throwable, Problem] = HttpConfig.DefaultProblems,
     secret: Secret = HttpConfig.DefaultSecret,
-    layout: Layout = Layout.plain
+    layout: Layout = Layout.plain,
+    markers: Boolean = false
 )
 
 private[eezo] object HttpConfig {

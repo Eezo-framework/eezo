@@ -80,7 +80,7 @@ trait HttpApp extends Dispatch {
     HttpServer.run(
       port,
       table ++ RouteTable(frameworkRoutes),
-      HttpConfig(maxBodySize, dev, problems, secret, layout)
+      HttpConfig(maxBodySize, dev, problems, secret, layout, markers = dev && DevMarkers.enabled)
     )
 
   /** What `dev` serves. The umbrella overrides it to run the drift check first and serve the drift
