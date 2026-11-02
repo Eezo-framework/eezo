@@ -40,10 +40,9 @@
 # for that one download; a red examples step that names eezoTailwind and a URL is the download,
 # not the code.
 #
-# In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
-# nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir file.
-# An uncommitted local-worktree.sbt at the worktree root turns that setting off. The gate writes
-# it and excludes it from git, so it never lands in a commit.
+# A linked git worktree used to need an uncommitted local-worktree.sbt, because sbt-git's jgit
+# probe failed at load there. sbt-ci-release 1.12.1 dropped sbt-git, and the file now breaks the
+# load instead: "not found: value git". The gate removes the one an earlier gate wrote.
 #
 # The repository's git hooks live in .githooks and git does not run them until core.hooksPath
 # says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one

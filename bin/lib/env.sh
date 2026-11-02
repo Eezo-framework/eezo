@@ -24,12 +24,12 @@ case "${DOCKER_HOST:-}" in
     esac ;;
 esac
 
-# A linked worktree: turn sbt-git's uncommitted changes probe off, or sbt does not load.
-if [ -f "$ROOT/.git" ] && [ ! -f "$ROOT/local-worktree.sbt" ]; then
-  printf '// Written by bin/gate for this linked worktree, see its header. Never commit it.\nThisBuild / git.gitUncommittedChanges := false\n' > "$ROOT/local-worktree.sbt"
-  exclude="$(git -C "$ROOT" rev-parse --git-common-dir)/info/exclude"
-  grep -qx 'local-worktree.sbt' "$exclude" 2>/dev/null || echo 'local-worktree.sbt' >> "$exclude"
-  echo "$EEZO_TOOL: wrote local-worktree.sbt for this worktree"
+# A linked worktree needs nothing any more: sbt-ci-release 1.12.1 dropped sbt-git, whose jgit
+# probe used to fail there. Earlier gates wrote a local-worktree.sbt that set an sbt-git key, and
+# that file now stops sbt from loading, so a leftover one goes.
+if [ -f "$ROOT/local-worktree.sbt" ] && grep -q 'gitUncommittedChanges' "$ROOT/local-worktree.sbt"; then
+  rm "$ROOT/local-worktree.sbt"
+  echo "$EEZO_TOOL: removed the stale local-worktree.sbt an earlier gate wrote for this worktree"
 fi
 
 # The repository's git hooks run only once core.hooksPath names them.
