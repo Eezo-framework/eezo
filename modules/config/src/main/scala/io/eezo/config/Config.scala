@@ -4,6 +4,7 @@ import java.util.concurrent.atomic.AtomicReference
 
 import scala.compiletime.constValue
 import scala.deriving.Mirror
+import scala.annotation.tailrec
 import scala.jdk.CollectionConverters.*
 
 import com.typesafe.config.{
@@ -442,17 +443,68 @@ object Config {
       true
     } catch { case _: ConfigException => false }
 
-  /** The paths whose values resolution fails on. First those that fail with every other
-    * substitution left out, then, when they fail together as a loop does, the first whose removal
-    * lets the file resolve. The library's exception is no help, since its origin is the variable's,
-    * not the file's.
+  /** The value the unresolved tree holds at `path`, reached object by object, since the tree's own
+    * accessors throw on a value still to be resolved.
     */
-  private def unjoinable(file: Tree, env: Map[String, String]): List[List[String]] = {
+  private def valueAt(root: ConfigObject, path: List[String]): ConfigValue =
+    path.tail.foldLeft(root.get(path.head)) { (v, key) => v.asInstanceOf[ConfigObject].get(key) }
+
+  /** Which of `candidates` each one substitutes, through other candidates too: a reference feeds on
+    * a candidate when it names that path, a path under it or a path above it.
+    */
+  private def fed(
+      file: Tree,
+      candidates: List[List[String]]
+  ): Map[List[String], Set[List[String]]] = {
+    val direct = candidates.map { p =>
+      val references = Rendered
+        .scan(valueAt(file.root(), p).render(Rendered.Options))
+        .references
+        .map(r => ConfigUtil.splitPath(r).asScala.toList)
+      p -> candidates.filter(c => references.exists(r => r.startsWith(c) || c.startsWith(r))).toSet
+    }.toMap
+    @tailrec def close(
+        m: Map[List[String], Set[List[String]]]
+    ): Map[List[String], Set[List[String]]] = {
+      val next = m.map((p, fs) => p -> fs.flatMap(f => m(f) + f))
+      if (next == m) m else close(next)
+    }
+    close(direct)
+  }
+
+  /** The paths resolution fails on in `file`, found one round at a time: first those that fail with
+    * every other substitution left out; then, when they fail together as a loop does, one whose
+    * removal lets the file resolve, and of those the one no other feeds on, so that a value joined
+    * wrongly is blamed and not the path it copies. The library's exception is no help, since its
+    * origin is the variable's, not the file's.
+    */
+  private def blame(file: Tree, env: Map[String, String]): List[List[String]] = {
     val candidates = substituting(file.root())
     val alone      =
       candidates.filter(p => !resolves(without(file, candidates.filterNot(_ == p)), env))
     if (alone.nonEmpty) alone
-    else candidates.find(p => resolves(without(file, List(p)), env)).toList
+    else {
+      val fixing = candidates.filter(p => resolves(without(file, List(p)), env))
+      val feeds  = fed(file, candidates)
+      fixing
+        .find(p => !fixing.exists(q => q != p && feeds(q).contains(p)))
+        .orElse(fixing.headOption)
+        .toList
+    }
+  }
+
+  /** Every path resolution fails on, blamed round after round until the file resolves without them,
+    * or until no one path is left to blame.
+    */
+  private def unjoinable(file: Tree, env: Map[String, String]): List[List[String]] = {
+    @tailrec def go(rest: Tree, blamed: List[List[String]]): List[List[String]] =
+      if (blamed.nonEmpty && resolves(rest, env)) blamed
+      else
+        blame(rest, env) match {
+          case Nil  => blamed
+          case more => go(without(rest, more), blamed ++ more)
+        }
+    go(file, Nil)
   }
 
   /** The resolved tree, or, where resolution fails, the offenders for what it fails on and the tree

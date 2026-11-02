@@ -512,6 +512,41 @@ class ConfigSuite extends munit.FunSuite {
     }
   }
 
+  test("a value that cannot be joined through a reference blames the path that joins, once") {
+    val file = ConfigFactory.parseString("""
+      port = 8080
+      stripe { secretKey = ${?K}, webhookSecret = ${?W} }
+      b = ${?B}
+      shopUrl = ${b} [1]
+    """)
+    val env     = Map("K" -> "k", "W" -> "w", "B" -> "s3cr3t-value")
+    val refused = Config[ShopConfig].read(file, env).left.toOption.get
+    assertEquals(refused.offenders, Seq(Config.Offender.Malformed("shopUrl", Unjoinable)))
+    (refused.message +: refused.offenders.map(_.toString)).foreach { text =>
+      assert(!text.contains("s3cr3t-value"), text)
+    }
+  }
+
+  test("a value joined wrongly at the end of a chain is blamed, beside one that fails on its own") {
+    val file = ConfigFactory.parseString("""
+      stripe { secretKey = ${?K}, webhookSecret = ${?W} }
+      a = ${?A}
+      b = ${a}
+      shopUrl = ${b} [1]
+      port = ${?PORT} [1]
+    """)
+    val env     = Map("K" -> "k", "W" -> "w", "A" -> "s3cr3t-value", "PORT" -> "8080")
+    val refused = Config[ShopConfig].read(file, env).left.toOption.get
+    assertEquals(
+      refused.offenders,
+      Seq(
+        Config.Offender.Malformed("port", Unjoinable),
+        Config.Offender.Malformed("shopUrl", Unjoinable)
+      )
+    )
+    assert(!refused.message.contains("s3cr3t-value"), refused.message)
+  }
+
   test("a required field that cannot be joined is refused once, not again as missing") {
     val file = ConfigFactory.parseString("banner = ${?BANNER} [1]")
     assertEquals(
