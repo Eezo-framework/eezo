@@ -30,7 +30,10 @@ object RenderJson {
     )
   }
 
-  def routes(r: RouteListing): String = Json.render(
+  def routes(r: RouteListing): String = Json.render(routesJson(r))
+
+  /** The value [[routes]] renders, for the dev loop's marker line, which compacts it instead. */
+  def routesJson(r: RouteListing): Json =
     Json.Obj(
       List(
         "command"    -> Json.Str("routes"),
@@ -55,5 +58,4 @@ object RenderJson {
         )
       )
     )
-  )
 }
