@@ -6,18 +6,22 @@ import java.util.UUID
 import javax.crypto.Mac
 import javax.crypto.spec.SecretKeySpec
 
+import io.eezo.config.Config
 import io.eezo.http.{Forbidden, Guarded, Route}
+
+import config.Settings
 
 object Stripe {
 
-  val key: String = sys.env("STRIPE_SECRET_KEY")
+  /** SPIKE: the section, read as a table is read, so building the table reads nothing. */
+  def key: String = Config[config.Stripe].current.secretKey.reveal
 
-  private val webhookSecret: String = sys.env("STRIPE_WEBHOOK_SECRET")
+  private def webhookSecret: String = Config[config.Stripe].current.webhookSecret.reveal
 
   /** Where Stripe sends the buyer afterwards: this application's own address, `SHOP_URL` on the
     * deployed copy.
     */
-  val back: String = sys.env.getOrElse("SHOP_URL", "http://localhost:8080")
+  def back: String = Config[Settings].current.shopUrl.path
 
   /** Who may call the webhook: a caller whose `Stripe-Signature` matches the raw body. Anyone else
     * is refused with 403 before the handler runs. The wrapper sees the `Request`; the handler after

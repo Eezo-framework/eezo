@@ -1,9 +1,17 @@
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
+import io.eezo.config.Config
 import io.eezo.http.{Layout, RouteTable}
 
-object Main extends EezoApp {
+import config.{Configured, Settings}
+
+object Main extends EezoApp with Configured {
+
+  /** SPIKE: the one value that names the application's class. The compiler checks
+    * `application.conf` against it.
+    */
+  override val config: Config.Root[Settings] = Config.root[Settings]
 
   override def schema: Schema     = AppSchema
   override def routes: RouteTable = Routes.table()
