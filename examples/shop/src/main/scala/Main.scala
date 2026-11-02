@@ -9,9 +9,10 @@ import config.{Configured, Settings}
 object Main extends EezoApp with Configured {
 
   /** SPIKE: the one value that names the application's class. The compiler checks
-    * `application.conf` against it.
+    * `application.conf` against it. No type ascription: the inferred type carries the file's
+    * digest, which is what makes an edit to the file alone recompile this object.
     */
-  override val config: Config.Root[Settings] = Config.root[Settings]
+  override val config = Config.root[Settings]
 
   override def schema: Schema     = AppSchema
   override def routes: RouteTable = Routes.table()

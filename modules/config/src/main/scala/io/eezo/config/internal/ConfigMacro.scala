@@ -170,11 +170,20 @@ object ConfigMacro {
 
     val path = constant("path")
 
-    // The expansion names the generated object's digest, so that the class depends on it: when the
-    // plugin rewrites the object for an edited file, the incremental compiler recompiles the class
-    // and the check runs again. Without the reference, an edit to the file alone recompiles nothing.
-    val digest: Expr[String] =
-      generated.map(m => Ref(m).select(m.fieldMember("digest")).asExprOf[String]).getOrElse(Expr(""))
+    // The expansion names the generated object's digest as a type argument, so that the class
+    // depends on it: when the plugin rewrites the object for an edited file, the alias changes, the
+    // incremental compiler recompiles the class and the check runs again. A reference to the
+    // constant value is folded to a literal before the dependency is recorded, and does not do.
+    val digest = constant("digest").getOrElse("")
+
+    def stamped(root: Expr[Config.Root[A]]): Expr[Config.Root[A]] =
+      generated.map(_.typeMember("Digest")).filterNot(_.isNoSymbol) match {
+        case Some(alias) =>
+          alias.typeRef.asType match {
+            case '[d] => '{ Config.Root.stamped[d, A]($root) }
+          }
+        case None => root
+      }
 
     // The file, when the build named one. Parsed and never resolved: what is checked is what the
     // author wrote, the literal or the reference, not what the compiler's environment holds.
@@ -255,6 +264,6 @@ object ConfigMacro {
         s"${TypeRepr.of[A].typeSymbol.name} cannot be read from application.conf, for the reasons above.",
         here
       )
-    '{ new Config.Root[A]($c, "application.conf", $digest) }
+    stamped('{ new Config.Root[A]($c, "application.conf", ${ Expr(digest) }) })
   }
 }

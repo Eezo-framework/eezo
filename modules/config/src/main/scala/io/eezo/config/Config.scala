@@ -153,7 +153,21 @@ object Config {
     }
   }
 
-  inline def root[A](using inline c: Config[A]): Root[A] = ${ internal.ConfigMacro.root[A]('c) }
+  /** A marker: the digest of the file the root was checked against, as a type. */
+  sealed trait Stamped[D]
+
+  object Root {
+
+    /** Identity, with the file's digest as a type in the result: what makes the entry object
+      * depend on the generated object the way the incremental compiler tracks. The compiler
+      * records nothing from inside a macro's expansion, but it records the inferred type of the
+      * value the expansion is assigned to, and `root` is transparent so that type is this one.
+      */
+    def stamped[D, A](root: Root[A]): Root[A] & Stamped[D] = root.asInstanceOf[Root[A] & Stamped[D]]
+  }
+
+  transparent inline def root[A](using inline c: Config[A]): Root[A] =
+    ${ internal.ConfigMacro.root[A]('c) }
 
   inline def derived[A](using m: Mirror.ProductOf[A]): Config[A] = make[A](slots[A], m)
 
