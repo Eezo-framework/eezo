@@ -178,13 +178,15 @@ DEV_CONSOLE_SINCE="0.4.0"
 # Whether the project in the current directory has a plugin with the console command: the
 # `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
 # `EezoVersion.value`, the literal in project/project/EezoVersion.scala, is DEV_CONSOLE_SINCE or
-# later. A `+` in the version is a locally published snapshot, always the current plugin, and a
-# project that pins neither way (the examples build reads `.eezo-version`) is taken to be current.
+# later. Commented out lines are skipped and the last pin wins, so an old pin left above the real
+# one as a comment does not count. A `+` in the version is a locally published snapshot, always
+# the current plugin, and a project that pins neither way (the examples build reads
+# `.eezo-version`) is taken to be current.
 dev_console_in_plugin() {
   local pinned
-  pinned="$(sed -nE 's/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | head -1)"
+  pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | tail -1)"
   [ -n "$pinned" ] ||
-    pinned="$(sed -nE 's/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | head -1)"
+    pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | tail -1)"
   [ -n "$pinned" ] || return 0
   case "$pinned" in *+*) return 0 ;; esac
   [ "$(printf '%s\n%s\n' "$DEV_CONSOLE_SINCE" "$pinned" | sort -V | head -1)" = "$DEV_CONSOLE_SINCE" ]
@@ -589,9 +591,10 @@ write_gitignore() { # <file>
 
 # The note a coding agent reads before touching the project: which form of `eezo dev` it can
 # follow, what to wait for, and that the forwarded commands answer in JSON. Written once; a
-# project that has its own AGENTS.md keeps it.
+# project that has its own AGENTS.md keeps it, and a symlink by that name, dangling or not, is
+# left alone rather than written through.
 write_agents_note() { # <path>
-  [ ! -e "$1" ] || return 0
+  [ ! -e "$1" ] && [ ! -L "$1" ] || return 0
   cat > "$1" <<'EOF'
 # For agents
 

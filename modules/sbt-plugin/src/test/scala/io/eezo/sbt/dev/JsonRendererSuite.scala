@@ -49,6 +49,20 @@ class JsonRendererSuite extends munit.FunSuite {
     assert(d("rendered").strOr("").contains("^^^"))
   }
 
+  test("a save during a build prints the first build's answer, then its own compiling") {
+    val out = render(
+      Event.Changed(Set("A.scala")),
+      Event.Changed(Set("B.scala")),
+      Event.BuildSucceeded(Vector.empty, 10L),
+      Event.BuildFailed(Vector(error), 20L)
+    )
+    assertEquals(
+      out.map(o => (o("event").strOr("?"), o("build").num.getOrElse(0L))),
+      Vector(("compiling", 1L), ("built", 1L), ("compiling", 2L), ("failed", 2L))
+    )
+    assertEquals(out(2)("trigger").str, Some("B.scala"))
+  }
+
   test("the application's lines, its exit and the markers are events with the values inside") {
     val listing = RouteListing(
       Vector(
@@ -84,17 +98,25 @@ class JsonRendererSuite extends munit.FunSuite {
       Vector("handwritten", "eezo")
     )
     assertEquals(out(3)("blocking").bool, Some(true))
+    assertEquals(out(3)("inSync").bool, Some(false))
+    assertEquals(out(3)("unreachable"), JNull)
     assertEquals(out(3)("changes").arr.head("destructive").bool, Some(true))
     assertEquals(out(4)("code").num, Some(1L))
+    val down = render(
+      Event.DriftReported(Drift(Vector.empty, blocking = false, Some("connection refused")))
+    )
+    assertEquals(down.head("unreachable").str, Some("connection refused"))
+    assertEquals(down.head("inSync").bool, Some(false))
+    assertEquals(render(Event.AppStopped).map(_("event").strOr("?")), Vector("stopped"))
   }
 
   test("a schema command is two events, the second carrying the command's own answer") {
     val answer =
       JsonReader.parse("""{"command":"sync","outcome":"applied"}""").fold(fail(_), identity)
     val out = render(
-      Event.ActionStarted(Action.Sync(force = false)),
-      Event.ActionFinished(
-        Outcome(Action.Sync(force = false), 0, Some(answer), Vector.empty, Vector.empty)
+      Event.CommandStarted(SchemaCommand.Sync(force = false)),
+      Event.CommandFinished(
+        Outcome(SchemaCommand.Sync(force = false), 0, Some(answer), Vector.empty, Vector.empty)
       )
     )
     assertEquals(out.map(_("status").strOr("?")), Vector("started", "finished"))

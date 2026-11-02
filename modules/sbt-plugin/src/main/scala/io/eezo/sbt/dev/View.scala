@@ -128,6 +128,11 @@ private[sbt] object Panes {
         Vector(
           Dim("no drift report yet: it arrives when the application boots, or press S to check")
         )
+      case SchemaState.Known(drift) if drift.unreachable.isDefined =>
+        wrap(
+          s"${theme.warn} database unreachable: ${drift.unreachable.getOrElse("")}; the application serves what does not need it",
+          width
+        ).map(line => Yellow(line))
       case SchemaState.Known(drift) if drift.inSync =>
         Vector(Green(s"${theme.ok} in sync: the database matches the model"))
       case SchemaState.Known(drift) =>
@@ -164,10 +169,10 @@ private[sbt] object Panes {
           else if (o.code == 1 && o.json.isDefined) (Yellow, theme.warn)
           else (Red, theme.fail)
         val line =
-          style(s"$mark eezo ${o.action.label}: ${Describe.summary(o)}") +
+          style(s"$mark eezo ${o.command.label}: ${Describe.summary(o)}") +
             Dim(s"  ${theme.bullet} output in ${Tab.Log.number} ${Tab.Log.name}")
-        val detail = o.action match {
-          case Action.Migrate(false) if o.json.exists(_("outcome").strOr("") == "pending") =>
+        val detail = o.command match {
+          case SchemaCommand.Migrate(false) if o.json.exists(_("outcome").strOr("") == "pending") =>
             o.json.toVector.flatMap(_("pending").arr).map(p => Dim(s"  ${p("file").strOr("?")}"))
           case _ => Vector.empty
         }
@@ -220,8 +225,11 @@ private[sbt] object Panes {
 /** The text of a schema command's answer, in the words the terminal front end uses. */
 private[sbt] object Describe {
 
-  def status(d: Drift): String =
-    if (d.inSync) "in sync" else s"${d.changes.size} difference(s) between model and database"
+  def status(d: Drift): String = d.unreachable match {
+    case Some(reason) => s"database unreachable: $reason"
+    case None         =>
+      if (d.inSync) "in sync" else s"${d.changes.size} difference(s) between model and database"
+  }
 
   /** One line for the answer: what the pane shows beside the glyph. */
   def summary(o: Outcome): String =
@@ -230,17 +238,17 @@ private[sbt] object Describe {
       o.json match {
         case None    => if (o.ok) "done" else s"exited ${o.code}"
         case Some(j) =>
-          o.action match {
-            case Action.Status  => status(Drift.fromJson(j))
-            case Action.Sync(_) =>
+          o.command match {
+            case SchemaCommand.Status  => status(Drift.fromJson(j))
+            case SchemaCommand.Sync(_) =>
               if (j("applied").boolOr(false)) "applied to the dev database"
               else if (j("refused").boolOr(false))
                 s"refused: ${j("blocked").arr.size} change(s) need review"
               else if (j("changes").arr.isEmpty) "in sync"
               else s"exited ${o.code}"
-            case Action.Freeze(_, _) =>
+            case SchemaCommand.Freeze(_, _) =>
               j("migration").str.map(path => s"wrote $path").getOrElse("nothing to freeze")
-            case Action.Migrate(_) =>
+            case SchemaCommand.Migrate(_) =>
               j("outcome").strOr("") match {
                 case "tampered" => "migration integrity check failed"
                 case "upToDate" => "no pending migrations"
@@ -258,11 +266,11 @@ private[sbt] object Describe {
   def outcome(o: Outcome): Vector[String] = o.json match {
     case None    => o.out
     case Some(j) =>
-      val body = o.action match {
-        case Action.Status =>
+      val body = o.command match {
+        case SchemaCommand.Status =>
           val d = Drift.fromJson(j)
           status(d) +: d.changes.map(c => s"  ${c.describe}")
-        case Action.Sync(_) =>
+        case SchemaCommand.Sync(_) =>
           val changes = j("changes").arr.map(Change.fromJson)
           val tail    =
             if (j("applied").boolOr(false)) "applied"
@@ -271,7 +279,7 @@ private[sbt] object Describe {
             else if (changes.isEmpty) "in sync"
             else ""
           changes.map(c => s"  ${c.describe}") :+ tail
-        case Action.Freeze(_, _) =>
+        case SchemaCommand.Freeze(_, _) =>
           j("migration").str match {
             case None       => Vector("nothing to freeze")
             case Some(path) =>
@@ -284,7 +292,7 @@ private[sbt] object Describe {
                 s"  ${r("change")("describe").strOr("?")}$note"
               } :+ s"wrote $path"
           }
-        case Action.Migrate(_) =>
+        case SchemaCommand.Migrate(_) =>
           j("outcome").strOr("") match {
             case "tampered" =>
               j("problems").arr
@@ -407,7 +415,7 @@ private[sbt] object View {
     spread(title(m), status(m), w)
 
   private def tabsRow(m: Model, layout: Layout)(implicit theme: Theme): String = {
-    val tabs = Tab.all.map { t =>
+    val tabs = m.tabs.map { t =>
       val count: String = t match {
         case Tab.Errors =>
           val n = m.errors.size
@@ -417,6 +425,7 @@ private[sbt] object View {
         case Tab.Routes => m.routes.map(r => " " + Dim(s"${r.routes.size}")).getOrElse("")
         case Tab.Schema =>
           m.schema match {
+            case SchemaState.Known(d) if d.unreachable.isDefined => " " + Yellow(theme.warn)
             case SchemaState.Known(d) if d.blocking => " " + Red(s"${theme.fail}${d.changes.size}")
             case SchemaState.Known(d) if !d.inSync  =>
               " " + Yellow(s"${theme.warn}${d.changes.size}")

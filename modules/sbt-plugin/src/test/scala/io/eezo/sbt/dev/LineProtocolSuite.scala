@@ -88,6 +88,32 @@ class LineProtocolSuite extends munit.FunSuite {
     )
   }
 
+  test("a stdout line between a record header and its level on stderr leaves the pair alone") {
+    val p = new LineProtocol
+    assertEquals(
+      p.stderr("Oct 27, 2026 12:00:01 PM org.eclipse.jetty.server.Server doStart"),
+      Vector.empty[Event]
+    )
+    assertEquals(p.stdout("3 routes:"), Vector(Event.AppLine("3 routes:", err = false)))
+    assertEquals(p.stderr("INFO: jetty-12.1.11; built: 2026-01-01"), Vector.empty[Event])
+    assertEquals(p.flush(), Vector.empty[Event])
+  }
+
+  test("the level is matched in the JVM's own language") {
+    assert(LineProtocol.isNoiseLevel("INFO: x"))
+    assert(LineProtocol.isNoiseLevel("FINER: x"))
+    assert(!LineProtocol.isNoiseLevel("WARNING: x"))
+    assert(!LineProtocol.isNoiseLevel("SEVERE: x"))
+    assert(!LineProtocol.isNoiseLevel("no colon here"))
+    val before = java.util.Locale.getDefault
+    try {
+      java.util.Locale.setDefault(java.util.Locale.ITALIAN)
+      val localized = java.util.logging.Level.INFO.getLocalizedName
+      assert(LineProtocol.isNoiseLevel(s"$localized: x"), localized)
+      assert(!LineProtocol.isNoiseLevel(s"${java.util.logging.Level.WARNING.getLocalizedName}: x"))
+    } finally java.util.Locale.setDefault(before)
+  }
+
   test("a stack frame naming jetty is not a record header") {
     val p = new LineProtocol
     assertEquals(

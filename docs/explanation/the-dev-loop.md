@@ -60,7 +60,8 @@ is the build: a spinner while a compile runs, labelled with the file that trigge
   child on the build's classpath, and the console restarts the application when one succeeds.
   The pane keeps one line per command: a spinner while it runs, then its answer in the colour
   of its exit code; everything the command printed is in the log. An application with no
-  database layer has no schema pane.
+  database layer has no schema pane: one with the layer reports its drift before it serves, so
+  serving without a report is how the console tells them apart.
 - **4 log**: everything the application prints or logs, a stack trace included, and the output
   of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and
   PgDn, `g` and `G` scroll; so does the mouse wheel, in terminals that turn it into arrows on the
@@ -125,7 +126,7 @@ application, with the two actions on it, re-checked on every `GET` so resolving 
 page or from another terminal shows up on the next refresh. The console shows the same drift in
 its schema pane, switches to it when the drift blocks, and offers the same actions as keys;
 resolved from there, the application is restarted at once. A database that can't be reached
-is a warning, and everything that doesn't need it serves. [Schema and
+is a warning, in the schema pane too, and everything that doesn't need it serves. [Schema and
 migrations](schema-and-migrations.md) has the detail.
 
 ## One secret per sbt session

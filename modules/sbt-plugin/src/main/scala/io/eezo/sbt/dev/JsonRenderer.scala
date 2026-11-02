@@ -6,8 +6,12 @@ package io.eezo.sbt.dev
   * `built` or `failed` answers it. Nothing is rendered for a key, a tick or a resize.
   *
   * The shapes mirror the lines the application prints under `EEZO_DEV_MARKERS`: `routes` is the
-  * `routes --json` body, `drift` the `db status --json` body plus `blocking`, and a finished
-  * command carries its own JSON answer as `result`.
+  * `routes --json` body, `drift` the `db status --json` body plus `blocking` and `unreachable`, and
+  * a finished command carries its own JSON answer as `result`.
+  *
+  * An event's own object comes first and the `compiling` of a build it set off after it, so that a
+  * save remembered during a build prints `built` with the first number and then `compiling` with
+  * the next, each answer under the number of its own question.
   */
 private[sbt] final class JsonRenderer {
 
@@ -17,22 +21,7 @@ private[sbt] final class JsonRenderer {
     objects(e, after, effects).map(JsonWriter.write)
 
   private def objects(e: Event, after: Model, effects: Vector[Effect]): Vector[JValue] = {
-    val compiling =
-      if (effects.contains(Effect.Build)) {
-        builds += 1
-        val trigger = after.build match {
-          case BuildState.Compiling(t, _) => t
-          case _                          => None
-        }
-        Vector(
-          obj(
-            "event"   -> JStr("compiling"),
-            "build"   -> JNum(builds.toLong),
-            "trigger" -> trigger.map(JStr(_)).getOrElse(JNull)
-          )
-        )
-      } else Vector.empty
-    compiling ++ (e match {
+    val own = e match {
       case Event.BuildSucceeded(warnings, millis) =>
         Vector(
           obj(
@@ -93,9 +82,11 @@ private[sbt] final class JsonRenderer {
       case Event.DriftReported(drift) =>
         Vector(
           obj(
-            "event"    -> JStr("drift"),
-            "blocking" -> JBool(drift.blocking),
-            "changes"  -> JArr(
+            "event"       -> JStr("drift"),
+            "inSync"      -> JBool(drift.inSync),
+            "blocking"    -> JBool(drift.blocking),
+            "unreachable" -> drift.unreachable.map(JStr(_)).getOrElse(JNull),
+            "changes"     -> JArr(
               drift.changes.map(c =>
                 obj(
                   "describe"    -> JStr(c.describe),
@@ -107,19 +98,19 @@ private[sbt] final class JsonRenderer {
             )
           )
         )
-      case Event.ActionStarted(action) =>
+      case Event.CommandStarted(command) =>
         Vector(
           obj(
             "event"   -> JStr("command"),
-            "command" -> JStr(action.label),
+            "command" -> JStr(command.label),
             "status"  -> JStr("started")
           )
         )
-      case Event.ActionFinished(o) =>
+      case Event.CommandFinished(o) =>
         Vector(
           obj(
             "event"   -> JStr("command"),
-            "command" -> JStr(o.action.label),
+            "command" -> JStr(o.command.label),
             "status"  -> JStr("finished"),
             "code"    -> JNum(o.code.toLong),
             "ok"      -> JBool(o.ok),
@@ -127,10 +118,25 @@ private[sbt] final class JsonRenderer {
             "result"  -> o.json.getOrElse(JNull)
           )
         )
-      case Event.Changed(_) | Event.BuildStarted(_) | Event.Pressed(_) | Event.Resized(_, _) |
-          Event.Tick(_) =>
+      case Event.Changed(_) | Event.Pressed(_) | Event.Resized(_, _) | Event.Tick(_) =>
         Vector.empty
-    })
+    }
+    val compiling =
+      if (effects.contains(Effect.Build)) {
+        builds += 1
+        val trigger = after.build match {
+          case BuildState.Compiling(t, _) => t
+          case _                          => None
+        }
+        Vector(
+          obj(
+            "event"   -> JStr("compiling"),
+            "build"   -> JNum(builds.toLong),
+            "trigger" -> trigger.map(JStr(_)).getOrElse(JNull)
+          )
+        )
+      } else Vector.empty
+    own ++ compiling
   }
 
   private def diagnostic(d: Diagnostic): JValue =

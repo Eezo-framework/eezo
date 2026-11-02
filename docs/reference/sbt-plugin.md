@@ -91,7 +91,7 @@ its save knows which `built` or `failed` answers it.
 | `stopped` | the application was stopped for a restart |
 | `line` | `stream` (`stdout` or `stderr`), `text`: the application's own output, routine boot records removed |
 | `routes` | the `routes --json` body: `routes`, `overridden`, `shadowed`, `orphans`; routes under `/eezo` have provenance `eezo` |
-| `drift` | the `db status --json` body plus `blocking` |
+| `drift` | the `db status --json` body plus `blocking`, and `unreachable` with the reason when the database could not be asked |
 | `command` | `command`, `status` (`started` or `finished`); when finished, `code`, `ok`, `summary` and the command's own JSON answer as `result` |
 
 A diagnostic is `path`, `line`, `column`, `severity` (`error`, `warning` or `info`), `message`

@@ -22,7 +22,7 @@ class ViewSuite extends munit.FunSuite {
   private def model(w: Int, h: Int): Model = {
     val base   = Model.initial("todo", w, h, now = 5000L)
     val (m, _) = Seq[Event](
-      Event.BuildStarted(Some("Index.scala")),
+      Event.Changed(Set("Index.scala")),
       Event.BuildSucceeded(Vector.empty, 420L),
       Event.AppStarted("Main"),
       Event.RoutesReported(listing),
@@ -78,7 +78,7 @@ class ViewSuite extends munit.FunSuite {
   }
 
   test("the footer's right end follows the build: spinner and trigger, then the verdict") {
-    val (compiling, _) = Update(model(80, 24), Event.BuildStarted(Some("Index.scala")))
+    val (compiling, _) = Update(model(80, 24), Event.Changed(Set("Index.scala")))
     val busy           = frameOf(compiling)(23)
     assert(busy.contains("compiling (Index.scala)"), busy)
     val (failed, _) = Update(compiling, Event.BuildFailed(Vector(error), 300L))
@@ -164,7 +164,7 @@ class ViewSuite extends munit.FunSuite {
       .parse("""{"command":"sync","applied":true,"changes":[{"describe":"+ todo.priority"}]}""")
       .toOption
     val outcome = Outcome(
-      Action.Sync(force = false),
+      SchemaCommand.Sync(force = false),
       0,
       applied,
       Vector("{...}"),
@@ -176,8 +176,8 @@ class ViewSuite extends munit.FunSuite {
     )
     val (m, _) = Seq[Event](
       Event.Pressed(Key.Char('3')),
-      Event.ActionStarted(outcome.action),
-      Event.ActionFinished(outcome)
+      Event.CommandStarted(outcome.command),
+      Event.CommandFinished(outcome)
     ).foldLeft((model(80, 24), Vector.empty[Effect])) { case ((acc, _), e) => Update(acc, e) }
     val rows = frameOf(m)
     assert(rows(9).contains("✓ eezo db sync --apply: applied to the dev database"), rows(9))
@@ -187,7 +187,7 @@ class ViewSuite extends munit.FunSuite {
     assert(m.log.exists(_.text == "  + todo.priority"))
     assert(m.log.exists(l => l.text == "WARNING: something real" && l.kind == LogLine.Err))
     assert(!m.log.exists(_.text.contains("HikariDataSource")))
-    val (running, _) = Update(m, Event.ActionStarted(Action.Status))
+    val (running, _) = Update(m, Event.CommandStarted(SchemaCommand.Status))
     assert(frameOf(running)(23).contains("⠋ db status"), frameOf(running)(23))
   }
 

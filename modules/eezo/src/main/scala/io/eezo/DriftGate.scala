@@ -63,9 +63,10 @@ private[eezo] object DriftGate {
   def apply(schema: Schema, databaseSchema: String): Option[RouteTable] = {
     val checked = tryDrift(schema, databaseSchema)
     val drift   = checked.getOrElse(Nil)
-    // The drift as a value, for the dev console; not printed when the database could not be
-    // asked, so the console shows "unknown" rather than a clean bill it never earned.
-    if (DevMarkers.enabled) checked.foreach(d => println(marker(d)))
+    // The drift as a value, for the dev console. When the database could not be asked the marker
+    // says so, so the console shows the error rather than a clean bill it never earned, and still
+    // learns that this application has a database layer.
+    if (DevMarkers.enabled) println(marker(drift, checked.left.toOption))
     if (blockers(drift).nonEmpty) {
       println(Render.status(StatusResult(drift)))
       println("""
@@ -88,28 +89,29 @@ private[eezo] object DriftGate {
   private def currentDrift(schema: Schema, databaseSchema: String): List[Change] =
     tryDrift(schema, databaseSchema).getOrElse(Nil)
 
-  /** The drift, or `None` when the database could not be asked, which is a warning and not a
+  /** The drift, or the reason the database could not be asked, which is a warning and not a
     * refusal: `eezo dev` with Postgres down still serves whatever does not need it.
     */
-  private def tryDrift(schema: Schema, databaseSchema: String): Option[List[Change]] =
+  private def tryDrift(schema: Schema, databaseSchema: String): Either[String, List[Change]] =
     try {
-      if (schema.snapshot.tables.isEmpty) Some(Nil)
-      else Some(read { Commands.status(schema, databaseSchema).changes })
+      if (schema.snapshot.tables.isEmpty) Right(Nil)
+      else Right(read { Commands.status(schema, databaseSchema).changes })
     } catch {
       case NonFatal(e) =>
-        System.err.println(s"[eezo] ⚠ drift check skipped, database unreachable: ${e.getMessage}")
-        None
+        val reason = Option(e.getMessage).getOrElse(e.getClass.getName)
+        System.err.println(s"[eezo] ⚠ drift check skipped, database unreachable: $reason")
+        Left(reason)
     }
 
   /** The drift marker line: `db status --json`'s shape plus `blocking`, this object's decision, so
-    * the console need not repeat the rule that makes it.
+    * the console need not repeat the rule that makes it, and `unreachable` with the reason when the
+    * database could not be asked.
     */
-  private[eezo] def marker(drift: List[Change]): String = {
+  private[eezo] def marker(drift: List[Change], unreachable: Option[String] = None): String = {
     val status = RenderJson.statusJson(StatusResult(drift))
-    DevMarkers.line(
-      "drift",
-      status.copy(fields = status.fields :+ ("blocking" -> Json.Bool(blockers(drift).nonEmpty)))
-    )
+    val extra  = ("blocking" -> Json.Bool(blockers(drift).nonEmpty)) ::
+      unreachable.map(reason => "unreachable" -> Json.Str(reason)).toList
+    DevMarkers.line("drift", status.copy(fields = status.fields ++ extra))
   }
 
   /** The refusal table: the page on every GET, and the two actions it posts to. */
