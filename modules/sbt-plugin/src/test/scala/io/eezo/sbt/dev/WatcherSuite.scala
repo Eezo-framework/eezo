@@ -56,7 +56,7 @@ class WatcherSuite extends munit.FunSuite {
   }
 
   test("a save under a source root is reported after the stylesheet's parent went in shallow") {
-    val base = Files.createTempDirectory("eezo-watch")
+    val base = Files.createTempDirectory("eezo-watch").toRealPath()
     val src  = base.resolve("src/main/scala")
     Files.createDirectories(src)
     val stylesheet      = base.resolve("tailwind.css")
@@ -72,7 +72,7 @@ class WatcherSuite extends munit.FunSuite {
   }
 
   test("a root that does not exist at start is watched once it is created") {
-    val base      = Files.createTempDirectory("eezo-watch")
+    val base      = Files.createTempDirectory("eezo-watch").toRealPath()
     val scala     = base.resolve("src/main/scala")
     val resources = base.resolve("src/main/resources")
     Files.createDirectories(scala)
@@ -86,7 +86,7 @@ class WatcherSuite extends munit.FunSuite {
   test(
     "the build's own output is ignored; a project under `target`, or a package so named, is not"
   ) {
-    val base = Files.createTempDirectory("eezo-watch").resolve("target/project")
+    val base = Files.createTempDirectory("eezo-watch").toRealPath().resolve("target/project")
     Files.createDirectories(base)
     val (watcher, seen) = watching(Seq(base), ignored = Seq(base.resolve("target")))
     try {
@@ -100,7 +100,7 @@ class WatcherSuite extends munit.FunSuite {
   test(
     "registrations are the roots that exist, the ancestors of those that do not, nothing nested"
   ) {
-    val base = Files.createTempDirectory("eezo-watch")
+    val base = Files.createTempDirectory("eezo-watch").toRealPath()
     Files.createDirectories(base.resolve("src/main/scala"))
     val roots = Seq(
       base.resolve("src/main/scala"),
@@ -115,10 +115,37 @@ class WatcherSuite extends munit.FunSuite {
   }
 
   test("an editor's scratch files are not relevant") {
-    val base = Files.createTempDirectory("eezo-watch")
+    val base = Files.createTempDirectory("eezo-watch").toRealPath()
     assert(!Watcher.relevant(base.resolve("Foo.scala~"), Nil))
     assert(!Watcher.relevant(base.resolve(".#Foo.scala"), Nil))
     assert(!Watcher.relevant(base.resolve(".Foo.scala.swp"), Nil))
     assert(Watcher.relevant(base.resolve("Foo.scala"), Nil))
+  }
+
+  test("real resolves the symlinks of the existing prefix and keeps the part not created yet") {
+    val target = Files.createTempDirectory("eezo-watch").toRealPath()
+    val link   = Files.createTempDirectory("eezo-link").toRealPath().resolve("project")
+    Files.createSymbolicLink(link, target): Unit
+    assertEquals(Watcher.real(link), target)
+    assertEquals(
+      Watcher.real(link.resolve("src/main/resources")),
+      target.resolve("src/main/resources")
+    )
+    assertEquals(Watcher.real(target.resolve("src")), target.resolve("src"))
+  }
+
+  test("a save in a project reached through a symlink is reported under its real name") {
+    val target = Files.createTempDirectory("eezo-watch").toRealPath()
+    val link   = Files.createTempDirectory("eezo-link").toRealPath().resolve("project")
+    Files.createSymbolicLink(link, target): Unit
+    val src = link.resolve("src/main/scala")
+    Files.createDirectories(src): Unit
+    val (watcher, seen) = watching(Seq(src), files = Seq(link.resolve("tailwind.css")))
+    try {
+      write(src.resolve("Foo.scala"), "object Foo")
+      expectReport(seen, target.resolve("src/main/scala/Foo.scala"))
+      write(link.resolve("tailwind.css"), "@import 'tailwindcss';")
+      expectReport(seen, target.resolve("tailwind.css"))
+    } finally watcher.close()
   }
 }
