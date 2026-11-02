@@ -35,6 +35,17 @@ class CheckedSuite extends munit.FunSuite {
     )
   }
 
+  test("a required value the file sets to null is refused, as the read counts null as absent") {
+    val errors = compileErrors(
+      """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-null.conf")"""
+    )
+    assertNoDiff(
+      errors.linesIterator.filter(_.contains("application.conf neither")).mkString("\n").trim,
+      "error: application.conf neither states `name` nor feeds it from a variable, and `name` " +
+        "has no default. Write `name = ${?NAME}` in the file, or give the field a default."
+    )
+  }
+
   test("a Redacted stated as a literal is refused with its line, never its text") {
     val errors = compileErrors(
       """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-wrong.conf")"""
@@ -88,6 +99,50 @@ class CheckedSuite extends munit.FunSuite {
         """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-concatenated.conf")"""
       ),
       ""
+    )
+  }
+
+  test("a secret committed once and copied to the Redacted path by a reference is refused") {
+    val errors = compileErrors(
+      """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-literal-scalar.conf")"""
+    )
+    assert(
+      errors.contains(
+        "application.conf states `keys.secret` as a literal at line 3, and `secret` is a " +
+          "Redacted. A secret reaches the file only through a variable: " +
+          "`secret = ${?KEYS_SECRET}`."
+      ),
+      errors
+    )
+    assert(!errors.contains("sk_live_committed"), errors)
+  }
+
+  test("a secret committed in a block that a section inherits is refused, at the block's line") {
+    val errors = compileErrors(
+      """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-literal-section.conf")"""
+    )
+    assert(
+      errors.contains(
+        "application.conf states `keys.secret` as a literal at line 4, and `secret` is a " +
+          "Redacted. A secret reaches the file only through a variable: " +
+          "`secret = ${?KEYS_SECRET}`."
+      ),
+      errors
+    )
+    assert(!errors.contains("sk_live_committed"), errors)
+  }
+
+  test("a section that inherits a block with no secret leaves the required secret unfed") {
+    val errors = compileErrors(
+      """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-reference-missing.conf")"""
+    )
+    assert(
+      errors.contains(
+        "application.conf neither states `keys.secret` nor feeds it from a variable, and " +
+          "`secret` has no default. Write `secret = ${?KEYS_SECRET}` under `keys` in the file, " +
+          "or give the field a default."
+      ),
+      errors
     )
   }
 

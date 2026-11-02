@@ -60,6 +60,38 @@ class RenderedSuite extends munit.FunSuite {
     assert(stated("a = 1\na = ${?A}", "a"))
   }
 
+  test("a list or an object beside a substitution is no text, and a scalar still is") {
+    assert(!stated("a = [1, 2]\na = ${?A}", "a"))
+    assert(!stated("a = { x = 1 }\na = ${?A}", "a"))
+    assert(!stated("a = [\"x\", ${?B}]\na = ${?A}", "a"))
+    assert(stated("a = \"x\"\na = ${?A}", "a"))
+    assertEquals(
+      names("a = [1, ${?B}]\na = ${?A}"),
+      List("a" -> "B", "a" -> "A")
+    )
+  }
+
+  test("a reference inside the file hands on the text it copies, as a literal of its own path") {
+    val hocon = """
+      source = "committed"
+      a = ${source}
+      a = ${?A}
+    """
+    assert(stated(hocon, "a"))
+    assert(!stated("a = ${?B}\na = ${?A}", "a"))
+  }
+
+  test("a leaf the section's reference cannot supply is not found by the walk checked uses") {
+    val root = ConfigFactory
+      .parseString("""
+      base { region = "eu" }
+      keys = ${base}
+    """)
+      .root()
+    assert(Config.at(root, List("keys", "secret")).isEmpty)
+    assert(Config.at(root, List("keys", "region")).isDefined)
+  }
+
   test("a leaf of a section that inherits through a reference is found by the walk checked uses") {
     val root = ConfigFactory
       .parseString("""

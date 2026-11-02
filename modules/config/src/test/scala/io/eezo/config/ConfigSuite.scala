@@ -372,6 +372,139 @@ class ConfigSuite extends munit.FunSuite {
     )
   }
 
+  test("a Redacted literal reached through a reference is refused also when a variable is set") {
+    val scalar = ConfigFactory.parseString("""
+      port = 1
+      source = "sk_live_committed"
+      stripe {
+        secretKey = ${source}
+        secretKey = ${?K}
+        webhookSecret = ${?W}
+      }
+    """)
+    val section = ConfigFactory.parseString("""
+      port = 1
+      base { secretKey = "sk_live_committed", webhookSecret = ${?W} }
+      stripe = ${base}
+      stripe { secretKey = ${?K} }
+    """)
+    for (file <- Seq(scalar, section); k <- Seq(Map("K" -> "k"), Map.empty[String, String])) {
+      val read = Config[ShopConfig].read(file, k + ("W" -> "w"))
+      assertEquals(read, Left(Config.Refused(Seq(Config.Offender.Literal("stripe.secretKey")))))
+      val refused = read.left.toOption.get
+      (refused.message +: refused.offenders.map(_.toString)).foreach { text =>
+        assert(!text.contains("sk_live_committed"), text)
+      }
+    }
+  }
+
+  test("references that loop back on themselves do not hang the literal check") {
+    val file = ConfigFactory.parseString("""
+      port = 1
+      a = ${b}
+      b = ${a}
+      stripe { secretKey = ${a}, secretKey = ${?K}, webhookSecret = ${?W} }
+    """)
+    assert(Config.literal(file.root(), List("stripe", "secretKey")).isEmpty)
+  }
+
+  test("a list fallback is no literal: the variable's value is read, and unset it is malformed") {
+    val file = ConfigFactory.parseString("""
+      port = 1
+      stripe { secretKey = [1, 2], secretKey = ${?K}, webhookSecret = ${?W} }
+    """)
+    assertEquals(
+      Config[ShopConfig].read(file, Map("K" -> "k", "W" -> "w")).map(_.stripe.secretKey),
+      Right(Redacted("k"))
+    )
+    assertEquals(
+      Config[ShopConfig].read(file, Map("W" -> "w")),
+      Left(
+        Config.Refused(
+          Seq(
+            Config.Offender.Malformed("stripe.secretKey", "is a list, and one value was expected")
+          )
+        )
+      )
+    )
+  }
+
+  test("a quoted key that holds a dot is a path of its own, never the nested path") {
+    val file = ConfigFactory.parseString("""
+      port = 1
+      stripe { webhookSecret = ${?W} }
+      "stripe.secretKey" = ${?X}
+    """)
+    val env = Map("X" -> "x", "W" -> "w")
+    assertEquals(
+      Config[ShopConfig].read(file, env),
+      Left(Config.Refused(Seq(Config.Offender.Missing("stripe.secretKey", Nil))))
+    )
+    assertEquals(
+      Config[ShopConfig].names(file).map(n => (n.variable, n.path, n.redacted)),
+      Seq(("W", "stripe.webhookSecret", true), ("X", "\"stripe.secretKey\"", false))
+    )
+  }
+
+  test("a value that cannot be joined is one malformed offender beside the others, not a throw") {
+    val file = ConfigFactory.parseString("""
+      port = ${?PORT}
+      stripe { secretKey = ${?K}, webhookSecret = ${?W} }
+      shopUrl = ${?SHOP_URL} [1]
+    """)
+    val env     = Map("K" -> "k", "W" -> "w", "SHOP_URL" -> "s3cr3t-value")
+    val read    = Config[ShopConfig].read(file, env)
+    val refused = read.left.toOption.get
+    assertEquals(
+      refused.offenders,
+      Seq(
+        Config.Offender.Malformed("shopUrl", Unjoinable),
+        Config.Offender.Missing("port", List("PORT"))
+      )
+    )
+    assertNoDiff(
+      refused.message,
+      s"""|shopUrl ${Unjoinable}
+          |port is missing: set PORT, which application.conf names for it
+          |""".stripMargin
+    )
+    (refused.message +: refused.offenders.map(_.toString)).foreach { text =>
+      assert(!text.contains("s3cr3t-value"), text)
+    }
+  }
+
+  test("a required field that cannot be joined is refused once, not again as missing") {
+    val file = ConfigFactory.parseString("banner = ${?BANNER} [1]")
+    assertEquals(
+      Config[Plain].read(file, Map("BANNER" -> "s3cr3t-value")),
+      Left(Config.Refused(Seq(Config.Offender.Malformed("banner", Unjoinable))))
+    )
+  }
+
+  test("substitutions that loop are refused at the first path of the loop, not thrown") {
+    val file = ConfigFactory.parseString("""
+      banner = ${loop}
+      loop = ${banner}
+    """)
+    val read = Config[Plain].read(file, Map.empty)
+    assertEquals(
+      read,
+      Left(Config.Refused(Seq(Config.Offender.Malformed("banner", Unjoinable))))
+    )
+  }
+
+  test("two loops, which no one path mends, are refused as the file, not thrown") {
+    val file = ConfigFactory.parseString("""
+      banner = ${b}
+      b = ${banner}
+      c = ${d}
+      d = ${c}
+    """)
+    val refused = Config[Plain].read(file, Map.empty).left.toOption.get
+    assertEquals(refused.offenders, Seq(Config.Offender.Malformed("application.conf", Unjoinable)))
+    assertNoDiff(refused.message, s"application.conf $Unjoinable")
+  }
+
   test("no offender, message or name ever holds text read from the file or the map") {
     val file = ConfigFactory.parseString("""
       port = "port-text-8080x"
@@ -394,6 +527,12 @@ class ConfigSuite extends munit.FunSuite {
 }
 
 object ConfigSuite {
+
+  /** The reason a refusal gives for a value resolution cannot build, written out here so that a
+    * change of the words in the main source fails a test.
+    */
+  val Unjoinable =
+    "cannot be resolved: it joins a list or an object with a single value, or substitutes itself"
 
   final case class Stripe(secretKey: Redacted, webhookSecret: Redacted) derives Config
 

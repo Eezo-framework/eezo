@@ -12,6 +12,7 @@ import com.typesafe.config.{
   ConfigObject,
   ConfigResolveOptions,
   ConfigResolver,
+  ConfigUtil,
   ConfigValue,
   ConfigValueFactory,
   ConfigValueType
@@ -193,31 +194,91 @@ object Config {
   /** The value at `path` in an unresolved object, literal or substitution, or `None` where the file
     * neither states nor feeds it. Walked by hand, because `hasPath` resolves on the way. Where the
     * path passes through a value only resolution can open, a section that inherits a block through
-    * `${base}`, that value is the answer: the file may state the path there, and only `None` may
-    * mean that it does not.
+    * `${base}`, the file may state the path there, so resolution decides: against the file alone,
+    * with every variable answered, the path is there or it is not. Only when resolution fails is
+    * the value on the way the answer.
     */
   private[config] def at(obj: ConfigObject, path: List[String]): Option[ConfigValue] =
-    reach(obj, path).map(_._1)
+    reach(obj, path).flatMap {
+      case (v, Nil)                      => Some(v)
+      case (v, _) if supplies(obj, path) => Some(v)
+      case _                             => None
+    }
 
-  /** The value the author wrote as text at `path` itself. One on the way is no answer: the text of
-    * `keys = ${base} { region = "us" }` belongs to `keys.region`, not to `keys.secret`.
+  /** The value the author wrote as text at `path` itself, or, where the path holds a reference
+    * inside the file or passes through one, the value that reference copies it from. One on the way
+    * is no text of the path: the text of `keys = ${base} { region = "us" }` belongs to
+    * `keys.region`, not to `keys.secret`, while the text of `base.secret` is the text of
+    * `keys.secret`. A reference that loops back is followed once.
     */
-  private[config] def literal(obj: ConfigObject, path: List[String]): Option[ConfigValue] =
-    reach(obj, path).collect { case (v, true) if stated(v) => v }
+  private[config] def literal(obj: ConfigObject, path: List[String]): Option[ConfigValue] = {
+    def copies(v: ConfigValue, rest: List[String]): List[List[String]] =
+      if (rest.isEmpty && unresolvable(v.valueType()).exists(Container.contains)) Nil
+      else
+        Rendered
+          .scan(v.render(Rendered.Options))
+          .references
+          .map(Rendered.segments)
+          .filter(r => r.nonEmpty && at(obj, r).isDefined)
+    def go(path: List[String], seen: Set[List[String]]): Option[ConfigValue] =
+      if (seen(path)) None
+      else
+        reach(obj, path).flatMap { (v, rest) =>
+          Option.when(rest.isEmpty && stated(v))(v).orElse {
+            copies(v, rest).iterator.flatMap(r => go(r ++ rest, seen + path)).nextOption()
+          }
+        }
+    go(path, Set.empty)
+  }
 
-  /** `at`, with whether the value is the one at the path itself. */
-  private def reach(obj: ConfigObject, path: List[String]): Option[(ConfigValue, Boolean)] =
+  private val Container = Set(ConfigValueType.OBJECT, ConfigValueType.LIST)
+
+  /** `at`, with what of the path is left once the value is reached: nothing where it is the value
+    * at the path itself.
+    */
+  private def reach(obj: ConfigObject, path: List[String]): Option[(ConfigValue, List[String])] =
     path match {
-      case Nil         => Some(obj -> true)
+      case Nil         => Some(obj -> Nil)
       case key :: rest =>
         unresolvable(Option(obj.get(key))) match {
-          case None                          => Some(obj -> false)
+          case None                          => Some(obj -> path)
           case Some(Some(o: ConfigObject))   => reach(o, rest)
-          case Some(Some(v)) if rest.isEmpty => Some(v -> true)
-          case Some(Some(v)) if !resolved(v) => Some(v -> false)
+          case Some(Some(v)) if rest.isEmpty => Some(v -> Nil)
+          case Some(Some(v)) if !resolved(v) => Some(v -> rest)
           case _                             => None
         }
     }
+
+  /** Whether the file, resolved alone, holds `path`. Every variable is answered, so that a path an
+    * optional substitution may feed counts as fed, and a reference inside the file is followed.
+    * Where resolution fails the file may still state the path, so it counts as held.
+    */
+  private def supplies(obj: ConfigObject, path: List[String]): Boolean = {
+    def holds(o: ConfigObject, path: List[String]): Boolean =
+      path match {
+        case Nil         => true
+        case key :: rest =>
+          Option(o.get(key)) match {
+            case Some(next: ConfigObject) => holds(next, rest)
+            case Some(_)                  => rest.isEmpty
+            case None                     => false
+          }
+      }
+    try
+      holds(
+        obj.toConfig
+          .resolve(
+            ConfigResolveOptions
+              .defaults()
+              .setUseSystemEnvironment(false)
+              .setAllowUnresolved(true)
+              .appendResolver(Everything)
+          )
+          .root(),
+        path
+      )
+    catch { case _: ConfigException => true }
+  }
 
   /** Whether the library knows what `v` is before resolution: a substitution, or a merge or a
     * concatenation that holds one, is known only after.
@@ -292,6 +353,14 @@ object Config {
     */
   private val Landing = "\u0000eezo substitution\u0000"
 
+  /** Answers every variable with the placeholder, so that resolving the file alone drops no
+    * optional substitution and the paths it feeds stay in the tree.
+    */
+  private val Everything: ConfigResolver = new ConfigResolver {
+    def lookup(path: String): ConfigValue = ConfigValueFactory.fromAnyRef(Landing)
+    def withFallback(fallback: ConfigResolver): ConfigResolver = this
+  }
+
   /** Every path `variable` lands on once resolved, with only it answered. A value merged with a
     * substitution, `stripe { ... }` and then `stripe = ${?STRIPE}`, renders as one piece, so the
     * walk cannot tell from it which leaf a substitution inside it feeds; resolution can. Only one
@@ -316,7 +385,10 @@ object Config {
     catch { case _: ConfigException => Nil }
   }
 
-  private[config] def dotted(path: List[String]): String = path.mkString(".")
+  /** The path in HOCON's own quoting, so that a key that holds a dot and the nested path it looks
+    * like are different paths, in a message and in every map keyed by one.
+    */
+  private[config] def dotted(path: List[String]): String = ConfigUtil.joinPath(path.asJava)
 
   /** The tree resolved against `env` alone, through the library's resolver hook: a substitution is
     * answered from the file first and then, with the process's environment switched off, from the
@@ -333,6 +405,77 @@ object Config {
         .setAllowUnresolved(true)
         .appendResolver(Variables(env))
     )
+
+  /** What a refusal says of a path whose value resolution cannot build. It never holds the
+    * library's message, which quotes the variable's value.
+    */
+  private val Unjoinable =
+    "cannot be resolved: it joins a list or an object with a single value, or substitutes itself"
+
+  /** The file as a whole, for a refusal that has no one path to name. */
+  private val FileName = "application.conf"
+
+  /** The outermost paths of the unresolved tree that hold a substitution, in file order: the only
+    * values resolution can fail on.
+    */
+  private def substituting(obj: ConfigObject, prefix: List[String] = Nil): List[List[String]] =
+    obj.keySet.asScala.toList
+      .map(key => key -> obj.get(key))
+      .sortBy((key, v) => (v.origin().lineNumber(), key))
+      .flatMap { (key, v) =>
+        val path = prefix :+ key
+        v match {
+          case o: ConfigObject if unresolvable(o.keySet).isDefined => substituting(o, path)
+          case _ if Rendered.scan(v.render(Rendered.Options)).references.nonEmpty => List(path)
+          case _                                                                  => Nil
+        }
+      }
+
+  private def without(file: Tree, paths: List[List[String]]): Tree =
+    paths.foldLeft(file)((f, p) => f.withoutPath(ConfigUtil.joinPath(p.asJava)))
+
+  private def resolves(file: => Tree, env: Map[String, String]): Boolean =
+    try {
+      val _ = resolve(file, env)
+      true
+    } catch { case _: ConfigException => false }
+
+  /** The paths whose values resolution fails on. First those that fail with every other
+    * substitution left out, then, when they fail together as a loop does, the first whose removal
+    * lets the file resolve. The library's exception is no help, since its origin is the variable's,
+    * not the file's.
+    */
+  private def unjoinable(file: Tree, env: Map[String, String]): List[List[String]] = {
+    val candidates = substituting(file.root())
+    val alone      =
+      candidates.filter(p => !resolves(without(file, candidates.filterNot(_ == p)), env))
+    if (alone.nonEmpty) alone
+    else candidates.find(p => resolves(without(file, List(p)), env)).toList
+  }
+
+  /** The resolved tree, or, where resolution fails, the offenders for what it fails on and the tree
+    * resolved without them, so that the fields beside them are still read.
+    */
+  private def settle(file: Tree, env: Map[String, String]): (List[Offender], Option[ConfigObject]) =
+    try (Nil, Some(resolve(file, env).root()))
+    catch {
+      case _: ConfigException =>
+        val bad       = unjoinable(file, env)
+        val offenders = bad.map(p => Offender.Malformed(dotted(p), Unjoinable))
+        try (offenders, Some(resolve(without(file, bad), env).root()))
+        catch {
+          case _: ConfigException =>
+            (if (bad.isEmpty) List(Offender.Malformed(FileName, Unjoinable)) else offenders, None)
+        }
+    }
+
+  private def pathOf(offender: Offender): String =
+    offender match {
+      case Offender.Missing(path, _)   => path
+      case Offender.Malformed(path, _) => path
+      case Offender.Reserved(path, _)  => path
+      case Offender.Literal(path)      => path
+    }
 
   /** The origin of every value the map answers, so that a resolved Redacted leaf of any other
     * origin is known to be text of the file, also where the file copies it in through a reference
@@ -432,10 +575,16 @@ object Config {
         val reserved = written.substitutions.collect {
           case s if s.variable.startsWith(FrameworkPrefix) => Offender.Reserved(s.path, s.variable)
         }
-        readAt(Some(resolve(file, env).root()), Nil, written) match {
-          case Right(value) if reserved.isEmpty => Right(value)
-          case Right(_)                         => Left(Refused(reserved))
-          case Left(offenders)                  => Left(Refused(reserved ++ offenders))
+        val (unjoined, tree) = settle(file, env)
+        val read             =
+          tree.fold[Either[List[Offender], A]](Left(Nil))(t => readAt(Some(t), Nil, written))
+        // A path that failed to resolve is refused once, not again as missing from the tree.
+        val rest = read.left.getOrElse(Nil).filterNot { o =>
+          unjoined.exists(u => pathOf(o) == pathOf(u) || pathOf(o).startsWith(pathOf(u) + "."))
+        }
+        read match {
+          case Right(value) if reserved.isEmpty && unjoined.isEmpty => Right(value)
+          case _ => Left(Refused(reserved ++ unjoined ++ rest))
         }
       }
 

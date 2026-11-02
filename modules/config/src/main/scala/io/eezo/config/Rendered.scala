@@ -18,18 +18,21 @@ private[config] object Rendered {
   val Options: ConfigRenderOptions = ConfigRenderOptions.concise()
 
   /** `references` are the paths substituted, as the library hands them to a resolver, in the order
-    * they render; `literal` is whether any text sits beside them.
+    * they render; `literal` is whether any scalar text sits beside them. A list or an object is not
+    * text, and what sits inside one does not make the value text, though a substitution inside one
+    * is still a reference.
     */
   final case class Scan(references: List[String], literal: Boolean)
 
   def scan(rendered: String): Scan = {
     val references = List.newBuilder[String]
     var literal    = false
+    var depth      = 0
     var i          = 0
     while (i < rendered.length) {
       rendered(i) match {
         case '"' =>
-          literal = true
+          if (depth == 0) literal = true
           i = quoted(rendered, i)
         case '$' if rendered.startsWith("${", i) =>
           val end  = closing(rendered, i + 2)
@@ -38,10 +41,16 @@ private[config] object Rendered {
           i = end + 1
         // A merge of two values renders them side by side, separated by a comma.
         case c if c.isWhitespace || c == ',' => i += 1
+        case '[' | '{'                       =>
+          depth += 1
+          i += 1
+        case ']' | '}' =>
+          depth -= 1
+          i += 1
         // A null in a merge is no text the author wrote, so it is no literal either.
         case 'n' if token(rendered, i, "null") => i += 4
         case _                                 =>
-          literal = true
+          if (depth == 0) literal = true
           i += 1
       }
     }

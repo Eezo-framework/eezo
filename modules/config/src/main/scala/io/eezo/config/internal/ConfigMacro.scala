@@ -2,7 +2,13 @@ package io.eezo.config.internal
 
 import scala.quoted.*
 
-import com.typesafe.config.{ConfigException, ConfigFactory, ConfigObject, ConfigParseOptions}
+import com.typesafe.config.{
+  ConfigException,
+  ConfigFactory,
+  ConfigObject,
+  ConfigParseOptions,
+  ConfigValueType
+}
 
 import io.eezo.config.Config
 import io.eezo.core.{Parser, Redacted}
@@ -242,7 +248,11 @@ object ConfigMacro {
           case None                                             => failed = true
           case Some(shape.Leaf(_, default, optional, redacted)) =>
             file.foreach { root =>
-              val value = Config.at(root, segments)
+              // `read` counts a null as absent, so the check does too. The guard comes first,
+              // because the type of a substitution is known only after resolution.
+              val value = Config
+                .at(root, segments)
+                .filterNot(v => Config.resolved(v) && v.valueType() == ConfigValueType.NULL)
               if (value.isEmpty && default.isEmpty && !optional) {
                 failed = true
                 report.error(
