@@ -449,7 +449,10 @@ private[sbt] final class Loop(
     t
   }
 
+  private lazy val realBase: Path = Watcher.real(base.toPath)
+
+  /** `path`, as the watcher reports it, relative to the project: the label of a build. */
   private def relative(path: Path): String =
-    try base.toPath.relativize(path).toString.replace(File.separatorChar, '/')
+    try realBase.relativize(path).toString.replace(File.separatorChar, '/')
     catch { case _: IllegalArgumentException => path.toString }
 }
