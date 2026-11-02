@@ -429,6 +429,45 @@ class ConfigSuite extends munit.FunSuite {
     )
   }
 
+  test("a reference inside a list fallback is no literal either, set or unset") {
+    val file = ConfigFactory.parseString("""
+      port = 1
+      source = "sk_live_committed"
+      stripe { secretKey = [${source}], secretKey = ${?K}, webhookSecret = ${?W} }
+    """)
+    assertEquals(
+      Config[ShopConfig].read(file, Map("K" -> "k", "W" -> "w")).map(_.stripe.secretKey),
+      Right(Redacted("k"))
+    )
+    assertEquals(
+      Config[ShopConfig].read(file, Map("W" -> "w")),
+      Left(
+        Config.Refused(
+          Seq(
+            Config.Offender.Malformed("stripe.secretKey", "is a list, and one value was expected")
+          )
+        )
+      )
+    )
+  }
+
+  test("a reference inside a list beside a section's fields is no copy of any of them") {
+    val file = ConfigFactory.parseString("""
+      port = 1
+      leak { secretKey = "sk_live_committed" }
+      base { webhookSecret = ${?W} }
+      stripe = ${base} { secretKey = ${?K}, note = [${leak}] }
+    """)
+    assertEquals(
+      Config[ShopConfig].read(file, Map("K" -> "k", "W" -> "w")).map(_.stripe.secretKey),
+      Right(Redacted("k"))
+    )
+    assertEquals(
+      Config[ShopConfig].read(file, Map("W" -> "w")),
+      Left(Config.Refused(Seq(Config.Offender.Missing("stripe.secretKey", List("K")))))
+    )
+  }
+
   test("a quoted key that holds a dot is a path of its own, never the nested path") {
     val file = ConfigFactory.parseString("""
       port = 1

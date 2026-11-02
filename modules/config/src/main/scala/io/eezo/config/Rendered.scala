@@ -20,12 +20,15 @@ private[config] object Rendered {
   /** `references` are the paths substituted, as the library hands them to a resolver, in the order
     * they render; `literal` is whether any scalar text sits beside them. A list or an object is not
     * text, and what sits inside one does not make the value text, though a substitution inside one
-    * is still a reference.
+    * is still a reference. `copies` are the references that sit beside the scalar text and not
+    * inside a list or an object: only those can hand the value its text, because a substitution
+    * inside a list feeds an element of the list, never the value itself.
     */
-  final case class Scan(references: List[String], literal: Boolean)
+  final case class Scan(references: List[String], copies: List[String], literal: Boolean)
 
   def scan(rendered: String): Scan = {
     val references = List.newBuilder[String]
+    val copies     = List.newBuilder[String]
     var literal    = false
     var depth      = 0
     var i          = 0
@@ -35,9 +38,11 @@ private[config] object Rendered {
           if (depth == 0) literal = true
           i = quoted(rendered, i)
         case '$' if rendered.startsWith("${", i) =>
-          val end  = closing(rendered, i + 2)
-          val body = rendered.substring(i + 2, end)
-          references += body.stripPrefix("?").trim
+          val end       = closing(rendered, i + 2)
+          val body      = rendered.substring(i + 2, end)
+          val reference = body.stripPrefix("?").trim
+          references += reference
+          if (depth == 0) copies += reference
           i = end + 1
         // A merge of two values renders them side by side, separated by a comma.
         case c if c.isWhitespace || c == ',' => i += 1
@@ -54,7 +59,7 @@ private[config] object Rendered {
           i += 1
       }
     }
-    Scan(references.result(), literal)
+    Scan(references.result(), copies.result(), literal)
   }
 
   /** Whether `word` stands alone at `from`, ending where the rendering ends or a merge separates.

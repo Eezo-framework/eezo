@@ -286,11 +286,16 @@ object ConfigMacro {
               case None =>
                 seen = seen.updated(key, at)
                 // A substitution at the section path may resolve to a block, so only a value the
-                // library knows before resolution is refused here; the read refuses the rest.
+                // library knows before resolution is refused here; the read refuses the rest. A
+                // null is no value, as `read` counts it as an absent section, so the fields
+                // below decide whether the absent section is complete.
                 val asValue =
                   file
                     .flatMap(Config.at(_, segments))
-                    .filter(v => Config.resolved(v) && !v.isInstanceOf[ConfigObject])
+                    .filter(v =>
+                      Config.resolved(v) && v.valueType() != ConfigValueType.NULL &&
+                        !v.isInstanceOf[ConfigObject]
+                    )
                 asValue.foreach { v =>
                   failed = true
                   report.error(

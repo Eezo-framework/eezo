@@ -139,7 +139,7 @@ object EezoPlugin extends AutoPlugin {
     eezoConfigClass              := None,
     Compile / eezoGenerateConfig := configFile.value,
     Compile / sourceGenerators += (Compile / eezoGenerateConfig).taskValue,
-    watchTriggers += Glob((Compile / resourceDirectory).value / "application.conf"),
+    watchTriggers ++= ConfigFile.watched((Compile / resourceDirectory).value),
     // The command tasks, project level rather than scoped to `Compile` so that `sbt eezoStatus`
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
     // inherits everything the build already decided about running (fork, working directory,
@@ -523,8 +523,9 @@ object EezoPlugin extends AutoPlugin {
     cached(inputs).toSeq
   }
 
-  /** The unit `ConfigFile` writes, with no cache of its own: the work is one hash of one file, and
-    * an unchanged unit is not written again.
+  /** The unit `ConfigFile` writes, with no cache of its own: the work is one hash of each config
+    * file in the resource directory, small files read in a moment, and an unchanged unit is not
+    * written again.
     */
   private def configFile: Def.Initialize[Task[Seq[File]]] = Def.task {
     ConfigFile.write(

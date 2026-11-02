@@ -71,6 +71,13 @@ class RenderedSuite extends munit.FunSuite {
     )
   }
 
+  test("a reference inside a list is no copy of the value, though it is still a reference") {
+    val scan = Rendered.scan("""[${source}],${?A}""")
+    assertEquals(scan.references, List("source", "A"))
+    assertEquals(scan.copies, List("A"))
+    assert(!scan.literal)
+  }
+
   test("a reference inside the file hands on the text it copies, as a literal of its own path") {
     val hocon = """
       source = "committed"

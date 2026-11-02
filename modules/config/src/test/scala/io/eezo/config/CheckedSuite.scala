@@ -46,6 +46,27 @@ class CheckedSuite extends munit.FunSuite {
     )
   }
 
+  test("a section the file sets to null is read as absent, so a section of defaults is accepted") {
+    assertNoDiff(
+      compileErrors(
+        """Config.checked[CheckedSuite.Tuned]("modules/config/src/test/resources/checked-null-section.conf")"""
+      ),
+      ""
+    )
+  }
+
+  test("a section the file sets to null is absent, so its required value is refused as missing") {
+    val errors = compileErrors(
+      """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-null-required-section.conf")"""
+    )
+    assertNoDiff(
+      errors.linesIterator.filter(_.contains("application.conf neither")).mkString("\n").trim,
+      "error: application.conf neither states `keys.secret` nor feeds it from a variable, and " +
+        "`secret` has no default. Write `secret = ${?KEYS_SECRET}` under `keys` in the file, or " +
+        "give the field a default."
+    )
+  }
+
   test("a Redacted stated as a literal is refused with its line, never its text") {
     val errors = compileErrors(
       """Config.checked[CheckedSuite.App]("modules/config/src/test/resources/checked-wrong.conf")"""
@@ -212,6 +233,10 @@ object CheckedSuite {
   final case class Keys(secret: Redacted, region: String = "eu") derives Config
 
   final case class App(name: String, keys: Keys, banner: Option[String]) derives Config
+
+  final case class Pool(size: Int = 10) derives Config
+
+  final case class Tuned(name: String, pool: Pool) derives Config
 
   final case class Twice(a: Keys, b: Keys) derives Config
 

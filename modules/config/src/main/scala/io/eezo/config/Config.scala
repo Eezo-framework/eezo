@@ -214,12 +214,14 @@ object Config {
   private[config] def literal(obj: ConfigObject, path: List[String]): Option[ConfigValue] = {
     def copies(v: ConfigValue, rest: List[String]): List[List[String]] =
       if (rest.isEmpty && unresolvable(v.valueType()).exists(Container.contains)) Nil
-      else
-        Rendered
-          .scan(v.render(Rendered.Options))
-          .references
+      else {
+        val scan = Rendered.scan(v.render(Rendered.Options))
+        // A reference inside a list or an object feeds an element or a key of its own, so `r ++ rest`
+        // never names where the path takes its text from: only a reference beside the value can.
+        scan.copies
           .map(Rendered.segments)
           .filter(r => r.nonEmpty && at(obj, r).isDefined)
+      }
     def go(path: List[String], seen: Set[List[String]]): Option[ConfigValue] =
       if (seen(path)) None
       else
