@@ -138,6 +138,18 @@ object ConfigFile extends io.eezo.config.Config.Root.Generated {
   test("the root accepts a field whose Parser only the class's own scope imports") {
     assertNoDiff(compileErrors("Config.root[CheckedSuite.Scoped.Timed]"), "")
   }
+
+  test("the root refuses a case class field whose Config lives outside its companion") {
+    val errors = compileErrors("Config.root[CheckedSuite.Imported.Two]")
+    assert(
+      errors.contains(
+        "`Sub` at field `x` is a case class, and the root cannot tell a section from a value: " +
+          "neither Config[Sub] nor Parser[Sub] is in scope here. Put the given in the companion " +
+          "of `Sub`, or write `derives Config` on it."
+      ),
+      errors
+    )
+  }
 }
 
 object CheckedSuite {
@@ -156,5 +168,16 @@ object CheckedSuite {
   object Scoped {
     import Givens.given
     final case class Timed(timeout: java.time.Duration) derives Config
+  }
+
+  final case class Sub(a: Keys)
+
+  object SubGivens {
+    given Config[Sub] = Config.derived
+  }
+
+  object Imported {
+    import SubGivens.given
+    final case class Two(x: Sub, y: Keys) derives Config
   }
 }

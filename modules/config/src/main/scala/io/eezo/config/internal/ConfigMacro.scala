@@ -93,7 +93,18 @@ object ConfigMacro {
               // A class that derived Config had every field checked there; a Parser missing here
               // is only out of scope, so the field is a section exactly when it derives Config.
               case (None, Some(config)) if derived => Some(Section(config, tpe))
-              case (None, None) if derived         => Some(Leaf(None, default, optional, redacted))
+              // A case class here is ambiguous: a section whose Config given sits outside the
+              // companion looks exactly like a value whose Parser does, and a section mistaken
+              // for a value escapes the twice check and the file checks under it.
+              case (None, None) if derived && tpe.dealias.typeSymbol.flags.is(Flags.Case) =>
+                val short = tpe.dealias.typeSymbol.name
+                report.errorAndAbort(
+                  s"`$short` at field `$name` is a case class, and the root cannot tell a section " +
+                    s"from a value: neither Config[$short] nor Parser[$short] is in scope here. " +
+                    s"Put the given in the companion of `$short`, or write `derives Config` on it.",
+                  here
+                )
+              case (None, None) if derived => Some(Leaf(None, default, optional, redacted))
               case (Some(_), _) if defaulted && unreachable =>
                 report.errorAndAbort(
                   s"${sym.name} is defined inside a method and has a default, which a Config " +
@@ -142,6 +153,11 @@ object ConfigMacro {
         s"${TypeRepr.of[A].typeSymbol.name} cannot derive Config, for the reasons above.",
         here
       )
+    fields.foreach {
+      case shape.Field(name, at, Some(shape.Leaf(None, _, _, _))) =>
+        report.errorAndAbort(s"Field `$name` has no Parser to read it with.", at)
+      case _ => ()
+    }
     Expr.ofList(fields.collect {
       case shape.Field(name, _, Some(shape.Leaf(Some(parser), default, optional, redacted))) =>
         val d: Expr[Option[() => Any]] = default match {
