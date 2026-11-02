@@ -72,10 +72,11 @@ create unique index "uq_book_title" on "book" ("title");
   runs to the end of its line and a quote inside it opens nothing, but a `;` there still ends the
   statement, because that is where the terminator of a statement ending in a comment sits. A line
   that is only a `--` comment is left out of the statements, unless that line is inside a literal,
-  a dollar quote, or a block comment.
-- Two readings of the file are prepared. The scanned one follows the rule above, over the raw
-  file. The plain one removes every line that begins with `--` and then splits on every `;`. The
-  declared fingerprint picks between them. A file that verified under the plain split still
+  a quoted identifier, a dollar quote, or a block comment.
+- Two readings of the file are prepared. The scanned one follows the rule above, over the file
+  with line endings normalised to `\n`. The plain one removes every line that begins with `--`
+  and then splits on every `;`. The declared fingerprint picks between them. A file that verified
+  under the plain split still
   verifies. When neither reading matches the fingerprint, `migrate` refuses the batch.
 - Not understood: a backslash escaped quote, and a `;` inside a `--` comment's own text. These
   split where a reader would not expect, so a statement written by hand avoids them. The plain

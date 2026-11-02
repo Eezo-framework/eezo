@@ -40,18 +40,19 @@ object Migration {
     *
     * The plain split still sees every line that begins with `--` removed first, which is the
     * reading a file written before the scanner knew about quotes was checked against. The scanned
-    * split sees the raw file, and drops such a line only when it starts outside a quote, so a line
-    * of a literal or a dollar quoted body is kept.
+    * split sees that same text, line endings normalised to `\n`, and drops such a line only when it
+    * starts outside a literal, a quoted identifier, a dollar quote, and a block comment.
     *
     * A backslash escaped quote is still not understood, and a `;` inside a `--` comment's own text
     * still cuts. The second is deliberate: `render` writes the terminator of a statement that ends
     * in a comment on that same line, so a `;` there has to end the statement.
     */
   def parse(content: String): Option[(String, List[String])] = {
-    val declared = content.linesIterator.collectFirst { case Header(f) => f }
-    val filtered = content.linesIterator.filterNot(_.trim.startsWith("--")).mkString("\n")
-    val scanned  = splitStatements(content)
-    val plain    = filtered.split(";").map(_.trim).filter(_.nonEmpty).toList
+    val declared   = content.linesIterator.collectFirst { case Header(f) => f }
+    val normalised = content.linesIterator.mkString("\n")
+    val filtered   = content.linesIterator.filterNot(_.trim.startsWith("--")).mkString("\n")
+    val scanned    = splitStatements(normalised)
+    val plain      = filtered.split(";").map(_.trim).filter(_.nonEmpty).toList
     declared.map { f =>
       if (fingerprint(scanned) == f || fingerprint(plain) != f) f -> scanned else f -> plain
     }
@@ -71,8 +72,9 @@ object Migration {
     * A `--` comment runs to the end of its line, and inside it a quote is inert: an apostrophe in
     * `-- don't` opens nothing. A `;` there still terminates, because `render` writes the statement
     * terminator on the same line as the statement. A line that is only such a comment, and that
-    * starts outside any quote, is left out of the statement text, so the header is not part of a
-    * statement and a line of a literal that begins with `--` is kept.
+    * starts outside a literal, a quoted identifier, a dollar quote, and a block comment, is left
+    * out of the statement text. The header is not part of a statement. A line of one of those that
+    * begins with `--` is kept.
     */
   private def splitStatements(body: String): List[String] = {
     val buf                    = new StringBuilder
