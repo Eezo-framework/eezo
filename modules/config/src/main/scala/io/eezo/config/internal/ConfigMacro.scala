@@ -141,49 +141,19 @@ object ConfigMacro {
   private val Reference = """\$\{(\??)([^}]+)\}""".r
   private val Concise   = ConfigRenderOptions.concise()
 
-  def root[A: Type](c: Expr[Config[A]])(using q: Quotes): Expr[Config.Root[A]] = {
+  /** `pathExpr` is the literal the generated unit passes, or `None` from `Config.root`. The path
+    * reaches the macro as an argument because the plugin writes the call itself, into a unit the
+    * incremental compiler recompiles whenever the file changes, since the unit's text changes with
+    * it. No channel through the build's flags is needed, and none is experimental.
+    */
+  def root[A: Type](c: Expr[Config[A]], pathExpr: Expr[Option[String]])(using
+      q: Quotes
+  ): Expr[Config.Root[A]] = {
     import q.reflect.*
     val here  = Position.ofMacroExpansion
     val shape = new Shape[q.type]
 
-    // The path reaches the macro through `io.eezo.generated.ConfigFile`, an object the sbt plugin
-    // writes beside `Routes`, because `CompilationInfo.XmacroSettings`, the channel a
-    // `-Xmacro-settings` flag would use, is `@experimental` in Scala 3.8.4 and would make every
-    // entry object experimental with it. A project without the plugin has no such object, and
-    // the check is silent.
-    // `requiredModule` answers a stub for a path nothing defines, so the object counts as present
-    // only when both constants are there to read.
-    val generated: Option[Symbol] =
-      try {
-        Some(Symbol.requiredModule("io.eezo.generated.ConfigFile")).filter { m =>
-          !m.isNoSymbol && !m.fieldMember("path").isNoSymbol && !m.fieldMember("digest").isNoSymbol
-        }
-      } catch { case _: Exception => None }
-
-    def constant(name: String): Option[String] =
-      generated.map(_.fieldMember(name)).flatMap { field =>
-        field.termRef.widenTermRefByName match {
-          case ConstantType(StringConstant(value)) => Some(value)
-          case _                                   => None
-        }
-      }
-
-    val path = constant("path")
-
-    // The expansion names the generated object's digest as a type argument, so that the class
-    // depends on it: when the plugin rewrites the object for an edited file, the alias changes, the
-    // incremental compiler recompiles the class and the check runs again. A reference to the
-    // constant value is folded to a literal before the dependency is recorded, and does not do.
-    val digest = constant("digest").getOrElse("")
-
-    def stamped(root: Expr[Config.Root[A]]): Expr[Config.Root[A]] =
-      generated.flatMap(_.typeMembers.find(_.name.startsWith("Stamp_"))) match {
-        case Some(stamp) =>
-          stamp.typeRef.asType match {
-            case '[d] => '{ Config.Root.stamped[d, A]($root) }
-          }
-        case None => root
-      }
+    val path: Option[String] = pathExpr.value.flatten
 
     // The file, when the build named one. Parsed and never resolved: what is checked is what the
     // author wrote, the literal or the reference, not what the compiler's environment holds.
@@ -277,6 +247,6 @@ object ConfigMacro {
         s"${TypeRepr.of[A].typeSymbol.name} cannot be read from application.conf, for the reasons above.",
         here
       )
-    stamped('{ new Config.Root[A]($c, "application.conf", ${ Expr(digest) }) })
+    '{ new Config.Root[A]($c, "application.conf") }
   }
 }

@@ -115,6 +115,8 @@ lazy val shop = (project in file("shop"))
   .settings(commonSettings)
   .settings(
     name := "shop",
+    // SPIKE (issue 393): the class application.conf is read into; the plugin writes the root.
+    eezoConfigClass := Some("config.Settings"),
     libraryDependencies ++= Seq(
       layer("eezo"),
       layer("eezo-auth"),

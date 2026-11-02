@@ -136,10 +136,10 @@ object Config {
     )
   }
 
-  /** The entry object's one value: the class the application reads, checked against the file at
-    * compile time when the build hands the macro its path, and read at boot.
+  /** The class the application reads, checked against the file at compile time where the build
+    * writes the root into the generated unit, and read at boot.
     */
-  final class Root[A](val config: Config[A], val resource: String, val digest: String) {
+  final class Root[A](val config: Config[A], val resource: String) {
 
     /** Parses the packaged resource, reads it against the real environment, installs on success.
       * The caller decides how a refusal stops the program.
@@ -153,21 +153,33 @@ object Config {
     }
   }
 
-  /** A marker: the digest of the file the root was checked against, as a type. */
-  sealed trait Stamped[D]
-
   object Root {
 
-    /** Identity, with the file's digest as a type in the result: what makes the entry object
-      * depend on the generated object the way the incremental compiler tracks. The compiler
-      * records nothing from inside a macro's expansion, but it records the inferred type of the
-      * value the expansion is assigned to, and `root` is transparent so that type is this one.
+    /** What the generated unit's object is: the build names the class, the plugin writes
+      * `object ConfigFile extends Config.Root.Generated` beside `Routes`, and boot finds it here.
       */
-    def stamped[D, A](root: Root[A]): Root[A] & Stamped[D] = root.asInstanceOf[Root[A] & Stamped[D]]
+    trait Generated { def root: Root[?] }
+
+    /** The root the build wrote, or `None` in a project whose build names no class. Looked up by
+      * its fixed name through the context class loader, which is the application's under `run`
+      * and in the forked JVM alike.
+      */
+    def generated: Option[Root[?]] = {
+      val loader = Option(Thread.currentThread.getContextClassLoader).getOrElse(getClass.getClassLoader)
+      try {
+        val module = Class.forName("io.eezo.generated.ConfigFile$", true, loader)
+        Some(module.getField("MODULE$").get(null).asInstanceOf[Generated].root)
+      } catch { case _: ClassNotFoundException => None }
+    }
   }
 
-  transparent inline def root[A](using inline c: Config[A]): Root[A] =
-    ${ internal.ConfigMacro.root[A]('c) }
+  /** A root with no file to check against: what a suite or a project without the plugin writes. */
+  inline def root[A](using inline c: Config[A]): Root[A] =
+    ${ internal.ConfigMacro.root[A]('c, '{ None }) }
+
+  /** The root the generated unit writes: the class checked against the file at `path`. */
+  inline def checked[A](inline path: String)(using inline c: Config[A]): Root[A] =
+    ${ internal.ConfigMacro.root[A]('c, '{ Some(path) }) }
 
   inline def derived[A](using m: Mirror.ProductOf[A]): Config[A] = make[A](slots[A], m)
 

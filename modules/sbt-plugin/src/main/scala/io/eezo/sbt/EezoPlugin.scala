@@ -83,6 +83,14 @@ object EezoPlugin extends AutoPlugin {
     val eezoJavaVersion: SettingKey[String] =
       settingKey[String]("Java version of the deployment base image (eclipse-temurin JRE).")
 
+    // SPIKE (issue 393): the class application.conf is read into. Named once here, so the plugin
+    // writes the root into the generated unit and the entry object writes nothing.
+    val eezoConfigClass: SettingKey[Option[String]] =
+      settingKey[Option[String]](
+        "The case class src/main/resources/application.conf is read into, fully qualified; " +
+          "None means the project has no configuration."
+      )
+
     // The stylesheet generator. `@transient` for the reason `eezoGenerateRoutes` is: the result is
     // a `Seq[File]`, and the generator keeps a cache of its own below.
     @transient val eezoTailwind: TaskKey[Seq[File]] =
@@ -117,30 +125,33 @@ object EezoPlugin extends AutoPlugin {
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
-    // SPIKE (issue 393): the path of `application.conf` and a digest of its content, written as
-    // constants of `io.eezo.generated.ConfigFile` for the `Config.root` macro, which checks the
-    // file against the class. A constant and not a `-Xmacro-settings` flag, because the macro API
-    // that reads the flag is experimental in Scala 3.8.4. The digest, as the name of a trait the
-    // root's type names, is what makes an edit to the file alone recompile the entry object: a
-    // literal type alias is dealiased away and a constant is folded away before the incremental
-    // compiler records dependencies, a trait's name is not.
+    // SPIKE (issue 393): when the build names the class, the plugin writes the root into
+    // `io.eezo.generated.ConfigFile`, beside `Routes`. The file's digest is in the text, so an edit
+    // to the file alone rewrites the unit and the incremental compiler recompiles it; the class is
+    // named in it, so an edit to the class alone recompiles it too. Boot finds the object by name.
+    eezoConfigClass := None,
     Compile / sourceGenerators += Def.task {
       val conf        = (Compile / resourceDirectory).value / "application.conf"
       val destination =
         (Compile / sourceManaged).value / "io" / "eezo" / "generated" / "ConfigFile.scala"
-      val digest = if (conf.exists) Hash.toHex(Hash(conf)) else ""
-      val text   =
-        s"""package io.eezo.generated
-           |
-           |/** Written by sbt-eezo from src/main/resources/application.conf; do not edit. */
-           |object ConfigFile {
-           |  final val path = "${conf.getPath}"
-           |  final val digest = "$digest"
-           |  sealed trait Stamp_$digest
-           |}
-           |""".stripMargin
-      if (!destination.exists || IO.read(destination) != text) IO.write(destination, text)
-      Seq(destination)
+      eezoConfigClass.value match {
+        case None =>
+          IO.delete(destination)
+          Seq.empty[File]
+        case Some(cls) =>
+          val digest = if (conf.exists) Hash.toHex(Hash(conf)) else "absent"
+          val text   =
+            s"""package io.eezo.generated
+               |
+               |/** Written by sbt-eezo from src/main/resources/application.conf ($digest); do not edit. */
+               |object ConfigFile extends io.eezo.config.Config.Root.Generated {
+               |  val root: io.eezo.config.Config.Root[$cls] =
+               |    io.eezo.config.Config.checked[$cls]("${conf.getPath}")
+               |}
+               |""".stripMargin
+          if (!destination.exists || IO.read(destination) != text) IO.write(destination, text)
+          Seq(destination)
+      }
     }.taskValue,
     // The dev loop rebuilds when the file changes; whether a rebuild recompiles the class is what
     // the spike measures.
