@@ -117,6 +117,32 @@ object EezoPlugin extends AutoPlugin {
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
+    // SPIKE (issue 393): the path of `application.conf` and a digest of its content, written as
+    // constants of `io.eezo.generated.ConfigFile` for the `Config.root` macro, which checks the
+    // file against the class. A constant and not a `-Xmacro-settings` flag, because the macro API
+    // that reads the flag is experimental in Scala 3.8.4. The digest is what makes an edit to the
+    // file alone recompile the class: the object's API changes, and the class refers to it.
+    Compile / sourceGenerators += Def.task {
+      val conf        = (Compile / resourceDirectory).value / "application.conf"
+      val destination =
+        (Compile / sourceManaged).value / "io" / "eezo" / "generated" / "ConfigFile.scala"
+      val digest = if (conf.exists) Hash.toHex(Hash(conf)) else ""
+      val text   =
+        s"""package io.eezo.generated
+           |
+           |/** Written by sbt-eezo from src/main/resources/application.conf; do not edit. */
+           |object ConfigFile {
+           |  final val path = "${conf.getPath}"
+           |  final val digest = "$digest"
+           |}
+           |""".stripMargin
+      if (!destination.exists || IO.read(destination) != text) IO.write(destination, text)
+      Seq(destination)
+    }.taskValue,
+    // The dev loop rebuilds when the file changes; whether a rebuild recompiles the class is what
+    // the spike measures.
+    Compile / eezoGenerateRoutes / watchTriggers +=
+      Glob((Compile / resourceDirectory).value, "application.conf"),
     // The command tasks, project level rather than scoped to `Compile` so that `sbt eezoStatus`
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
     // inherits everything the build already decided about running (fork, working directory,

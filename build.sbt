@@ -108,6 +108,13 @@ def module(id: String): Project =
 // an HTTP status.
 lazy val core = module("core")
 
+// SPIKE (issue 393): the application's configuration read from `application.conf`. Holds the
+// HOCON parser and the `Config` derivation, moved out of `core` so that `core` stays dependency
+// free. `test->test` on `core` for `Captured`.
+lazy val config = module("config")
+  .dependsOn(core % "compile->compile;test->test")
+  .settings(libraryDependencies += typesafeConfig)
+
 // Jetty boot, request parsing, response writing, file based routing.
 lazy val http = module("http")
   .dependsOn(core % "compile->compile;test->test")
@@ -175,6 +182,7 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(
     core % "compile->compile;test->test",
+    config,
     http,
     db,
     live % "compile->compile;test->test",
@@ -258,7 +266,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
+  .aggregate(core, config, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
   .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
@@ -271,6 +279,7 @@ lazy val root = (project in file("."))
     // is a 2.12 cross build and the demo is not an API, so neither is documented here.
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
       core,
+      config,
       http,
       db,
       live,

@@ -44,6 +44,9 @@ object Dependencies {
       * adds `eezo-upickle` beside its own upickle meets no eviction.
       */
     val upickle = "4.4.3"
+
+    /** Typesafe Config, the HOCON parser. SPIKE: the version is the latest on Maven Central. */
+    val typesafeConfig = "1.4.3"
   }
 
   /** The test framework. Every module gets it; nothing else is shared by default. */
@@ -109,4 +112,7 @@ object Dependencies {
     * library, so an application chooses the one it serializes with by choosing the adapter.
     */
   val upickle = "com.lihaoyi" %% "upickle" % V.upickle
+
+  /** SPIKE: the HOCON parser behind `eezo-config`, and only there. */
+  val typesafeConfig = "com.typesafe" % "config" % V.typesafeConfig
 }
