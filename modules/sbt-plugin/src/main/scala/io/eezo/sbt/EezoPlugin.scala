@@ -120,10 +120,10 @@ object EezoPlugin extends AutoPlugin {
     // SPIKE (issue 393): the path of `application.conf` and a digest of its content, written as
     // constants of `io.eezo.generated.ConfigFile` for the `Config.root` macro, which checks the
     // file against the class. A constant and not a `-Xmacro-settings` flag, because the macro API
-    // that reads the flag is experimental in Scala 3.8.4. The digest, as a literal type the root's
-    // expansion names, is what makes an edit to the file alone recompile the class: a reference
-    // to the constant value is folded away before the incremental compiler records it, a type
-    // argument is not.
+    // that reads the flag is experimental in Scala 3.8.4. The digest, as the name of a trait the
+    // root's type names, is what makes an edit to the file alone recompile the entry object: a
+    // literal type alias is dealiased away and a constant is folded away before the incremental
+    // compiler records dependencies, a trait's name is not.
     Compile / sourceGenerators += Def.task {
       val conf        = (Compile / resourceDirectory).value / "application.conf"
       val destination =
@@ -135,8 +135,8 @@ object EezoPlugin extends AutoPlugin {
            |/** Written by sbt-eezo from src/main/resources/application.conf; do not edit. */
            |object ConfigFile {
            |  final val path = "${conf.getPath}"
-           |  type Digest = "$digest"
            |  final val digest = "$digest"
+           |  sealed trait Stamp_$digest
            |}
            |""".stripMargin
       if (!destination.exists || IO.read(destination) != text) IO.write(destination, text)

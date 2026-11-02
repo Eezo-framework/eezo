@@ -12,7 +12,9 @@ object Main extends EezoApp with Configured {
     * `application.conf` against it. No type ascription: the inferred type carries the file's
     * digest, which is what makes an edit to the file alone recompile this object.
     */
-  override val config = Config.root[Settings]
+  val settings = Config.root[Settings]
+
+  override val config = settings
 
   override def schema: Schema     = AppSchema
   override def routes: RouteTable = Routes.table()
@@ -25,3 +27,5 @@ object Main extends EezoApp with Configured {
     */
   override def databaseSchema: String = "shop"
 }
+
+

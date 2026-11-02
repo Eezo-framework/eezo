@@ -177,9 +177,9 @@ object ConfigMacro {
     val digest = constant("digest").getOrElse("")
 
     def stamped(root: Expr[Config.Root[A]]): Expr[Config.Root[A]] =
-      generated.map(_.typeMember("Digest")).filterNot(_.isNoSymbol) match {
-        case Some(alias) =>
-          alias.typeRef.asType match {
+      generated.flatMap(_.typeMembers.find(_.name.startsWith("Stamp_"))) match {
+        case Some(stamp) =>
+          stamp.typeRef.asType match {
             case '[d] => '{ Config.Root.stamped[d, A]($root) }
           }
         case None => root
