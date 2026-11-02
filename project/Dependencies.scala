@@ -44,6 +44,11 @@ object Dependencies {
       * adds `eezo-upickle` beside its own upickle meets no eviction.
       */
     val upickle = "4.4.3"
+
+    /** Typesafe Config. The library has no dependency of its own, so `eezo-config` costs an
+      * application one jar.
+      */
+    val typesafeConfig = "1.4.3"
   }
 
   /** The test framework. Every module gets it; nothing else is shared by default. */
@@ -109,4 +114,10 @@ object Dependencies {
     * library, so an application chooses the one it serializes with by choosing the adapter.
     */
   val upickle = "com.lihaoyi" %% "upickle" % V.upickle
+
+  /** The HOCON parser behind `eezo-config`, and only there. `application.conf` is HOCON because its
+    * substitution, `${?VAR}`, is how the environment reaches a value, so the file names every
+    * variable it reads and no naming rule has to be guessed.
+    */
+  val typesafeConfig = "com.typesafe" % "config" % V.typesafeConfig
 }

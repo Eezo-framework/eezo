@@ -21,6 +21,7 @@ The plugin does nothing until a project enables it. An application with no route
 | task | what it does |
 |---|---|
 | `eezoGenerateRoutes` | writes `Routes.scala`; runs on every compile as a source generator, cached on the sources' hashes |
+| `eezoGenerateConfig` | writes `ConfigFile.scala` when `eezoConfigClass` names a class, and deletes it when it names none; runs on every compile as a source generator |
 | `eezoDev` | an alias for `~eezoRestart`: restart on every save |
 | `eezoRestart` | prints `eezo dev: building`, compiles, kills the running application, forks a fresh JVM running `Main dev`, prints `eezo dev: started <Main>`; the two lines are what `eezo dev` builds its console from |
 | `eezoStop` | stops the forked application, if any |
@@ -42,12 +43,13 @@ console.
 | key | default | notes |
 |---|---|---|
 | `eezoJavaVersion` | `"25"` | the JRE tag `eezoStage` writes into the Dockerfile |
+| `eezoConfigClass` | `None` | the case class `src/main/resources/application.conf` is read into, fully qualified; `Some` makes the build check the file against it |
 | `Compile / run / connectInput` | `true` | set by the plugin so `freeze` can prompt |
 | `Compile / eezoGenerateRoutes / watchTriggers` | `src/main/scala/**/*.scala` | what the watch reacts to |
 | `eezoTailwindVersion` | `"4.3.3"` | the Tailwind release `eezoTailwind` fetches |
 | `eezoTailwindInput` | `baseDirectory.value / "tailwind.css"` | the stylesheet `eezoTailwind` compiles; absent means no Tailwind |
 | `eezoTailwindCli` | `None` | a Tailwind CLI already on the machine, instead of the fetched one |
-| `watchTriggers` | `+= tailwind.css` | project level, so an edit to the stylesheet alone restarts the dev loop |
+| `watchTriggers` | `+= tailwind.css`, `+= src/main/resources/application.conf` | project level, so an edit to the stylesheet or the file alone restarts the dev loop |
 
 `run / fork := true` is the scaffold's, not the plugin's, and it's needed: the application
 runs on the JDK floor, and sbt's own JVM may not be on it.
@@ -91,6 +93,14 @@ cache key, because no source file carries them:
 
 Adding either dependency therefore regenerates the table on the next compile with no source
 change.
+
+When `eezoConfigClass` names a class, a second file sits beside it,
+`io/eezo/generated/ConfigFile.scala`. It holds one call, `Config.checked[<class>](<path>)`, with
+the absolute path of `src/main/resources/application.conf`, and the file's SHA-256 in its first
+line. The call checks the file against the class at compile time. The digest is there because the
+incremental compiler never looks inside a macro: an edit to the file alone changes the unit's
+text, so the unit is compiled and checked again. With `None` the plugin writes no such file and
+deletes one left from before.
 
 ## sbt versions
 

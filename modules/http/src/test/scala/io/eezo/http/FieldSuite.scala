@@ -6,7 +6,7 @@ import io.eezo.core.Parser
   *
   * Every case here is a way the split could go wrong in silence: the strict core Boolean leaking
   * into a checkbox and refusing `on`, the lenient checkbox reading leaking out as a given, or a
-  * Field passing for a Parser where a later Config summons one.
+  * Field passing for a Parser where Config summons one.
   */
 class FieldSuite extends munit.FunSuite {
 
