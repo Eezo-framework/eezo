@@ -110,10 +110,19 @@ final case class Request(
     * `Map[String, String]` drops them in silence. Memoised, because the `_method` override reads
     * the body before dispatch and the handler reads it again. `multipart/form-data` is out of
     * scope: this is `application/x-www-form-urlencoded` only.
+    *
+    * A body that is not valid percent encoding, such as `name=50%`, is the client's mistake, so it
+    * is a [[BadRequest]] rather than the decoder's own exception, which the boundary would answer
+    * with a 500.
     */
   lazy val form: Map[String, Seq[String]] =
     if (!isFormEncoded) Map.empty
-    else Request.decodeForm(new String(body, StandardCharsets.UTF_8))
+    else
+      try Request.decodeForm(new String(body, StandardCharsets.UTF_8))
+      catch {
+        case _: IllegalArgumentException =>
+          throw BadRequest("the form body is not valid percent encoding")
+      }
 
   /** Whether the body is one a form submission produces, which is the single place that question is
     * answered.

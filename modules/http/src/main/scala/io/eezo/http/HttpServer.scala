@@ -8,6 +8,7 @@ import java.util.concurrent.TimeoutException
 import scala.jdk.CollectionConverters.*
 
 import io.eezo.core.html.Html
+import org.eclipse.jetty.http.HttpException
 import org.eclipse.jetty.server.Handler as JettyHandler
 import org.eclipse.jetty.server.NetworkConnector
 import org.eclipse.jetty.server.Request as JettyRequest
@@ -527,8 +528,17 @@ private[eezo] object HttpServer {
     response.write(true, ByteBuffer.wrap(bytes), callback)
   }
 
+  /** The query string, decoded. Jetty refuses one that is not valid percent encoding, such as
+    * `?q=%`, with an exception that carries a 400 eezo's boundary does not read, so it is turned
+    * into the [[BadRequest]] it means here, where the request is read.
+    */
   private def queryOf(request: JettyRequest): Map[String, Seq[String]] = {
-    val fields = JettyRequest.extractQueryParameters(request)
+    val fields =
+      try JettyRequest.extractQueryParameters(request)
+      catch {
+        case _: HttpException =>
+          throw BadRequest("the query string is not valid percent encoding")
+      }
     fields.getNames.asScala.map(name => name -> fields.getValuesOrEmpty(name).asScala.toSeq).toMap
   }
 

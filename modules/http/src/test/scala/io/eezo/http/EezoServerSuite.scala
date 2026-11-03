@@ -3,6 +3,7 @@ package io.eezo.http
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -244,6 +245,34 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
+  test("a malformed percent escape in the query string or the form body is a 400, not a 500") {
+    @volatile var ran = false
+    val routes        = RouteTable(
+      Seq(
+        Route.Http(
+          Method.GET,
+          PathPattern.parse("/search"),
+          _ => { ran = true; Response.Ok(Html.text("ok")) }
+        ),
+        Route.Http(
+          Method.POST,
+          PathPattern.parse("/widgets"),
+          req => { ran = true; Response.Ok(Html.text(req.form.toString)) }
+        )
+      )
+    )
+    serving(routes) { (_, port) =>
+      for (query <- Seq("q=%", "q=%zz", "%=1"))
+        assertEquals(status(port, s"/search?$query"), 400, clue(query))
+      for (body <- Seq("name=%", "name=50%", "%zz=1")) {
+        val response = submit(port, "/widgets", handed(), body)
+        assertEquals(response.statusCode(), 400, clue(body))
+        assert(clue(response.body()).contains("not valid percent encoding"))
+      }
+      assert(!ran)
+    }
+  }
+
   test("a byte body is written as it stands, with the headers the handler set") {
     val routes = RouteTable(
       Seq(
@@ -333,5 +362,21 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     serving(hello, dev = true) { (_, port) =>
       assertEquals(get(port, Reload.path).statusCode(), 404)
     }
+  }
+
+  /** The status of a `GET` sent over a bare socket, for a target the JDK's client refuses to send,
+    * such as a query string with a malformed percent escape.
+    */
+  private def status(port: Int, target: String): Int = {
+    val socket = new java.net.Socket(Loopback, port)
+    try {
+      socket.setSoTimeout(5000)
+      socket.getOutputStream.write(
+        s"GET $target HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+          .getBytes(StandardCharsets.US_ASCII)
+      )
+      val reply = new String(socket.getInputStream.readAllBytes(), StandardCharsets.US_ASCII)
+      reply.takeWhile(_ != '\r').split(' ')(1).toInt
+    } finally socket.close()
   }
 }
