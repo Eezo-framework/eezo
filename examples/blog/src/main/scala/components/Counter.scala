@@ -24,10 +24,11 @@ final class Counter extends Component[Int] {
 
   def render(count: Int): Html =
     div(
-      Attrs.style := "font-family: system-ui; text-align: center; margin-top: 4rem",
-      h1("eezo live counter"),
-      p(Attrs.style := "font-size: 4rem; margin: 1rem", span(count)),
+      Attrs.cls := "mt-16 text-center",
+      h1("eezo live counter rotate-3"),
+      p(Attrs.cls := "my-4 text-6xl font-light tabular-nums", span(count)),
       div(
+        Attrs.cls := "flex justify-center gap-2",
         button(Live.onClick("dec"), "−"),
         button(Live.onClick("reset"), "reset"),
         button(Live.onClick("inc"), "+")

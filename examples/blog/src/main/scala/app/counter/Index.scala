@@ -9,9 +9,10 @@ import components.Counter
 
 /** `app/counter/Index.scala` mounts `GET /counter`, calling `def index`.
   *
-  * The handler owns the whole document — title, styling, chrome — and drops the live component in
-  * with `Live.mount`, which returns the anchor and the client script as one fragment. This is the
-  * envelope rule (design/live.md §2.3): the framework injects only the mount, never the page.
+  * The handler returns a title and the live component, dropped in with `Live.mount`, which returns
+  * the anchor and the client script as one fragment; the layout named in `Main` puts the document
+  * around them. The framework injects only the mount, never the page (design/live.md §2.3): the
+  * frame is the application's own.
   */
 object Index {
 
@@ -19,10 +20,5 @@ object Index {
   given Guarded[Index.type] = Guarded.public
 
   def index(request: Request): Response =
-    Response.Ok(
-      Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("eezo live counter")),
-        body(Live.mount(request, new Counter))
-      )
-    )
+    Response.Ok(title("eezo live counter") ++ Live.mount(request, new Counter))
 }

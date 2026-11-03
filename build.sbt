@@ -100,22 +100,34 @@ def module(id: String): Project =
     .settings(commonSettings)
     .settings(name := s"eezo-$id")
 
-// The framework's own types: configuration, the HTML node tree and DSL, the model key `Id[T]`, and
-// what everything else builds on. `core` holds what has no dependencies of its own and at least two
-// dependent modules, which is why `Id` is here: `db` stores one and `http` reads one out of a path
-// and a form, and those two are siblings that never see each other. Not errors: the eezo exception
-// set lives in `http`, so that `db`, which depends on `core` and never on `http`, cannot reach for
-// an HTTP status.
+// The framework's own types: `Parser` and `Redacted`, the HTML node tree and DSL, the model key
+// `Id[T]`, and what everything else builds on. `core` holds what has no dependencies of its own and
+// at least two dependent modules, which is why `Id` is here: `db` stores one and `http` reads one
+// out of a path and a form, and those two are siblings that never see each other. Not errors: the
+// eezo exception set lives in `http`, so that `db`, which depends on `core` and never on `http`,
+// cannot reach for an HTTP status.
 lazy val core = module("core")
 
-// Jetty boot, request parsing, response writing, file based routing.
-lazy val http = module("http")
+// The application's configuration: `derives Config`, read from `application.conf` through Typesafe
+// Config's HOCON parser. A module of its own so that `core` stays free of dependencies, and under
+// both layers rather than in one, since an application on either layer has a configuration to
+// read and its entry trait reads it before the application starts. `test->test` on `core`, as the
+// layers have it, so a suite here can share core's helpers.
+lazy val config = module("config")
   .dependsOn(core % "compile->compile;test->test")
+  .settings(libraryDependencies += typesafeConfig)
+
+// Jetty boot, request parsing, response writing, file based routing. `config` because `HttpApp`
+// reads the application's configuration before it serves; `config` sees only `core`, so `http`
+// still never sees `db`. `test->test` on it for the loader its suites boot a Config through.
+lazy val http = module("http")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, slf4jJdk14, jettyWsClient))
 
-// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
+// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect. `config`
+// because `DbApp` reads the application's configuration before it installs a `Database`.
 lazy val db = module("db")
-  .dependsOn(core % "compile->compile;test->test")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(postgresql, hikari, slf4jJdk14, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
@@ -174,7 +186,8 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // sign in rather than spell either a second time.
 lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(
-    core % "compile->compile;test->test",
+    core   % "compile->compile;test->test",
+    config % "compile->compile;test->test",
     http,
     db,
     live % "compile->compile;test->test",
@@ -187,6 +200,11 @@ lazy val eezo = (project in file("modules/eezo"))
   // `live`'s test classpath happens to carry.
   .settings(libraryDependencies += jettyWsClient)
 
+// The Tailwind CSS release the plugin fetches for an application that names none in its build.
+// Here rather than in the plugin's source, so a bump is a one line change beside every other
+// version this build pins; the plugin reads it through the generated `TailwindVersion` below.
+lazy val tailwindVersion = "4.3.3"
+
 // The sbt plugin that generates the route table. It is published as `sbt-eezo` because sbt
 // plugins are named that way, and it is cross built for sbt 1 and sbt 2 from one source. See
 // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md` for why.
@@ -195,6 +213,21 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
   .settings(
     name := "sbt-eezo",
     pomFacts,
+    // `tailwindVersion` above, written into the plugin as a source so that both axes compile it
+    // like any other and no resource lookup happens at task time.
+    Compile / sourceGenerators += Def.task {
+      val file = (Compile / sourceManaged).value / "io" / "eezo" / "sbt" / "TailwindVersion.scala"
+      val text =
+        s"""package io.eezo.sbt
+           |
+           |/** Written by the build from `tailwindVersion` in build.sbt; do not edit. */
+           |private[sbt] object TailwindVersion {
+           |  val Default: String = "$tailwindVersion"
+           |}
+           |""".stripMargin
+      if (!file.exists || IO.read(file) != text) IO.write(file, text)
+      Seq(file)
+    }.taskValue,
     // The build level Scala 3.9.0 cannot build an sbt 1 plugin, so a plain `sbt compile`
     // would fail.
     scalaVersion       := Toolchain.PluginScalaVersion,
@@ -238,7 +271,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
+  .aggregate(core, config, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
   .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
@@ -251,6 +284,7 @@ lazy val root = (project in file("."))
     // is a 2.12 cross build and the demo is not an API, so neither is documented here.
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
       core,
+      config,
       http,
       db,
       live,

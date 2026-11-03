@@ -8,7 +8,11 @@ package io.eezo.db.schema
   */
 object Ddl {
 
-  private def q(s: String): String = "\"" + s.replace("\"", "\"\"") + "\""
+  /** A name as a Postgres quoted identifier, its own double quotes doubled. Shared with
+    * [[io.eezo.db.DbInit]], whose schema statements run on every connection, where a stray quote
+    * would fail them all or run more than the one statement meant.
+    */
+  private[db] def q(s: String): String = "\"" + s.replace("\"", "\"\"") + "\""
 
   private def checkName(table: String, column: String, expr: String): String = {
     val h = Integer.toHexString(expr.hashCode & 0xffffff)

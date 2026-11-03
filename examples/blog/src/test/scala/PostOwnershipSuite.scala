@@ -1,9 +1,9 @@
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.sql.Connection
 import java.util.UUID
 
-import io.eezo.core.Id
+import io.eezo.auth.Password
+import io.eezo.core.{Id, Parser}
 import io.eezo.db.*
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.http.Body
@@ -94,17 +94,16 @@ class PostOwnershipSuite extends munit.FunSuite {
     *
     * A second `DbApp` for the same reason `CreateUser` is one: `withDatabase` is `protected`, so
     * installing a `Database` is something only a subclass can ask for, and a test is a front end
-    * like any other. The schema, the per connection hook and `AppSchema` are `Main`'s own values
-    * rather than copies, so a change to where the blog keeps its tables moves this with it.
+    * like any other. The schema and `AppSchema` are `Main`'s own values rather than copies, so a
+    * change to where the blog keeps its tables moves this with it.
     */
   private object BlogDb extends DbApp {
-    override def schema: Schema                   = Main.schema
-    override def databaseUrl: String              = postgres.getJdbcUrl
-    override def databaseUser: String             = postgres.getUsername
-    override def databasePassword: String         = postgres.getPassword
-    override def databaseSchema: String           = Main.databaseSchema
-    override def databaseInit: Connection => Unit = Main.databaseInit
-    override def boot(): Unit                     = ()
+    override def schema: Schema           = Main.schema
+    override def databaseUrl: String      = postgres.getJdbcUrl
+    override def databaseUser: String     = postgres.getUsername
+    override def databasePassword: String = postgres.getPassword
+    override def databaseSchema: String   = Main.databaseSchema
+    override def boot(): Unit             = ()
 
     /** The one thing this object exists to publish: a `Database` installed around a block, which is
       * what `sbt run` does around `boot` and what every handler below reaches through.
@@ -113,19 +112,21 @@ class PostOwnershipSuite extends munit.FunSuite {
   }
 
   /** The two users, made once, through the application's own tools: `run db sync --apply` for the
-    * tables, exactly as `README.md` says to before the first request, and `CreateUser.hashPassword`
-    * for the hash, so the rows the guard verifies against are the rows the operator's tool would
-    * have written.
+    * tables, exactly as `README.md` says to before the first request, and `Parser[Password]` for
+    * the hash, the read `CreateUser` takes its password through, so the rows the guard verifies
+    * against are the rows the operator's tool would have written.
     */
   private lazy val signedUp: (Id[User], Id[User]) = {
     BlogDb.main(Array("db", "sync", "--apply"))
     val alice = Id.gen[User]()
     val bob   = Id.gen[User]()
+    val hash  =
+      summon[Parser[Password]].read(Secret).fold(reason => fail(s"Secret $reason"), identity)
     BlogDb.around {
       transact {
         val users = Table[User]
-        users.insert(User(alice, AliceEmail, CreateUser.hashPassword(Secret)))
-        users.insert(User(bob, BobEmail, CreateUser.hashPassword(Secret)))
+        users.insert(User(alice, AliceEmail, hash))
+        users.insert(User(bob, BobEmail, hash))
       }
     }
     (alice, bob)

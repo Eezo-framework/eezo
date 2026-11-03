@@ -25,6 +25,11 @@ jobs:
   build:
     name: Compile and test
     runs-on: ubuntu-latest
+    # A green run takes about 6 minutes, so 25 leaves room for a cold cache or a slow runner
+    # without letting a hang run on. The default is 360, and a hung suite once held the Test step
+    # for 5 hours 23 minutes before anyone cancelled it, blocking the branch status all the while.
+    # Hitting this limit ends the job red, which is the point: a hang costs minutes, not hours.
+    timeout-minutes: 25
 
     steps:
       # The whole history, tags included, so that sbt-dynver derives the same version here as the
@@ -32,12 +37,12 @@ jobs:
       # and the site step below needs it to be: a shallow clone has no tag to describe, so that
       # commit would be versioned by its hash and the site would still look for the release on
       # Maven Central, where it is not yet.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "25"
@@ -97,11 +102,25 @@ jobs:
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.
       # Nothing inside this repository exercises the plugin end to end, because a plugin defined in
       # a build cannot be enabled by that same build. `blog` is what covers the derived half: its
-      # seven routes exist only in the file the generator writes.
+      # seven routes exist only in the file the generator writes. `eezoDev --once` is the dev
+      # console without a terminal, cut short: it builds `hello`, forks it, waits for it to serve,
+      # stops it, and fails the command when it did not serve, which is the loop's one end to end
+      # check that needs no keyboard.
+      #
+      # `blog` has a `tailwind.css`, so its build fetches the Tailwind CLI into `~/.eezo/tools` once
+      # per version; cached here so the download is paid once per runner image and version rather
+      # than on every run. The version is `tailwindVersion` in build.sbt, so the key hashes that
+      # file: a bump misses the cache, and nothing here has to be kept in step by hand.
+      - name: Cache the fetched tools
+        uses: actions/cache@v6
+        with:
+          path: ~/.eezo/tools
+          key: eezo-tools-${{ runner.os }}-${{ hashFiles('build.sbt') }}
+
       - name: Build the example applications
         run: |
           sbt -batch publishLocalForExample
-          cd examples && sbt -batch scalafmtCheckAll test
+          cd examples && sbt -batch scalafmtCheckAll test "project hello" "eezoDev --once"
 
       # The documentation site is an eezo application too, with a build of its own against the
       # released eezo, the way a user's application is built. Its suite renders every page out of

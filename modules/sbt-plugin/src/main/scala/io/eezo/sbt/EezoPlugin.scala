@@ -63,9 +63,10 @@ object EezoPlugin extends AutoPlugin {
     @transient val eezoFreeze: InputKey[Unit] =
       inputKey[Unit]("Forwards to `run db freeze <name>`: writes a migration from the model diff.")
 
-    // The dev loop's two halves. `eezoRestart` is the kernel: kill the app's JVM, fork it again
-    // on the fresh classpath, return so the watch can wait for the next edit. `eezoDev`, the
-    // command a user actually types, is a command alias over it, defined in `globalSettings`.
+    // The dev loop's kernel for the sbt shell: kill the app's JVM, fork it again on the fresh
+    // classpath, return. `eezoDev`, the command a user actually types, is the dev console
+    // (`dev.DevCommand`, registered in `globalSettings`), which forks through the same
+    // `DevProcess` with the output piped to its panes instead.
     @transient val eezoRestart: TaskKey[Unit] =
       taskKey[Unit]("(Re)starts the application in dev mode in a background JVM.")
 
@@ -82,6 +83,40 @@ object EezoPlugin extends AutoPlugin {
 
     val eezoJavaVersion: SettingKey[String] =
       settingKey[String]("Java version of the deployment base image (eclipse-temurin JRE).")
+
+    // The class is named in the build and not on the entry object, so the plugin can write the
+    // compile time check into a unit of its own and the application writes nothing for it.
+    val eezoConfigClass: SettingKey[Option[String]] =
+      settingKey[Option[String]](
+        "The case class src/main/resources/application.conf is read into, fully qualified; " +
+          "None writes no io.eezo.generated.ConfigFile."
+      )
+
+    // `@transient` for the reason `eezoGenerateRoutes` is: the result is a `Seq[File]`.
+    @transient val eezoGenerateConfig: TaskKey[Seq[File]] =
+      taskKey[Seq[File]](
+        "Generates io.eezo.generated.ConfigFile, which checks eezoConfigClass against " +
+          "application.conf at compile time; does nothing when eezoConfigClass is None."
+      )
+
+    // The stylesheet generator. `@transient` for the reason `eezoGenerateRoutes` is: the result is
+    // a `Seq[File]`, and the generator keeps a cache of its own below.
+    @transient val eezoTailwind: TaskKey[Seq[File]] =
+      taskKey[Seq[File]](
+        "Builds assets/tailwind.css from the tailwind.css at the project root with the Tailwind " +
+          "CLI, as a resource generator; does nothing when the file is absent."
+      )
+
+    val eezoTailwindVersion: SettingKey[String] =
+      settingKey[String]("The Tailwind CSS release eezoTailwind fetches, when no CLI is named.")
+
+    val eezoTailwindInput: SettingKey[File] =
+      settingKey[File]("The stylesheet eezoTailwind compiles; its absence means no Tailwind.")
+
+    val eezoTailwindCli: SettingKey[Option[File]] =
+      settingKey[Option[File]](
+        "A Tailwind CLI already on this machine, used instead of the one eezoTailwind fetches."
+      )
   }
 
   import autoImport._
@@ -98,6 +133,14 @@ object EezoPlugin extends AutoPlugin {
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
+    // The configuration's check, beside the route table. The trigger is on the project for the
+    // reason the stylesheet's is below: a generator is reached through `sourceGenerators` and not
+    // as a task dependency, so a trigger scoped to it is never read, and without one a save of
+    // the file alone does not restart the dev loop or check the file again.
+    eezoConfigClass              := None,
+    Compile / eezoGenerateConfig := configFile.value,
+    Compile / sourceGenerators += (Compile / eezoGenerateConfig).taskValue,
+    watchTriggers ++= ConfigFile.watched((Compile / resourceDirectory).value),
     // The command tasks, project level rather than scoped to `Compile` so that `sbt eezoStatus`
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
     // inherits everything the build already decided about running (fork, working directory,
@@ -141,8 +184,24 @@ object EezoPlugin extends AutoPlugin {
         }
       )
       .value,
-    eezoStop        := DevProcess.stop(quiet = false, log = message => println(message)),
-    eezoJavaVersion := "25",
+    eezoStop         := DevProcess.stop(quiet = false, log = message => println(message)),
+    eezoDevClasspath := EezoClasspath.files.value,
+    eezoJavaVersion  := "25",
+    // The stylesheet, built inside the same classpath request that compiles the project, so that
+    // `eezoRestart`, `test`, `package` and `eezoStage` all carry a stylesheet that matches the
+    // sources beside it, with nothing to commit and nothing to remember. The trigger is what makes
+    // an edit to the stylesheet itself, which no compile reads, restart the dev loop. It is set
+    // on the project and not on the task, and the difference was measured: the watch collects
+    // `watchTriggers` from the tasks the watched task depends on, and a generator is reached
+    // through the `resourceGenerators` setting rather than as a task dependency, so a trigger
+    // scoped to `Compile / eezoTailwind` is never read. The project scope reaches every task of
+    // the project by delegation, `~eezoRestart` and `~test` alike.
+    eezoTailwindVersion    := Tailwind.DefaultVersion,
+    eezoTailwindInput      := baseDirectory.value / "tailwind.css",
+    eezoTailwindCli        := None,
+    Compile / eezoTailwind := tailwind.value,
+    Compile / resourceGenerators += (Compile / eezoTailwind).taskValue,
+    watchTriggers += Glob(eezoTailwindInput.value),
     // The staged layout is the whole deployment contract: lib/ holds every runtime jar (this
     // project's own classes via packageBin, so directory classpath entries are not shipped raw),
     // db/ holds the committed migrations (present even when empty, so the Dockerfile's COPY never
@@ -187,17 +246,25 @@ object EezoPlugin extends AutoPlugin {
     }
   )
 
-  /** `eezoDev`: restart on every edit. The watch is sbt's own (`watchTriggers` above already covers
-    * the source tree, and `eezoRestart`'s classpath dependency pulls the compile), so the loop is
-    * one alias rather than machinery: research/build-reload.md measured resident `~` at 148 to 300
-    * ms from save to rebuilt, which is the budget this rides on.
+  /** `eezoDev`: the dev console, a command of its own (`dev.DevCommand`) rather than an alias for
+    * `~eezoRestart`. It owns the terminal, watches the source tree itself with a debounce
+    * (research/build-reload.md §1.5 measured sbt's `~` building twice on a multi-file save), asks
+    * for `eezoDevClasspath` on each change, and forks the application with its output piped into a
+    * pane. `eezoRestart` and `eezoStop` stay as tasks for the sbt shell.
     *
     * `dev` is the http layer's command. On a database only application (`DbApp` alone) it is
-    * unknown, so `eezoDev` prints the unknown command line on every save; a rerun on save loop for
-    * a job is sbt's own `~run`.
+    * unknown, so the console's application exits at once with the unknown command line; a rerun on
+    * save loop for a job is sbt's own `~run`.
     */
   override lazy val globalSettings: Seq[Setting[?]] =
-    addCommandAlias("eezoDev", "~eezoRestart")
+    Seq(commands += dev.DevCommand.command)
+
+  /** The application's runtime classpath, as the dev console asks for it: a key of its own rather
+    * than `eezoRestart`, which prints its marker line and forks, when the console wants the
+    * classpath alone and does the rest itself. `@transient` for the reason `eezoGenerateRoutes` is.
+    */
+  @transient private[sbt] val eezoDevClasspath: TaskKey[Seq[File]] =
+    taskKey[Seq[File]]("The runtime classpath, compiled: what the dev console forks on.")
 
   /** `eezoSync --apply` → `run db sync --apply`: the task's own arguments, appended after the
     * command. One helper so the three input tasks cannot drift apart.
@@ -465,6 +532,91 @@ object EezoPlugin extends AutoPlugin {
 
     cached(inputs).toSeq
   }
+
+  /** The unit `ConfigFile` writes, with no cache of its own: the work is one hash of each config
+    * file in the resource directory, small files read in a moment, and an unchanged unit is not
+    * written again.
+    */
+  private def configFile: Def.Initialize[Task[Seq[File]]] = Def.task {
+    ConfigFile.write(
+      eezoConfigClass.value,
+      (Compile / resourceDirectory).value / "application.conf",
+      (Compile / sourceManaged).value / "io" / "eezo" / "generated" / "ConfigFile.scala"
+    )
+  }
+
+  /** Builds the stylesheet when the project has a `tailwind.css`, and nothing otherwise.
+    *
+    * Tailwind reads the sources for the class names they use, so the sources are this generator's
+    * inputs the way `app/` is the route generator's, and the same `FileFunction.cached` keeps a
+    * save that changed nothing it reads from running the CLI again. The stamp carries the version
+    * and the CLI's path, the two inputs no source file holds, so a bumped `eezoTailwindVersion`
+    * misses the cache with no source change. The CLI writes into the task's own cache directory and
+    * the result is copied to `resourceManaged` only when its bytes differ, for the reason
+    * `writeIfChanged` gives: an unchanged stylesheet must not move the timestamp `copyResources`
+    * reads.
+    *
+    * A CLI that exits non zero fails this task with its diagnostics in the message, and with
+    * nothing else: a `MessageOnlyException`, so sbt prints the message as it prints a compile error
+    * and no stack trace. Under the dev loop that is the same path a compile error takes: the
+    * launcher prints the failure, and the previous application keeps serving.
+    *
+    * Every `.value` is read before the first branch, because sbt's task macro rejects one inside an
+    * `if` or a closure; and none of them is `fullClasspath`, `products` or `compile`, for the
+    * reason `generate` gives above.
+    */
+  private def tailwind: Def.Initialize[Task[Seq[File]]] = Def.task {
+    val log         = streams.value.log
+    val cache       = streams.value.cacheDirectory
+    val input       = eezoTailwindInput.value
+    val version     = eezoTailwindVersion.value
+    val named       = eezoTailwindCli.value
+    val root        = baseDirectory.value
+    val destination = (Compile / resourceManaged).value / "assets" / "tailwind.css"
+    val scanned     =
+      (Compile / unmanagedSourceDirectories).value ++ (Compile / unmanagedResourceDirectories).value
+
+    if (!input.isFile) {
+      if (destination.exists) IO.delete(destination)
+      Seq.empty
+    } else {
+      val cli = named.getOrElse(
+        Tailwind.ensureBinary(
+          version,
+          Tailwind.toolsDir(sys.env.get("EEZO_HOME"), sys.props("user.home")),
+          message => log.info(message)
+        )
+      )
+      val sources = scanned.flatMap(dir => (dir ** "*").get().filter(_.isFile)).toSet
+      val stamp   = cache / "eezo-tailwind.version"
+      IO.write(stamp, s"$version\n${cli.getAbsolutePath}\n")
+      val built = cache / "tailwind.css"
+
+      val cached = FileFunction.cached(cache / "eezo-tailwind", FilesInfo.hash, FilesInfo.hash) {
+        (changed: Set[File]) =>
+          val _ = changed
+          Tailwind.run(cli, input, built, root) match {
+            case Right(())     => ()
+            case Left(printed) =>
+              throw new sbt.internal.util.MessageOnlyException(
+                s"eezoTailwind: tailwindcss failed on ${input.getName}\n$printed"
+              )
+          }
+          copyIfChanged(built, destination)
+          Set(destination)
+      }
+      cached(sources + input + stamp).toSeq
+    }
+  }
+
+  /** `writeIfChanged` for bytes: the built stylesheet reaches `resourceManaged` only when it
+    * differs from what is there.
+    */
+  private def copyIfChanged(source: File, destination: File): Unit =
+    if (
+      !destination.exists() ||
+      !java.util.Arrays.equals(IO.readBytes(source), IO.readBytes(destination))
+    ) IO.copyFile(source, destination)
 
   /** `sourceGenerators` runs on every evaluation and the hashed input set covers the whole source
     * tree, so an edit to a file with no routes and no models in it reaches this point. Writing

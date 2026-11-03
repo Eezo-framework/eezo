@@ -117,8 +117,10 @@ TestDb.around {
 
 `withDatabase` installs the pool around the block, so `transact`, `read` and the derived
 resources' `JdbcStore` all reach it. The blog's `PostOwnershipSuite` is the complete pattern,
-two users and the 403 included. Add `"org.testcontainers" % "postgresql" % "1.21.3" % Test` to
-the build; the suite needs Docker.
+two users and the 403 included. Add `"org.testcontainers" % "postgresql" % "1.21.4" % Test` to
+the build; the suite needs Docker. The examples take that version from the framework's
+`Dependencies.testcontainersPg`, so opening the blog's `build.sbt` shows the val, not this
+coordinate.
 
 ## A live component
 

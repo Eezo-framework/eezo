@@ -1,20 +1,22 @@
 package io.eezo.db
 
 import io.eezo.db.engine.Database
+import io.eezo.db.schema.Ddl
 
 import java.net.{URI, URLDecoder}
-import java.sql.Connection
+import java.sql.{Connection, SQLException}
 import java.time.Duration
 
-/** How an application names its database: the connection settings and the per connection hook.
+/** How an application names its database: the connection settings, the Postgres schema it lives in,
+  * and the per connection hook.
   *
   * Split out of [[DbApp]] so that a front end which is not the application's entry point (a deploy
   * runner, the testkit) can build the same `Database` from the same settings without inheriting
   * `boot`. `DbApp` extends this, and the umbrella's `EezoApp` through it; users override members
   * here and never name the trait.
   *
-  * Named for [[databaseInit]], its one member that is not a string, because it is the one people
-  * get wrong; see its comment.
+  * Named for what happens on every connection the pool opens, because that is the part people get
+  * wrong: a setting made on one connection is missing from the next. See [[databaseSchema]].
   *
   * **Two spellings of the environment, one mechanism.** `EEZO_DB_URL`/`EEZO_DB_USER`/
   * `EEZO_DB_PASS` are eezo's own and always win. When they are absent and `DATABASE_URL` is present
@@ -61,12 +63,30 @@ trait DbInit {
   def databaseAcquireTimeout: Duration =
     DbInit.acquireTimeout(sys.env.get("EEZO_DB_ACQUIRE_TIMEOUT"))
 
-  /** Run on **every** connection the pool creates, not once on a borrowed one (DESIGN §8.7).
+  /** The Postgres schema the application lives in: where its tables are created and where the drift
+    * commands read the catalog. Declared here, where the `Database` is built, because the name has
+    * to reach the connections as well as the catalog reads, and a front end that builds a
+    * `Database` through this trait must land in the same schema as the application.
     *
-    * This is where `search_path`, `application_name` and statement timeouts belong. Without it an
-    * application that works in a non-`public` schema silently splits in two: its own connections
-    * see one schema and eezo's see another, which shows up as a migration that appears not to have
-    * run.
+    * Naming it is enough. Any name but `public` makes every physical connection create the schema
+    * when it is missing and set `search_path` to it, before [[databaseInit]] runs, so the DDL the
+    * commands apply, the migration ledger and the application's own SQL all land where `status`
+    * looks. With the setup left to the application, a name set here without the matching hook split
+    * the application in two: tables created in `public`, the catalog read in the named schema, and
+    * `status` reporting the whole model missing after a `sync --apply` that succeeded.
+    *
+    * `public`, the default, runs nothing, so the connection keeps Postgres's own `search_path`.
+    */
+  def databaseSchema: String = "public"
+
+  /** Run on **every** connection the pool creates, not once on a borrowed one (DESIGN §8.7),
+    * because the settings it exists for are per connection: a statement run once would reach only
+    * the connection that ran it.
+    *
+    * This is where `application_name`, statement timeouts and any other per connection setting
+    * belong. The schema is not among them: [[databaseSchema]] sets `search_path` on its own, ahead
+    * of this hook, so an override here needs no `super` call to keep the application in its schema,
+    * and one that sets `search_path` on purpose still has the last word.
     */
   def databaseInit: Connection -> Unit = _ => ()
 
@@ -75,13 +95,61 @@ trait DbInit {
       databaseUrl,
       databaseUser,
       databasePassword,
-      databaseInit,
+      DbInit.connectionInit(databaseSchema, databaseInit),
       databasePoolSize,
       databaseAcquireTimeout
     )
 }
 
 object DbInit {
+
+  /** The one hook the pool runs: the schema step `databaseSchema` implies, then the application's
+    * own. Composed here rather than offered as `databaseInit`'s default, because a default would be
+    * lost by every override that forgot `super`, which is the split this exists to prevent.
+    */
+  private[eezo] def connectionInit(schema: String, init: Connection -> Unit): Connection -> Unit =
+    if (schema == "public") init
+    else
+      c => {
+        enterSchema(c, schema)
+        init(c)
+      }
+
+  /** Creates the schema only when the catalog says it is missing, because Postgres checks the
+    * CREATE privilege on the database before it honours `if not exists`: a least privileged role
+    * that owns an existing schema would otherwise fail every connection the pool opens.
+    *
+    * Two connections that both found it missing still race, on a fresh database where the pool
+    * fills or several processes boot at once, and `if not exists` does not settle that race: the
+    * loser fails on the catalog's unique index. Its failure means the schema is there, which is all
+    * this step needs, so it goes on to `search_path`; any other failure is a real one and fails the
+    * connection.
+    */
+  private def enterSchema(c: Connection, schema: String): Unit = {
+    val name = Ddl.q(schema)
+    val st   = c.createStatement()
+    try {
+      if (!schemaExists(c, schema))
+        try st.execute(s"create schema if not exists $name"): Unit
+        catch { case e: SQLException if CreatedMeanwhile(e.getSQLState) => () }
+      st.execute(s"set search_path to $name"): Unit
+    } finally st.close()
+  }
+
+  /** `unique_violation`, what Postgres answers the loser of the race, and `duplicate_schema`, which
+    * says the same thing in its own words.
+    */
+  private val CreatedMeanwhile: Set[String | Null] = Set("23505", "42P06")
+
+  private def schemaExists(c: Connection, schema: String): Boolean = {
+    val ps = c.prepareStatement("select 1 from pg_namespace where nspname = ?")
+    try {
+      ps.setString(1, schema)
+      val rs = ps.executeQuery()
+      try rs.next()
+      finally rs.close()
+    } finally ps.close()
+  }
 
   private[eezo] val DefaultPoolSize: Int = 10
 

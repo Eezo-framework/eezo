@@ -1,5 +1,8 @@
 package io.eezo.http
 
+import io.eezo.config.Config
+import io.eezo.config.support.ConfigFileLoader
+import io.eezo.core.Redacted
 import io.eezo.core.html.Tags.p
 import io.eezo.core.support.Captured.captured
 
@@ -11,6 +14,7 @@ import io.eezo.core.support.Captured.captured
   * overrides, `routes` needs no server, and the database layer's commands do not exist here.
   */
 class HttpAppSuite extends munit.FunSuite {
+  import HttpAppSuite.*
 
   private val ok: Handler = _ => Response.Ok(p("ok"))
 
@@ -27,6 +31,8 @@ class HttpAppSuite extends munit.FunSuite {
     override def boot(): Unit = booted = true
 
     override protected def devServer(): Unit = developed = true
+
+    def framework: Seq[Route] = frameworkRoutes
   }
 
   test("no arguments is the application: boot runs") {
@@ -80,11 +86,82 @@ class HttpAppSuite extends munit.FunSuite {
     assert(!out.contains("status"), out)
   }
 
+  /** The application, as one whose build names [[Kiosk]], with `env` for its environment. */
+  private class Configured(env: Map[String, String]) extends Recording {
+    var seen: Option[Kiosk] = None
+
+    override private[eezo] def environment: Map[String, String] = env
+
+    override def boot(): Unit = {
+      booted = true
+      seen = Some(Config[Kiosk].current)
+    }
+  }
+
+  private def configured(app: Recording, args: List[String]) =
+    ConfigFileLoader.generating(classOf[KioskFile.type], Some("kiosk.conf"))(
+      captured(app.run(args))
+    )
+
+  test("a refused Config stops the application before boot: exit 1 and the line, no stack") {
+    val app              = new Configured(Map.empty)
+    val (code, out, err) = configured(app, Nil)
+    assertEquals(code, 1)
+    assertEquals(out, "")
+    assertEquals(
+      err.linesIterator.toList,
+      List("[eezo] key is missing: set KIOSK_KEY, which application.conf names for it")
+    )
+    assert(!app.booted)
+  }
+
+  test("a refused Config stops dev before the dev server, with the same line") {
+    val app            = new Configured(Map.empty)
+    val (code, _, err) = configured(app, List("dev"))
+    assertEquals(code, 1)
+    assertEquals(
+      err.linesIterator.toList,
+      List("[eezo] key is missing: set KIOSK_KEY, which application.conf names for it")
+    )
+    assert(!app.developed)
+  }
+
+  test("a good read boots with the Config installed, and dev serves after it") {
+    val app              = new Configured(Map("KIOSK_KEY" -> "k"))
+    val (code, out, err) = configured(app, Nil)
+    assertEquals(code, 0, err)
+    assertEquals(out, "")
+    assertEquals(app.seen, Some(Kiosk("hi", Redacted("k"))))
+    assertEquals(configured(app, List("dev"))._1, 0)
+    assert(app.developed)
+  }
+
+  test("help lists config once, and config prints nothing for a build that names no class") {
+    val (code, out, _) = captured(new Recording().run(List("help")))
+    assertEquals(code, 0)
+    assertEquals(out.linesIterator.count(_.trim.startsWith("config")), 1, out)
+    assertEquals(captured(new Recording().run(List("config"))), (0, "", ""))
+  }
+
   test("every server setting is an override with the server's own default") {
     val app = new Recording
     assertEquals(app.port, 8080)
     assertEquals(app.maxBodySize, HttpConfig.DefaultMaxBodySize)
     assert(!app.problems.isDefinedAt(new RuntimeException("anything")))
     assertEquals(app.layout, Layout.plain)
+  }
+
+  test("the asset route is a framework route, so every way of serving carries it") {
+    assertEquals(new Recording().framework.map(_.describe), Seq("GET /assets/*file"))
+  }
+}
+
+object HttpAppSuite {
+
+  /** Read by this suite alone, since the installed value is global to the JVM. */
+  final case class Kiosk(greeting: String, key: Redacted) derives Config
+
+  object KioskFile extends Config.Root.Generated {
+    val root: Config.Root[Kiosk] = Config.root[Kiosk]
   }
 }

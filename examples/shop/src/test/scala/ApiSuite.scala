@@ -1,6 +1,5 @@
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
-import java.sql.Connection
 
 import io.eezo.auth.{Password, Token}
 import io.eezo.core.Id
@@ -49,18 +48,16 @@ class ApiSuite extends munit.FunSuite {
     started
   }
 
-  /** The shop's own database settings pointed at the container. `Main`'s schema name and per
-    * connection hook rather than copies, so the routes read the `shop` search path they read in
-    * production.
+  /** The shop's own database settings pointed at the container. `Main`'s schema name rather than a
+    * copy, so the routes read the `shop` search path they read in production.
     */
   private object ShopDb extends DbApp {
-    override def schema: Schema                   = Main.schema
-    override def databaseUrl: String              = postgres.getJdbcUrl
-    override def databaseUser: String             = postgres.getUsername
-    override def databasePassword: String         = postgres.getPassword
-    override def databaseSchema: String           = Main.databaseSchema
-    override def databaseInit: Connection => Unit = Main.databaseInit
-    override def boot(): Unit                     = ()
+    override def schema: Schema           = Main.schema
+    override def databaseUrl: String      = postgres.getJdbcUrl
+    override def databaseUser: String     = postgres.getUsername
+    override def databasePassword: String = postgres.getPassword
+    override def databaseSchema: String   = Main.databaseSchema
+    override def boot(): Unit             = ()
 
     def around[A](body: => A): A = withDatabase(body)
   }

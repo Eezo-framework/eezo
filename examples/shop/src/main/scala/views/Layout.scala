@@ -1,6 +1,7 @@
 package views
 
 import io.eezo.core.html.*
+import io.eezo.http.Assets
 import io.eezo.http.Request
 
 import models.User
@@ -9,9 +10,9 @@ import models.User
   * login page and the error page included. Named in `Main`. Every link in the nav has a route
   * behind it.
   *
-  * The stylesheet is `assets/shop.css` in the jar, linked under the versioned address `Assets`
-  * gives it and served by the route under `/assets`. Element selectors only, so the pages typed on
-  * stage carry no class names.
+  * The stylesheet is `assets/shop.css` in the jar, linked under the versioned address eezo's
+  * `Assets` gives it and served by the asset route every application carries. Element selectors
+  * only, so the pages typed on stage carry no class names.
   */
 object Layout extends io.eezo.http.Layout {
 

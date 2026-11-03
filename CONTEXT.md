@@ -33,9 +33,16 @@ One of the seven route roles a Resource can mount. A model subtracts from the fu
 companion, and a handwritten route may take over the role it subtracted.
 _Avoid_: verb, endpoint, operation
 
+**Parser**:
+How text from outside becomes a value of one Scala type, and what a missing text means for it. It
+knows nothing of forms or inputs, so a form field and anything else that reads text share one
+reading and one message for a value that will not read.
+_Avoid_: decoder, reader, codec, converter
+
 **Field**:
-How one Scala type reads from and shows as a single form input: its input type, its rendered text,
-its parsed value and what an absent submission means for it.
+How one Scala type reads from and shows as a single form input. A Field is composed over a Parser,
+which reads the text and says what an absent submission means, and adds how a browser input spells
+that text: its input type, its rendered text and whether a checkbox renders ticked.
 _Avoid_: column, property, attribute
 
 **Serde**:
@@ -56,6 +63,31 @@ can answer, since a type alias or a hand written instance counts as much as a `d
 the generated route table asks it once per model and lists none of them, and a derivation eezo
 gains changes nothing the generator writes.
 _Avoid_: mountables
+
+**Config**:
+A case class an application reads from its file, `src/main/resources/application.conf`, through a
+Config derived for it. The file is HOCON and is committed with the code. It states a value as a
+literal, or it feeds the value from the environment through a substitution, `${?VAR}`, so the
+file and not a naming rule says which variable sets which value. An unset variable leaves the
+value to the literal written before the substitution, or to the class. A variable under `EEZO_`
+is the framework's own, and a file that names one is refused when it is read. Each field is read
+at its full dotted path through its Parser, or is a Section. A field with a default takes the
+default when the file has no value for it, an `Option` field is `None`, and any other absent field
+is missing, whatever its Parser says absence means. A read that fails names every offender at once
+by its path, and the variables the file names for it, and never the text it found. When the build
+names the class, the file is also checked against it at compile time, and boot reads it before the
+application starts: a refused read stops the start, and a good one is installed, so a handler
+reads the class, or any Section of it, with `Config[A].current`. A suite makes its own value
+current for one block with `Config[A].installed(value) { body }`.
+_Avoid_: settings, properties, parameters, env vars
+
+**Section**:
+A case class nested in a Config, one field of its parent, read from the block of the file under
+the field's name. It has a Config of its own, so code that needs only one section reads that
+section and not the whole class. Each section type appears once in the tree, because a section is
+installed and read by its type. A section has no default and is never optional: its fields have
+theirs.
+_Avoid_: group, sub config, namespace
 
 ### How Form and Resource relate
 
@@ -123,6 +155,13 @@ The one key an application signs its sessions with, set where the application is
 never written in its code. Without one the application runs on a throwaway that lasts as long as
 the process, which is right on a laptop and wrong in production.
 _Avoid_: secret key base, signing key, app key, salt
+
+**Redacted**:
+Text an application must not leak, such as an API key, held so that printing it shows
+`Redacted(redacted)` and comparing it takes the same time whatever it holds. The Secret is the one
+key a session is signed with and belongs to the framework; a Redacted is any value of the
+application's own that must stay out of logs and pages, with no length rule and no fixed variable.
+_Avoid_: secret, sensitive string, masked value
 
 ### Authentication
 
@@ -250,6 +289,12 @@ The build tool's side of developing an application: watching the sources, recomp
 and replacing the running application with a fresh one. A failed compile leaves the previous
 application serving.
 _Avoid_: hot reload, watch mode, revolver
+
+**Dev console**:
+What `eezo dev` draws on the terminal: the dev loop's state, the application's log, the compile
+errors, the route table and the schema drift as panes, and the schema commands as keys. One sbt
+command of the plugin, so the sbt shell has it too.
+_Avoid_: TUI, dashboard, watch mode, REPL
 
 **Dev server**:
 The application started in development: the same routes, plus the drift check at boot, the route

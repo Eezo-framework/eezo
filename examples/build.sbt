@@ -1,6 +1,6 @@
 // The example applications, in one build so that they share one meta build: the plugin is
-// resolved once, and `EezoVersion` — which reads the locally published version and toolchain out
-// of `.eezo-version` — has one definition rather than one per example. Each example is still an
+// resolved once, and `EezoVersion`, which reads the locally published version and toolchain out
+// of `.eezo-version`, has one definition rather than one per example. Each example is still an
 // ordinary single-source-tree project that enables `EezoPlugin` for itself, which is what a real
 // application is.
 //
@@ -87,13 +87,14 @@ lazy val blog = (project in file("blog"))
     libraryDependencies ++= Seq(
       layer("eezo"),
       layer("eezo-auth"),
-      "org.scalameta" %% "munit" % "1.3.4" % Test,
+      "org.scalameta" %% "munit" % "1.3.6" % Test,
       // `PostOwnershipSuite` drives the real route table over real rows, so it needs a real
       // Postgres: what it is asserting about is the SQL `JdbcStore.owned` narrows with, and an
       // in-memory substitute is the half `modules/http` already tests. Test scope, so nothing the
       // blog runs with carries it.
-      "org.testcontainers" % "postgresql" % "1.21.4" % Test
+      Dependencies.testcontainersPg
     ),
+    eezoConfigClass := Some("blog.BlogConfig"),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir
   )
@@ -120,17 +121,16 @@ lazy val shop = (project in file("shop"))
       layer("eezo-auth"),
       layer("eezo-upickle"),
       "com.lihaoyi" %% "upickle" % "4.4.3",
-      "org.scalameta" %% "munit" % "1.3.4" % Test,
-      "org.testcontainers" % "postgresql" % "1.21.4" % Test
+      "org.scalameta" %% "munit" % "1.3.6" % Test,
+      Dependencies.testcontainersPg
     ),
-    // `Stripe` reads its two secrets when the route table is built, and a suite builds the table,
-    // so the suite runs in a JVM of its own that can be handed stand ins. Nothing in it calls
-    // Stripe, so no real key is ever needed or read.
+    eezoConfigClass := Some("shop.ShopConfig"),
+    // `Config[ShopConfig].installed` writes process wide state, and the suites install values of
+    // their own. A forked JVM runs them one at a time, where sbt's own JVM would run them in
+    // parallel and let one suite's install be read by another. The Stripe secrets are read in the
+    // handler and the guard and never when the route table is built, so no suite needs them in its
+    // environment.
     Test / fork := true,
-    Test / envVars := Map(
-      "STRIPE_SECRET_KEY"     -> "sk_test_unused",
-      "STRIPE_WEBHOOK_SECRET" -> "whsec_unused"
-    ),
     Compile / run / mainClass := Some("Main"),
     runInProjectDir
   )

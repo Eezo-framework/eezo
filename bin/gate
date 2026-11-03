@@ -10,7 +10,8 @@
 #   prose      bin/prose-check                   no dash characters in docs and scaladoc
 #   compile    sbt +compile Test/compile         the plugin is cross built for sbt 1 and sbt 2
 #   test       sbt +test                         every module suite
-#   examples   sbt publishLocalForExample, then the examples build's format check and suites
+#   examples   sbt publishLocalForExample, then the examples build's format check and suites,
+#              then `eezoDev --once` on hello, the dev loop without a terminal
 #   site       sbt unidoc, then the site build's own suites
 #
 # For one sbt command with the same environment and none of the locks or steps, `bin/fast`:
@@ -35,10 +36,14 @@
 # colima socket when nothing else set it, and pins the API version whenever DOCKER_HOST names a
 # colima socket, however it got there.
 #
-# In a linked git worktree sbt fails to load with "Bare Repository has neither a working tree,
-# nor an index": sbt-git runs jgit's status at load and jgit misreads the worktree's gitdir file.
-# An uncommitted local-worktree.sbt at the worktree root turns that setting off. The gate writes
-# it and excludes it from git, so it never lands in a commit.
+# The examples step builds the blog's stylesheet with the Tailwind CLI, which the plugin fetches
+# from GitHub into ~/.eezo/tools once per version. The first run on a machine needs the network
+# for that one download; a red examples step that names eezoTailwind and a URL is the download,
+# not the code.
+#
+# A linked git worktree used to need an uncommitted local-worktree.sbt, because sbt-git's jgit
+# probe failed at load there. sbt-ci-release 1.12.1 dropped sbt-git, and the file now breaks the
+# load instead: "not found: value git". The gate removes the one an earlier gate wrote.
 #
 # The repository's git hooks live in .githooks and git does not run them until core.hooksPath
 # says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one
@@ -50,11 +55,9 @@
 # step the gate names any process listening on 8080 and carries on; a red ClientSuite under that
 # line is the squatter, not the code.
 #
-# Three suites are timing sensitive and can go red under machine load with no code cause.
-# PoolSuite's "with the database down, the first read waits the acquire timeout" fires its 500 ms
-# acquire timeout before the driver's refusal is recorded. LiveServerSuite's abnormal drop rejoin
-# can time out on a slow runner. DrainSuite can hang the test step with every suite green. A lone
-# red in one of those: rerun once before diagnosing.
+# One suite is timing sensitive and can go red under machine load with no code cause:
+# LiveServerSuite's abnormal drop rejoin can time out on a slow runner. A lone red there: rerun
+# once before diagnosing.
 #
 # `bin/gate --dry-run` prints the steps and the lock paths without running sbt, and changes
 # nothing, not even the git config.
@@ -151,7 +154,7 @@ step test     "$ROOT" sbt -batch +test
 
 acquire "$EXAMPLES_LOCK" examples
 step examples "$ROOT" sbt -batch publishLocalForExample
-step examples "$ROOT/examples" sbt -batch scalafmtCheckAll test
+step examples "$ROOT/examples" sbt -batch scalafmtCheckAll test "project hello" "eezoDev --once"
 release "$EXAMPLES_LOCK"
 
 step site     "$ROOT" sbt -batch unidoc

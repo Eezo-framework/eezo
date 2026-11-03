@@ -57,8 +57,9 @@ object Pg {
       acquireTimeout = DbInit.DefaultAcquireTimeout
     )
 
-  /** The connection init hook that isolates a suite by schema: [[database]]'s, and the one a suite
-    * that builds its own `Database` through `DbInit` names as `databaseInit`.
+  /** The connection init hook that isolates a suite by schema: [[database]]'s. A suite that builds
+    * its own `Database` through `DbInit` names the schema as `databaseSchema` instead, which sets
+    * the same `search_path` on every connection.
     */
   def searchPath(schema: String): Connection -> Unit = c => {
     val st = c.createStatement()

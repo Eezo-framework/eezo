@@ -125,10 +125,12 @@ The dev server checks drift before it serves, and it checks again on every `GET`
 - **A database that can't be reached** is a warning, not a refusal. `eezo dev` with Postgres
   down serves whatever doesn't need it.
 
-The decisions are on the page and not at the console, because under the dev loop the
-application shares stdin with sbt's watch and a prompt would race it for every keystroke. The
-page's forms carry the CSRF token like any other, because the buttons apply destructive changes
-and any open tab can `POST` to a localhost server.
+The dev console offers the same two actions on its schema pane, `s` and `f`, and restarts the
+application once one succeeds; the page stays, for the browser you are already looking at, and
+for deciding destructive changes one by one, which the console's freeze does as a whole: keep
+them all or drop them all. Neither prompts at the application's own stdin, which it does not
+have. The page's forms carry the CSRF token like any other, because the buttons apply destructive
+changes and any open tab can `POST` to a localhost server.
 
 An application with no schema skips the check entirely, even against a database with tables in
 it. Refusing to serve over tables the application never declared would block every schema-less

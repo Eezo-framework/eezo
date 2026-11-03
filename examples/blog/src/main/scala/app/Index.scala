@@ -49,17 +49,11 @@ object Index {
     */
   def index(request: Request): Response =
     Response.Ok(
-      Html.doctype ++ html(
-        head(
-          meta(Attrs.charset := "utf-8"),
-          title("eezo blog")
-        ),
-        body(
-          h1("eezo blog"),
-          p("Seven routes, derived from one case class."),
-          p(a(Attrs.href := "/admin/posts", "All posts")),
-          User.guard.logoutForm(request, Url.Absolute("/admin/logout"))
-        )
+      title("eezo blog") ++ div(
+        h1("eezo blog"),
+        p("Seven routes, derived from one case class."),
+        p(a(Attrs.href := "/admin/posts", "All posts")),
+        User.guard.logoutForm(request, Url.Absolute("/admin/logout"))
       )
     )
 }

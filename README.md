@@ -86,7 +86,7 @@ Deploying is done with `eezo deploy` on Fly.io.
 `project/plugins.sbt`:
 
 ```scala
-addSbtPlugin("io.eezo" % "sbt-eezo" % "0.2.0")
+addSbtPlugin("io.eezo" % "sbt-eezo" % "0.3.0")
 ```
 
 `build.sbt`:
@@ -96,7 +96,7 @@ scalaVersion := "3.9.0"
 
 enablePlugins(EezoPlugin)
 
-libraryDependencies += "io.eezo" %% "eezo" % "0.2.0"
+libraryDependencies += "io.eezo" %% "eezo" % "0.3.0"
 
 scalacOptions ++= Seq("-release", "25", "-deprecation", "-feature", "-unchecked", "-no-indent")
 
@@ -114,7 +114,8 @@ Every artifact is published at the same version, under the `io.eezo` group:
 | `eezo-auth` | sessions, email and password sign in, CSRF, route guards and row ownership                                           |
 | `eezo-live` | server-side rendered UI with the thin browser client: the diff and patch protocol, the client runtime, PubSub        |
 | `eezo-upickle` | the JSON adapter for API routes: `api.Serde` for any model through upickle, not carried by the umbrella                |
-| `eezo-core` | what the others build on: configuration, HTML tree and DSL, derivation, model keys                                   |
+| `eezo-config` | `Config`: the application's own configuration, read from `application.conf`, sections included                      |
+| `eezo-core` | what the others build on: `Parser` and `Redacted`, HTML tree and DSL, derivation, model keys                         |
 | `sbt-eezo` | the sbt plugin that generates the route table, for sbt 1 and sbt 2                                                   |
 
 An application has one or two layers, the http layer and the database layer. Use a layer by extending the appropriate trait in your app:
@@ -235,7 +236,7 @@ final class Board extends Component[List[Order]] {
 ## The command line
 
 ```
-eezo new <name>       scaffold a new application in ./<name>
+eezo new <name>       scaffold a new application in ./<name>; --tailwind styles it
 eezo dev              serve, restarting on every save
 eezo routes           what is mounted
 eezo db status        the drift between the models and the database

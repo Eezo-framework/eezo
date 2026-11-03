@@ -165,6 +165,11 @@ and reload endpoints are asked before your table, so no route can shadow them an
 moves them. The live routes are appended after yours, so they show in the boot listing but not
 in `eezo routes`, which is your table.
 
+`/assets` is served on every server too, by `GET /assets/*file`, which reads the jar's `assets/`
+directory: a stylesheet Tailwind built, or a file of your own under `src/main/resources/assets`.
+It is not reserved. Appended after your table like the live routes, so a route of your own there
+wins.
+
 ## Where to go next
 
 What a mount does to the paths and to the links on the pages is

@@ -27,6 +27,9 @@ import io.eezo.live.LiveApp
   * fails the same way, in either order, instead of booting with no `Database` installed. `dev`
   * composes through `devServer` alike: the drift check before the server comes up, and the refusal
   * page in place of the app while the drift is dangerous, all under the same `Database`.
+  *
+  * Neither override reads the application's Config: both layers share `ConfigApp`, which reads it
+  * before either hook runs, so a refused read builds no `Database` and runs no drift check.
   */
 trait EezoApp extends HttpApp with LiveApp with DbApp {
 

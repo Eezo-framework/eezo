@@ -265,6 +265,10 @@ private[eezo] object HttpServer {
   private def announce(routes: RouteTable, config: HttpConfig): Unit = {
     RouteReport.warnings(routes).foreach(warning => log.log(System.Logger.Level.WARNING, warning))
     if (config.dev) println(RouteReport.listing(routes.routes))
+    // The same table as a value for the dev console, which shows it in a pane of its own: the
+    // listing above is for a human reading the raw stream. See `DevMarkers`.
+    if (config.markers)
+      println(DevMarkers.line("routes", cli.RenderJson.routesJson(cli.Commands.routes(routes))))
   }
 
   /** The page a failure is answered with, for a browser route, a refused request and a refused

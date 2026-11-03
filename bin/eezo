@@ -11,6 +11,7 @@
 # https://eezo.io/install writes with the released version.
 
 set -euo pipefail
+unset CDPATH
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(dirname "$SCRIPT_DIR")"
@@ -20,7 +21,11 @@ usage() {
 eezo — the framework launcher
 
   eezo new <name>       scaffold a new application in ./<name>
-  eezo dev              serve, restarting on every save
+  eezo new .            scaffold a new application in the current directory, named after it
+      --tailwind        with a tailwind.css at the root and the stylesheet linked from the page
+  eezo dev              the dev console: serve, restart on save, errors, routes, schema
+      --no-tui          the same loop as lines, no screen and no keys: for a pipe or a log
+      --json            the same loop as one JSON object per line: for an agent or a tool
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -30,6 +35,8 @@ eezo — the framework launcher
 
 forwarded to the application (run from the project directory):
   eezo routes           what is mounted
+  eezo config           the variables application.conf names, one per line: variable,
+                        path, redacted|plain, required|defaulted|optional, tab separated
   eezo db <command>     the schema commands: status | sync | freeze | migrate |
                         reset | drop | dump | ddl; `eezo db` alone lists them
   eezo help             every command the application answers
@@ -150,15 +157,68 @@ forward_live() {
 }
 
 # ---------------------------------------------------------------------------------------------
-# dev — the console. sbt runs the watch loop (`eezoDev`, the plugin's `~eezoRestart`) at its warn
-# level, so compile warnings and errors come through and sbt's own narration does not. The
-# console is built here from three sources: the plugin's two marker lines ("eezo dev: building"
-# before each compile, "eezo dev: started <Main>" after each fork), sbt's [error] lines, and the
-# application's own output, which the forked JVM inherits into this same pipe. A spinner stands
-# in for sbt's loading and the compile; the application's boot lines (the drift banner, the route
-# table, the address) and anything it logs pass through; the java.util.logging records Jetty and
-# HikariCP write at INFO are dropped, because they are the only lines nobody asked for.
+# dev — the console. It lives in the sbt plugin: `eezoDev` is a command of sbt-eezo that owns the
+# terminal, watches the sources, compiles, forks the application, and draws a full screen console
+# with the log, the compile errors, the route table and the schema drift as panes, and the schema
+# commands on keys. So this script hands sbt the terminal and gets out of the way: no pipe, no
+# `-batch` (the sbt launcher spells that as `</dev/null`, which would leave the console no
+# keyboard), and sbt's own progress bars off. `--no-tui` asks the plugin for the same loop as
+# lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`): no
+# screen, no keys, so a pipe, a log file or an agent driving the build can read it; Ctrl-C, or
+# killing sbt, stops it and the application with it. Without a terminal and without a flag only
+# `eezoDev --once` runs, which stops by itself.
+#
+# A project pinned to an sbt-eezo from before the console (DEV_CONSOLE_SINCE) still has only the
+# `~eezoRestart` alias, so for those the console below is built here from sbt's output, as it was
+# before: two marker lines from the plugin, sbt's [error] lines, and the application's own
+# output. The pin is read off the project, not off this script's checkout: `site/` pins a release
+# in its own build even though it sits beside a snapshot.
 # ---------------------------------------------------------------------------------------------
+
+DEV_CONSOLE_SINCE="0.4.0"
+
+# Whether the project in the current directory is on the given eezo release or a later one: the
+# `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
+# `EezoVersion.value`, the literal in project/project/EezoVersion.scala. Commented out lines are
+# skipped and the last pin wins, so an old pin left above the real one as a comment does not count.
+# A `+` in the version is a locally published snapshot, always the current plugin, and a project
+# that pins neither way (the examples build reads `.eezo-version`) is taken to be current.
+pinned_since() { # pinned_since <release>
+  local pinned
+  pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | tail -1)"
+  [ -n "$pinned" ] ||
+    pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | tail -1)"
+  [ -n "$pinned" ] || return 0
+  case "$pinned" in *+*) return 0 ;; esac
+  [ "$(printf '%s\n%s\n' "$1" "$pinned" | sort -V | head -1)" = "$1" ]
+}
+
+dev() { # [--no-tui | --json]
+  need_sbt
+  local command="eezoDev"
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-tui) command="eezoDev --plain" ;;
+      --json) command="eezoDev --json" ;;
+      *)
+        echo "eezo dev: unknown option $1 (the options are --no-tui and --json)" >&2
+        exit 1
+        ;;
+    esac
+    shift
+  done
+  if pinned_since "$DEV_CONSOLE_SINCE"; then
+    # `--server`: on an sbt 2 project the sbt script runs a thin client by default, and the
+    # console must run in the process that owns this terminal.
+    SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -Dsbt.supershell=false" \
+      exec sbt --server -error "$command"
+  fi
+  # The older plugin's console is lines already, so `--no-tui` changes nothing here, and it has
+  # no event stream, so `--json` gets the lines too.
+  dev_legacy
+}
+
+# ---- the console built here, for a project on an older plugin ------------------------------
 
 DEV_STATUS=""
 DEV_WATCHING="watching for changes; Ctrl-C stops"
@@ -244,8 +304,7 @@ dev_console() {
   done
 }
 
-dev() {
-  need_sbt
+dev_legacy() {
   set +e
   sbt_at -warn eezoDev 2>&1 | dev_console
   local code="${PIPESTATUS[0]}"
@@ -327,6 +386,153 @@ TOML
   } > fly.toml
 }
 
+# The configuration preflight: every variable application.conf names, as `eezo config` lists it,
+# checked against the names Fly holds, so that an application whose boot would refuse its own
+# configuration stops here and not in a crash loop on Fly. `eezo config` is the one source: this
+# script parses no HOCON and trusts the need as printed. Names only, as with the database secret:
+# `fly secrets list` shows digests and nothing here keeps them, and of the [env] table of fly.toml
+# only the keys are read.
+#
+# A project pinned to a release from before the `config` command (CONFIG_SINCE) is not checked:
+# its application answers `run config` with an unknown command, and no application on it can name
+# a Config class, so it deploys as it did before the check existed.
+
+CONFIG_SINCE="0.4.0"
+
+in_list() { # in_list <name> <names, one per line>: exact, so STRIPE_KEY is not STRIPE_KEY_OLD
+  case $'\n'"$2"$'\n' in
+    *$'\n'"$1"$'\n'*) return 0 ;;
+  esac
+  return 1
+}
+
+# The table runs from its `[env]` header to the next header, and a key may be indented and quoted
+# either way. Everything from the first `=` on is the value, which is dropped unread. A value that
+# opens a multi line string, three quotes of either kind, runs to the line that closes it, and the
+# lines in between are its text: in any table, read as keys or headers they would name variables
+# fly.toml does not set. A file saved with Windows line endings is read the same, or its [env]
+# header would never match and a committed secret there would pass unseen.
+fly_env_keys() { # the keys of the [env] table of fly.toml, one per line, and never a value
+  awk -v q="'" '
+    { sub(/\r$/, "") }
+    closer != "" { if (index($0, closer)) closer = ""; next }
+    /^[ \t]*\[/ { in_env = ($0 ~ /^[ \t]*\[[ \t]*env[ \t]*\][ \t]*(#.*)?$/); next }
+    /^[ \t]*(#|$)/ || !/=/ { next }
+    {
+      value = $0
+      sub(/^[^=]*=[ \t]*/, "", value)
+      opener = substr(value, 1, 3)
+      if ((opener == "\"\"\"" || opener == q q q) && !index(substr(value, 4), opener)) closer = opener
+    }
+    !in_env { next }
+    {
+      key = $0
+      sub(/=.*/, "", key)
+      gsub(/^[ \t]+|[ \t]+$/, "", key)
+      first = substr(key, 1, 1)
+      if (length(key) > 1 && (first == "\"" || first == q) && substr(key, length(key), 1) == first)
+        key = substr(key, 2, length(key) - 2)
+      print key
+    }' fly.toml
+}
+
+# A secret that is staged or only partly deployed carries an indicator in front of its name, `*` or
+# `!`, and is set all the same: the indicator is dropped whether it is its own field or glued to the
+# name, and a field of punctuation alone, such as a table border, is passed over. The first field
+# that is a word is the name. The header row, the one that names the NAME and DIGEST columns, is no
+# secret.
+secret_names() { # the names in `fly secrets list` text on stdin, one per line, and never a digest
+  awk '
+    !header && /(^|[ \t])NAME([ \t]|$)/ && /(^|[ \t])DIGEST([ \t]|$)/ { header = 1; next }
+    {
+      for (i = 1; i <= NF; i++) {
+        field = $i
+        sub(/^[*!]+/, "", field)
+        if (field !~ /^[A-Za-z0-9_]/) continue
+        if (field ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print field
+        break
+      }
+    }'
+}
+
+config_preflight() {
+  pinned_since "$CONFIG_SINCE" || return 0
+  local code=0
+  run_captured "reading application.conf" sbt_cmd "run config" || code=$?
+  if [ "$code" -ne 0 ]; then
+    replay_captured "$SBT_NOISE"
+    exit 1
+  fi
+  local rows="$CAPTURED_OUT"
+  cat "$CAPTURED_ERR" >&2
+  rm -f "$CAPTURED_ERR"
+
+  # A line that is not a row stops the deploy rather than being skipped: a skipped line could be
+  # a required variable that sbt or the application printed something in front of. The line is
+  # matched whole before it is split, because read with a tab in IFS takes tabs as whitespace and
+  # would fold an empty field, a leading tab or a trailing tab into a row that looks well formed.
+  local variables="" required="" redacted="" row variable redaction need line=0
+  local grammar=$'^([A-Za-z_][A-Za-z0-9_]*)\t[^\t]+\t(plain|redacted)\t(required|defaulted|optional)$'
+  while IFS= read -r row || [ -n "$row" ]; do
+    line=$((line + 1))
+    if ! [[ $row =~ $grammar ]]; then
+      rm -f "$rows"
+      {
+        echo "✗ deployment cannot continue: line $line of what eezo config printed is not a variable row, so the"
+        echo "  variables application.conf names cannot be checked. Run eezo config to see it."
+      } >&2
+      exit 1
+    fi
+    variable="${BASH_REMATCH[1]}" redaction="${BASH_REMATCH[2]}" need="${BASH_REMATCH[3]}"
+    in_list "$variable" "$variables" || variables+="$variable"$'\n'
+    [ "$redaction" != redacted ] || redacted+="$variable"$'\n'
+    [ "$need" != required ] || required+="$variable"$'\n'
+  done < "$rows"
+  rm -f "$rows"
+  [ -n "$variables" ] || return 0
+
+  # Fly is asked for its secrets only when a required variable is not already in [env], so a
+  # failing `fly secrets list` stops no deploy that never needed it. A failure stops the deploy on
+  # its own line, rather than reporting every variable as missing.
+  local env_keys secrets="" listed name
+  env_keys="$(fly_env_keys)"
+  for name in $required; do
+    in_list "$name" "$env_keys" && continue
+    if ! listed="$("$FLY" secrets list)"; then
+      {
+        echo "✗ deployment cannot continue: fly secrets list failed, so the variables application.conf names"
+        echo "  cannot be checked. See the output above."
+      } >&2
+      exit 1
+    fi
+    secrets="$(secret_names <<< "$listed")"
+    break
+  done
+
+  # Names and places only: the report is built from the variable names, never from a line read.
+  local report=""
+  for name in $variables; do
+    if in_list "$name" "$redacted" && in_list "$name" "$env_keys"; then
+      report+="    $name is redacted and belongs in fly secrets, not in fly.toml, which is committed: remove it from the [env] table and set it with fly secrets set $name=..."$'\n'
+    elif ! in_list "$name" "$required" || in_list "$name" "$secrets"; then
+      continue
+    elif in_list "$name" "$redacted"; then
+      report+="    $name is required and redacted: set it with fly secrets set $name=..."$'\n'
+    elif ! in_list "$name" "$env_keys"; then
+      report+="    $name is required: set it with fly secrets set $name=..., or as a key of the [env] table of fly.toml"$'\n'
+    fi
+  done
+  if [ -n "$report" ]; then
+    {
+      echo "✗ deployment cannot continue: the variables application.conf names are not all in place on Fly."
+      echo
+      printf '%s' "$report"
+    } >&2
+    exit 1
+  fi
+  return 0
+}
+
 deploy() {
   local target="fly" app=""
   while [ $# -gt 0 ]; do
@@ -374,7 +580,7 @@ deploy() {
     echo "→ wrote fly.toml (app: $name${region:+, region: $region})"
   fi
 
-  # The one reliable secret preflight: an app with migrations will run `db migrate --apply` on
+  # The database secret preflight: an app with migrations will run `db migrate --apply` on
   # deploy, which needs a database. Names only — secret values never reach this machine.
   if [ -d db/migrations ] && [ -n "$(ls db/migrations 2> /dev/null)" ]; then
     if ! "$FLY" secrets list 2> /dev/null | grep -qE '(DATABASE_URL|EEZO_DB_URL)'; then
@@ -391,6 +597,8 @@ MSG
       exit 1
     fi
   fi
+
+  config_preflight
 
   local staged=0
   run_captured "staging the application" sbt_cmd eezoStage || staged=$?
@@ -516,25 +724,121 @@ read_version_file() {
   }
 }
 
+# The scaffold's gitignore entries, either written to a new .gitignore file or appended if .gitignore
+# already exists, in which case it names the entries it appended
+write_gitignore() { # <file>
+  local file="$1" existed=0 line added=()
+  [ ! -f "$file" ] || existed=1
+  for line in target/ .bsp/ .metals/ .bloop/; do
+    [ "$existed" -eq 1 ] && grep -qxF "$line" "$file" && continue
+    added+=("$line")
+  done
+  [ "${#added[@]}" -gt 0 ] || return 0
+  if [ -s "$file" ] && [ -n "$(tail -c1 "$file")" ]; then echo >> "$file"; fi
+  printf '%s\n' "${added[@]}" >> "$file"
+  [ "$existed" -eq 0 ] || echo "added ${added[*]} to the existing .gitignore"
+}
+
+# The note a coding agent reads before touching the project: which form of `eezo dev` it can
+# follow, what to wait for, and that the forwarded commands answer in JSON. Written once; a
+# project that has its own AGENTS.md keeps it, and a symlink by that name, dangling or not, is
+# left alone rather than written through.
+write_agents_note() { # <path>
+  [ ! -e "$1" ] && [ ! -L "$1" ] || return 0
+  cat > "$1" <<'EOF'
+# For agents
+
+This is an [eezo](https://eezo.io) application. The dev loop draws a full screen console for a
+person; an agent uses the same loop as a stream it can read.
+
+## The dev loop
+
+```
+eezo dev --json > dev.log 2>&1 &
+```
+
+builds the project, starts the application, and restarts it on every save, printing one JSON
+object per line, each with an `event` field:
+
+- `compiling` with a `build` number and the `trigger` file, then `built` or `failed` with the
+  same number. `failed` carries `diagnostics`, each with `path`, `line`, `column`, `severity`,
+  `message` and the compiler's `rendered` excerpt. The previous application keeps serving
+  through a failed build.
+- `started`, then `serving` with the `url`. Wait for it before making requests. `exited` with
+  the `code` when the application dies.
+- `line` with `stream` and `text`: the application's own output, routine boot records removed.
+- `routes` and `drift` at every start, the `eezo routes --json` and `eezo db status --json`
+  bodies, `drift` with `blocking` set when the drift gate holds the pages.
+
+Stop the loop with a signal to the sbt process; the application stops with it. `eezo dev
+--no-tui` prints the same events as text, and `sbt "eezoDev --once"` builds, waits for the
+application to serve, stops, and exits nonzero when it did not.
+
+## The commands
+
+`eezo routes`, `eezo db status`, `eezo db sync --apply`, `eezo db freeze <name>` and
+`eezo db migrate --apply` are the application's own commands; every one takes `--json`.
+Exit code 1 is the command's answer, drift found or a change refused, not a failure of the
+build. `eezo db` alone lists them, and `eezo help` lists everything the application answers.
+EOF
+}
+
 scaffold() {
-  name="${1:-}"
-  [ -n "$name" ] || { echo "eezo: new needs a name: eezo new myapp" >&2; exit 1; }
-  [ ! -e "$name" ] || { echo "eezo: ./$name already exists" >&2; exit 1; }
+  # One name and, anywhere beside it, `--tailwind`: the scaffold then writes a `tailwind.css` at
+  # the root, which is what turns the plugin's stylesheet generator on, and links the stylesheet
+  # from the one page it writes. The file is the switch; the flag only writes it.
+  local dir="" tailwind=0 arg
+  for arg in "$@"; do
+    case "$arg" in
+      --tailwind) tailwind=1 ;;
+      --*) echo "eezo: new does not know the flag '$arg'; it takes a name and --tailwind" >&2; exit 1 ;;
+      *)
+        [ -z "$dir" ] || { echo "eezo: new takes one name, got '$dir' and '$arg'" >&2; exit 1; }
+        dir="$arg"
+        ;;
+    esac
+  done
+  [ -n "$dir" ] || { echo "eezo: new needs a name: eezo new myapp, or eezo new . for the current directory ($(basename "$PWD"))" >&2; exit 1; }
+  # Any reference to the current directory such as: ./, "$PWD", or a symlink to it
+  if [ "$dir" -ef . ]; then dir="."; fi
+  if [ "$dir" = "." ]; then
+    # In place: the app is named after the directory
+    name="$(basename "$PWD")"
+    local existing=() file
+    for file in build.sbt build.sc build.mill project src; do
+      [ ! -e "$file" ] && [ ! -L "$file" ] || existing+=("$file")
+    done
+    [ "${#existing[@]}" -eq 0 ] || {
+      echo "eezo: this directory already has ${existing[*]}; new scaffolds a project only where there is none" >&2
+      exit 1
+    }
+    [ ! -L .gitignore ] || {
+      echo "eezo: .gitignore here is a symlink; new appends its entries only to a plain .gitignore" >&2
+      exit 1
+    }
+    [ ! -e .gitignore ] || { [ -f .gitignore ] && [ -r .gitignore ] && [ -w .gitignore ]; } || {
+      echo "eezo: .gitignore here is not a file new can append to; make it a writable file or remove it" >&2
+      exit 1
+    }
+  else
+    name="$dir"
+    [ ! -e "$dir" ] || { echo "eezo: ./$dir already exists" >&2; exit 1; }
+  fi
   read_version_file
 
-  mkdir -p "$name/project" "$name/src/main/scala/app" "$name/src/main/scala/models"
+  mkdir -p "$dir/project" "$dir/src/main/scala/app" "$dir/src/main/scala/models"
 
-  cat > "$name/project/build.properties" <<EOF
+  cat > "$dir/project/build.properties" <<EOF
 sbt.version=$SBT_VERSION
 EOF
 
-  cat > "$name/project/plugins.sbt" <<EOF
+  cat > "$dir/project/plugins.sbt" <<EOF
 // The route table generator: scans src/main/scala/app/ and your models into
 // io.eezo.generated.Routes, and provides the eezo* tasks (eezoDev, eezoStatus, ...).
 addSbtPlugin("io.eezo" % "sbt-eezo" % "$EEZO_VERSION")
 EOF
 
-  cat > "$name/build.sbt" <<EOF
+  cat > "$dir/build.sbt" <<EOF
 name         := "$name"
 scalaVersion := "$SCALA_VERSION"
 
@@ -549,7 +853,7 @@ run / fork           := true
 run / outputStrategy := Some(OutputStrategy.StdoutOutput)
 EOF
 
-  cat > "$name/src/main/scala/Main.scala" <<'EOF'
+  cat > "$dir/src/main/scala/Main.scala" <<'EOF'
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
@@ -574,7 +878,52 @@ object Main extends EezoApp {
 }
 EOF
 
-  cat > "$name/src/main/scala/app/Index.scala" <<'EOF'
+  if [ "$tailwind" -eq 1 ]; then
+    cat > "$dir/tailwind.css" <<'EOF'
+/* The stylesheet eezo builds. The sbt plugin sees this file at the project root and runs the
+   Tailwind CLI over it on every build, writing assets/tailwind.css into the jar; nothing here is
+   committed but this file. source("src") keeps the scan to the sources. The how-to "Style with
+   Tailwind" in the docs has the rest. */
+@import "tailwindcss" source("src");
+EOF
+    cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
+package app
+
+import io.eezo.core.html.*
+import io.eezo.http.Assets
+import io.eezo.http.Request
+import io.eezo.http.Response
+
+/** `app/Index.scala` mounts `GET /`, calling `def index`: the filename is the route.
+  *
+  * The stylesheet is the one the build writes from `tailwind.css` at the project root, linked
+  * under the versioned address `Assets.url` gives it. Once the application has a second page, the
+  * link moves into a `Layout` named in `Main`, so every page gets it.
+  */
+object Index {
+
+  def index(request: Request): Response = {
+    val _ = request
+    Response.Ok(
+      Html.doctype ++ html(
+        head(
+          meta(Attrs.charset := "utf-8"),
+          title("eezo"),
+          link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("tailwind.css"))
+        ),
+        body(
+          Attrs.cls := "mx-auto max-w-xl p-8 font-sans text-stone-800",
+          h1(Attrs.cls := "text-3xl font-semibold", "it works"),
+          p(Attrs.cls := "mt-4", "Add a case class with ", code("derives Form, Resource"), " under models/ "),
+          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
+        )
+      )
+    )
+  }
+}
+EOF
+  else
+    cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
 package app
 
 import io.eezo.core.html.*
@@ -599,19 +948,17 @@ object Index {
   }
 }
 EOF
+  fi
 
-  cat > "$name/.gitignore" <<'EOF'
-target/
-.bsp/
-.metals/
-.bloop/
-EOF
+  write_agents_note "$dir/AGENTS.md"
 
-  echo "created ./$name (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  echo "created $name at $(cd -- "$dir" 2> /dev/null && pwd) (eezo $EEZO_VERSION, Scala $SCALA_VERSION, sbt $SBT_VERSION)"
+  write_gitignore "$dir/.gitignore"
   echo
   echo "next:"
-  echo "  cd $name"
+  [ "$dir" = "." ] || echo "  cd $name"
   echo "  eezo dev           # serve on :8080, restart on save"
+  [ "$tailwind" -eq 0 ] || echo "                     # the first build fetches the Tailwind CLI once, into ~/.eezo/tools"
   echo "  eezo routes        # what is mounted"
 }
 
@@ -625,7 +972,8 @@ case "$cmd" in
     scaffold "$@"
     ;;
   dev)
-    dev
+    shift
+    dev "$@"
     ;;
   build)
     need_sbt
@@ -650,7 +998,7 @@ case "$cmd" in
       forward "eezo db ${2:-}" "run $*"
     fi
     ;;
-  routes | help)
+  routes | config | help)
     need_sbt
     forward "eezo $cmd" "run $*"
     ;;

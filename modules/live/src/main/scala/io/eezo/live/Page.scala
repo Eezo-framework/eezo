@@ -24,7 +24,7 @@ import io.eezo.core.html.Html
   *     Jetty's own demand loop. Nothing is queued unboundedly and nothing is dropped.
   *   - **Topic deliveries never block their publisher** ([[post]]): they enqueue and return. A full
   *     mailbox drops the delivery and records it; the loop answers with one full resync, so the DOM
-  *     stays honest about the state — which has genuinely missed those messages, because a
+  *     stays honest about the state, which has genuinely missed those messages, because a
   *     subscriber slower than its publisher misses messages or grows without bound, and eezo
   *     chooses the honest loss (design/live.md §1.1 on §4.5).
   *
@@ -46,7 +46,7 @@ private[live] final class Page[S](
     case FromClient(event: Event, done: Promise[Unit])
     case FromTopic(transition: S => S)
     case Rebase(prefix: String)
-    case Resync
+    case Resync(forced: Boolean)
     case Stop
   }
 
@@ -70,10 +70,18 @@ private[live] final class Page[S](
     */
   private var prefix: String = "/"
 
+  /** Whether the client's DOM is behind `lastTree`: a frame was produced while no listener was
+    * attached, or the write of one failed and detached the listener on the way. Owned by the loop
+    * thread, which is the only one that sends. A join's resync replays the tree only when this is
+    * set; otherwise the client holds exactly what the page rendered, and a whole-tree frame would
+    * undo whatever a script did to that DOM after the first render.
+    */
+  private var owed: Boolean = false
+
   /** Runs `init`, renders and validates the first tree, starts the page thread, and returns the
     * tree for the mount to embed. A failing `init` or a non-canonical first render propagates to
-    * the caller — the HTTP request that is mounting — after cancelling whatever subscriptions
-    * `init` already made.
+    * the caller, the HTTP request that is mounting, after cancelling whatever subscriptions `init`
+    * already made.
     */
   def mount(): Html.Element = {
     val ctx = new Init[S](post)
@@ -145,21 +153,24 @@ private[live] final class Page[S](
   private[live] def rebase(prefix: String): Unit =
     mailbox.put(Msg.Rebase(prefix))
 
-  /** Asks the loop for one full-tree frame after whatever is already queued: the first thing a
-    * connecting or reconnecting socket receives, which heals both the mount-to-join gap (topic
-    * messages may have moved the state while no socket was attached to carry the frames) and a
-    * rejoin inside the grace window. Enqueue-and-return, like any non-client work; a full mailbox
-    * is already heading for a drop-driven resync, so the request is granted either way.
+  /** Asks the loop for one frame after whatever is already queued: the first thing a connecting or
+    * reconnecting socket receives. Forced, it is the whole tree, which is what a `failed` report
+    * needs. Unforced, the join's request, it is the whole tree only when the client is behind
+    * (topic messages moved the state while no socket was attached, between mount and join or inside
+    * a grace window) and an empty `patches` frame otherwise, which the client reads as its
+    * acknowledgement. Enqueue-and-return, like any non-client work; a full mailbox is already
+    * heading for a drop-driven resync, so the request is granted either way.
     */
-  private[live] def resync(): Unit =
-    if (!mailbox.offer(Msg.Resync)) {
+  private[live] def resync(forced: Boolean = true): Unit =
+    if (!mailbox.offer(Msg.Resync(forced))) {
       val _ = dropped.incrementAndGet()
     }
 
   /** Hands the page's frames to `out` until [[detach]]. Frames sent while nothing is attached, in
     * the gap between mount and join or during a grace window, are dropped rather than buffered: the
-    * join that attaches a listener also asks for a [[resync]], which replays the whole tree, so
-    * nothing is owed to a socket that was not there, and a page nobody watches holds no backlog.
+    * drop is remembered, and the join that attaches a listener asks for a [[resync]], which replays
+    * the whole tree when anything was dropped, so nothing is owed to a socket that was not there,
+    * and a page nobody watches holds no backlog.
     */
   private[live] def attach(out: List[Patch] => Unit): Unit = listener = Some(out)
 
@@ -169,7 +180,7 @@ private[live] final class Page[S](
   private[live] def detach(): Unit = listener = None
 
   /** Stops the page: cancels its subscriptions, stops the thread, and fails whatever callers were
-    * still waiting. Idempotent, callable from any thread — the registry reaps through this.
+    * still waiting. Idempotent, callable from any thread: the registry reaps through this.
     */
   def close(): Unit = {
     closed = true
@@ -210,10 +221,15 @@ private[live] final class Page[S](
           case _                    => ()
         }
         val (resyncs, changes) =
-          work.filterNot(_.isInstanceOf[Msg.Rebase]).partition(_ == Msg.Resync)
+          work.filterNot(_.isInstanceOf[Msg.Rebase]).partition(_.isInstanceOf[Msg.Resync])
         val completions = if (changes.nonEmpty) step(changes) else Nil
-        // After the changes, so the joining client gets the tree those changes produced.
-        if (resyncs.nonEmpty) sendWholeTree()
+        // After the changes, so the joining client gets the tree those changes produced. A join
+        // on a page the client is not behind gets an empty frame: its acknowledgement, and no
+        // rewrite of a DOM that already matches.
+        if (resyncs.nonEmpty) {
+          val forced = resyncs.exists { case Msg.Resync(forced) => forced; case _ => false }
+          if (forced || owed) sendWholeTree() else send(Nil)
+        }
         // Blocked callers are released only after the whole batch's frames are out, resyncs
         // included: "the work is finished" means everything enqueued before the event is on the
         // wire when event() returns, which is also what makes tests deterministic.
@@ -272,7 +288,7 @@ private[live] final class Page[S](
 
   /** The state folded through the batch, with each blocked caller's individual outcome: an event
     * whose `handle` throws fails alone and moves nothing; the rest of the batch still applies. A
-    * topic transition that throws is logged and skipped — nobody is waiting on it.
+    * topic transition that throws is logged and skipped, since nobody is waiting on it.
     */
   private def applied(work: List[Msg]): (S, List[(Promise[Unit], Option[Throwable])]) =
     work.foldLeft((state, List.empty[(Promise[Unit], Option[Throwable])])) {
@@ -286,7 +302,7 @@ private[live] final class Page[S](
             log.log(System.Logger.Level.WARNING, s"page $id dropped a failing topic transition", e)
             (s, acc)
         }
-      case ((s, acc), Msg.Rebase(_) | Msg.Resync | Msg.Stop) => (s, acc)
+      case ((s, acc), Msg.Rebase(_) | Msg.Resync(_) | Msg.Stop) => (s, acc)
     } match {
       case (s, acc) => (s, acc.reverse)
     }
@@ -294,8 +310,10 @@ private[live] final class Page[S](
   /** One frame carrying the whole current tree: what a joining socket starts from, and what an
     * overflow falls back to. Always against `lastTree`, so it says exactly what the page knows.
     */
-  private def sendWholeTree(): Unit =
+  private def sendWholeTree(): Unit = {
     send(List(Patch.SetChildren(Nil, None, Vector(lastTree))))
+    owed = listener.isEmpty
+  }
 
   /** Adopts the prefix the client reported. Once: the baseline is rewritten a single time, when "/"
     * becomes something else, because `Url.Mounted` survives `under` and a second application would
@@ -325,7 +343,12 @@ private[live] final class Page[S](
         case other => throw new IllegalStateException(s"under() changed the root: $other")
       }
 
-  private def send(patches: List[Patch]): Unit = listener.foreach(_(patches))
+  private def send(patches: List[Patch]): Unit = {
+    listener.foreach(_(patches))
+    // Nobody received it, or the write failed and the listener detached itself on the way: either
+    // way the client's DOM is now behind, and the next join must replay the tree.
+    if (patches.nonEmpty && listener.isEmpty) owed = true
+  }
 
   /** A blocked caller behind a closed page gets a failure, not a wait forever; work nobody waits on
     * is simply dropped.

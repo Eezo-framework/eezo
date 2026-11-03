@@ -40,11 +40,15 @@ final class Board extends Component[List[(Long, String)]] {
 
   def render(items: List[(Long, String)]): Html =
     div(
-      Attrs.style := "font-family: system-ui; max-width: 30rem; margin: 3rem auto",
+      Attrs.cls := "space-y-3",
       h1("shared board"),
       p("Open this page in two browsers; act in one, watch the other."),
       p(a(Attrs.href := Url.Mounted("/board"), "this board's own address")),
-      div(button(Live.onClick("shout"), "shout"), " ", button(Live.onClick("wave"), "wave")),
+      div(
+        Attrs.cls := "flex gap-2",
+        button(Live.onClick("shout"), "shout"),
+        button(Live.onClick("wave"), "wave")
+      ),
       ul(items.map { case (id, text) => li(Key(id.toString), text) })
     )
 }

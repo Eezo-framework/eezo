@@ -55,6 +55,221 @@ class MigrationSuite extends FunSuite {
     val recommented = migration.render.replace("-- initial", "-- initial (reviewed)")
     assertEquals(Migration.verify(recommented), Right(stmts))
   }
+
+  /** A statement list through the real `render`, asserted back as that same list.
+    *
+    * Every quoting case below goes through this rather than a hand-built file, because the shape
+    * that breaks a splitter is the one `render` writes: the `;` lands on the same line as the
+    * statement, so a statement ending in a comment hides its own terminator inside that comment. A
+    * file assembled by hand can put the `;` on its own line and pass without exercising any of it.
+    */
+  private def rendered(statements: List[String]): String =
+    Migration(1, "seed", statements, Migration.fingerprint(statements)).render
+
+  private def roundTrips(name: String)(statements: List[String]): Unit =
+    test(name) {
+      assertEquals(Migration.verify(rendered(statements)), Right(statements))
+    }
+
+  /** The same round trip after every LF in the rendered file is replaced with CR LF.
+    *
+    * A file from Windows keeps the carriage return. The scanner has to see the normalised text, or
+    * a multi line statement hashes to something other than the fingerprint `render` wrote.
+    */
+  private def roundTripsCrLf(name: String)(statements: List[String]): Unit =
+    test(name) {
+      val windows = rendered(statements).replace("\n", "\r\n")
+      assertEquals(Migration.verify(windows), Right(statements))
+    }
+
+  roundTrips("a semicolon inside a string literal does not split the statement")(
+    List("""insert into "post" ("title") values ('semicolon; inside text')""")
+  )
+
+  roundTrips("a double quoted identifier with an apostrophe does not swallow the next statement")(
+    List("""create table "o'clock" ("id" int)""", """create index "ix" on "o'clock" ("id")""")
+  )
+
+  roundTrips("a statement ending in a comment keeps the terminator that follows the comment")(
+    List("""update "post" set "n" = 0 -- reset""", "select 1")
+  )
+
+  roundTrips("an apostrophe in a trailing comment opens no literal")(
+    List("""update post set n = 0 -- it's stale""", "select 1")
+  )
+
+  roundTrips("a block comment holding an apostrophe does not swallow the next statement")(
+    List("""update post set n = 0 /* don't */""", "select 1")
+  )
+
+  roundTrips("a semicolon right after a doubled quote stays inside the literal")(
+    List("""insert into "t" ("v") values ('a''; b')""")
+  )
+
+  roundTrips("a literal ending in a doubled quote still finds the real terminator after it")(
+    List("""select 'a'';'""", "select 1")
+  )
+
+  roundTrips("an escaped quote inside one statement leaves the next one whole")(
+    List("""insert into t values (E'it\'s')""")
+  )
+
+  roundTrips("escaped quotes across two statements do not merge them")(
+    List("""insert into t values (E'a\'b')""", """insert into t values (E'c\'d')""")
+  )
+
+  roundTrips("plain generated DDL is unaffected")(
+    List(
+      """create table "book" ("id" uuid primary key)""",
+      """create index "ix_book" on "book" ("id")"""
+    )
+  )
+
+  roundTrips("a dollar quoted body keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $$ begin perform 1; end $$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a tagged dollar quote keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $fn$ begin perform 1; end $fn$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar quoted body keeps a comment line and a semicolon")(
+    List(
+      "create function f() returns void as $$\nbegin\n  -- keep this line\n  perform 1;\nend\n$$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar sign inside an unquoted identifier does not open a dollar quote")(
+    List("create table foo$tag$ (v text default 'a; b')")
+  )
+
+  roundTrips("an underscore before a dollar sign does not open a dollar quote")(
+    List("create table foo_$bar$ (v text default 'a; b')")
+  )
+
+  roundTrips("a dollar sign before a dollar sign does not open a dollar quote")(
+    List("create table foo$$bar$ (v text default 'a; b')")
+  )
+
+  roundTrips("a nested block comment keeps a semicolon in its own text")(
+    List("select 1 /* a /* b */ ; c */", "select 'a; b'")
+  )
+
+  roundTrips("a dollar quote closes only on its own tag")(
+    List("select $a$ x $b$ ; y $a$", "select 'a; b'")
+  )
+
+  roundTrips("a comment line inside a block comment is kept")(
+    List("select 1 /*\n-- x\n*/", "select 'a; b'")
+  )
+
+  roundTrips("a comment line inside a quoted identifier is kept")(
+    List("create table \"a\n-- b\" (v text default 'x; y')", "select 'a; b'")
+  )
+
+  roundTripsCrLf("a multi line statement in a CR LF file still verifies")(
+    List("create table t (\n  a int\n)", "insert into t values ('a; b')")
+  )
+
+  roundTripsCrLf("a dollar quoted body with a comment line still verifies as CR LF")(
+    List(
+      "create function f() returns void as $$\nbegin\n  -- keep this line\n  perform 1;\nend\n$$ language plpgsql",
+      "select 'a; b'"
+    )
+  )
+
+  roundTripsCrLf("a literal comment line still verifies as CR LF")(
+    List(
+      "insert into t (v) values ('first\n-- not a comment\na; b')",
+      "select 'a; b'"
+    )
+  )
+
+  roundTripsCrLf("a comment line inside a block comment still verifies as CR LF")(
+    List("select 1 /*\n-- x\n*/", "select 'a; b'")
+  )
+
+  roundTrips("a line of a literal that starts with a comment mark is kept")(
+    List(
+      "insert into t (v) values ('first\n-- not a comment\na; b')",
+      "select 1"
+    )
+  )
+
+  roundTrips("a block comment with an apostrophe does not swallow a later semicolon")(
+    List(
+      "update post set n = 0 /* don't */",
+      "insert into post (t) values ('a; b')"
+    )
+  )
+
+  roundTrips("an apostrophe in an identifier does not swallow a later semicolon")(
+    List(
+      """create table "o'clock" ("id" int)""",
+      """insert into "o'clock" ("v") values ('a; b')"""
+    )
+  )
+
+  /** The comment state earns its place here and nowhere else in this suite.
+    *
+    * The comment carries a quote that closes nothing, and the statement after it carries a `;`
+    * inside a literal. Without comment state the stray apostrophe opens a literal that swallows
+    * that `;`, the scanned split is wrong, and the plain split is wrong too because of the literal,
+    * so neither candidate matches and `verify` refuses a file `render` had just written.
+    */
+  roundTrips("a comment with an unmatched quote, then a literal holding a semicolon")(
+    List("""update "t" set "n" = 0 -- don't""", """insert into "t" ("v") values ('a; b')""")
+  )
+
+  test("the plain split is taken when the scanner's reading does not match the fingerprint") {
+    // Backslash escapes are not tracked, so the scanner reads this as one statement. The plain
+    // split reads two, matches the declared fingerprint, and is what parse answers with.
+    val stmts    = List("""insert into t values (E'a\'b')""", """insert into t values (E'c\'d')""")
+    val rendered = Migration(1, "seed", stmts, Migration.fingerprint(stmts)).render
+    assertEquals(Migration.parse(rendered).map(_._2), Some(stmts))
+  }
+
+  test("a file neither reading explains is still refused") {
+    val stmts    = List("""create table "book" ("id" uuid primary key)""")
+    val tampered =
+      Migration(1, "seed", stmts, Migration.fingerprint(stmts)).render.replace("book", "volume")
+    assert(Migration.verify(tampered).isLeft, "a tampered file must not verify under either split")
+  }
+
+  /** The limit of the line above, recorded rather than fixed.
+    *
+    * A `;` inside a comment has to cut, because `render` writes the terminator of a statement that
+    * ends in a comment inside that comment's own text. So a `;` the comment itself carries cuts
+    * there too, and the statement comes back in two pieces. The same file does not verify at the
+    * merge base either, where the plain split cuts at both that `;` and the one in the literal, so
+    * this is a limit and not something this change took away.
+    */
+  test("a semicolon in the comment's own text is not supported") {
+    val stmts =
+      List(
+        """update "t" set "n" = 0 -- don't; really""",
+        """insert into "t" ("v") values ('a; b')"""
+      )
+    val rendered = Migration(1, "seed", stmts, Migration.fingerprint(stmts)).render
+    assertEquals(
+      Migration.parse(rendered).map(_._2),
+      Some(
+        List(
+          """update "t" set "n" = 0 -- don't""",
+          "really",
+          """insert into "t" ("v") values ('a; b')"""
+        )
+      )
+    )
+    assert(Migration.verify(rendered).isLeft, "the fingerprint cannot match a split statement")
+  }
 }
 
 /** Migration authoring: numbering, resolutions, and the snapshot written alongside. */

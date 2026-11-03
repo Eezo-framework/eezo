@@ -6,7 +6,7 @@ import io.eezo.core.Id
 import io.eezo.db.*
 import io.eezo.db.Scopes.*
 import io.eezo.http.{BadRequest, Guarded, NotFound, Request, Response}
-import io.eezo.http.client.{Auth, Http, Reply}
+import io.eezo.http.client.{Http, Reply}
 
 import models.{Order, Product}
 import stripe.Stripe
@@ -20,19 +20,20 @@ object Create {
     val order   =
       Order(Id.gen(), product.id, product.name, product.price, paid = false, Instant.now())
     transact(Table[Order].insert(order))
+    val (paid, cancelled) = Stripe.returns
     Http.post(
       "https://api.stripe.com/v1/checkout/sessions",
       Http.form(
         "mode"                                          -> "payment",
         "client_reference_id"                           -> order.id.show,
-        "success_url"                                   -> s"${Stripe.back}/?paid",
-        "cancel_url"                                    -> Stripe.back,
+        "success_url"                                   -> paid,
+        "cancel_url"                                    -> cancelled,
         "line_items[0][quantity]"                       -> "1",
         "line_items[0][price_data][currency]"           -> "eur",
         "line_items[0][price_data][unit_amount]"        -> (product.price * 100).toString,
         "line_items[0][price_data][product_data][name]" -> product.name
       ),
-      Auth.bearer(Stripe.key)
+      Stripe.authorization
     ) match {
       case Reply.Ok(reply) => Response.Redirect(Stripe.sessionUrl(reply.text))
       case other           => throw BadRequest(s"Stripe answered $other")

@@ -29,8 +29,6 @@ class DbAppSuite extends PgSuite {
     override def databaseUser: String     = Pg.username
     override def databasePassword: String = Pg.password
 
-    override def databaseInit: Connection -> Unit = Pg.searchPath(pgSchema)
-
     override def boot(): Unit = {
       ran = true
       sawDatabase = read { Commands.status(schema, databaseSchema) }.changes.nonEmpty
@@ -38,6 +36,96 @@ class DbAppSuite extends PgSuite {
   }
 
   private def installed: Boolean = Installed.installed
+
+  /** An application that names its Postgres schema and nothing else: no `databaseInit`, so whatever
+    * puts its tables in that schema is the framework's doing. The schema is one that does not exist
+    * yet, so the framework has to create it, and the test drops it after.
+    */
+  private class Named(name: String, user: String = Pg.username, password: String = Pg.password)
+      extends DbApp {
+    override def schema: Schema         = Library
+    override def databaseSchema: String = name
+
+    override def databaseUrl: String      = Pg.jdbcUrl
+    override def databaseUser: String     = user
+    override def databasePassword: String = password
+
+    override def boot(): Unit = ()
+  }
+
+  /** The same application with a hook of its own for something unrelated to the schema, written
+    * without `super`, the way an application adds `application_name` and forgets the rest.
+    */
+  private class NamedWithHook(name: String) extends Named(name) {
+    override def databaseInit: Connection -> Unit = c => {
+      val st = c.createStatement()
+      try st.execute("set application_name to 'eezo-dbappsuite'"): Unit
+      finally st.close()
+    }
+  }
+
+  /** The schemas that hold a table called `table`, read from the catalog. */
+  private def schemasHolding(table: String): Set[String] = {
+    val ps =
+      db.prepareStatement("select table_schema from information_schema.tables where table_name = ?")
+    try {
+      ps.setString(1, table)
+      val rs = ps.executeQuery()
+      try Iterator.continually(rs).takeWhile(_.next()).map(_.getString(1)).toSet
+      finally rs.close()
+    } finally ps.close()
+  }
+
+  /** Runs `f` with `name` absent before and dropped after, so no later suite sees its tables. */
+  private def inFreshSchema(name: String)(f: => Unit): Unit = {
+    val drop = s"""drop schema if exists "${name.replace("\"", "\"\"")}" cascade"""
+    exec(drop)
+    try f
+    finally exec(drop)
+  }
+
+  test("databaseSchema alone puts the tables in that schema, creating it, and status agrees") {
+    val name = pgSchema + "_own"
+    inFreshSchema(name) {
+      val app = new Named(name)
+      assertEquals(captured(app.run(List("db", "sync", "--apply")))._1, 0)
+      assertEquals(schemasHolding("author"), Set(name))
+      val (code, out, _) = captured(app.run(List("db", "status")))
+      assertEquals(code, 0, out)
+    }
+  }
+
+  test("a role that owns its schema but cannot create one on the database still connects") {
+    val name = pgSchema + "_owned"
+    val role = pgSchema + "_role"
+    inFreshSchema(name) {
+      exec(
+        s"""drop role if exists "$role"""",
+        s"""create role "$role" login password 'owner'""",
+        s"""create schema "$name" authorization "$role""""
+      )
+      try {
+        val app = new Named(name, user = role, password = "owner")
+        assertEquals(captured(app.run(List("db", "sync", "--apply")))._1, 0)
+        assertEquals(schemasHolding("author"), Set(name))
+      } finally {
+        exec(s"""drop schema if exists "$name" cascade""", s"""drop role if exists "$role"""")
+      }
+    }
+  }
+
+  test(
+    "a databaseInit of the application's own, without super, keeps the tables in databaseSchema"
+  ) {
+    val name = pgSchema + "_hook"
+    inFreshSchema(name) {
+      val app = new NamedWithHook(name)
+      assertEquals(captured(app.run(List("db", "sync", "--apply")))._1, 0)
+      assertEquals(schemasHolding("author"), Set(name))
+      val (code, out, _) = captured(app.run(List("db", "status")))
+      assertEquals(code, 0, out)
+    }
+  }
 
   test("no arguments is the program, run with a Database installed and uninstalled after") {
     val app = new Job

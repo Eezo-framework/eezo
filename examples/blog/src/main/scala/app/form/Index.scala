@@ -14,10 +14,5 @@ object Index {
   given Guarded[Index.type] = Guarded.public
 
   def index(request: Request): Response =
-    Response.Ok(
-      Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("live signup")),
-        body(Live.mount(request, new Signup))
-      )
-    )
+    Response.Ok(title("live signup") ++ Live.mount(request, new Signup))
 }

@@ -51,7 +51,7 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
 
   def render(s: CalloutState): Html =
     div(
-      Attrs.style := "font-family: system-ui; max-width: 32rem; margin: 3rem auto",
+      Attrs.cls := "space-y-3",
       h1("calling out"),
       p("token: ", code(s.token), " ", button(Live.onClick("toggle-token"), "toggle")),
       p(
@@ -61,7 +61,7 @@ final class Callout(async: Async[CalloutState]) extends Component[CalloutState] 
       ),
       p(if (s.loading) em("calling…") else strong(s.outcome)),
       p(
-        Attrs.style := "color: gray",
+        Attrs.cls := "text-sm text-stone-500",
         "The call happens on the server: this page's handle runs in the JVM, and async.get " +
           "fetches /api over the loopback (127.0.0.1, matching Jetty's IPv4 bind - `localhost` " +
           "can resolve to IPv6 ::1 and time out). The browser's network tab shows only the " +

@@ -18,8 +18,8 @@ where they came from and wraps only the derived ones in `Route.under("/admin")`,
 routes and the URLs the pages emit together; `app/Index.scala` explains the one link that has to
 name `/admin` by hand.
 
-The blog keeps its table in a Postgres schema named `blog` (`databaseSchema` plus the `databaseInit`
-hook), so it shares the dev database with the other examples.
+The blog keeps its table in a Postgres schema named `blog` (`databaseSchema` in `Main.scala`, the
+one override that does it), so it shares the dev database with the other examples.
 
 ```bash
 docker run -d --name eezo-pg -p 5442:5432 \
@@ -29,21 +29,49 @@ cd examples
 sbt "blog/run db sync --apply"     # the two tables have to exist before the first request
 ```
 
-The first user comes next, since there is no sign up page. Run this line on its own and type the
-password at the prompt. It is a separate block on purpose: pasted together with the lines after it,
-`read` would take the next line as the password.
+The first user comes next, since there is no sign up page. `CreateUser.scala` reads the email and
+the password from `src/main/resources/application.conf`, and the file feeds both from variables:
+
+```hocon
+createUser {
+  email = ${?BLOG_EMAIL}
+  password = ${?BLOG_PASSWORD}
+}
+```
+
+`blog/BlogConfig.scala` is the case class the file is read into, and `examples/build.sbt` names it
+with `eezoConfigClass`. Boot reads the file before the server or the job starts.
+
+| variable | what it is for | when unset |
+|---|---|---|
+| `BLOG_EMAIL` | `createUser.email`, the first user's email | the server boots; `CreateUser` refuses to run |
+| `BLOG_PASSWORD` | `createUser.password`, the first user's password, hashed when the file is read | the server boots; `CreateUser` refuses to run |
+
+The two variables used to carry `EEZO_` in front of their names. `application.conf` may not feed a
+value from a variable under `EEZO_`, which is the prefix of the framework's own variables, so they
+lost it: export them under the names above. A refusal names the path and the variable to set:
+
+```text
+[eezo] createUser.password is missing: set BLOG_PASSWORD, which application.conf names for it
+```
+
+Run this line on its own and type the password at the prompt. It is a separate block on purpose:
+pasted together with the lines after it, `read` would take the next line as the password.
 
 ```bash
-printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; echo; export EEZO_BLOG_PASSWORD
+printf 'password: '; IFS= read -rs BLOG_PASSWORD; echo; export BLOG_PASSWORD
 ```
 
 ```bash
-EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
-unset EEZO_BLOG_PASSWORD        # the server below has no use for it
+BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
+unset BLOG_PASSWORD             # the server below would hash it at boot for nothing
 sbt blog/run                    # http://localhost:8080, posts at /admin/posts
 sbt "blog/run routes"           # 11 routes: GET /, the three the guard carries, and the seven
 sbt "blog/run db status"           # in sync ✓
 ```
+
+A password longer than the 72 bytes bcrypt reads is refused before any user is created, with
+`[eezo] createUser.password is longer than the 72 bytes bcrypt reads`.
 
 An existing blog database predates the `users` table, so `db sync --apply` is not optional on one:
 without it the first sign in fails on a table that is not there.
@@ -105,19 +133,19 @@ renders a Sign out button for a browser that is signed in and nothing at all for
 The guard builds the form rather than the application, because a `POST` has to carry the CSRF token
 and a hand written form that forgot it would be refused with a 403 at the route it posts to.
 
-The button is on `/` and not on the editing screens because those are derived: a derived page comes
-back in a plain envelope with nowhere to put a control, and whether an application can replace that
-envelope is still an open question. The address is written out because `/` is outside the mount, the
-same reason the "All posts" link on that page names `/admin` by hand; a page inside a mount takes
-`logoutForm`'s default and never spells the prefix.
+The button is on `/` and not on the editing screens because those are derived: a derived page is
+content eezo wrote, and the frame around it, `views/Layout.scala`, is the one place the application
+could add a control to every page at once. The address is written out because `/` is outside the
+mount, the same reason the "All posts" link on that page names `/admin` by hand; a page inside a
+mount takes `logoutForm`'s default and never spells the prefix.
 
 ### The first user, without a sign up page
 
 There is no registration: `User` derives `Table` alone, with no `Form` and no `Resource`, so nothing
 mounts a page that writes one. `CreateUser.scala` is the operator's tool instead, a second `DbApp`
 in the same project, and the commands above are the whole of it. It reads the email and password
-from the environment rather than from arguments, because an argument list is visible to every
-process on the machine through `ps`. The environment alone does not keep a secret out of the
+from variables, through `application.conf`, rather than from arguments, because an argument list is
+visible to every process on the machine through `ps`. The environment alone does not keep a secret out of the
 shell's history file, which records the whole command line, so the password is typed at a prompt
 that does not echo instead of being written into the command.
 
@@ -127,6 +155,19 @@ only way to make one from text is to hash it.
 `sbt "blog/run dev"` (or `blog/eezoDev`) runs the drift check before serving and answers the drift
 page while the drift is dangerous; `../todo/README.md` walks through that loop and the rest of the
 schema commands.
+
+## Styled with Tailwind
+
+`tailwind.css` at the project root is the whole setup. The sbt plugin sees it and runs the Tailwind
+CLI inside every build, over `src/` as the file's `source("src")` says, and writes the result to
+`assets/tailwind.css` in the jar; nothing is committed, and the CLI is fetched once per version
+into `~/.eezo/tools`. `views/Layout.scala` is the frame every page comes back in, named in
+`Main.scala`, and it links the stylesheet under the versioned address `Assets.url` gives it. The
+components under `components/` carry utility classes where they used to carry inline styles, and
+the base layer in `tailwind.css` gives the derived pages and the login page, which carry no
+classes, a look of their own. `TailwindSuite` asserts that the stylesheet is on the classpath at
+test time and holds a class only the components use, which is the plugin's generator having run.
+[Style with Tailwind](../../docs/how-to/style-with-tailwind.md) is the recipe.
 
 ## Why both derivations compile here
 

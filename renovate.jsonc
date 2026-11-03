@@ -1,0 +1,13 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended"],
+  // Renovate reads this file from the default branch, main, which is the latest release. dev is the
+  // trunk every pull request targets, so Renovate reads the dependency files from dev and opens its
+  // pull requests against it.
+  "baseBranchPatterns": ["dev"],
+  // config:recommended ignores every path under examples, which hid examples/project/build.properties
+  // from the sbt updates and let its sbt.version drift from the root build's, a drift
+  // Toolchain.assertExampleSbtVersionMatches refuses to load. The list below is Renovate's own
+  // default, without that preset's additions, so the examples build is scanned like the root and site.
+  "ignorePaths": ["**/node_modules/**", "**/bower_components/**"]
+}

@@ -31,7 +31,10 @@ object RenderJson {
 
   private def changes(cs: List[Change]): Json = Json.Arr(cs.map(change))
 
-  def status(r: StatusResult): String = Json.render(
+  def status(r: StatusResult): String = Json.render(statusJson(r))
+
+  /** The value [[status]] renders, for the dev loop's drift marker, which adds a field to it. */
+  def statusJson(r: StatusResult): Json.Obj =
     Json.Obj(
       List(
         "command" -> Json.Str("status"),
@@ -39,7 +42,6 @@ object RenderJson {
         "changes" -> changes(r.changes)
       )
     )
-  )
 
   def sync(r: SyncResult, applyRequested: Boolean): String = Json.render(
     Json.Obj(

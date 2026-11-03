@@ -1,17 +1,16 @@
-import java.sql.Connection
-
 import io.eezo.auth.Password
+import io.eezo.config.Config
 import io.eezo.core.Id
 import io.eezo.db.*
 import io.eezo.db.Scopes.transact
-import io.eezo.http.Field
 
+import blog.CreateUserConfig
 import models.User
 
 /** How the blog gets its first user, with no registration page anywhere.
   *
-  * printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; export EEZO_BLOG_PASSWORD
-  * EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser" unset EEZO_BLOG_PASSWORD
+  * printf 'password: '; IFS= read -rs BLOG_PASSWORD; export BLOG_PASSWORD
+  * BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser" unset BLOG_PASSWORD
   *
   * A second `DbApp` rather than a command on `Main`, because `Main` is the application and this is
   * an operator's tool: the two have different lifetimes, and the one that inserts a user should not
@@ -24,6 +23,9 @@ import models.User
   * a shell appends the whole command line, secret included, to its history file; a password that
   * has been in either place is a password that has to be changed.
   *
+  * Both variables used to carry `EEZO_` in front of their names. `application.conf` may not feed a
+  * value from a variable under `EEZO_`, the framework's prefix, so they lost it.
+  *
   * The connection settings below repeat `Main`'s. That duplication is real and is the cost of
   * leaving `Main.scala` untouched: `withDatabase` is `protected`, so a tool cannot borrow the
   * application's database, and `DbInit` is the seam both of them stand on instead.
@@ -34,62 +36,54 @@ object CreateUser extends DbApp {
 
   override def databaseSchema: String = "blog"
 
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "blog"""")
-      st.execute("""set search_path to "blog"""")
-    } finally st.close()
-  }
-
-  override def boot(): Unit = {
-    val email    = required("EEZO_BLOG_EMAIL")
-    val password = required(PasswordVariable)
-
-    // Hashed here, once, at the strength `Password.hash` fixes, and only through `Field[Password]`,
-    // the same door a login form's own submission goes through. That is what makes the 72 byte
-    // refusal run here too, so an operator sees "is longer than the 72 bytes bcrypt reads" rather
-    // than the `IllegalArgumentException` spring-security-crypto throws three calls deeper. This is
-    // the only place in the blog that ever holds the text, and it holds it for as long as one
-    // bcrypt call takes.
-    val hashed = hashPassword(password)
-
-    transact {
-      val users = Table[User]
-      users.insert(User(Id.gen(), email, hashed))
+  override def boot(): Unit =
+    account(Config[CreateUserConfig].current) match {
+      case Right((email, hashed)) =>
+        transact {
+          val users = Table[User]
+          users.insert(User(Id.gen(), email, hashed))
+        }
+        println(s"created $email; sign in at /admin/login")
+      case Left(refused) =>
+        refuse(refused)
+        sys.exit(1)
     }
 
-    println(s"created $email; sign in at /admin/login")
-  }
-
-  private inline val PasswordVariable = "EEZO_BLOG_PASSWORD"
-
-  /** A missing variable stops the tool rather than creating a user nobody can sign in as. */
-  private def required(name: String): String =
-    sys.env.getOrElse(
-      name,
-      throw new IllegalStateException(
-        s"$name is not set. Run:\n" +
-          s"  printf 'password: '; IFS= read -rs $PasswordVariable; export $PasswordVariable\n" +
-          "  EEZO_BLOG_EMAIL=you@example.com sbt \"blog/runMain CreateUser\"\n" +
-          s"  unset $PasswordVariable"
-      )
-    )
-
-  /** The one door from the environment's text to a stored hash, so a refusal an operator can act on
-    * comes from eezo, not from three stack frames inside spring-security-crypto. `Field[Password]`
-    * is the same check a login form's password box already runs, so this tool cannot accept a text
-    * a login page would refuse to have ever hashed in the first place.
-    *
-    * Not private, for the one test that pins the refusal on the byte cap: that test cannot set
-    * `EEZO_BLOG_PASSWORD` on a running JVM, so it has to reach this door directly rather than
-    * through [[boot]].
+  /** Prints the lines a boot refusal prints, through the same `[eezo] ` door on stderr, so the
+    * operator reads one shape whichever of the two refused. Kept apart from `boot`, which exits, so
+    * a suite can hold the README's line to what the job prints.
     */
-  def hashPassword(text: String): Password =
-    Field[Password]
-      .read(text)
-      .fold(
-        message => throw new IllegalStateException(s"$PasswordVariable $message"),
-        identity
-      )
+  def refuse(refused: Config.Refused): Unit = refused.lines.foreach(fail(Nil, _))
+
+  /** The account to create, or the refusal boot would print for a value that is missing.
+    *
+    * The password arrives hashed, at the strength `Password.hash` fixes: `Parser[Password]` is the
+    * same door a login form's own submission goes through, and it hashes on read. That is what
+    * makes the 72 byte refusal run here too, at boot and at the password's path, so an operator
+    * sees "is longer than the 72 bytes bcrypt reads" rather than the `IllegalArgumentException`
+    * spring-security-crypto throws three calls deeper.
+    *
+    * The fields are optional so that the server, which reads the same file, boots without them. The
+    * job is the one reader that needs both, so it refuses here, in the words and the exit code of a
+    * boot refusal, rather than creating a user nobody can sign in as.
+    */
+  def account(section: CreateUserConfig): Either[Config.Refused, (String, Password)] =
+    (section.email, section.password) match {
+      case (Some(email), Some(password)) => Right(email -> password)
+      case (email, password)             =>
+        Left(
+          Config.Refused(
+            Seq(
+              Option.when(email.isEmpty)(missing("email", "BLOG_EMAIL")),
+              Option.when(password.isEmpty)(missing("password", "BLOG_PASSWORD"))
+            ).flatten
+          )
+        )
+    }
+
+  /** The path is the one `application.conf` writes the field under, and the variable the one it
+    * feeds the field from, so the line names what the operator has to set.
+    */
+  private def missing(field: String, variable: String): Config.Offender =
+    Config.Offender.Missing(s"createUser.$field", List(variable))
 }

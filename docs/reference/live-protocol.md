@@ -58,8 +58,11 @@ that fails any of this is answered with an `error` frame and the page carries on
 | `pong` | |
 
 A resync is a `patches` frame with one `setChildren` whose `path` is `[]` and `expect` is
-`null`: the anchor's whole content replaced. The server sends one on every join, on a mailbox
-overflow, and after a `failed` report.
+`null`: the anchor's whole content replaced. The server sends one after a `join` only when the
+client's DOM is behind the page, because a frame was produced while no socket was attached,
+between mount and join or during a grace window. A `join` on a page nothing moved is answered
+with an empty `patches` frame, so a script that touched the DOM after the first render keeps
+its work. A resync is also sent on a mailbox overflow, and after a `failed` report.
 
 ## Patch kinds
 

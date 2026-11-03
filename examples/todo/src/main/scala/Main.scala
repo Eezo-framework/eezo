@@ -1,5 +1,3 @@
-import java.sql.Connection
-
 import io.eezo.EezoApp
 import io.eezo.generated.Routes
 import io.eezo.db.Schema
@@ -21,17 +19,9 @@ object Main extends EezoApp {
   override def port: Int = 8090
 
   /** This app keeps its tables in a Postgres schema of its own, so it can share the dev database
-    * with other examples without their drift bleeding into each other. Two halves, told once each:
-    * the init hook runs on **every** pooled connection (search_path is per-connection), and
-    * `databaseSchema` points the drift commands' catalog reads at the same name.
+    * with other examples without their drift bleeding into each other. Naming it is enough: eezo
+    * creates the schema and sets search_path to it on **every** pooled connection, because
+    * search_path is per connection, and the drift commands read the same name.
     */
   override def databaseSchema: String = "todo"
-
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "todo"""")
-      st.execute("""set search_path to "todo"""")
-    } finally st.close()
-  }
 }

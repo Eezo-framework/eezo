@@ -58,6 +58,7 @@ object Assets {
       "site.css",
       "api.css",
       "keys.js",
+      "code.js",
       "mascot.png",
       "favicon-32.png",
       "apple-touch-icon.png",

@@ -69,11 +69,12 @@ object Layout {
           new Page(meta.path, Theme.toggle(request), content, () => Search.current, initial)
         ),
         // highlight.js colours the code blocks after the page is parsed: the library, the two
-        // grammars its bundle leaves out, and the one call.
+        // grammars its bundle leaves out, and `code.js`, which runs it once and again over any
+        // block the live layer replaces, since a patch carries the server's uncoloured markup.
         script(Attrs.src := Assets.url("hljs/highlight.min.js")),
         script(Attrs.src := Assets.url("hljs/scala.min.js")),
         script(Attrs.src := Assets.url("hljs/nginx.min.js")),
-        script(Html.raw("hljs.highlightAll()")),
+        script(Attrs.src := Assets.url("code.js")),
         // The keyboard: the one thing the live layer cannot hear. Ctrl-K or Cmd-K presses the
         // search button, Escape presses its close button, and the input is focused once the
         // dialog has been patched in; everything else about the search is the component's.

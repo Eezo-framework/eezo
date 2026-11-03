@@ -48,21 +48,11 @@ object Tour extends DbApp {
   override def databaseUser: String     = container.getUsername
   override def databasePassword: String = container.getPassword
 
-  /** The tour works in its own schema, so eezo's connections have to be told about it too;
-    * otherwise the migrator writes to `public` while the drift checks read `eezo_tour`, and a
-    * replay looks like it never happened. DESIGN §8.7.
+  /** The tour works in its own schema, and naming it is all eezo needs: every connection the pool
+    * opens creates it if it is missing and sets `search_path` to it, so the migrator writes where
+    * the drift checks read. DESIGN §8.7.
     */
-  // `Connection => Unit`, not `->`: this module does not enable capture checking, so eezo's pure
-  // arrow presents here as an ordinary function type (research/capture-checking.md §6.3).
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try st.execute(s"""create schema if not exists "$Schema0"""")
-    catch { case NonFatal(_) => () }
-    finally st.close()
-    val st2 = c.createStatement()
-    try st2.execute(s"""set search_path to "$Schema0"""")
-    finally st2.close()
-  }
+  override def databaseSchema: String = Schema0
 
   private var paused = true
 
@@ -405,8 +395,8 @@ object Tour extends DbApp {
   private def prepare(c: Connection): Unit = {
     header()
     exec(c, s"""drop schema if exists "$Schema0" cascade""")
-    // `if not exists`: the pool fills in the background while this runs, and each new connection's
-    // `databaseInit` may create the schema between the drop and this line.
+    // `if not exists`: the pool fills in the background while this runs, and each new connection
+    // creates the schema `databaseSchema` names when it is missing, maybe between the drop and here.
     exec(c, s"""create schema if not exists "$Schema0"""")
     exec(c, s"""set search_path to "$Schema0"""")
     note(s"Working in schema `$Schema0` on ${Db.url}, so nothing else is touched.")

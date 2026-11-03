@@ -135,6 +135,9 @@ class CheckSpellingSuite extends DbSuite {
   roundTrip("min length on a varchar")(checked("code", PgType.Varchar(20), Check.MinLen(2)))
   roundTrip("max length on a varchar")(checked("label", PgType.Varchar(40), Check.MaxLen(30)))
   roundTrip("a raw in")(checked("status", PgType.Text, Check.Raw("{} in ('a','b')")))
+  roundTrip("a raw in with mixed case literals")(
+    checked("status", PgType.Text, Check.Raw("{} in ('Draft','Published')"))
+  )
   roundTrip("control, positive on an integer")(checked("n", PgType.Int4, Check.Positive))
   roundTrip("control, max length on a text")(checked("title", PgType.Text, Check.MaxLen(100)))
 
@@ -156,6 +159,20 @@ class CheckSpellingSuite extends DbSuite {
     val t = snap(tbl("t", id, col("status", "text", checks = List("status in ('a','b')"))))
     exec(Ddl.render(Differ.diff(empty, t))*)
     assertEquals(CheckSpelling.drift(db, t, pgSchema), Nil)
+  }
+
+  // Was half of backlog item 17: a literal's case. The quoting half is still open.
+  test("a literal's case is reported as drift, in Postgres's spelling") {
+    val live =
+      snap(tbl("t", id, col("status", "text", checks = List("status in ('draft','published')"))))
+    val model =
+      snap(tbl("t", id, col("status", "text", checks = List("status in ('Draft','Published')"))))
+    exec(Ddl.render(Differ.diff(empty, live))*)
+    CheckSpelling.drift(db, model, pgSchema) match {
+      case List(Change.DropCheck("t", "status", _), add @ Change.AddCheck("t", "status", _)) =>
+        assert(add.risky)
+      case other => fail(s"expected one DropCheck and one risky AddCheck on status, got: $other")
+    }
   }
 
   test("a check that differs in meaning is reported, in Postgres's spelling") {

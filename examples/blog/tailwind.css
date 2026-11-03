@@ -1,0 +1,46 @@
+/* The stylesheet eezo builds: the sbt plugin sees this file at the project root and runs the
+   Tailwind CLI over it on every build, into assets/tailwind.css in the jar. `source("src")`
+   points the scan at the Scala sources and nothing else, so target/ is never read. */
+@import "tailwindcss" source("src");
+
+/* The derived pages, the login page and the error page are made of bare elements and carry no
+   classes, and Tailwind's preflight has reset every one of them. These rules give those elements
+   a look, and the handwritten pages inherit it. */
+@layer base {
+  h1 {
+    @apply mb-4 text-2xl font-semibold;
+  }
+  h2 {
+    @apply mt-6 mb-3 text-xl font-semibold;
+  }
+  p {
+    @apply my-2;
+  }
+  a {
+    @apply text-sky-700 underline-offset-2 hover:underline;
+  }
+  ul {
+    @apply my-2 list-disc pl-6;
+  }
+  label {
+    @apply my-2 block;
+  }
+  input[type="text"],
+  input[type="email"],
+  input[type="password"],
+  textarea,
+  select {
+    @apply rounded border border-stone-300 bg-white px-2 py-1;
+  }
+  button,
+  input[type="submit"] {
+    @apply cursor-pointer rounded bg-stone-800 px-3 py-1 text-white hover:bg-stone-600 disabled:cursor-default disabled:opacity-40;
+  }
+  table {
+    @apply my-4 w-full border-collapse text-left;
+  }
+  th,
+  td {
+    @apply border-b border-stone-200 px-2 py-1 align-top;
+  }
+}

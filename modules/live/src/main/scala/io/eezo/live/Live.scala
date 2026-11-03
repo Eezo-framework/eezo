@@ -31,7 +31,7 @@ import io.eezo.http.{
   * (design/live.md §2.3): it never scans a response for markers, because the mount is just a value
   * in whatever the handler returns. A whole document goes out as written and content comes back
   * inside the application's Layout; the script travels with the mount either way. The script's
-  * address is a plain string on purpose — the socket and the script are served unmounted under the
+  * address is a plain string on purpose: the socket and the script are served unmounted under the
   * reserved prefix, so a mounted page must not have them rewritten.
   *
   * One mount per response in v1. A second mount renders (each is an ordinary value) but the client
@@ -55,7 +55,7 @@ object Live {
 
   /** Marks an element as a click binding: `button(Live.onClick("inc"), "+")` sends `Event("inc")`
     * to the component's `handle`. The client delegates one listener at the document, so the binding
-    * survives any patch that replaces the element — and so do all the bindings below.
+    * survives any patch that replaces the element, and so do all the bindings below.
     */
   def onClick(name: String): Attr = ClickAttr := name
 
@@ -86,7 +86,7 @@ object Live {
 
   /** Mounts `component` as a live page: the returned fragment goes wherever the handler's own
     * layout puts it. At the registry's cap the component is rendered once, statically, and the page
-    * says so in an attribute the client logs — a busy site degrades to working pages that do not
+    * says so in an attribute the client logs: a busy site degrades to working pages that do not
     * update, never to errors (design/live.md §2.5).
     *
     * `request` is the request being answered, and the one thing read off it is `currentUser`: a
@@ -259,9 +259,9 @@ object Live {
               log.log(System.Logger.Level.WARNING, s"page $id sent a malformed frame: $problem")
               conn.send(Wire.error(problem))
             case Right(Wire.ClientMessage.Join(base)) =>
-              // The reported base is the prefix the client's DOM was rewritten with; the resync
-              // that follows carries the tree rebased to match, and starts the client from
-              // whatever moved between mount and join (design/live.md §2.6).
+              // The reported base is the prefix the client's DOM was rewritten with; the frame
+              // that follows carries the tree rebased to match when anything moved between mount
+              // and join (design/live.md §2.6), and is empty otherwise.
               mountPrefix(base) match {
                 case Some(prefix) => page.rebase(prefix)
                 case None         =>
@@ -270,7 +270,7 @@ object Live {
                     s"page $id sent a dubious base '$base'; ignored"
                   )
               }
-              page.resync()
+              page.resync(forced = false)
             case Right(Wire.ClientMessage.Emit(event)) =>
               try page.event(event)
               catch {
@@ -308,7 +308,7 @@ object Live {
 
   /** The join's base report, validated down to a path this process would itself have written:
     * `Response.under` only ever produces normalised absolute paths, so anything else is a client
-    * inventing things. `None` is "ignore it", never an error - the page then keeps "/".
+    * inventing things. `None` is "ignore it", never an error: the page then keeps "/".
     */
   private def mountPrefix(base: String): Option[String] =
     Option.when(base.length <= 200 && base.matchesSafePrefix)(io.eezo.core.html.Url.normalise(base))

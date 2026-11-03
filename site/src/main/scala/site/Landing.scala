@@ -167,9 +167,9 @@ object Landing {
       )
     )
 
-  /** The talk, in a band under the hero: a shop built with Eezo on stage at Scala Days. The embed
-    * is YouTube's cookieless host and loads lazily, so the page does not pay for it until the band
-    * is near the viewport.
+  /** The talk, in a band under the hero: an application built with Eezo on stage at Scala Days. The
+    * embed is YouTube's cookieless host and loads lazily, so the page does not pay for it until the
+    * band is near the viewport.
     */
   private def talk: Html =
     section(
@@ -181,10 +181,8 @@ object Landing {
           p(Attrs.cls := "eyebrow", "From Scala Days"),
           h2("Shopping for a Scala framework"),
           p(
-            "Daniel Ciocîrlan and Riccardo Cardin build a shop with Eezo on stage, ",
-            "from the first case class to a working checkout."
-          ),
-          a(Attrs.cls := "btn btn-primary", Attrs.href := "/docs/examples/shop", "Read the shop")
+            "Riccardo and Daniel demonstrate a non-trivial full-stack web application from scratch."
+          )
         ),
         figure(
           Attrs.cls := "talk-video",

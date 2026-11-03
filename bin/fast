@@ -13,7 +13,7 @@ usage() {
 usage: bin/fast [--examples|--site] <sbt command>...
 
 Runs sbt once, in batch mode, with the environment bin/gate sets up: DOCKER_HOST at the colima
-socket, the testcontainers API version pin, the local-worktree.sbt file in a linked worktree, the
+socket, the testcontainers API version pin, no stale local-worktree.sbt in a linked worktree, the
 repository's git hooks. No locks, no gate steps. The build is the root by default, examples/ with
 --examples, site/ with --site.
 

@@ -1,6 +1,6 @@
 package io.eezo.db
 
-import io.eezo.core.Dispatch
+import io.eezo.config.ConfigApp
 import io.eezo.core.Dispatch.Usage
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.db.cli.{Commands, MigrateResult, Render, RenderJson}
@@ -40,18 +40,17 @@ import scala.io.StdIn
   * in the background. It is deliberately not eager, as Phoenix is not: with Postgres down, `dev`
   * keeps serving every page that needs no database, and `sbt run` fails on the first query that
   * needs Postgres, after the acquire timeout, rather than refusing to start.
+  *
+  * The program is the one exception to starting regardless: when the build names a Config class,
+  * `ConfigApp` reads it before [[withDatabase]], and a refused read exits 1 with no `Database`
+  * built, because a value the application needs is missing and no pool would bring it.
   */
-trait DbApp extends Dispatch with DbInit {
+trait DbApp extends ConfigApp with DbInit {
 
   /** The application's schema, `object AppSchema extends Schema` named here. Abstract: a database
     * layer is its schema, and an application without one is a mistake.
     */
   def schema: Schema
-
-  /** The Postgres schema the drift commands introspect. `search_path` is set per connection in
-    * [[databaseInit]]; this is the same name, told to the side that reads catalogs.
-    */
-  def databaseSchema: String = "public"
 
   /** The program: what `sbt run` does, once, with a `Database` installed. Abstract, because a
     * database only application is its program. The umbrella supplies the http layer's default,

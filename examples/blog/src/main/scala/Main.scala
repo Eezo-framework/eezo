@@ -1,8 +1,7 @@
-import java.sql.Connection
-
 import io.eezo.EezoApp
 import io.eezo.db.Schema
 import io.eezo.generated.Routes
+import io.eezo.http.Layout
 import io.eezo.http.Provenance
 import io.eezo.http.Route
 import io.eezo.http.RouteTable
@@ -45,19 +44,14 @@ object Main extends EezoApp {
   override def schema: Schema = AppSchema
 
   /** This app keeps its table in a Postgres schema of its own, so it can share the dev database
-    * with the other examples without their drift bleeding into each other. Two halves, told once
-    * each: the init hook runs on **every** pooled connection (search_path is per connection), and
-    * `databaseSchema` points the drift commands' catalog reads at the same name.
+    * with the other examples without their drift bleeding into each other. Naming it is enough:
+    * eezo creates the schema and sets search_path to it on **every** pooled connection, because
+    * search_path is per connection, and the drift commands read the same name.
     */
   override def databaseSchema: String = "blog"
 
-  override def databaseInit: Connection => Unit = { c =>
-    val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "blog"""")
-      st.execute("""set search_path to "blog"""")
-    } finally st.close()
-  }
+  /** The frame around every page, with the stylesheet Tailwind builds; `views/Layout.scala`. */
+  override def layout: Layout = views.Layout
 
   override def routes: RouteTable = {
     val table                  = Routes.table()

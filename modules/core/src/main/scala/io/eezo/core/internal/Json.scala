@@ -216,6 +216,22 @@ object Json {
     }
   }
 
+  /** One line, no padding: the shape for a value that travels as a single line of text, which is
+    * what the dev loop's marker lines are (`eezo dev: drift {...}`), where a reader takes one line
+    * as one event and a newline inside the value would split it. [[render]] stays the shape every
+    * `--json` command prints, because a human reads those. The two agree on everything but
+    * whitespace, so `parse` reads both.
+    */
+  def compact(j: Json): String = j match {
+    case Json.Str(v)  => "\"" + escape(v) + "\""
+    case Json.Num(v)  => v.toString
+    case Json.Bool(v) => v.toString
+    case Json.Null    => "null"
+    case Json.Arr(xs) => xs.map(compact).mkString("[", ",", "]")
+    case Json.Obj(fs) =>
+      fs.map { case (k, v) => "\"" + escape(k) + "\":" + compact(v) }.mkString("{", ",", "}")
+  }
+
   def render(j: Json, indent: Int = 0): String = {
     val pad  = "  " * indent
     val pad1 = "  " * (indent + 1)

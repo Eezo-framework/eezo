@@ -99,6 +99,11 @@ not a model, so a warning would be noise.
 A guard's own routes are not under the prefix: `GET /login`, `POST /login` and `POST /logout`
 by default, relative to the mount.
 
+`/assets` is not reserved, and it is served on every server: `GET /assets/*file` reads the jar's
+`assets/` directory, the stylesheet the sbt plugin builds among the files there, and is appended
+after your table, so a route of your own under `/assets` wins. [Style with
+Tailwind](../how-to/style-with-tailwind.md) has the link a layout writes.
+
 ## Related
 
 [URLs and mounts](../explanation/urls-and-mounts.md) is what `Route.under` does to a table.

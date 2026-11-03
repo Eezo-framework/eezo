@@ -68,7 +68,7 @@ final class Guestbook extends Component[GuestbookState] {
       else s.entries.reverse
 
     div(
-      Attrs.style := "font-family: system-ui; max-width: 34rem; margin: 3rem auto",
+      Attrs.cls := "space-y-3",
       h1("guestbook"),
       p(
         "your clicks here: ",

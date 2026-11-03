@@ -2,12 +2,136 @@ package io.eezo.db
 
 import munit.FunSuite
 
+import java.lang.reflect.{InvocationHandler, Method, Proxy}
+import java.sql.{Connection, PreparedStatement, ResultSet, SQLException, Statement}
 import java.time.Duration
+import scala.collection.mutable.ListBuffer
 
 /** The `DATABASE_URL` fallback parser: the one secret a PaaS injects, split into the three values
-  * JDBC wants. Pure, so a plain suite.
+  * JDBC wants; and the schema step the pool runs on every connection, read off a connection that
+  * records what it is asked. Pure, so a plain suite.
   */
 class DbInitSuite extends FunSuite {
+
+  /** A connection with no database behind it: it writes down every call made on it and every
+    * statement executed through it, and answers the catalog lookup as `schemaExists` says. With
+    * `createFails`, the `create schema` statement fails with that SQLState, the way Postgres
+    * answers the loser of two connections that both found the schema missing.
+    */
+  private final class Recording(schemaExists: Boolean, createFails: Option[String] = None) {
+    val calls: ListBuffer[String]    = ListBuffer.empty
+    val executed: ListBuffer[String] = ListBuffer.empty
+
+    private def proxy[T](
+        cls: Class[T]
+    )(answer: (Method, Array[AnyRef] | Null) => AnyRef | Null): T =
+      cls.cast(
+        Proxy.newProxyInstance(
+          getClass.getClassLoader,
+          Array[Class[?]](cls),
+          new InvocationHandler {
+            def invoke(p: AnyRef, m: Method, args: Array[AnyRef] | Null): AnyRef | Null =
+              answer(m, args)
+          }
+        )
+      )
+
+    private val resultSet: ResultSet = proxy(classOf[ResultSet]) { (m, _) =>
+      if (m.getName == "next") java.lang.Boolean.valueOf(schemaExists) else null
+    }
+
+    private val prepared: PreparedStatement = proxy(classOf[PreparedStatement]) { (m, _) =>
+      if (m.getName == "executeQuery") resultSet else null
+    }
+
+    private val statement: Statement = proxy(classOf[Statement]) { (m, args) =>
+      if (m.getName == "execute") {
+        val sql = String.valueOf(args.nn(0))
+        executed += sql
+        createFails match {
+          case Some(state) if sql.startsWith("create schema") =>
+            throw new SQLException("duplicate key value violates unique constraint", state)
+          case _ => java.lang.Boolean.FALSE
+        }
+      } else null
+    }
+
+    val connection: Connection = proxy(classOf[Connection]) { (m, _) =>
+      calls += m.getName
+      m.getName match {
+        case "createStatement"  => statement
+        case "prepareStatement" => prepared
+        case _                  => null
+      }
+    }
+  }
+
+  test(
+    "the default public schema runs nothing on the connection, so its search_path is Postgres's"
+  ) {
+    val c = Recording(schemaExists = true)
+    DbInit.connectionInit("public", _ => ())(c.connection)
+    assertEquals(c.calls.toList, Nil)
+  }
+
+  test("a named schema is created when missing, then becomes the search_path, before the hook") {
+    val c = Recording(schemaExists = false)
+    DbInit.connectionInit(
+      "shop",
+      conn => conn.createStatement().execute("set application_name to 'x'"): Unit
+    )(
+      c.connection
+    )
+    assertEquals(
+      c.executed.toList,
+      List(
+        """create schema if not exists "shop"""",
+        """set search_path to "shop"""",
+        "set application_name to 'x'"
+      )
+    )
+  }
+
+  test(
+    "a schema that exists is not created again, so a role without CREATE on the database connects"
+  ) {
+    val c = Recording(schemaExists = true)
+    DbInit.connectionInit("shop", _ => ())(c.connection)
+    assertEquals(c.executed.toList, List("""set search_path to "shop""""))
+  }
+
+  test(
+    "losing the race to create the schema to another connection still enters it, either SQLState"
+  ) {
+    for (state <- List("23505", "42P06")) {
+      val c = Recording(schemaExists = false, createFails = Some(state))
+      DbInit.connectionInit("shop", _ => ())(c.connection)
+      assertEquals(
+        c.executed.toList,
+        List("""create schema if not exists "shop"""", """set search_path to "shop""""),
+        state
+      )
+    }
+  }
+
+  test("any other failure to create the schema fails the connection") {
+    val c = Recording(schemaExists = false, createFails = Some("42501"))
+    val e = intercept[SQLException](DbInit.connectionInit("shop", _ => ())(c.connection))
+    assertEquals(e.getSQLState, "42501")
+    assertEquals(c.executed.toList, List("""create schema if not exists "shop""""))
+  }
+
+  test("a double quote in the schema name is doubled, so the name stays one identifier") {
+    val c = Recording(schemaExists = false)
+    DbInit.connectionInit("""a"; drop table x; --""", _ => ())(c.connection)
+    assertEquals(
+      c.executed.toList,
+      List(
+        """create schema if not exists "a""; drop table x; --"""",
+        """set search_path to "a""; drop table x; --""""
+      )
+    )
+  }
 
   private def parsed(url: String) =
     DbInit.parseDatabaseUrl(url).getOrElse(fail(s"expected $url to parse"))

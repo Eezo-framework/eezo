@@ -46,8 +46,30 @@ The pool starts empty and grows to the size as connections are needed.
 ## One database, several applications
 
 Each application can keep its tables in a Postgres schema of its own, so two applications can
-share the dev database without their drift bleeding into each other. Two overrides on `Main`,
-told once each:
+share the dev database without their drift bleeding into each other. Name the schema on `Main`:
+
+```scala
+object Main extends EezoApp {
+
+  override def databaseSchema: String = "bookshelf"
+  // ...
+}
+```
+
+That one override is enough. Every connection the pool opens creates the schema when it is
+missing and sets `search_path` to it, because `search_path` is per connection, so the tables
+`sync` creates, the migration ledger and your own queries all land in `bookshelf`. The schema
+commands read the catalog under the same name, so `status` compares your model against the right
+tables. The examples under `examples/` each do this.
+
+The schema is created only when the catalog says it is missing, so a production role that owns an
+existing schema but may not create one on the database still connects. `search_path` is the schema
+alone: objects in `public`, such as an extension's types and functions, are not on it. An
+application that needs those too sets the path itself in `databaseInit`, which runs after the
+schema step: `set search_path to bookshelf, public`.
+
+`databaseInit` is for any other per connection setting, such as `application_name` or a statement
+timeout. It runs after the schema step on every pooled connection and needs no `super` call:
 
 ```scala
 import java.sql.Connection
@@ -58,19 +80,12 @@ object Main extends EezoApp {
 
   override def databaseInit: Connection => Unit = { c =>
     val st = c.createStatement()
-    try {
-      st.execute("""create schema if not exists "bookshelf"""")
-      st.execute("""set search_path to "bookshelf"""")
-    } finally st.close()
+    try st.execute("set application_name to 'bookshelf'")
+    finally st.close()
   }
   // ...
 }
 ```
-
-`databaseInit` runs on every pooled connection, because `search_path` is per connection.
-`databaseSchema` points the schema commands' catalog reads at the same name, so `status` compares
-your model against the right tables. Both halves are needed; the examples under `examples/` each
-do this.
 
 ## In tests
 

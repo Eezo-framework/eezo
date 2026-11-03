@@ -25,7 +25,7 @@ jobs:
     steps:
       # sbt-dynver reads the tag out of the git history, so a shallow clone would leave it with
       # no version to derive.
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -36,7 +36,7 @@ jobs:
         run: bin/release --check "${GITHUB_REF_NAME#v}"
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "25"
@@ -72,12 +72,12 @@ jobs:
           echo "::error::the site deploys from main or a release tag, not from ${GITHUB_REF}"
           exit 1
 
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Set up JDK 25
-        uses: actions/setup-java@v5
+        uses: actions/setup-java@v6
         with:
           distribution: temurin
           java-version: "25"

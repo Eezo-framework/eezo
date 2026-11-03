@@ -10,7 +10,7 @@ import io.eezo.core.html.Tags.*
 
 /** The one-writer contract, held under fire: simultaneous client events and topic publishes against
   * one page, and both the final state and the final DOM come out right. The DOM assertion is the
-  * sharp one — every emitted frame, applied in emission order from the initial tree, must land
+  * sharp one: every emitted frame, applied in emission order from the initial tree, must land
   * exactly on the final render, which fails if any diff was ever computed against a baseline the
   * client did not hold.
   */
@@ -183,6 +183,36 @@ class PageSuite extends munit.FunSuite {
     val landed = replay.map(_.render).mkString
     assert(landed.matches("<div><span>\\d+</span></div>"), landed)
     page.close()
+  }
+
+  test("a join's resync replays the tree only when a frame was missed; otherwise it is empty") {
+    val topic          = new Topic[String]
+    val component      = new BoardComponent(topic)
+    val (frames, send) = collector()
+    val page           = new Page("p8", component)
+    val initial        = page.mount()
+
+    // Attached straight after the mount, nothing moved: the join's frame is empty.
+    page.attach(send)
+    page.resync(forced = false)
+    // The loop sends a resync frame after the changes of the batch it drained it with, so a click
+    // enqueued before the loop took the resync would put its patch on the wire first. Waiting for
+    // the join frame makes the click a batch of its own.
+    eventually(frames.size == 1)
+    page.event(Event("click")) // a blocking call, so its patch is on the wire too
+    assertEquals(frames.peek(), Nil, "nothing was owed to a client holding the mounted tree")
+    assertEquals(frames.size, 2)
+
+    // Detached, a frame drops: the next join's resync is the whole tree, and only that one.
+    page.detach()
+    page.event(Event("click"))
+    page.attach(send)
+    page.resync(forced = false)
+    page.resync(forced = false)
+    page.event(Event("click"))
+    val afterRejoin = frames.toArray(Array.empty[List[Patch]]).drop(2).toList
+    assertEquals(afterRejoin.count(_.exists(_.isInstanceOf[Patch.SetChildren])), 1, afterRejoin)
+    assertEquals(replayed(initial, frames).last, component.render(Board(3, Nil)))
   }
 
   test("frames reach only an attached listener; with none attached they drop without a throw") {
