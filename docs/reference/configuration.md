@@ -37,41 +37,123 @@ class that derives `Config`. The build names the class, fully qualified:
 eezoConfigClass := Some("shop.ShopConfig")
 ```
 
-The case class must be in a named package. The plugin writes an object in `io.eezo.generated`
-that names the class, and code in a named package cannot name a class in the empty package.
+When the build names no class, nothing reads the file, and a file there has no effect.
+[Configuration from one file](../explanation/configuration.md) tells why the rules below are
+what they are.
 
-Boot reads the file before the application starts: for `sbt run` with no arguments, and for
-`dev`. The read occurs before the database layer builds a `Database`, before the drift check,
-and before the server binds its port. Boot does these steps:
+### Rules of the file
 
-1. It parses the application's own `application.conf`, the first one on the classpath. It does
-   not merge `reference.conf`, the system properties, `-Dconfig.file`, or an `application.conf`
-   from a dependency.
+- Boot reads the first `application.conf` on the classpath, which is the application's own. It
+  does not merge `reference.conf`, the system properties, `-Dconfig.file`, or an
+  `application.conf` from a dependency.
+- The file is HOCON. A field is read at its full dotted path, and the fields of a section are in
+  the block under the section's name.
+- A value is stated in the file, or fed from a variable through a substitution. Nothing else
+  feeds a value.
+- A substitution must not name a variable under `EEZO_`. That prefix is the framework's, and the
+  framework's own variables, in the table above, stay out of the file.
+- A `Redacted` field, or an `Option` of one, is never a literal in the file, also when the file
+  copies the text in from another of its paths. It comes from a variable only.
+- The class is in a named package. The plugin writes an object in `io.eezo.generated` that names
+  the class, and code in a named package cannot name a class in the empty package.
+- A field the file does not state, or states as `null`, is absent. A field fed through `${?VAR}`
+  from an unset variable reads the literal that the file writes for the same path before the
+  substitution, and with no such literal it is absent. An absent field takes its default when it
+  has one, an absent `Option` field is `None`, and any other absent field is missing. Only the
+  class decides this; what the field's `Parser` says of absent text is not used.
+- A section is a field whose type has a `Config` of its own. It has no default, it is not an
+  `Option`, and its type is at one path of the class only.
+
+### The `${?VAR}` idiom
+
+`path = ${?VAR}` feeds the path from the variable `VAR`. The question mark makes the
+substitution optional: when `VAR` is unset, the literal written for the path before the
+substitution applies, and with no literal the path is absent and the rules above decide. The
+file names each variable. eezo makes no variable name from a path, so a variable that the file
+does not name never reaches a value. The shop feeds its Stripe section this way:
+
+```hocon
+stripe {
+  secretKey = ${?STRIPE_SECRET_KEY}
+  webhookSecret = ${?STRIPE_WEBHOOK_SECRET}
+}
+```
+
+At compile time a `${?VAR}` counts as a value for its path, whether or not `VAR` is set. Whether
+`eezo config` lists a variable as `required`, `defaulted` or `optional` comes from the field in
+the class alone. A literal that the file writes for the same path does not change it.
+
+### When boot reads it
+
+Boot reads the file for `sbt run` with no arguments, and for `dev`. The read occurs before the
+database layer builds a `Database`, before the drift check, and before the server binds its
+port. Boot does these steps:
+
+1. It parses the file, as the rules above say.
 2. It resolves each substitution from the process environment.
 3. It installs the value. A handler reads it with `Config[ShopConfig].current`, and one section
    with `Config[Stripe].current`. A suite sets its own value for one block with
    `Config[ShopConfig].installed(value) { ... }`.
 
+`current` before any install throws an `IllegalStateException` that names `installed`.
+
 When the read fails, boot writes one line per offender to stderr and exits with code 1. It
-writes no stack trace and starts nothing. Each line names a path and a variable, never a value:
+writes no stack trace and starts nothing. A substitution under `EEZO_` comes first, and the
+fields follow in the order the class declares them. Under `eezo dev` a refused read shows the
+same lines in the log. Each save restarts the application, and the restart reads the file again.
+
+The other commands do not read the file's values: `routes`, `config`, `help` and the `db` commands
+work when a variable the file needs is unset.
+
+### Offender lines
+
+Each line names a path, and a variable where there is one, and never a value. `<path>` is the
+dotted path and `<VAR>` a variable. With `--json`, each line is a `{"error": "..."}` object
+instead, with the same text after `[eezo] `.
+
+| when | line |
+|---|---|
+| a required field the file does not name | `[eezo] <path> is missing: add it to application.conf` |
+| a required field fed from an unset variable | `[eezo] <path> is missing: set <VAR>, which application.conf names for it`; two or more variables are joined with ` or ` |
+| a value its `Parser` does not read | `[eezo] <path> <reason>`, with the reason of the field's `Parser` |
+| an object where one value is expected | `[eezo] <path> is an object, and one value was expected` |
+| a list where one value is expected | `[eezo] <path> is a list, and one value was expected` |
+| one value where a section is expected | `[eezo] <path> is a value, and a section was expected` |
+| a substitution that does not resolve | `[eezo] <path> cannot be resolved: it joins a list or an object with a single value, or substitutes itself`; `application.conf` in place of the path when no one path is to blame |
+| a variable under `EEZO_` | `[eezo] <path> is fed from <VAR>, and EEZO_ is the framework's prefix for its own variables: name another variable in application.conf` |
+| a `Redacted` stated as a literal | `[eezo] <path> is stated as a literal in application.conf, and it is a Redacted: a Redacted value reaches the file only through a variable` |
+| the build names a class and the file is not on the classpath | `[eezo] application.conf is missing: the build names a Config class with eezoConfigClass, and boot reads it from src/main/resources/application.conf` |
+| the file does not parse | `[eezo] application.conf does not parse at line <n>: fix its syntax there.`; without ` at line <n>` when the parser gives no line |
+
+The reasons of the `Parser`s that eezo ships. The `Parser`s of `String` and `Redacted` read any
+text:
+
+| type | reason |
+|---|---|
+| `Int`, `Long`, `Double` | `is not a number` |
+| `Boolean` | `is not true or false` |
+| `UUID`, `Id` | `is not an id` |
+| `LocalDate` | `is not a date` |
+| `LocalDateTime`, `Instant` | `is not a date and time` |
+| `Url` | `is not a url` |
+| `Password`, from `eezo-auth` | `is required` for empty text, `is longer than the 72 bytes bcrypt reads` |
+
+The shop, started with neither Stripe variable set, prints:
 
 ```
-[eezo] port is missing: add it to application.conf
 [eezo] stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it
+[eezo] stripe.webhookSecret is missing: set STRIPE_WEBHOOK_SECRET, which application.conf names for it
 ```
 
-When the build names a class and the file is not on the classpath, boot exits with code 1 and
-one line, `[eezo] application.conf is missing: ...`. When the build names no class, boot reads
-nothing, and a file there has no effect.
+### `eezo config`
 
-Under `eezo dev` a refused read shows the same lines in the log. Each save restarts the
-application, and the restart reads the file again.
-
-The other commands do not read the file's values: `routes`, `config`, `help` and the `db`
-commands work when a variable the file needs is unset. [`eezo config`](cli.md) lists the variables the file names, and checks
-the two things the file alone can get wrong: a substitution of a variable under `EEZO_`, and a
-`Redacted` path stated as a literal. The framework's own variables, in the table above, stay
-out of the file.
+`eezo config` lists the variables the file names, in
+file order, and [the CLI reference](cli.md#commands) gives the format of its lines. It reads the
+file and never the environment, so it never reports a value as missing, and it prints the same list
+with every variable set or none. It refuses only what the file alone can get wrong: a missing file,
+a file that does not parse, a substitution under `EEZO_`, and a `Redacted` stated as a literal. Then
+it lists nothing, writes the lines of the table above to stderr, and exits with code 1. When the
+build names no class, it prints nothing and exits with code 0.
 
 ## `HttpApp`
 
