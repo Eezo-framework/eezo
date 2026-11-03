@@ -75,7 +75,10 @@ at its full dotted path through its Parser, or is a Section. A field with a defa
 default when the file has no value for it, an `Option` field is `None`, and any other absent field
 is missing, whatever its Parser says absence means. A read that fails names every offender at once
 by its path, and the variables the file names for it, and never the text it found. When the build
-names the class, the file is also checked against it at compile time.
+names the class, the file is also checked against it at compile time, and boot reads it before the
+application starts: a refused read stops the start, and a good one is installed, so a handler
+reads the class, or any Section of it, with `Config[A].current`. A suite makes its own value
+current for one block with `Config[A].installed(value) { body }`.
 _Avoid_: settings, properties, parameters, env vars
 
 **Section**:

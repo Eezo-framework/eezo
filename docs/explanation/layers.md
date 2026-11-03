@@ -68,6 +68,7 @@ eezo
   db ddl                       print full DDL
   dev                          serve with the route listing and the reload client on
   routes                       the mounted table, with boot's warnings
+  config                       the variables application.conf names, without reading them
   help                         this list
 
 db freeze takes --accept-all / --skip-destructive in place of the prompt
@@ -77,9 +78,10 @@ every command takes --json for machine-readable output (same exit codes);
 no arguments runs the application
 ```
 
-The first eight are the database layer's, the next two are the http layer's. On `eezo-http`
-alone, `db status` is an unknown command, and on `eezo-db` alone so is `dev`. Every command takes
-`--json`, with the same exit codes, so a script gates on the code and parses the body.
+The first eight are the database layer's, the next two are the http layer's, and `config` comes
+from both, so it appears once. On `eezo-http` alone, `db status` is an unknown command, and on
+`eezo-db` alone so is `dev`, while `config` is on either. Every command takes `--json`, with the
+same exit codes, so a script gates on the code and parses the body.
 
 ## Stacking the two
 
@@ -120,9 +122,11 @@ the application while the drift is dangerous.
 - **`eezo-upickle`** sits on the http layer and the umbrella doesn't carry it. It gives an API
   route an `api.Serde` for any model through upickle, so `eezo-http` itself has no JSON library
   on its classpath. An application that wants another library writes its own `given api.Serde`.
-- **`eezo-config`** sits beside the layers, on `eezo-core` alone. It reads the application's own
-  `application.conf` into a case class of its own, its `Config`, so neither layer carries the
-  HOCON parser for the other. The umbrella carries it; an application on one layer adds it.
+- **`eezo-config`** sits under both layers, on `eezo-core` alone. It reads the application's own
+  `application.conf` into a case class of its own, its `Config`. Both entry traits read that
+  class before the application starts, so both layers depend on it and every application
+  carries the HOCON parser, one with no class to read included. It sees only `eezo-core`, so the
+  http layer still never sees the database layer.
 - **`eezo-testkit`** sees all of them. It boots a real server against a real database and
   drives it over HTTP and WebSocket, for tests.
 

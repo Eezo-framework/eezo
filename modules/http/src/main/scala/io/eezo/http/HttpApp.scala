@@ -1,6 +1,6 @@
 package io.eezo.http
 
-import io.eezo.core.Dispatch
+import io.eezo.config.ConfigApp
 import io.eezo.core.Dispatch.Usage
 import io.eezo.http.cli.{Commands, Render, RenderJson}
 
@@ -16,15 +16,19 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   * an override beside [[port]]; nothing in user code calls `HttpServer.run`. `main` is inherited
   * from `Dispatch`: `sbt run` boots, `eezo dev` (the plugin's `eezoDev`, or `sbt "run dev"` without
   * the restart on save) serves with the listing and the reload client on, `eezo routes` prints the
-  * table, and any other first argument is unknown. The database layer's commands do not exist here:
-  * an application that needs them depends on `eezo` and extends `EezoApp`, which stacks both
-  * layers.
+  * table, `eezo config` lists the variables `application.conf` names, and any other first argument
+  * is unknown. The database layer's commands do not exist here: an application that needs them
+  * depends on `eezo` and extends `EezoApp`, which stacks both layers.
   *
   * [[serve]] is the only call site of `HttpServer.run` in the entry traits, so [[boot]] and `dev`
   * see the same overrides. Both are virtual hooks the umbrella overrides: [[program]] to run `boot`
   * under the database, [[devServer]] to run the drift check first.
+  *
+  * Both start only after `ConfigApp` has read the application's Config, when the build names one:
+  * the read wraps the `dev` arm here and not [[devServer]], so the umbrella's override, with its
+  * `Database` and its drift check, runs after the read too and never for a refused one.
   */
-trait HttpApp extends Dispatch {
+trait HttpApp extends ConfigApp {
 
   /** The route table, usually `Routes.table()` from the sbt plugin's generated object. Abstract: an
     * http layer is its routes, and an application without any is a mistake.
@@ -95,7 +99,7 @@ trait HttpApp extends Dispatch {
   protected def program(): Unit = boot()
 
   override protected def commands: PartialFunction[List[String], Int] = ({
-    case "dev" :: _        => devServer(); 0
+    case "dev" :: flags    => configured(flags)(devServer())
     case "routes" :: flags =>
       val result = Commands.routes(routes)
       emit(flags)(RenderJson.routes(result), Render.routes(result))

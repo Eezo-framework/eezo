@@ -46,6 +46,20 @@ trait Config[A] {
     */
   def names(file: Tree): Seq[Config.Name]
 
+  /** The offenders the file shows on its own, before any environment: a variable under the
+    * framework's prefix, and a Redacted stated as text. What a command checks for an operator who
+    * has set nothing yet, so a value no variable feeds yet is not one of them. Every variable the
+    * file names is answered with text no environment holds, which leaves each path fed and lets the
+    * read find the two offenders where it finds them at boot.
+    */
+  def check(file: Tree): Seq[Config.Offender] = {
+    val answered = Config.Written(file).substitutions.map(_.variable -> Config.Answered).toMap
+    read(file, answered).left.toSeq.flatMap(_.offenders).filter {
+      case _: Config.Offender.Reserved | _: Config.Offender.Literal => true
+      case _                                                        => false
+    }
+  }
+
   /** What boot calls with the value it read. Every section is installed under its own Config too,
     * so that code that needs one section asks for that section and not for the whole class.
     */
@@ -117,7 +131,10 @@ object Config {
   final case class Refused(offenders: Seq[Offender]) {
 
     /** One line per offender, the path first, for an operator reading a boot log. */
-    def message: String =
+    def message: String = lines.mkString("\n")
+
+    /** [[message]] line by line, for a caller that prefixes each, as boot's `[eezo] ` does. */
+    def lines: Seq[String] =
       offenders
         .map {
           case Offender.Missing(path, Nil)       => s"$path is missing: add it to application.conf"
@@ -131,8 +148,12 @@ object Config {
             s"$path is stated as a literal in application.conf, and it is a Redacted: a Redacted " +
               "value reaches the file only through a variable"
         }
-        .mkString("\n")
   }
+
+  /** What [[Config.check]] answers every variable with: no value an operator sets, so nothing a
+    * refusal could quote.
+    */
+  private[config] val Answered = "\u0000eezo check\u0000"
 
   /** The framework reads its own variables under this prefix, and a file that feeds a path from one
     * would read the framework's value or hand it the application's.
@@ -418,6 +439,15 @@ object Config {
   /** The file as a whole, for a refusal that has no one path to name. */
   private val FileName = "application.conf"
 
+  /** What a refusal says of a file that does not parse, at compile time and at boot alike. The
+    * library's own message quotes the tokens around the fault, which can be a secret, so only the
+    * line is kept.
+    */
+  private[config] def unparsable(e: ConfigException): String = {
+    val line = Option(e.origin()).map(_.lineNumber()).filter(_ > 0)
+    s"$FileName does not parse${line.fold("")(n => s" at line $n")}: fix its syntax there."
+  }
+
   /** The outermost paths of the unresolved tree that hold a substitution, in file order: the only
     * values resolution can fail on.
     */
@@ -675,8 +705,9 @@ object Config {
           .getOrElse(
             throw new IllegalStateException(
               s"Config[$label].current was asked for before a $label was installed. Boot " +
-                s"installs the one it reads from application.conf; a suite wraps its call in " +
-                s"Config[$label].installed(value) { ... }."
+                "installs the one it reads from application.conf when the build names the class " +
+                s"with eezoConfigClass; a suite wraps its call in Config[$label].installed(value) " +
+                "{ ... }."
             )
           )
 
@@ -709,7 +740,20 @@ object Config {
   /** The class the application reads, checked against the file at compile time where the build
     * writes the root into the generated unit.
     */
-  final class Root[A](val config: Config[A])
+  final class Root[A](val config: Config[A]) {
+
+    /** What boot does with the file: the read, and on success the install. Here, where the class is
+      * known, since a caller that holds only a `Root[?]` cannot hand the value it read back to
+      * `install`.
+      */
+    private[config] def boot(file: Tree, env: Map[String, String]): Option[Refused] =
+      config.read(file, env) match {
+        case Right(value) =>
+          config.install(value)
+          None
+        case Left(refused) => Some(refused)
+      }
+  }
 
   object Root {
 
@@ -719,7 +763,51 @@ object Config {
     trait Generated {
       def root: Root[?]
     }
+
+    /** The name the plugin writes the object under, fixed so that boot finds it without the entry
+      * object naming it.
+      */
+    private val GeneratedName = "io.eezo.generated.ConfigFile"
+
+    /** The object's class, else a class of the same name with no object, which is someone else's
+      * class and must be refused like an object of the wrong type: read as absent, it would boot
+      * with nothing installed.
+      */
+    private def generatedClass: Option[Class[?]] =
+      try Some(loader.loadClass(GeneratedName + "$"))
+      catch {
+        case _: ClassNotFoundException =>
+          try Some(loader.loadClass(GeneratedName))
+          catch { case _: ClassNotFoundException => None }
+      }
+
+    /** The root the build names, or `None` when it names none. Looked up by name and not linked,
+      * since the object exists only where the build sets `eezoConfigClass`. Only a class nobody
+      * wrote is `None`: one that fails to load or to initialise is the build gone wrong, and taking
+      * it for absent would boot with nothing installed and fail later, on the first `current`.
+      */
+    def generated: Option[Root[?]] =
+      generatedClass.map { cls =>
+        val instance =
+          try cls.getField("MODULE$").get(null)
+          catch { case _: NoSuchFieldException => null }
+        instance match {
+          case g: Generated => g.root
+          case _            =>
+            throw new IllegalStateException(
+              s"$GeneratedName is not a Config.Root.Generated, so the plugin did not write it: " +
+                "move the class that has its name, which only the plugin writes"
+            )
+        }
+      }
   }
+
+  /** The loader boot finds the generated object and `application.conf` through. The context loader
+    * first, as `Assets` has it: sbt runs an application and a suite under a loader of its own, with
+    * eezo's jars in a parent layer that cannot see the application's classes or resources.
+    */
+  private[config] def loader: ClassLoader =
+    Option(Thread.currentThread.getContextClassLoader).getOrElse(getClass.getClassLoader)
 
   /** The root with no file to check against: what a suite or a project without the plugin writes.
     * It still walks the whole tree of sections, so a section type at two paths is refused here too.

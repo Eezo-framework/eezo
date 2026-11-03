@@ -35,6 +35,8 @@ eezo — the framework launcher
 
 forwarded to the application (run from the project directory):
   eezo routes           what is mounted
+  eezo config           the variables application.conf names, one per line: variable,
+                        path, redacted|plain, required|defaulted|optional, tab separated
   eezo db <command>     the schema commands: status | sync | freeze | migrate |
                         reset | drop | dump | ddl; `eezo db` alone lists them
   eezo help             every command the application answers
@@ -848,7 +850,7 @@ case "$cmd" in
       forward "eezo db ${2:-}" "run $*"
     fi
     ;;
-  routes | help)
+  routes | config | help)
     need_sbt
     forward "eezo $cmd" "run $*"
     ;;

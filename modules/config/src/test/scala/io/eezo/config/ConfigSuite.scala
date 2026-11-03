@@ -180,6 +180,26 @@ class ConfigSuite extends munit.FunSuite {
     )
   }
 
+  test("check finds what the file alone gets wrong, and never a value no variable feeds yet") {
+    val file = ConfigFactory.parseString("""
+      port = "abc"
+      stripe {
+        secretKey = "sk_live_committed"
+        webhookSecret = ${?EEZO_WEBHOOK}
+      }
+      shopUrl = ${?SHOP_URL}
+    """)
+    assertEquals(
+      Config[ShopConfig].check(file),
+      Seq(
+        Config.Offender.Reserved("stripe.webhookSecret", "EEZO_WEBHOOK"),
+        Config.Offender.Literal("stripe.secretKey")
+      )
+    )
+    assertEquals(Config[ShopConfig].check(shop), Seq.empty)
+    assertEquals(Config[ShopConfig].check(ConfigFactory.empty()), Seq.empty)
+  }
+
   test("names lists one Name per substitution of the file, in file order, by the path it feeds") {
     import Config.Need.*
     assertEquals(
