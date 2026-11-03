@@ -143,6 +143,7 @@ object Docs {
   private[site] val Modules: Vector[(String, String, String)] = Vector(
     ("io.eezo", "eezo", "The umbrella: EezoApp, both layers."),
     ("io.eezo.core", "eezo-core", "The HTML tree and DSL, Id, Store."),
+    ("io.eezo.config", "eezo-config", "Config, read from application.conf."),
     (
       "io.eezo.http",
       "eezo-http",

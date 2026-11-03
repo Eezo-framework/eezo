@@ -84,6 +84,21 @@ object EezoPlugin extends AutoPlugin {
     val eezoJavaVersion: SettingKey[String] =
       settingKey[String]("Java version of the deployment base image (eclipse-temurin JRE).")
 
+    // The class is named in the build and not on the entry object, so the plugin can write the
+    // compile time check into a unit of its own and the application writes nothing for it.
+    val eezoConfigClass: SettingKey[Option[String]] =
+      settingKey[Option[String]](
+        "The case class src/main/resources/application.conf is read into, fully qualified; " +
+          "None writes no io.eezo.generated.ConfigFile."
+      )
+
+    // `@transient` for the reason `eezoGenerateRoutes` is: the result is a `Seq[File]`.
+    @transient val eezoGenerateConfig: TaskKey[Seq[File]] =
+      taskKey[Seq[File]](
+        "Generates io.eezo.generated.ConfigFile, which checks eezoConfigClass against " +
+          "application.conf at compile time; does nothing when eezoConfigClass is None."
+      )
+
     // The stylesheet generator. `@transient` for the reason `eezoGenerateRoutes` is: the result is
     // a `Seq[File]`, and the generator keeps a cache of its own below.
     @transient val eezoTailwind: TaskKey[Seq[File]] =
@@ -118,6 +133,14 @@ object EezoPlugin extends AutoPlugin {
     // to a new file under `app/` at all.
     Compile / eezoGenerateRoutes / watchTriggers +=
       Glob((Compile / scalaSource).value, RecursiveGlob / "*.scala"),
+    // The configuration's check, beside the route table. The trigger is on the project for the
+    // reason the stylesheet's is below: a generator is reached through `sourceGenerators` and not
+    // as a task dependency, so a trigger scoped to it is never read, and without one a save of
+    // the file alone does not restart the dev loop or check the file again.
+    eezoConfigClass              := None,
+    Compile / eezoGenerateConfig := configFile.value,
+    Compile / sourceGenerators += (Compile / eezoGenerateConfig).taskValue,
+    watchTriggers ++= ConfigFile.watched((Compile / resourceDirectory).value),
     // The command tasks, project level rather than scoped to `Compile` so that `sbt eezoStatus`
     // needs no scope to type. `toTask` on `run` rather than `runner` directly, so the forward
     // inherits everything the build already decided about running (fork, working directory,
@@ -508,6 +531,18 @@ object EezoPlugin extends AutoPlugin {
     }
 
     cached(inputs).toSeq
+  }
+
+  /** The unit `ConfigFile` writes, with no cache of its own: the work is one hash of each config
+    * file in the resource directory, small files read in a moment, and an unchanged unit is not
+    * written again.
+    */
+  private def configFile: Def.Initialize[Task[Seq[File]]] = Def.task {
+    ConfigFile.write(
+      eezoConfigClass.value,
+      (Compile / resourceDirectory).value / "application.conf",
+      (Compile / sourceManaged).value / "io" / "eezo" / "generated" / "ConfigFile.scala"
+    )
   }
 
   /** Builds the stylesheet when the project has a `tailwind.css`, and nothing otherwise.
