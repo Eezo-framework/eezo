@@ -2,7 +2,8 @@ import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
 import java.util.UUID
 
-import io.eezo.core.Id
+import io.eezo.auth.Password
+import io.eezo.core.{Id, Parser}
 import io.eezo.db.*
 import io.eezo.db.Scopes.{read, transact}
 import io.eezo.http.Body
@@ -111,19 +112,21 @@ class PostOwnershipSuite extends munit.FunSuite {
   }
 
   /** The two users, made once, through the application's own tools: `run db sync --apply` for the
-    * tables, exactly as `README.md` says to before the first request, and `CreateUser.hashPassword`
-    * for the hash, so the rows the guard verifies against are the rows the operator's tool would
-    * have written.
+    * tables, exactly as `README.md` says to before the first request, and `Parser[Password]` for
+    * the hash, the read `CreateUser` takes its password through, so the rows the guard verifies
+    * against are the rows the operator's tool would have written.
     */
   private lazy val signedUp: (Id[User], Id[User]) = {
     BlogDb.main(Array("db", "sync", "--apply"))
     val alice = Id.gen[User]()
     val bob   = Id.gen[User]()
+    val hash  =
+      summon[Parser[Password]].read(Secret).fold(reason => fail(s"Secret $reason"), identity)
     BlogDb.around {
       transact {
         val users = Table[User]
-        users.insert(User(alice, AliceEmail, CreateUser.hashPassword(Secret)))
-        users.insert(User(bob, BobEmail, CreateUser.hashPassword(Secret)))
+        users.insert(User(alice, AliceEmail, hash))
+        users.insert(User(bob, BobEmail, hash))
       }
     }
     (alice, bob)
