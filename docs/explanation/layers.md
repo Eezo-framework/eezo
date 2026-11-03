@@ -120,6 +120,9 @@ the application while the drift is dangerous.
 - **`eezo-upickle`** sits on the http layer and the umbrella doesn't carry it. It gives an API
   route an `api.Serde` for any model through upickle, so `eezo-http` itself has no JSON library
   on its classpath. An application that wants another library writes its own `given api.Serde`.
+- **`eezo-config`** sits beside the layers, on `eezo-core` alone. It reads the application's own
+  `application.conf` into a case class of its own, its `Config`, so neither layer carries the
+  HOCON parser for the other. The umbrella carries it; an application on one layer adds it.
 - **`eezo-testkit`** sees all of them. It boots a real server against a real database and
   drives it over HTTP and WebSocket, for tests.
 

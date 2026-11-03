@@ -100,13 +100,21 @@ def module(id: String): Project =
     .settings(commonSettings)
     .settings(name := s"eezo-$id")
 
-// The framework's own types: configuration, the HTML node tree and DSL, the model key `Id[T]`, and
-// what everything else builds on. `core` holds what has no dependencies of its own and at least two
-// dependent modules, which is why `Id` is here: `db` stores one and `http` reads one out of a path
-// and a form, and those two are siblings that never see each other. Not errors: the eezo exception
-// set lives in `http`, so that `db`, which depends on `core` and never on `http`, cannot reach for
-// an HTTP status.
+// The framework's own types: `Parser` and `Redacted`, the HTML node tree and DSL, the model key
+// `Id[T]`, and what everything else builds on. `core` holds what has no dependencies of its own and
+// at least two dependent modules, which is why `Id` is here: `db` stores one and `http` reads one
+// out of a path and a form, and those two are siblings that never see each other. Not errors: the
+// eezo exception set lives in `http`, so that `db`, which depends on `core` and never on `http`,
+// cannot reach for an HTTP status.
 lazy val core = module("core")
+
+// The application's configuration: `derives Config`, read from `application.conf` through Typesafe
+// Config's HOCON parser. A module of its own so that `core` stays free of dependencies, and beside
+// the layers rather than in one, since an application on either layer has a configuration to read.
+// `test->test` on `core`, as the layers have it, so a suite here can share core's helpers.
+lazy val config = module("config")
+  .dependsOn(core % "compile->compile;test->test")
+  .settings(libraryDependencies += typesafeConfig)
 
 // Jetty boot, request parsing, response writing, file based routing.
 lazy val http = module("http")
@@ -175,6 +183,7 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(
     core % "compile->compile;test->test",
+    config,
     http,
     db,
     live % "compile->compile;test->test",
@@ -258,7 +267,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
+  .aggregate(core, config, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
   .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
@@ -271,6 +280,7 @@ lazy val root = (project in file("."))
     // is a 2.12 cross build and the demo is not an API, so neither is documented here.
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
       core,
+      config,
       http,
       db,
       live,
