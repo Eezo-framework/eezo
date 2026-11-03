@@ -15,8 +15,8 @@ class InstallSuite extends munit.FunSuite {
     assertNoDiff(
       thrown.getMessage,
       "Config[Lonely].current was asked for before a Lonely was installed. Boot installs the one " +
-        "it reads from application.conf; a suite wraps its call in " +
-        "Config[Lonely].installed(value) { ... }."
+        "it reads from application.conf when the build names the class with eezoConfigClass; a " +
+        "suite wraps its call in Config[Lonely].installed(value) { ... }."
     )
   }
 

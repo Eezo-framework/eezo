@@ -132,7 +132,9 @@ When `eezoConfigClass` names a class, a second file sits beside it,
 `io/eezo/generated/ConfigFile.scala`. It holds one call, `Config.checked[<class>](<path>)`, with
 the absolute path of `src/main/resources/application.conf`, and a digest in its first line over
 that file and every `.conf`, `.json` and `.properties` file under `src/main/resources`. The call
-checks the file against the class at compile time. The digest is there because the incremental
+checks the file against the class at compile time. Boot finds the object by that fixed name and
+reads the file into the class before the application starts, as
+[configuration](configuration.md) describes. The digest is there because the incremental
 compiler never looks inside a macro: an edit to the file, or to a file it includes from that
 directory, changes the unit's text, so the unit is compiled and checked again. An `include` that
 reaches outside `src/main/resources`, by absolute path, by a `..` path or from the classpath, is

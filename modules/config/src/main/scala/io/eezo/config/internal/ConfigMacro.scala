@@ -203,20 +203,13 @@ object ConfigMacro {
 
     // Parsed and never resolved: what is checked is what the author wrote, the literal or the
     // substitution, and not what the compiler's environment holds.
-    // The library's own message quotes the tokens around the fault, which can be a secret, so the
-    // refusal keeps only the line.
     val parsed: Option[ConfigObject] = path.map { p =>
       try
         ConfigFactory
           .parseFile(new java.io.File(p), ConfigParseOptions.defaults().setAllowMissing(true))
           .root()
       catch {
-        case e: ConfigException =>
-          val line = Option(e.origin()).map(_.lineNumber()).filter(_ > 0)
-          report.errorAndAbort(
-            s"application.conf does not parse${line.fold("")(n => s" at line $n")}: fix its syntax there.",
-            here
-          )
+        case e: ConfigException => report.errorAndAbort(Config.unparsable(e), here)
       }
     }
 

@@ -109,21 +109,25 @@ def module(id: String): Project =
 lazy val core = module("core")
 
 // The application's configuration: `derives Config`, read from `application.conf` through Typesafe
-// Config's HOCON parser. A module of its own so that `core` stays free of dependencies, and beside
-// the layers rather than in one, since an application on either layer has a configuration to read.
-// `test->test` on `core`, as the layers have it, so a suite here can share core's helpers.
+// Config's HOCON parser. A module of its own so that `core` stays free of dependencies, and under
+// both layers rather than in one, since an application on either layer has a configuration to
+// read and its entry trait reads it before the application starts. `test->test` on `core`, as the
+// layers have it, so a suite here can share core's helpers.
 lazy val config = module("config")
   .dependsOn(core % "compile->compile;test->test")
   .settings(libraryDependencies += typesafeConfig)
 
-// Jetty boot, request parsing, response writing, file based routing.
+// Jetty boot, request parsing, response writing, file based routing. `config` because `HttpApp`
+// reads the application's configuration before it serves; `config` sees only `core`, so `http`
+// still never sees `db`. `test->test` on it for the loader its suites boot a Config through.
 lazy val http = module("http")
-  .dependsOn(core % "compile->compile;test->test")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, slf4jJdk14, jettyWsClient))
 
-// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
+// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect. `config`
+// because `DbApp` reads the application's configuration before it installs a `Database`.
 lazy val db = module("db")
-  .dependsOn(core % "compile->compile;test->test")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(postgresql, hikari, slf4jJdk14, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
@@ -182,8 +186,8 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // sign in rather than spell either a second time.
 lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(
-    core % "compile->compile;test->test",
-    config,
+    core   % "compile->compile;test->test",
+    config % "compile->compile;test->test",
     http,
     db,
     live % "compile->compile;test->test",
