@@ -9,13 +9,23 @@ import java.util.Properties
   */
 object Toolchain {
 
-  /** The pinned language version. eezo tracks Scala 3.8.x. */
-  val ScalaVersion = "3.8.4"
+  /** The pinned language version. eezo tracks Scala 3.9.x. */
+  val ScalaVersion = "3.9.0"
 
   /** The Scala version the sbt 1 axis of `sbt-eezo` is built with. sbt 1 runs on Scala 2.12 and a
     * plugin has to match it, so this is sbt's version to choose, not eezo's.
     */
   val PluginScalaVersion = "2.12.21"
+
+  /** The Scala version the sbt 2 axis of `sbt-eezo` is built with. sbt 2 compiles a build's
+    * `build.sbt` with its own Scala 3, which is 3.8.4 from sbt 2.0.6 through 2.0.12, and that
+    * compiler reads TASTy only up to 28.8. A plugin built with a newer Scala 3 writes TASTy the
+    * build cannot read, and the build then fails to load with `value autoImport is not a member of
+    * object io.eezo.sbt.EezoPlugin`. So, like `PluginScalaVersion`, this is sbt's version to
+    * choose, not eezo's, and it stays where it is when `ScalaVersion` moves. It moves when the
+    * floor in `Sbt2Version` moves to an sbt whose Scala 3 is newer.
+    */
+  val Sbt2PluginScalaVersion = "3.8.4"
 
   /** The oldest sbt 1 that `sbt-eezo` promises to work on. Deliberately not eezo's own sbt: a floor
     * pinned to whatever this build happens to run is an accident, not a promise. 1.5.8 is the floor

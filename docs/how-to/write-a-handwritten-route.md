@@ -120,6 +120,6 @@ Leaving it out is a compile error naming the file.
 
 ## Where the table is written
 
-`target/scala-3.8.4/src_managed/main/io/eezo/generated/Routes.scala`. One row per file, each
+`target/scala-3.9.0/src_managed/main/io/eezo/generated/Routes.scala`. One row per file, each
 with a `// from` comment naming the source. A compile error in that file means the method on the
 row doesn't take a `Request` and return a `Response`; fix the file the comment names.
