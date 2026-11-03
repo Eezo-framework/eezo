@@ -441,6 +441,7 @@ class DeployPreflightSuite extends FunSuite {
       configCode = 2,
       pluginsSbt = "addSbtPlugin(\"io.eezo\" % \"sbt-eezo\" % \"0.3.0\")\n"
     )
+    assertEquals(run.out, "")
     assertEquals(run.err, "✗ build failed; deployment was not attempted\n")
     assertEquals(run.code, 1)
     assertEquals(run.sbtCalls, List(Stage))
