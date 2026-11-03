@@ -45,13 +45,15 @@ build names a Config class.
 `config` prints one line per substitution in `application.conf`, four fields separated by a tab
 and no header: the variable, the path it feeds, `redacted` or `plain`, and `required`,
 `defaulted` or `optional`. The words are fixed, so a script reads the lines with
-`while IFS=$'\t' read -r variable path redaction need` and needs no JSON parser:
+`while IFS=$'\t' read -r variable path redaction need` and needs no JSON parser. The shop's:
 
 ```
 $ eezo config
-SHOP_PORT	port	plain	required
 STRIPE_SECRET_KEY	stripe.secretKey	redacted	required
-STRIPE_CURRENCY	stripe.currency	plain	defaulted
+STRIPE_WEBHOOK_SECRET	stripe.webhookSecret	redacted	required
+SHOP_URL	shopUrl	plain	defaulted
+SHOP_EMAIL	createUser.email	plain	optional
+SHOP_PASSWORD	createUser.password	plain	optional
 ```
 
 It reads no environment, so the output is the same with every variable set or none, and it never
