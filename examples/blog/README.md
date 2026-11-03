@@ -29,21 +29,49 @@ cd examples
 sbt "blog/run db sync --apply"     # the two tables have to exist before the first request
 ```
 
-The first user comes next, since there is no sign up page. Run this line on its own and type the
-password at the prompt. It is a separate block on purpose: pasted together with the lines after it,
-`read` would take the next line as the password.
+The first user comes next, since there is no sign up page. `CreateUser.scala` reads the email and
+the password from `src/main/resources/application.conf`, and the file feeds both from variables:
+
+```hocon
+createUser {
+  email = ${?BLOG_EMAIL}
+  password = ${?BLOG_PASSWORD}
+}
+```
+
+`blog/BlogConfig.scala` is the case class the file is read into, and `examples/build.sbt` names it
+with `eezoConfigClass`. Boot reads the file before the server or the job starts.
+
+| variable | what it is for | when unset |
+|---|---|---|
+| `BLOG_EMAIL` | `createUser.email`, the first user's email | the server boots; `CreateUser` refuses to run |
+| `BLOG_PASSWORD` | `createUser.password`, the first user's password, hashed when the file is read | the server boots; `CreateUser` refuses to run |
+
+The two variables used to carry `EEZO_` in front of their names. `application.conf` may not feed a
+value from a variable under `EEZO_`, which is the prefix of the framework's own variables, so they
+lost it: export them under the names above. A refusal names the path and the variable to set:
+
+```text
+[eezo] createUser.password is missing: set BLOG_PASSWORD, which application.conf names for it
+```
+
+Run this line on its own and type the password at the prompt. It is a separate block on purpose:
+pasted together with the lines after it, `read` would take the next line as the password.
 
 ```bash
-printf 'password: '; IFS= read -rs EEZO_BLOG_PASSWORD; echo; export EEZO_BLOG_PASSWORD
+printf 'password: '; IFS= read -rs BLOG_PASSWORD; echo; export BLOG_PASSWORD
 ```
 
 ```bash
-EEZO_BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
-unset EEZO_BLOG_PASSWORD        # the server below has no use for it
+BLOG_EMAIL=you@example.com sbt "blog/runMain CreateUser"
+unset BLOG_PASSWORD             # the server below would hash it at boot for nothing
 sbt blog/run                    # http://localhost:8080, posts at /admin/posts
 sbt "blog/run routes"           # 11 routes: GET /, the three the guard carries, and the seven
 sbt "blog/run db status"           # in sync ✓
 ```
+
+A password longer than the 72 bytes bcrypt reads is refused before any user is created, with
+`[eezo] createUser.password is longer than the 72 bytes bcrypt reads`.
 
 An existing blog database predates the `users` table, so `db sync --apply` is not optional on one:
 without it the first sign in fails on a table that is not there.
@@ -116,8 +144,8 @@ mount takes `logoutForm`'s default and never spells the prefix.
 There is no registration: `User` derives `Table` alone, with no `Form` and no `Resource`, so nothing
 mounts a page that writes one. `CreateUser.scala` is the operator's tool instead, a second `DbApp`
 in the same project, and the commands above are the whole of it. It reads the email and password
-from the environment rather than from arguments, because an argument list is visible to every
-process on the machine through `ps`. The environment alone does not keep a secret out of the
+from variables, through `application.conf`, rather than from arguments, because an argument list is
+visible to every process on the machine through `ps`. The environment alone does not keep a secret out of the
 shell's history file, which records the whole command line, so the password is typed at a prompt
 that does not echo instead of being written into the command.
 
