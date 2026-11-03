@@ -378,6 +378,10 @@ class ConfigSuite extends munit.FunSuite {
       Config[ShopConfig].read(file, Map("W" -> "w")),
       Left(Config.Refused(Seq(Config.Offender.Literal("stripe.secretKey"))))
     )
+    assertEquals(
+      Config[ShopConfig].check(file),
+      Seq(Config.Offender.Literal("stripe.secretKey"))
+    )
   }
 
   test("a Redacted literal copied into a section by a reference inside the file is refused") {

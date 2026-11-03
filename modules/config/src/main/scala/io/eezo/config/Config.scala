@@ -48,16 +48,22 @@ trait Config[A] {
 
   /** The offenders the file shows on its own, before any environment: a variable under the
     * framework's prefix, and a Redacted stated as text. What a command checks for an operator who
-    * has set nothing yet, so a value no variable feeds yet is not one of them. Every variable the
-    * file names is answered with text no environment holds, which leaves each path fed and lets the
-    * read find the two offenders where it finds them at boot.
+    * has set nothing yet, so a value no variable feeds yet is not one of them. The file is read
+    * twice. With every variable answered by text no environment holds, each path is fed and the
+    * read finds the two offenders at the leaves. With none answered, a variable that replaces a
+    * whole section stays unset, so the section stays a section and its literal leaf is still
+    * reached, as at boot with that variable unset. An unset variable is only a Missing there, and
+    * the filter drops it.
     */
   def check(file: Tree): Seq[Config.Offender] = {
     val answered = Config.Written(file).substitutions.map(_.variable -> Config.Answered).toMap
-    read(file, answered).left.toSeq.flatMap(_.offenders).filter {
-      case _: Config.Offender.Reserved | _: Config.Offender.Literal => true
-      case _                                                        => false
-    }
+    (read(file, answered).left.toSeq ++ read(file, Map.empty).left.toSeq)
+      .flatMap(_.offenders)
+      .filter {
+        case _: Config.Offender.Reserved | _: Config.Offender.Literal => true
+        case _                                                        => false
+      }
+      .distinct
   }
 
   /** What boot calls with the value it read. Every section is installed under its own Config too,
