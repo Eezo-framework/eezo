@@ -229,9 +229,11 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
       Seq(file)
     }.taskValue,
     // The build level Scala 3.9.0 cannot build an sbt 1 plugin, so a plain `sbt compile`
-    // would fail.
+    // would fail. Nor can it build an sbt 2 plugin: it writes TASTy 28.9, and sbt 2 compiles
+    // `build.sbt` with a Scala 3.8.4 that reads up to 28.8, so the build would not load. Each axis
+    // takes the Scala version of the sbt it targets, see `Toolchain`.
     scalaVersion       := Toolchain.PluginScalaVersion,
-    crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.ScalaVersion),
+    crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.Sbt2PluginScalaVersion),
     // Both compilers get a stated bytecode target on both axes, so that no half of a published jar
     // inherits one from whatever JDK happened to launch the build. The floors are sbt's own, Java 8
     // for sbt 1 and JDK 17 for sbt 2, not eezo's.
@@ -243,7 +245,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         // checked on the Scala 3 axis only.
         case "2.12" =>
           common ++ Seq("-Xsource:3", "-release:8", "-Xfatal-warnings", "-Ywarn-unused")
-        // 3.9.0 already defaults to 17; stated so a compiler upgrade cannot move it in silence.
+        // 3.8.4 already defaults to 17; stated so a compiler upgrade cannot move it in silence.
         case _ => common ++ Seq("-release:17", "-Werror", "-Wunused:all", "-Wvalue-discard")
       }
     },
@@ -262,8 +264,21 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         case "2.12" => Toolchain.Sbt1Floor
         case _      => Toolchain.Sbt2Version
       }
-    }
+    },
+    // The tests under `src/sbt-test`, which load the plugin in a real sbt. `scripted` starts the sbt
+    // of `pluginCrossBuild / sbtVersion`, so on the sbt 2 axis it is `Toolchain.Sbt2Version`, the
+    // floor the docs promise, and the test cannot drift from it. It does not publish the plugin
+    // itself, so that is made a dependency, and the test finds it by this version.
+    scriptedLaunchOpts ++= Seq(s"-Dplugin.version=${version.value}"),
+    scriptedDependencies := scriptedDependencies.dependsOn(publishLocal).value
   )
+
+// The pin for the sbt 2 row of `docs/reference/sbt-plugin.md`: the plugin built on the sbt 2 axis,
+// loaded with `enablePlugins(EezoPlugin)` in a real sbt 2. Compiling that axis and running its
+// suite load nothing into sbt, so neither goes red when the axis writes TASTy that sbt's own Scala
+// cannot read, and this does. The Scala version comes from `Toolchain` so that the gate and CI,
+// which both run this alias, never state it a second time.
+addCommandAlias("scriptedSbt2", s";++ ${Toolchain.Sbt2PluginScalaVersion};sbtEezo/scripted")
 
 // The root has no sources today, but it still carries commonSettings. Without it, any file
 // dropped at the repo root would compile against whatever JVM launched sbt instead of the
