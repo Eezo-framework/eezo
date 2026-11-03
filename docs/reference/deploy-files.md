@@ -99,6 +99,10 @@ Secrets. `EEZO_SECRET` and the database variables go through `fly secrets set`, 
 postgres attach` sets `DATABASE_URL`. `eezo deploy` checks that a `DATABASE_URL` or
 `EEZO_DB_URL` secret exists before deploying an application with migrations, by name only.
 
+An `[env]` table is yours to add, for the plain variables `eezo config` lists. `eezo deploy`
+reads only its keys, and refuses to deploy while it names a redacted variable: that one goes
+through `fly secrets set`.
+
 ## Settings
 
 | setting | default | effect |

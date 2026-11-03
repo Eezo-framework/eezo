@@ -177,21 +177,20 @@ forward_live() {
 
 DEV_CONSOLE_SINCE="0.4.0"
 
-# Whether the project in the current directory has a plugin with the console command: the
+# Whether the project in the current directory is on the given eezo release or a later one: the
 # `sbt-eezo` version it pins, a literal in project/plugins.sbt or, when that line reads
-# `EezoVersion.value`, the literal in project/project/EezoVersion.scala, is DEV_CONSOLE_SINCE or
-# later. Commented out lines are skipped and the last pin wins, so an old pin left above the real
-# one as a comment does not count. A `+` in the version is a locally published snapshot, always
-# the current plugin, and a project that pins neither way (the examples build reads
-# `.eezo-version`) is taken to be current.
-dev_console_in_plugin() {
+# `EezoVersion.value`, the literal in project/project/EezoVersion.scala. Commented out lines are
+# skipped and the last pin wins, so an old pin left above the real one as a comment does not count.
+# A `+` in the version is a locally published snapshot, always the current plugin, and a project
+# that pins neither way (the examples build reads `.eezo-version`) is taken to be current.
+pinned_since() { # pinned_since <release>
   local pinned
   pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*"io\.eezo" *% *"sbt-eezo" *% *"([^"]+)".*/\1/p' project/plugins.sbt 2> /dev/null | tail -1)"
   [ -n "$pinned" ] ||
     pinned="$(sed -nE '/^[[:space:]]*\/\//d; s/.*val value: *String *= *"([^"]+)".*/\1/p' project/project/EezoVersion.scala 2> /dev/null | tail -1)"
   [ -n "$pinned" ] || return 0
   case "$pinned" in *+*) return 0 ;; esac
-  [ "$(printf '%s\n%s\n' "$DEV_CONSOLE_SINCE" "$pinned" | sort -V | head -1)" = "$DEV_CONSOLE_SINCE" ]
+  [ "$(printf '%s\n%s\n' "$1" "$pinned" | sort -V | head -1)" = "$1" ]
 }
 
 dev() { # [--no-tui | --json]
@@ -208,7 +207,7 @@ dev() { # [--no-tui | --json]
     esac
     shift
   done
-  if dev_console_in_plugin; then
+  if pinned_since "$DEV_CONSOLE_SINCE"; then
     # `--server`: on an sbt 2 project the sbt script runs a thin client by default, and the
     # console must run in the process that owns this terminal.
     SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -Dsbt.supershell=false" \
@@ -387,6 +386,153 @@ TOML
   } > fly.toml
 }
 
+# The configuration preflight: every variable application.conf names, as `eezo config` lists it,
+# checked against the names Fly holds, so that an application whose boot would refuse its own
+# configuration stops here and not in a crash loop on Fly. `eezo config` is the one source: this
+# script parses no HOCON and trusts the need as printed. Names only, as with the database secret:
+# `fly secrets list` shows digests and nothing here keeps them, and of the [env] table of fly.toml
+# only the keys are read.
+#
+# A project pinned to a release from before the `config` command (CONFIG_SINCE) is not checked:
+# its application answers `run config` with an unknown command, and no application on it can name
+# a Config class, so it deploys as it did before the check existed.
+
+CONFIG_SINCE="0.4.0"
+
+in_list() { # in_list <name> <names, one per line>: exact, so STRIPE_KEY is not STRIPE_KEY_OLD
+  case $'\n'"$2"$'\n' in
+    *$'\n'"$1"$'\n'*) return 0 ;;
+  esac
+  return 1
+}
+
+# The table runs from its `[env]` header to the next header, and a key may be indented and quoted
+# either way. Everything from the first `=` on is the value, which is dropped unread. A value that
+# opens a multi line string, three quotes of either kind, runs to the line that closes it, and the
+# lines in between are its text: in any table, read as keys or headers they would name variables
+# fly.toml does not set. A file saved with Windows line endings is read the same, or its [env]
+# header would never match and a committed secret there would pass unseen.
+fly_env_keys() { # the keys of the [env] table of fly.toml, one per line, and never a value
+  awk -v q="'" '
+    { sub(/\r$/, "") }
+    closer != "" { if (index($0, closer)) closer = ""; next }
+    /^[ \t]*\[/ { in_env = ($0 ~ /^[ \t]*\[[ \t]*env[ \t]*\][ \t]*(#.*)?$/); next }
+    /^[ \t]*(#|$)/ || !/=/ { next }
+    {
+      value = $0
+      sub(/^[^=]*=[ \t]*/, "", value)
+      opener = substr(value, 1, 3)
+      if ((opener == "\"\"\"" || opener == q q q) && !index(substr(value, 4), opener)) closer = opener
+    }
+    !in_env { next }
+    {
+      key = $0
+      sub(/=.*/, "", key)
+      gsub(/^[ \t]+|[ \t]+$/, "", key)
+      first = substr(key, 1, 1)
+      if (length(key) > 1 && (first == "\"" || first == q) && substr(key, length(key), 1) == first)
+        key = substr(key, 2, length(key) - 2)
+      print key
+    }' fly.toml
+}
+
+# A secret that is staged or only partly deployed carries an indicator in front of its name, `*` or
+# `!`, and is set all the same: the indicator is dropped whether it is its own field or glued to the
+# name, and a field of punctuation alone, such as a table border, is passed over. The first field
+# that is a word is the name. The header row, the one that names the NAME and DIGEST columns, is no
+# secret.
+secret_names() { # the names in `fly secrets list` text on stdin, one per line, and never a digest
+  awk '
+    !header && /(^|[ \t])NAME([ \t]|$)/ && /(^|[ \t])DIGEST([ \t]|$)/ { header = 1; next }
+    {
+      for (i = 1; i <= NF; i++) {
+        field = $i
+        sub(/^[*!]+/, "", field)
+        if (field !~ /^[A-Za-z0-9_]/) continue
+        if (field ~ /^[A-Za-z_][A-Za-z0-9_]*$/) print field
+        break
+      }
+    }'
+}
+
+config_preflight() {
+  pinned_since "$CONFIG_SINCE" || return 0
+  local code=0
+  run_captured "reading application.conf" sbt_cmd "run config" || code=$?
+  if [ "$code" -ne 0 ]; then
+    replay_captured "$SBT_NOISE"
+    exit 1
+  fi
+  local rows="$CAPTURED_OUT"
+  cat "$CAPTURED_ERR" >&2
+  rm -f "$CAPTURED_ERR"
+
+  # A line that is not a row stops the deploy rather than being skipped: a skipped line could be
+  # a required variable that sbt or the application printed something in front of. The line is
+  # matched whole before it is split, because read with a tab in IFS takes tabs as whitespace and
+  # would fold an empty field, a leading tab or a trailing tab into a row that looks well formed.
+  local variables="" required="" redacted="" row variable redaction need line=0
+  local grammar=$'^([A-Za-z_][A-Za-z0-9_]*)\t[^\t]+\t(plain|redacted)\t(required|defaulted|optional)$'
+  while IFS= read -r row || [ -n "$row" ]; do
+    line=$((line + 1))
+    if ! [[ $row =~ $grammar ]]; then
+      rm -f "$rows"
+      {
+        echo "✗ deployment cannot continue: line $line of what eezo config printed is not a variable row, so the"
+        echo "  variables application.conf names cannot be checked. Run eezo config to see it."
+      } >&2
+      exit 1
+    fi
+    variable="${BASH_REMATCH[1]}" redaction="${BASH_REMATCH[2]}" need="${BASH_REMATCH[3]}"
+    in_list "$variable" "$variables" || variables+="$variable"$'\n'
+    [ "$redaction" != redacted ] || redacted+="$variable"$'\n'
+    [ "$need" != required ] || required+="$variable"$'\n'
+  done < "$rows"
+  rm -f "$rows"
+  [ -n "$variables" ] || return 0
+
+  # Fly is asked for its secrets only when a required variable is not already in [env], so a
+  # failing `fly secrets list` stops no deploy that never needed it. A failure stops the deploy on
+  # its own line, rather than reporting every variable as missing.
+  local env_keys secrets="" listed name
+  env_keys="$(fly_env_keys)"
+  for name in $required; do
+    in_list "$name" "$env_keys" && continue
+    if ! listed="$("$FLY" secrets list)"; then
+      {
+        echo "✗ deployment cannot continue: fly secrets list failed, so the variables application.conf names"
+        echo "  cannot be checked. See the output above."
+      } >&2
+      exit 1
+    fi
+    secrets="$(secret_names <<< "$listed")"
+    break
+  done
+
+  # Names and places only: the report is built from the variable names, never from a line read.
+  local report=""
+  for name in $variables; do
+    if in_list "$name" "$redacted" && in_list "$name" "$env_keys"; then
+      report+="    $name is redacted and belongs in fly secrets, not in fly.toml, which is committed: remove it from the [env] table and set it with fly secrets set $name=..."$'\n'
+    elif ! in_list "$name" "$required" || in_list "$name" "$secrets"; then
+      continue
+    elif in_list "$name" "$redacted"; then
+      report+="    $name is required and redacted: set it with fly secrets set $name=..."$'\n'
+    elif ! in_list "$name" "$env_keys"; then
+      report+="    $name is required: set it with fly secrets set $name=..., or as a key of the [env] table of fly.toml"$'\n'
+    fi
+  done
+  if [ -n "$report" ]; then
+    {
+      echo "✗ deployment cannot continue: the variables application.conf names are not all in place on Fly."
+      echo
+      printf '%s' "$report"
+    } >&2
+    exit 1
+  fi
+  return 0
+}
+
 deploy() {
   local target="fly" app=""
   while [ $# -gt 0 ]; do
@@ -434,7 +580,7 @@ deploy() {
     echo "→ wrote fly.toml (app: $name${region:+, region: $region})"
   fi
 
-  # The one reliable secret preflight: an app with migrations will run `db migrate --apply` on
+  # The database secret preflight: an app with migrations will run `db migrate --apply` on
   # deploy, which needs a database. Names only — secret values never reach this machine.
   if [ -d db/migrations ] && [ -n "$(ls db/migrations 2> /dev/null)" ]; then
     if ! "$FLY" secrets list 2> /dev/null | grep -qE '(DATABASE_URL|EEZO_DB_URL)'; then
@@ -451,6 +597,8 @@ MSG
       exit 1
     fi
   fi
+
+  config_preflight
 
   local staged=0
   run_captured "staging the application" sbt_cmd eezoStage || staged=$?
