@@ -63,10 +63,23 @@ class MigrationSuite extends FunSuite {
     * statement, so a statement ending in a comment hides its own terminator inside that comment. A
     * file assembled by hand can put the `;` on its own line and pass without exercising any of it.
     */
+  private def rendered(statements: List[String]): String =
+    Migration(1, "seed", statements, Migration.fingerprint(statements)).render
+
   private def roundTrips(name: String)(statements: List[String]): Unit =
     test(name) {
-      val rendered = Migration(1, "seed", statements, Migration.fingerprint(statements)).render
-      assertEquals(Migration.verify(rendered), Right(statements))
+      assertEquals(Migration.verify(rendered(statements)), Right(statements))
+    }
+
+  /** The same round trip after every LF in the rendered file is replaced with CR LF.
+    *
+    * A file from Windows keeps the carriage return. The scanner has to see the normalised text, or
+    * a multi line statement hashes to something other than the fingerprint `render` wrote.
+    */
+  private def roundTripsCrLf(name: String)(statements: List[String]): Unit =
+    test(name) {
+      val windows = rendered(statements).replace("\n", "\r\n")
+      assertEquals(Migration.verify(windows), Right(statements))
     }
 
   roundTrips("a semicolon inside a string literal does not split the statement")(
@@ -109,6 +122,98 @@ class MigrationSuite extends FunSuite {
     List(
       """create table "book" ("id" uuid primary key)""",
       """create index "ix_book" on "book" ("id")"""
+    )
+  )
+
+  roundTrips("a dollar quoted body keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $$ begin perform 1; end $$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a tagged dollar quote keeps a semicolon and the next statement")(
+    List(
+      "create function f() returns void as $fn$ begin perform 1; end $fn$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar quoted body keeps a comment line and a semicolon")(
+    List(
+      "create function f() returns void as $$\nbegin\n  -- keep this line\n  perform 1;\nend\n$$ language plpgsql",
+      "select 1"
+    )
+  )
+
+  roundTrips("a dollar sign inside an unquoted identifier does not open a dollar quote")(
+    List("create table foo$tag$ (v text default 'a; b')")
+  )
+
+  roundTrips("an underscore before a dollar sign does not open a dollar quote")(
+    List("create table foo_$bar$ (v text default 'a; b')")
+  )
+
+  roundTrips("a dollar sign before a dollar sign does not open a dollar quote")(
+    List("create table foo$$bar$ (v text default 'a; b')")
+  )
+
+  roundTrips("a nested block comment keeps a semicolon in its own text")(
+    List("select 1 /* a /* b */ ; c */", "select 'a; b'")
+  )
+
+  roundTrips("a dollar quote closes only on its own tag")(
+    List("select $a$ x $b$ ; y $a$", "select 'a; b'")
+  )
+
+  roundTrips("a comment line inside a block comment is kept")(
+    List("select 1 /*\n-- x\n*/", "select 'a; b'")
+  )
+
+  roundTrips("a comment line inside a quoted identifier is kept")(
+    List("create table \"a\n-- b\" (v text default 'x; y')", "select 'a; b'")
+  )
+
+  roundTripsCrLf("a multi line statement in a CR LF file still verifies")(
+    List("create table t (\n  a int\n)", "insert into t values ('a; b')")
+  )
+
+  roundTripsCrLf("a dollar quoted body with a comment line still verifies as CR LF")(
+    List(
+      "create function f() returns void as $$\nbegin\n  -- keep this line\n  perform 1;\nend\n$$ language plpgsql",
+      "select 'a; b'"
+    )
+  )
+
+  roundTripsCrLf("a literal comment line still verifies as CR LF")(
+    List(
+      "insert into t (v) values ('first\n-- not a comment\na; b')",
+      "select 'a; b'"
+    )
+  )
+
+  roundTripsCrLf("a comment line inside a block comment still verifies as CR LF")(
+    List("select 1 /*\n-- x\n*/", "select 'a; b'")
+  )
+
+  roundTrips("a line of a literal that starts with a comment mark is kept")(
+    List(
+      "insert into t (v) values ('first\n-- not a comment\na; b')",
+      "select 1"
+    )
+  )
+
+  roundTrips("a block comment with an apostrophe does not swallow a later semicolon")(
+    List(
+      "update post set n = 0 /* don't */",
+      "insert into post (t) values ('a; b')"
+    )
+  )
+
+  roundTrips("an apostrophe in an identifier does not swallow a later semicolon")(
+    List(
+      """create table "o'clock" ("id" int)""",
+      """insert into "o'clock" ("v") values ('a; b')"""
     )
   )
 
