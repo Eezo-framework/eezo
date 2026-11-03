@@ -98,9 +98,10 @@ port. Boot does these steps:
 `current` before any install throws an `IllegalStateException` that names `installed`.
 
 When the read fails, boot writes one line per offender to stderr and exits with code 1. It
-writes no stack trace and starts nothing. A substitution under `EEZO_` comes first, and the
-fields follow in the order the class declares them. Under `eezo dev` a refused read shows the
-same lines in the log. Each save restarts the application, and the restart reads the file again.
+writes no stack trace and starts nothing. A substitution under `EEZO_` comes first, then each
+substitution that does not resolve, and the other fields follow in the order the class declares
+them. Under `eezo dev` a refused read shows the same lines in the log. Each save restarts the
+application, and the restart reads the file again.
 
 The other commands do not read the file's values: `routes`, `config`, `help` and the `db` commands
 work when a variable the file needs is unset.

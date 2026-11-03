@@ -13,10 +13,10 @@ them, and the file does not hold them.
 
 The values are in `src/main/resources/application.conf`. The file is HOCON, and it goes into the
 repository with the code. Boot reads the first `application.conf` on the classpath, which is the
-application's own, and nothing more. It does not merge `reference.conf`, the system properties,
-`-Dconfig.file`, or a file that a dependency ships. So a reviewer reads one file and sees every
-value the application can get, and a library on the classpath cannot add a value that nobody
-committed.
+application's own, as the one root file. It does not merge `reference.conf`, the system properties,
+`-Dconfig.file`, or a file that a dependency ships. A file that an `include` in `application.conf`
+names is also read. So a reviewer reads `application.conf` and every file it includes, and a
+library adds a value only when the committed file includes it.
 
 The build names the type that the file is read into:
 
