@@ -24,6 +24,10 @@ fly postgres attach myapp-db --app <your-app>
 
 `attach` sets `DATABASE_URL` on the app. Then `eezo deploy` again.
 
+The deploy also stops when `eezo config` lists a required variable that is in neither
+`fly secrets` nor the `[env]` table of `fly.toml`, or a redacted variable that is in `[env]`. It
+names each one and where it may go.
+
 ## What a deploy does
 
 1. `eezo build` stages `target/eezo/stage/`: every runtime jar, your `db/migrations`, and a

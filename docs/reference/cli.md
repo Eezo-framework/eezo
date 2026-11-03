@@ -71,7 +71,13 @@ refuses the bare form and names the `db` one.
 
 `deploy` on a first run, with no `fly.toml`, runs `fly launch`, and in a session with no
 terminal that needs `--app <name>`. Before deploying an application with migrations it checks
-that a `DATABASE_URL` or `EEZO_DB_URL` secret exists. After deploying it polls
+that a `DATABASE_URL` or `EEZO_DB_URL` secret exists. Then it runs `config` and checks each
+variable against the names Fly has. A required variable must be in `fly secrets` or in the
+`[env]` table of `fly.toml`; a redacted one must be in `fly secrets`. A redacted variable in
+`[env]` is refused even when `fly secrets` has it too, because `fly.toml` is committed. A
+defaulted or optional variable may be in neither. The deploy names every offender in one
+message and exits 1 before it builds. It reads names only, never a value, and when `config`
+itself refuses, its lines are what the deploy prints. After deploying it polls
 `/eezo/health` for up to ninety seconds.
 
 ## Which commands open a database
