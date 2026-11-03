@@ -84,6 +84,22 @@ class PagesSuite extends FunSuite {
     )
   }
 
+  /** By slug in the rendered order, because an unlisted page still renders, at the end of its
+    * section, so only the order tells a listed page from a forgotten one.
+    */
+  private def follows(pillar: String, before: String, slug: String, after: Option[String]) = {
+    val slugs = pages.pillar(pillar).get.pages.map(_.slug.stripPrefix(s"$pillar/"))
+    val at    = slugs.indexOf(slug)
+    assert(at > 0, s"$slug is not among the $pillar pages: $slugs")
+    assertEquals(slugs(at - 1), before, slugs)
+    after.foreach(next => assertEquals(slugs.lift(at + 1), Some(next), slugs))
+  }
+
+  test("the configuration pages sit beside the server and the database ones") {
+    follows("explanation", "the-server", "configuration", Some("deployment"))
+    follows("how-to", "configure-the-database", "configure-the-application", None)
+  }
+
   test("a design note is not a page, and a link to a repository file goes to GitHub") {
     assert(!pages.all.exists(_.source.startsWith("docs/adr/")))
     assert(!pages.all.exists(_.source.startsWith("research/")))
