@@ -72,9 +72,12 @@ jobs:
       # fresh one.
       #
       # The cross is cheap because `crossScalaVersions` is per project: sbt reports "Setting Scala
-      # version to 2.12.21 on 1 projects. Excluded 9 projects", then "Setting Scala version to
-      # 3.8.4 on 10 projects", so only the plugin is built twice and the eight framework modules
-      # are not dragged through a 2.12 pass they would never survive.
+      # version to 2.12.21 on 1 projects. Excluded 11 projects", then "Setting Scala version to
+      # 3.8.4 on 1 projects. Excluded 11 projects", then "Setting Scala version to 3.9.0 on 11
+      # projects", so only the plugin is built twice and the nine framework modules are not dragged
+      # through a 2.12 pass they would never survive, nor through a 3.8.4 pass they have no use for.
+      # The plugin has a Scala 3 of its own because it has to be built with the Scala 3 of the sbt 2
+      # it targets, see `Sbt2PluginScalaVersion` in project/Toolchain.scala.
       - name: Compile
         run: sbt -batch +compile Test/compile
 
@@ -97,6 +100,17 @@ jobs:
       # design/backlog.md. If it *fails*, an item has been fixed: the message says what to do.
       - name: Test
         run: sbt -batch +test
+
+      # The sbt 2 row of docs/reference/sbt-plugin.md, pinned. `scriptedSbt2` publishes `sbt-eezo`
+      # on the sbt 2 axis and loads it with `enablePlugins(EezoPlugin)` in a real sbt 2.0.6
+      # project, the test under modules/sbt-plugin/src/sbt-test. Compiling the axis and running its
+      # suite load nothing into sbt, so neither can see TASTy that sbt's own Scala cannot read: sbt
+      # 2 compiles `build.sbt` with Scala 3.8.4, which reads up to TASTy 28.8, and a plugin built
+      # with Scala 3.9.0 writes 28.9, so the build that enables it fails to load. This step goes red
+      # on that. It only loads the plugin. Generating and compiling with it is the examples step
+      # below, which runs on sbt 1 and so only ever sees the 2.12 axis.
+      - name: Load the plugin in sbt 2
+        run: sbt -batch scriptedSbt2
 
       # The walking skeletons, built the way a user builds one: eezo published to the local ivy
       # cache, and a separate sbt build that enables the plugin and compiles what it generates.

@@ -76,7 +76,7 @@ Deploying is done with `eezo deploy` on Fly.io.
 ## Requirements
 
 - **JDK 25 or newer.** Eezo needs virtual threads to not be pinned on `synchronized`.
-- **Scala 3.8.4.**
+- **Scala 3.9.**
 - **sbt 1.5.8 or newer, or sbt 2.0.6 or newer.** The plugin is published for both.
 - **Postgres**, for an application with a database layer. The default connection is a local
   Postgres. One of the few Eezo configurations is for [the database](docs/how-to/configure-the-database.md).
@@ -92,7 +92,7 @@ addSbtPlugin("io.eezo" % "sbt-eezo" % "0.3.0")
 `build.sbt`:
 
 ```scala
-scalaVersion := "3.8.4"
+scalaVersion := "3.9.0"
 
 enablePlugins(EezoPlugin)
 

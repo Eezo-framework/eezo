@@ -148,6 +148,11 @@ incremental one. With `None` the plugin writes no such file and deletes one left
 | sbt 1 | 2.12.21 | 1.5.8 |
 | sbt 2 | 3.8.4 | 2.0.6 |
 
+The Scala column is the Scala the plugin is built with on that axis. It is chosen by the sbt the
+axis targets and not by your application, because a plugin built with a newer Scala 3 than sbt's
+own cannot be loaded by it. That is why the sbt 2 row trails the Scala the framework is built
+with. The gate loads the plugin in sbt 2.0.6 to check the row.
+
 One source file set, compiled on both axes. The source stays inside the subset both compilers
 accept, and building both is the only check that it does. The plugin's bytecode targets are
 Java 8 on sbt 1 and 17 on sbt 2, which are sbt's floors and have nothing to do with the JDK the

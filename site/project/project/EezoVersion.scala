@@ -12,7 +12,7 @@ object EezoVersion {
   val value: String = "0.3.0"
 
   /** `Toolchain.ScalaVersion` from the main build, carried across for `scalaVersion` here. */
-  val scalaVersion: String = "3.8.4"
+  val scalaVersion: String = "3.9.0"
 
   /** `Toolchain.JdkFloor` from the main build, carried across for `-release` here. */
   val jdkFloor: String = "25"
