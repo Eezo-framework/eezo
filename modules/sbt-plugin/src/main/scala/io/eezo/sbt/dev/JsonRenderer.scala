@@ -118,6 +118,7 @@ private[sbt] final class JsonRenderer {
             "result"  -> o.json.getOrElse(JNull)
           )
         )
+      case Event.ConfigReported(_)                                                  => Vector.empty
       case Event.Changed(_) | Event.Pressed(_) | Event.Resized(_, _) | Event.Tick(_) =>
         Vector.empty
     }

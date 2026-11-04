@@ -29,6 +29,10 @@ private[sbt] final class LineProtocol {
       decode(line.substring(RoutesMarker.length), "routes")(j =>
         Event.RoutesReported(RouteListing.fromJson(j))
       )
+    else if (line.startsWith(ConfigMarker))
+      decode(line.substring(ConfigMarker.length), "config")(j =>
+        Event.ConfigReported(ConfigReport.fromJson(j))
+      )
     else if (line.startsWith(DriftMarker))
       decode(line.substring(DriftMarker.length), "drift")(j =>
         Event.DriftReported(Drift.fromJson(j))
@@ -77,6 +81,7 @@ private[sbt] object LineProtocol {
 
   val RoutesMarker: String  = "eezo dev: routes "
   val DriftMarker: String   = "eezo dev: drift "
+  val ConfigMarker: String = "eezo dev: config "
   val ServingMarker: String = "serving on "
 
   /** A `java.util.logging` record header: `<date> <time> <logger class> <method>`, no parentheses,

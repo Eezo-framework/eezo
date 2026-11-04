@@ -348,7 +348,8 @@ private[sbt] final class Loop(
         b.mainClass,
         Seq("dev"),
         base,
-        piped = true
+        piped = true,
+        extraEnv = model.session
       )
       // The new child is in place before `replacing` clears, so the old one's waiter, which checks
       // both, never reads its exit as the application's.

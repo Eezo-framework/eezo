@@ -49,9 +49,12 @@ private[sbt] object Tab {
   /** Last, since it is the one pane that is never short: the three before it are the answers, the
     * log is where the output went.
     */
-  case object Log extends Tab(4, "log", "log")
+  /** SPIKE: the configuration pane. */
+  case object Config extends Tab(4, "config", "cfg")
 
-  val all: Vector[Tab] = Vector(Errors, Routes, Schema, Log)
+  case object Log extends Tab(5, "log", "log")
+
+  val all: Vector[Tab] = Vector(Errors, Routes, Schema, Config, Log)
 
   def numbered(n: Int): Option[Tab] = all.find(_.number == n)
 }
@@ -70,6 +73,9 @@ private[sbt] object Prompt {
   final case class FreezePolicy(name: String, destructive: Int) extends Prompt
 
   final case class ConfirmMigrate(pending: Int) extends Prompt
+
+  /** SPIKE: a value for the first of `remaining`, typed into `buffer`. */
+  final case class SetValue(remaining: List[ConfigRow], buffer: String) extends Prompt
 }
 
 private[sbt] final case class LogLine(text: String, kind: LogLine.Kind)
@@ -95,6 +101,8 @@ private[sbt] final case class Model(
     log: Vector[LogLine],
     routes: Option[RouteListing],
     schema: SchemaState,
+    config: Option[ConfigReport],
+    session: Map[String, String],
     outcome: Option[Outcome],
     busy: Option[SchemaCommand],
     tab: Tab,
@@ -125,7 +133,12 @@ private[sbt] final case class Model(
   def hasDatabase: Boolean = schema != SchemaState.NoDatabase
 
   /** The panes this application has: the schema pane goes with the database layer. */
-  def tabs: Vector[Tab] = if (hasDatabase) Tab.all else Tab.all.filterNot(_ == Tab.Schema)
+  def tabs: Vector[Tab] =
+    Tab.all.filterNot(t => (t == Tab.Schema && !hasDatabase) || (t == Tab.Config && config.isEmpty))
+
+  /** SPIKE: the missing values the session has not supplied yet. */
+  def missingValues: List[ConfigRow] =
+    config.toList.flatMap(_.missingRows).filterNot(r => session.contains(r.variable))
 
   def drift: Option[Drift] = schema match {
     case SchemaState.Known(d) => Some(d)
@@ -155,6 +168,8 @@ private[sbt] object Model {
       log = Vector.empty,
       routes = None,
       schema = SchemaState.Unknown,
+      config = None,
+      session = Map.empty,
       outcome = None,
       busy = None,
       tab = Tab.Log,
@@ -221,6 +236,19 @@ private[sbt] object Update {
 
     case Event.RoutesReported(listing) =>
       (clampAll(m.copy(routes = Some(listing))), none)
+
+    case Event.ConfigReported(report) =>
+      val known = m.copy(config = Some(report))
+      val next  =
+        if (report.missing.nonEmpty)
+          known
+            .copy(tab = Tab.Config)
+            .note(
+              s"${report.missing.size} configuration value(s) missing: e sets them for this session",
+              LogLine.Fail
+            )
+        else known
+      (clampAll(next), none)
 
     case Event.DriftReported(drift) =>
       val known = m.copy(schema = SchemaState.Known(drift))
@@ -347,12 +375,14 @@ private[sbt] object Update {
   private def plain(m: Model, key: Key): (Model, Vector[Effect]) = key match {
     case Key.Char('q') | Key.CtrlC | Key.CtrlD => (m, Vector(Effect.Quit))
     case Key.Char('?')                         => (m.copy(help = true), none)
-    case Key.Char(c) if c >= '1' && c <= '4'   =>
+    case Key.Char(c) if c >= '1' && c <= '5'   =>
       (m.copy(tab = m.tabs.find(_.number == c - '0').getOrElse(m.tab)), none)
     case Key.Tab     => (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + 1) % m.tabs.size)), none)
     case Key.BackTab =>
       (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + m.tabs.size - 1) % m.tabs.size)), none)
     case Key.Char('r') => startBuild(m, Set.empty)
+    case Key.Char('e') if m.missingValues.nonEmpty =>
+      (m.copy(prompt = Some(Prompt.SetValue(m.missingValues, ""))), none)
     case Key.Char('c') =>
       (m.copy(log = Vector.empty, offsets = m.offsets.updated(Tab.Log, 0), follow = true), none)
     case Key.Char('s') if m.hasDatabase && m.busy.isEmpty =>
@@ -397,6 +427,22 @@ private[sbt] object Update {
                 Vector(Effect.Run(SchemaCommand.Freeze(name, dropAll = false)))
               )
           }
+      case (Prompt.SetValue(row :: rest, buffer), Key.Enter) =>
+        val value = buffer.trim
+        if (value.isEmpty) (m, none)
+        else {
+          val supplied = m.copy(session = m.session.updated(row.variable, value))
+          if (rest.isEmpty)
+            (
+              supplied.copy(prompt = None).note(s"${row.variable} set for this session; restarting"),
+              Vector(Effect.Restart)
+            )
+          else (supplied.copy(prompt = Some(Prompt.SetValue(rest, ""))), none)
+        }
+      case (Prompt.SetValue(rows, buffer), Key.Backspace) =>
+        (m.copy(prompt = Some(Prompt.SetValue(rows, buffer.dropRight(1)))), none)
+      case (Prompt.SetValue(rows, buffer), Key.Char(c)) =>
+        (m.copy(prompt = Some(Prompt.SetValue(rows, buffer + c))), none)
       case (Prompt.FreezeName(buffer), Key.Backspace) =>
         (m.copy(prompt = Some(Prompt.FreezeName(buffer.dropRight(1)))), none)
       case (Prompt.FreezeName(buffer), Key.Char(c)) =>

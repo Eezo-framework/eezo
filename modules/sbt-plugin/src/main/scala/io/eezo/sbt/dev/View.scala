@@ -37,6 +37,7 @@ private[sbt] object Panes {
         case Tab.Errors => errors(m, width)
         case Tab.Routes => routes(m, width)
         case Tab.Schema => schema(m, width)
+        case Tab.Config => config(m, width)
       }
 
   private def log(m: Model, width: Int)(implicit theme: Theme): Vector[String] =
@@ -119,6 +120,47 @@ private[sbt] object Panes {
           (title +: table) ++ (if (warnings.isEmpty) Vector.empty
                                else "" +: warnings.flatMap(w => wrap(w, width)))
         }
+    }
+
+  /** SPIKE: the variables the file names, set or unset, the missing ones first in red. */
+  private def config(m: Model, width: Int)(implicit theme: Theme): Vector[String] =
+    m.config match {
+      case None => Vector(Dim("no configuration report yet: it arrives when the application boots"))
+      case Some(report) if report.rows.isEmpty => Vector(Dim("application.conf names no variable"))
+      case Some(report)                        =>
+        val missing = m.missingValues
+        val title   =
+          if (missing.nonEmpty)
+            Red(
+              s"${theme.fail} ${missing.size} required value(s) missing; the application did not start"
+            )
+          else if (report.missing.nonEmpty)
+            Cyan(s"${theme.ok} every missing value set for this session; restarting")
+          else Green(s"${theme.ok} every required value is set")
+        val variableWidth = report.rows.map(_.variable.length).max
+        val pathWidth     = report.rows.map(_.path.length).max
+        val table         = report.rows.map { r =>
+          val status =
+            if (m.session.contains(r.variable)) Cyan(s"${theme.ok} set (session)")
+            else if (r.set) Green(s"${theme.ok} set")
+            else if (report.missing.contains(r.path)) Red(s"${theme.fail} unset")
+            else Dim("unset")
+          val mark = if (r.redacted) "redacted" else "plain"
+          truncate(
+            s"${Bold(padRight(r.variable, variableWidth))}  ${padRight(r.path, pathWidth)}  " +
+              Dim(padRight(r.need, 9) + " " + padRight(mark, 8)) + "  " + status,
+            width
+          )
+        }
+        val advice =
+          if (missing.nonEmpty)
+            Vector(
+              "",
+              Dim("e  type each missing value for this session, then restart"),
+              Dim("   or quit, export the variables, and start again")
+            )
+          else Vector.empty
+        (title +: "" +: table) ++ advice
     }
 
   private def schema(m: Model, width: Int)(implicit theme: Theme): Vector[String] = {
@@ -207,7 +249,8 @@ private[sbt] object Panes {
         )
       else Vector.empty
     val keys = Vector(
-      ("1-4", "the panes: errors, routes, schema, log"),
+      ("1-5", "the panes: errors, routes, schema, config, log"),
+      ("e", "set a missing configuration value for this session, then restart"),
       ("tab", "next pane"),
       ("j k", "scroll (also arrows, PgUp, PgDn, g, G)"),
       ("r", "rebuild and restart now"),
@@ -432,6 +475,12 @@ private[sbt] object View {
             case SchemaState.Known(_) => " " + Green(theme.ok)
             case _                    => ""
           }
+        case Tab.Config =>
+          m.config match {
+            case Some(_) if m.missingValues.nonEmpty => " " + Red(s"${theme.fail}${m.missingValues.size}")
+            case Some(_)                             => " " + Green(theme.ok)
+            case None                                => ""
+          }
         case Tab.Log => ""
       }
       val name  = if (layout.narrow) t.short else t.name
@@ -457,7 +506,9 @@ private[sbt] object View {
       if (m.hasDatabase && m.busy.isEmpty)
         Vector(key("s", "sync"), key("f", "freeze"), key("m", "migrate"))
       else Vector.empty
-    val always = Vector(key("r", "restart")) ++ db ++ Vector(key("?", "help"), key("q", "quit"))
+    val cfg    = if (m.missingValues.nonEmpty) Vector(key("e", "set")) else Vector.empty
+    val always =
+      Vector(key("r", "restart")) ++ cfg ++ db ++ Vector(key("?", "help"), key("q", "quit"))
     val keys   = if (layout.narrow) always.take(1) ++ always.takeRight(2) else always
     val busy = m.busy.map(a => Cyan(s"${theme.spinner(m.spinner)} ${a.label}") + "  ").getOrElse("")
     val all  = Panes.lines(m, m.tab, Panes.width(m)).size
@@ -498,6 +549,12 @@ private[sbt] object View {
           Yellow(s" ${theme.warn} $n destructive change(s) in $name: ") + Bold(
             "k"
           ) + " keep the data (skip them)  " + Bold("d") + " drop  " + Bold("Esc") + " cancels"
+      case Prompt.SetValue(rows, buffer) =>
+        val row    = rows.head
+        val shown  = if (row.redacted) "\u2022" * buffer.length else buffer
+        val remain = if (rows.size > 1) s" (${rows.size - 1} more after it)" else ""
+        s" ${Bold(row.variable)}" + Dim(s" for ${row.path}$remain: ") + Bold(shown) + Reverse(" ") +
+          Dim("   Enter sets it for this session, Esc cancels")
       case Prompt.ConfirmMigrate(n) =>
         if (narrow) s" $n pending. " + Bold("Enter") + " apply " + Bold("Esc") + " cancel"
         else

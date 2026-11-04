@@ -29,13 +29,17 @@ trait ConfigApp extends Dispatch {
     * The layers call it around everything that starts the application, `program` and `dev`, and
     * around nothing else: no other command reads a value.
     */
-  protected final def configured(flags: List[String])(body: => Unit): Int =
+  protected final def configured(flags: List[String])(body: => Unit): Int = {
+    // SPIKE: the config marker for the dev console, printed before boot decides.
+    if (environment.get("EEZO_DEV_MARKERS").exists(_.nonEmpty))
+      ConfigApp.marker(environment).foreach(println)
     ConfigApp.refusal(environment) match {
       case Nil =>
         body
         0
       case lines => refuse(flags, lines)
     }
+  }
 
   /** One `fail` per offender, so each line carries the `[eezo] ` prefix, or under `--json` is an
     * object of its own.
@@ -81,6 +85,37 @@ object ConfigApp {
       application match {
         case Left(line)  => List(line)
         case Right(file) => root.boot(file, env).fold(Nil)(_.lines.toList)
+      }
+    }
+
+  /** SPIKE: `eezo dev: config <json>`, the variables with set or unset and the paths missing. */
+  private[config] def marker(env: Map[String, String]): Option[String] =
+    Config.Root.generated.flatMap { root =>
+      application.toOption.map { file =>
+        val names   = root.config.names(file)
+        val missing = root.boot(file, env).toList.flatMap(_.offenders).collect {
+          case Config.Offender.Missing(path, _) => path
+        }
+        "eezo dev: config " + Json.compact(
+          Json.Obj(
+            List(
+              "variables" -> Json.Arr(
+                names.toList.map(n =>
+                  Json.Obj(
+                    List(
+                      "variable" -> Json.Str(n.variable),
+                      "path"     -> Json.Str(n.path),
+                      "redacted" -> Json.Bool(n.redacted),
+                      "need"     -> Json.Str(need(n)),
+                      "set"      -> Json.Bool(env.contains(n.variable))
+                    )
+                  )
+                )
+              ),
+              "missing" -> Json.Arr(missing.map(Json.Str(_)))
+            )
+          )
+        )
       }
     }
 

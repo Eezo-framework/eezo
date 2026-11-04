@@ -21,7 +21,7 @@ private[sbt] object PlainRenderer {
     case Event.AppLine(text, _)      => Vector(text)
     // The application prints its own listing and its own drift banner beside the markers, so the
     // values are not printed again.
-    case Event.RoutesReported(_) | Event.DriftReported(_) => Vector.empty
+    case Event.RoutesReported(_) | Event.DriftReported(_) | Event.ConfigReported(_) => Vector.empty
     case Event.CommandStarted(command)                    => Vector(s"$$ eezo ${command.label}")
     case Event.CommandFinished(outcome)                   =>
       (Describe.outcome(outcome) ++ LineProtocol.quiet(outcome.err)) :+

@@ -198,3 +198,33 @@ private[sbt] final case class Outcome(
   /** Exit 2 is `Dispatch`'s unknown command: the application has no database layer. */
   def unknownCommand: Boolean = code == 2
 }
+
+/** SPIKE: one variable `application.conf` names, as the config marker reports it. */
+private[sbt] final case class ConfigRow(
+    variable: String,
+    path: String,
+    redacted: Boolean,
+    need: String,
+    set: Boolean
+)
+
+/** SPIKE: the config marker: every variable, and the paths boot found missing. */
+private[sbt] final case class ConfigReport(rows: Vector[ConfigRow], missing: Set[String]) {
+  def missingRows: Vector[ConfigRow] = rows.filter(r => missing.contains(r.path))
+}
+
+private[sbt] object ConfigReport {
+  def fromJson(j: JValue): ConfigReport =
+    ConfigReport(
+      rows = j("variables").arr.map(v =>
+        ConfigRow(
+          v("variable").strOr("?"),
+          v("path").strOr("?"),
+          v("redacted").boolOr(false),
+          v("need").strOr("required"),
+          v("set").boolOr(false)
+        )
+      ),
+      missing = j("missing").arr.flatMap(_.str).toSet
+    )
+}

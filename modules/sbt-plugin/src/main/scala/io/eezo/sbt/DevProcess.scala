@@ -93,7 +93,8 @@ private[sbt] object DevProcess {
       mainClass: String,
       args: Seq[String],
       workingDirectory: File,
-      piped: Boolean
+      piped: Boolean,
+      extraEnv: Map[String, String] = Map.empty
   ): Process = {
     hook
     stop(quiet = true)
@@ -113,6 +114,8 @@ private[sbt] object DevProcess {
     secretFor(Option(environment.get(SecretVar)))
       .foreach(secret => environment.put(SecretVar, secret): Unit)
     if (piped) environment.put(MarkersVar, "1"): Unit
+    // SPIKE: the values the console's user typed for this session.
+    extraEnv.foreach { case (k, v) => environment.put(k, v): Unit }
 
     val process = builder.start()
     if (piped) process.getOutputStream.close()

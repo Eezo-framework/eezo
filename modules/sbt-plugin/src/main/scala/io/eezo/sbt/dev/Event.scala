@@ -26,6 +26,7 @@ private[sbt] object Event {
   final case class Serving(url: String)                  extends Event
   final case class RoutesReported(listing: RouteListing) extends Event
   final case class DriftReported(drift: Drift)           extends Event
+  final case class ConfigReported(report: ConfigReport)  extends Event
 
   final case class CommandStarted(command: SchemaCommand) extends Event
   final case class CommandFinished(outcome: Outcome)      extends Event
