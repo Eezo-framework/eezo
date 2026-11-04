@@ -78,8 +78,12 @@ private[sbt] object Tab {
   * for a plain variable and to the child's environment.
   */
 private[sbt] final class Typed private (private val text: String) {
-  def +(c: Char): Typed         = new Typed(text + c)
-  def dropLast: Typed           = new Typed(text.dropRight(1))
+  def +(c: Char): Typed = new Typed(text + c)
+  def dropLast: Typed   =
+    new Typed(
+      if (text.isEmpty) text
+      else text.dropRight(Character.charCount(text.codePointBefore(text.length)))
+    )
   def isEmpty: Boolean          = text.isEmpty
   def length: Int               = text.length
   def reveal: String            = text
@@ -199,23 +203,28 @@ private[sbt] final case class Model(
 
   /** The paths `e` asks a value for, from the last report, every one of them each time: a value
     * typed before is asked again, since the report still names the path. A malformed value is asked
-    * of the variable that supplied it, the last one named that is set, because HOCON lets a later
-    * substitution win and a value typed for an earlier one would change nothing.
+    * of every variable that is set among those the file names for the path, in file order. The
+    * report does not say whether they are fallbacks, where the last one set wins, or the parts of a
+    * concatenation, where any one of them can hold the bad text, so the console asks each and
+    * leaves it to the developer, who can skip with Enter on an empty value the ones that do not
+    * hold it.
     */
   def asks: Vector[Ask] =
     config.toVector.flatMap { report =>
       def set(variable: String): Boolean = report.rows.exists(r => r.variable == variable && r.set)
-      report.fixable.map { o =>
-        val variable =
-          if (o.kind == ConfigOffender.Malformed) o.variables.filter(set).lastOption
-          else None
-        val asked = variable.getOrElse(o.variables.head)
-        // Masked unless the report says the variable is plain.
-        val redacted = report.rows
-          .find(r => r.path == o.path && r.variable == asked)
-          .orElse(report.rows.find(_.path == o.path))
-          .forall(_.redacted)
-        Ask(o.path, asked, o.variables.find(_ != asked), redacted)
+      report.fixable.flatMap { o =>
+        val setOnes =
+          if (o.kind == ConfigOffender.Malformed) o.variables.filter(set) else Vector.empty
+        val asked = if (setOnes.isEmpty) Vector(o.variables.head) else setOnes
+        asked.map { variable =>
+          // Masked unless the report says the variable is plain.
+          val redacted = report.rows
+            .find(r => r.path == o.path && r.variable == variable)
+            .orElse(report.rows.find(_.path == o.path))
+            .forall(_.redacted)
+          val alternative = if (asked.size > 1) None else o.variables.find(_ != variable)
+          Ask(o.path, variable, alternative, redacted)
+        }
       }
     }
 
@@ -520,9 +529,14 @@ private[sbt] object Update {
               )
           }
       case (Prompt.Supply(ask +: rest, typed), Key.Enter) =>
-        if (typed.isEmpty) (m, none)
+        // An empty value skips an ask only when the path is asked of several variables, since
+        // some of those cannot matter and the environment's own value is the right answer for
+        // them; a path asked of one variable has nothing else to fall back on.
+        val skippable = m.asks.count(_.path == ask.path) > 1
+        if (typed.isEmpty && !skippable) (m, none)
         else {
-          val held = m.copy(supplied = m.supplied.updated(ask.variable, typed))
+          val held =
+            if (typed.isEmpty) m else m.copy(supplied = m.supplied.updated(ask.variable, typed))
           if (rest.isEmpty)
             (
               held

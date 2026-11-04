@@ -134,7 +134,13 @@ class UpdateSuite extends munit.FunSuite {
     val first  = port.copy(set = true)
     val second = ConfigRow("PORT", "port", redacted = false, "required", set = true)
     val bad    = ConfigReport(Vector(first, second), Vector(malformed("port", "SHOP_PORT", "PORT")))
-    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    val onlySecond = bad.copy(rows = Vector(first.copy(set = false), second))
+    val (asked, _) = run(start, Event.ConfigReported(onlySecond), Event.Pressed(Key.Char('e')))
+    val (both, _)  = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      both.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
+      Some(Vector("SHOP_PORT", "PORT"))
+    )
     assertEquals(
       asked.prompt,
       Some(
@@ -150,6 +156,94 @@ class UpdateSuite extends munit.FunSuite {
     val (retyped, restart) = runAll(asked, typing("8080") :+ Event.Pressed(Key.Enter))
     assertEquals(restart, Vector[Effect](Effect.Restart))
     assertEquals(retyped.supplied, Map("PORT" -> Typed("8080")))
+  }
+
+  test("bytes of a UTF-8 value typed in the prompt reach the child as the text typed") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val decoder    = new KeyDecoder
+    val keys = Seq(0x63, 0x61, 0x66, 0xc3, 0xa9).flatMap(decoder.feed(_)).map(Event.Pressed(_))
+    val (typed, _) = runAll(asked, keys :+ Event.Pressed(Key.Enter))
+    assertEquals(
+      typed.supplied.map { case (k, v) => k -> v.reveal },
+      Map("SHOP_PORT" -> "caf\u00e9")
+    )
+  }
+
+  test("Backspace drops a whole character, a surrogate pair included") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val decoder    = new KeyDecoder
+    val keys       = (Seq('a'.toInt, 0xf0, 0x9f, 0x98, 0x80)
+      .flatMap(decoder.feed(_)))
+      .map(Event.Pressed(_))
+    val (typed, _) = runAll(asked, keys :+ Event.Pressed(Key.Backspace))
+    val shown      = typed.prompt.collect { case Prompt.Supply(_, t) => t.reveal }
+    assertEquals(shown, Some("a"))
+  }
+
+  test("a malformed concatenation asks every variable set in it, in file order") {
+    val prefix = ConfigRow("PREFIX", "port", redacted = false, "required", set = true)
+    val number = ConfigRow("PORT", "port", redacted = false, "required", set = true)
+    val bad    = ConfigReport(Vector(prefix, number), Vector(malformed("port", "PREFIX", "PORT")))
+    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      asked.prompt,
+      Some(
+        Prompt.Supply(
+          Vector(
+            Ask("port", "PREFIX", None, redacted = false),
+            Ask("port", "PORT", None, redacted = false)
+          ),
+          Typed.empty
+        )
+      )
+    )
+    val keys = typing("80") ++ Seq(Event.Pressed(Key.Enter)) ++ typing("81") ++
+      Seq(Event.Pressed(Key.Enter))
+    val (typed, restart) = runAll(asked, keys)
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(typed.supplied, Map("PREFIX" -> Typed("80"), "PORT" -> Typed("81")))
+  }
+
+  test(
+    "Enter on an empty value skips an ask of a path asked of several variables, keeping the environment's"
+  ) {
+    val first  = ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = true)
+    val second = ConfigRow("PORT", "port", redacted = false, "required", set = true)
+    val bad    = ConfigReport(Vector(first, second), Vector(malformed("port", "SHOP_PORT", "PORT")))
+    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      asked.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
+      Some(Vector("SHOP_PORT", "PORT"))
+    )
+    val (skipped, none) = run(asked, Event.Pressed(Key.Enter))
+    assertEquals(none, Vector.empty[Effect])
+    assertEquals(skipped.supplied, Map.empty[String, Typed])
+    assertEquals(
+      skipped.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
+      Some(Vector("PORT"))
+    )
+    val (done, restart) = runAll(skipped, typing("8080") :+ Event.Pressed(Key.Enter))
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(done.supplied, Map("PORT" -> Typed("8080")))
+  }
+
+  test("a part of a concatenation can be left as it is: the first typed, the last skipped") {
+    val prefix = ConfigRow("PREFIX", "port", redacted = false, "required", set = true)
+    val number = ConfigRow("PORT", "port", redacted = false, "required", set = true)
+    val bad    = ConfigReport(Vector(prefix, number), Vector(malformed("port", "PREFIX", "PORT")))
+    val (asked, _)      = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    val keys            = typing("1") ++ Seq(Event.Pressed(Key.Enter), Event.Pressed(Key.Enter))
+    val (done, restart) = runAll(asked, keys)
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(done.supplied, Map("PREFIX" -> Typed("1")))
+    assertEquals(done.prompt, None)
+  }
+
+  test("Enter on an empty value still does nothing when the path is asked of one variable") {
+    val (asked, _)      = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (same, effects) = run(asked, Event.Pressed(Key.Enter))
+    assertEquals(same, asked)
+    assertEquals(effects, Vector.empty[Effect])
   }
 
   test("a malformed value the console supplied is asked again, and the retyped one replaces it") {

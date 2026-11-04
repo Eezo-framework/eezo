@@ -12,6 +12,12 @@ package io.eezo.sbt.dev
   * delivers a lone Escape once nothing has followed it for [[KeyDecoder.Quiet]] milliseconds, late
   * by that much and never lost.
   *
+  * A character outside ASCII arrives as two to four bytes, a lead byte and its continuation bytes.
+  * The decoder holds them until the character is whole and delivers it as one key, or as the two
+  * keys of a surrogate pair, so a value typed into a prompt reaches the child as the text the
+  * developer typed and not as one Latin-1 character per byte. A byte that breaks the sequence drops
+  * the part held and is read afresh.
+  *
   * Only the sequences the console binds are recognised. Any other `ESC [ ...` sequence is consumed
   * whole and dropped, so a key the console does not know never lands as stray characters in a text
   * prompt.
@@ -43,22 +49,43 @@ private[sbt] final class KeyDecoder {
 
   private var pending: StringBuilder = null
   private var since: Long            = 0L
+  private val utf8                   = new java.io.ByteArrayOutputStream
+  private var utf8Missing: Int       = 0
 
   /** The keys one more byte completes, often none; `now` is when the byte arrived. */
   def feed(b: Int, now: Long = 0L): Vector[Key] =
     if (pending != null) continueSequence(b)
-    else
+    else if (utf8Missing > 0 && b >= 0x80 && b <= 0xbf) continueCharacter(b)
+    else {
+      utf8Missing = 0
       b match {
-        case 27           => pending = new StringBuilder; since = now; Vector.empty
-        case 13 | 10      => Vector(Key.Enter)
-        case 9            => Vector(Key.Tab)
-        case 127 | 8      => Vector(Key.Backspace)
-        case 3            => Vector(Key.CtrlC)
-        case 4            => Vector(Key.CtrlD)
-        case 12           => Vector(Key.CtrlL)
-        case c if c >= 32 => Vector(Key.Char(c.toChar))
-        case _            => Vector.empty
+        case 27                          => pending = new StringBuilder; since = now; Vector.empty
+        case 13 | 10                     => Vector(Key.Enter)
+        case 9                           => Vector(Key.Tab)
+        case 127 | 8                     => Vector(Key.Backspace)
+        case 3                           => Vector(Key.CtrlC)
+        case 4                           => Vector(Key.CtrlD)
+        case 12                          => Vector(Key.CtrlL)
+        case c if c >= 0xc2 && c <= 0xf4 =>
+          utf8.reset()
+          utf8.write(c)
+          utf8Missing = if (c >= 0xf0) 3 else if (c >= 0xe0) 2 else 1
+          Vector.empty
+        case c if c >= 32 && c < 127 => Vector(Key.Char(c.toChar))
+        case _                       => Vector.empty
       }
+    }
+
+  private def continueCharacter(b: Int): Vector[Key] = {
+    utf8.write(b)
+    utf8Missing -= 1
+    if (utf8Missing > 0) Vector.empty
+    else {
+      val text = new String(utf8.toByteArray, java.nio.charset.StandardCharsets.UTF_8)
+      // An overlong or out of range sequence decodes to the replacement character: dropped.
+      if (text.contains('\ufffd')) Vector.empty else text.toVector.map(Key.Char(_))
+    }
+  }
 
   /** [[timeout]] once an `ESC` has waited [[KeyDecoder.Quiet]] milliseconds for its sequence. */
   def expire(now: Long): Vector[Key] =

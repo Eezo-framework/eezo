@@ -165,6 +165,27 @@ private[sbt] object Loop {
     model.supplied.map { case (variable, typed) => variable -> typed.reveal }
 }
 
+/** The one door the events of the application's children pass to the queue. A child's pumps outlive
+  * its process, since stopping waits for the exit and not for the pipes, so a line the old child
+  * printed can still be in flight when the next one starts; without this door such a line, a config
+  * marker most of all, lands behind the next child's start and passes for that child's own. The
+  * check and the add share the lock with the swap, so no line slips between them.
+  */
+private[sbt] final class Handover(events: java.util.Queue[Event]) {
+  private var current: Option[AnyRef] = None
+
+  /** `next` becomes the child whose events count, and `started` is queued ahead of any of them. */
+  def swap(next: AnyRef, started: Event): Unit = synchronized {
+    current = Some(next)
+    events.add(started): Unit
+  }
+
+  /** Queues what `child` produced, unless a later child has taken over. */
+  def from(child: AnyRef)(produced: => Vector[Event]): Unit = synchronized {
+    if (current.exists(_ eq child)) produced.foreach(e => events.add(e): Unit)
+  }
+}
+
 /** The loop and its threads. One instance per `eezoDev`; nothing here outlives the command. */
 private[sbt] final class Loop(
     state: State,
@@ -183,6 +204,7 @@ private[sbt] final class Loop(
 ) {
 
   private val events   = new LinkedBlockingQueue[Event]
+  private val handover = new Handover(events)
   private val stopping = new AtomicBoolean(false)
   // Fed by the keys thread, expired by the tick thread; each holds its monitor while it does.
   private val decoder  = new KeyDecoder
@@ -366,18 +388,25 @@ private[sbt] final class Loop(
       child = Some(process)
       replacing = false
       // Queued before the pumps start, so that the child's config marker, which starts the report
-      // of this child afresh, never lands ahead of it.
-      events.add(Event.AppStarted(b.mainClass)): Unit
+      // of this child afresh, never lands ahead of it; and from here the old child's pumps, still
+      // draining, are shut out.
+      handover.swap(process, Event.AppStarted(b.mainClass))
       val protocol = new LineProtocol
       thread("eezo-dev-stdout")(
-        pump(process.getInputStream, line => protocol.synchronized(protocol.stdout(line)))
+        pump(
+          process.getInputStream,
+          line => handover.from(process)(protocol.synchronized(protocol.stdout(line)))
+        )
       ).start()
       thread("eezo-dev-stderr")(
-        pump(process.getErrorStream, line => protocol.synchronized(protocol.stderr(line)))
+        pump(
+          process.getErrorStream,
+          line => handover.from(process)(protocol.synchronized(protocol.stderr(line)))
+        )
       ).start()
       thread("eezo-dev-wait") {
         val code = process.waitFor()
-        protocol.synchronized(protocol.flush()).foreach(e => events.add(e): Unit)
+        handover.from(process)(protocol.synchronized(protocol.flush()))
         if (child.contains(process) && !replacing && !stopping.get)
           events.add(Event.AppExited(code)): Unit
       }.start()
@@ -444,12 +473,12 @@ private[sbt] final class Loop(
     }
   }
 
-  private def pump(in: java.io.InputStream, classify: String => Vector[Event]): Unit = {
+  private def pump(in: java.io.InputStream, deliver: String => Unit): Unit = {
     val reader = new BufferedReader(new InputStreamReader(in, "UTF-8"))
     try {
       var line = reader.readLine()
       while (line != null) {
-        classify(line).foreach(e => events.add(e): Unit)
+        deliver(line)
         line = reader.readLine()
       }
     } catch { case _: java.io.IOException => () }
