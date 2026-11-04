@@ -4,11 +4,13 @@ import java.io.{ByteArrayOutputStream, IOException, PrintStream}
 import java.net.{ServerSocket, URI}
 import java.net.http.{HttpClient, HttpRequest, HttpResponse}
 
-import io.eezo.core.Id
+import io.eezo.config.Config
+import io.eezo.config.support.ConfigFileLoader
+import io.eezo.core.{Id, Redacted}
 import io.eezo.core.html.Tags.{body, html, p}
 import io.eezo.core.support.Captured.captured
 import io.eezo.db.{Schema, SchemaError, Table}
-import io.eezo.db.engine.{ConnectionUnavailable, Installed}
+import io.eezo.db.engine.{ConnectionUnavailable, Database, Installed}
 import io.eezo.http.{Handler, HttpServer, Method, PathPattern, Response, Route, RouteTable}
 
 /** The umbrella's entry trait: both layers stacked, `EezoApp extends HttpApp with DbApp`.
@@ -172,6 +174,53 @@ class EezoAppSuite extends munit.FunSuite {
     assert(!app.booted)
   }
 
+  /** An application whose build names [[Storefront]] and whose environment sets nothing, so its
+    * read is refused. It records whether a `Database` was asked for, which a refused read must
+    * never do: not for the program, not for the drift check `dev` runs first.
+    */
+  private class Refused extends Recording {
+    var built = false
+
+    override private[eezo] def environment: Map[String, String] = Map.empty
+
+    override protected def database: Database = {
+      built = true
+      super.database
+    }
+  }
+
+  private def refused(app: Refused, args: List[String]) =
+    ConfigFileLoader.generating(classOf[StorefrontFile.type], Some("storefront.conf"))(
+      captured(app.run(args))
+    )
+
+  private val missingKey =
+    "[eezo] stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"
+
+  test("a refused Config stops the program before withDatabase: exit 1, no Database built") {
+    val app              = new Refused
+    val (code, out, err) = refused(app, Nil)
+    assertEquals(code, 1)
+    assertEquals(out, "")
+    assertEquals(err.linesIterator.toList, List(missingKey))
+    assert(!app.built, "a Database was built for an application that cannot start")
+    assert(!app.booted)
+  }
+
+  test("a refused Config stops dev before the drift check, with the same line") {
+    val app            = new Refused
+    val (code, _, err) = refused(app, List("dev"))
+    assertEquals(code, 1)
+    assertEquals(err.linesIterator.toList, List(missingKey))
+    assert(!app.built, "dev built a Database, so the drift check ran, before the Config was read")
+  }
+
+  test("help lists config once on the umbrella, though both layers bring it") {
+    val (code, out, _) = captured(new Recording().run(List("help")))
+    assertEquals(code, 0)
+    assertEquals(out.linesIterator.count(_.trim.startsWith("config")), 1, out)
+  }
+
   test("an unknown first argument is exit 2 on the umbrella too") {
     val (code, _, err) = captured(new Recording().run(List("deploy")))
     assertEquals(code, 2)
@@ -221,3 +270,12 @@ class EezoAppSuite extends munit.FunSuite {
 private case class Widget(id: Id[Widget], name: String) derives Table
 
 private object Widgets extends Schema { val widgets = table[Widget] }
+
+/** Read by this suite alone, since the installed value is global to the JVM. */
+private final case class Payments(secretKey: Redacted) derives Config
+
+private final case class Storefront(stripe: Payments) derives Config
+
+private object StorefrontFile extends Config.Root.Generated {
+  val root: Config.Root[Storefront] = Config.root[Storefront]
+}

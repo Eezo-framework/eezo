@@ -76,7 +76,7 @@ Deploying is done with `eezo deploy` on Fly.io.
 ## Requirements
 
 - **JDK 25 or newer.** Eezo needs virtual threads to not be pinned on `synchronized`.
-- **Scala 3.8.4.**
+- **Scala 3.9.**
 - **sbt 1.5.8 or newer, or sbt 2.0.6 or newer.** The plugin is published for both.
 - **Postgres**, for an application with a database layer. The default connection is a local
   Postgres. One of the few Eezo configurations is for [the database](docs/how-to/configure-the-database.md).
@@ -92,7 +92,7 @@ addSbtPlugin("io.eezo" % "sbt-eezo" % "0.3.0")
 `build.sbt`:
 
 ```scala
-scalaVersion := "3.8.4"
+scalaVersion := "3.9.0"
 
 enablePlugins(EezoPlugin)
 
@@ -114,7 +114,8 @@ Every artifact is published at the same version, under the `io.eezo` group:
 | `eezo-auth` | sessions, email and password sign in, CSRF, route guards and row ownership                                           |
 | `eezo-live` | server-side rendered UI with the thin browser client: the diff and patch protocol, the client runtime, PubSub        |
 | `eezo-upickle` | the JSON adapter for API routes: `api.Serde` for any model through upickle, not carried by the umbrella                |
-| `eezo-core` | what the others build on: configuration, HTML tree and DSL, derivation, model keys                                   |
+| `eezo-config` | `Config`: the application's own configuration, read from `application.conf`, sections included                      |
+| `eezo-core` | what the others build on: `Parser` and `Redacted`, HTML tree and DSL, derivation, model keys                         |
 | `sbt-eezo` | the sbt plugin that generates the route table, for sbt 1 and sbt 2                                                   |
 
 An application has one or two layers, the http layer and the database layer. Use a layer by extending the appropriate trait in your app:

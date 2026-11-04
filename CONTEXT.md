@@ -65,13 +65,30 @@ gains changes nothing the generator writes.
 _Avoid_: mountables
 
 **Config**:
-A case class an application reads from its environment, through a Config derived for it. Each field
-is read from the variable spelled as its name in upper snake case, through its Parser. A field with
-a default takes the default when its variable is absent, an `Option` field is `None`, and any other
-absent field is missing, whatever its Parser says absence means. A read that fails names every
-missing and malformed variable at once and never the text it found. A field whose variable would
-start with `EEZO_` does not compile, since that prefix is the framework's own.
+A case class an application reads from its file, `src/main/resources/application.conf`, through a
+Config derived for it. The file is HOCON and is committed with the code. It states a value as a
+literal, or it feeds the value from the environment through a substitution, `${?VAR}`, so the
+file and not a naming rule says which variable sets which value. An unset variable leaves the
+value to the literal written before the substitution, or to the class. A variable under `EEZO_`
+is the framework's own, and a file that names one is refused when it is read. So is a file that
+states a Redacted field as a literal, since a Redacted reaches the file only through a variable.
+Each field is read at its full dotted path through its Parser, or is a Section. A field with a
+default takes the default when the file has no value for it, an `Option` field is `None`, and any
+other absent field is missing, whatever its Parser says absence means. A read that fails names every
+offender at once by its path, and the variables the file names for it, and never the text it found.
+When the build names the class, the file is also checked against it at compile time, and boot reads
+it before the application starts: a refused read stops the start, and a good one is installed, so a
+handler reads the class, or any Section of it, with `Config[A].current`. A suite makes its own value
+current for one block with `Config[A].installed(value) { body }`.
 _Avoid_: settings, properties, parameters, env vars
+
+**Section**:
+A case class nested in a Config, one field of its parent, read from the block of the file under
+the field's name. It has a Config of its own, so code that needs only one section reads that
+section and not the whole class. Each section type appears once in the tree, because a section is
+installed and read by its type. A section has no default and is never optional: its fields have
+theirs.
+_Avoid_: group, sub config, namespace
 
 ### How Form and Resource relate
 
@@ -273,6 +290,12 @@ The build tool's side of developing an application: watching the sources, recomp
 and replacing the running application with a fresh one. A failed compile leaves the previous
 application serving.
 _Avoid_: hot reload, watch mode, revolver
+
+**Dev console**:
+What `eezo dev` draws on the terminal: the dev loop's state, the application's log, the compile
+errors, the route table and the schema drift as panes, and the schema commands as keys. One sbt
+command of the plugin, so the sbt shell has it too.
+_Avoid_: TUI, dashboard, watch mode, REPL
 
 **Dev server**:
 The application started in development: the same routes, plus the drift check at boot, the route

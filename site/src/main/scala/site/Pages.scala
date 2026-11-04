@@ -198,6 +198,7 @@ object Pages {
               "mount-under-a-prefix",
               "evolve-the-schema",
               "configure-the-database",
+              "configure-the-application",
               "add-authentication",
               "serve-a-json-api",
               "add-a-live-component",
@@ -233,6 +234,7 @@ object Pages {
               "failures",
               "the-dev-loop",
               "the-server",
+              "configuration",
               "deployment"
             )
           )()

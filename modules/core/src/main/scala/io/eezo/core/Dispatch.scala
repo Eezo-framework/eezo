@@ -28,8 +28,11 @@ trait Dispatch {
   protected def program(): Unit
 
   /** The commands this application answers, as `first argument :: rest`. `Nil` is [[program]] and
-    * is answered here, once, so no layer owns it. Each layer writes `own orElse super.commands` for
-    * its own commands, so the later mixin's arms are consulted first.
+    * is answered here, so no layer owns it. The one arm ahead of it is the configuration read every
+    * layer shares, in `eezo-config`, which this module cannot see: it answers `Nil` with an exit
+    * code before calling [[program]], since a refused read must stop the start with 1. Each layer
+    * writes `own orElse super.commands` for its own commands, so the later mixin's arms are
+    * consulted first.
     */
   protected def commands: PartialFunction[List[String], Int] = { case Nil => program(); 0 }
 

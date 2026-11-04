@@ -22,16 +22,46 @@ other examples.
 
 ## Run it locally
 
-The shop boots with a Postgres, two Stripe secrets, a session key and port 8080 free. It reads them
-from the environment:
+The shop boots with a Postgres, two Stripe secrets, a session key and port 8080 free. The shop's own
+values come from `src/main/resources/application.conf`, and the file feeds each one from a variable:
+
+```hocon
+stripe {
+  secretKey = ${?STRIPE_SECRET_KEY}
+  webhookSecret = ${?STRIPE_WEBHOOK_SECRET}
+}
+
+shopUrl = ${?SHOP_URL}
+
+createUser {
+  email = ${?SHOP_EMAIL}
+  password = ${?SHOP_PASSWORD}
+}
+```
+
+`shop/ShopConfig.scala` is the case class the file is read into, and `examples/build.sbt` names it
+with `eezoConfigClass`. The framework's own values, the database and the session key, stay out of
+the file and come from the environment as before. Together they are these variables:
 
 | variable | what it is for | when unset |
 |---|---|---|
 | `EEZO_DB_URL`, `EEZO_DB_USER`, `EEZO_DB_PASS` | the Postgres the tables live in | `jdbc:postgresql://localhost:5442/eezo`, `postgres`, `postgres`, which is the container below |
-| `STRIPE_SECRET_KEY` | the test mode key Stripe Checkout sessions are created with | the server refuses to boot |
-| `STRIPE_WEBHOOK_SECRET` | the signing secret the `POST /webhooks/stripe` guard verifies | the server refuses to boot |
+| `STRIPE_SECRET_KEY` | `stripe.secretKey`, the test mode key Stripe Checkout sessions are created with | the server refuses to boot |
+| `STRIPE_WEBHOOK_SECRET` | `stripe.webhookSecret`, the signing secret the `POST /webhooks/stripe` guard verifies | the server refuses to boot |
 | `EEZO_SECRET` | the key the session cookie is signed with, at least 32 bytes | a throwaway key announced at WARNING, so every restart signs the admin out |
-| `SHOP_URL` | where Stripe sends the buyer back | `http://localhost:8080` |
+| `SHOP_URL` | `shopUrl`, where Stripe sends the buyer back | `http://localhost:8080`, the default `ShopConfig` gives it |
+| `SHOP_EMAIL`, `SHOP_PASSWORD` | `createUser.email` and `createUser.password`, the first user | the server boots; `CreateUser` refuses to run |
+
+A refused boot starts nothing. It prints one line for each value it lacks, with the path and the
+variable to set, and exits with code 1:
+
+```text
+[eezo] stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it
+[eezo] stripe.webhookSecret is missing: set STRIPE_WEBHOOK_SECRET, which application.conf names for it
+```
+
+`sbt "shop/run config"` lists the variables the file names, and which of them are required and
+redacted, without reading a single one.
 
 The port is `EezoApp`'s default, 8080, and `Main.scala` does not override it, so stop whatever else
 listens there. Stripe cannot reach localhost on its own: the Stripe CLI forwards test events with
@@ -47,18 +77,24 @@ cd examples
 sbt "shop/run db migrate --apply"
 ```
 
-The first user comes next, since there is no sign up page. `CreateUser.scala` reads the email and
-the password from the environment:
-
-```bash
-SHOP_EMAIL=you@example.com SHOP_PASSWORD='a long password' sbt "shop/runMain CreateUser"
-```
-
-The server needs Stripe's two secrets, a test mode key and the webhook's signing secret, and reads
-them when it boots:
+The first user comes next, since there is no sign up page. `CreateUser.scala` reads the whole of
+`application.conf` before it runs, as the server does, so it refuses to run until the two Stripe
+secrets are set. Export them first. They stay set for the server after it:
 
 ```bash
 export STRIPE_SECRET_KEY=sk_test_... STRIPE_WEBHOOK_SECRET=whsec_...
+SHOP_EMAIL=you@example.com SHOP_PASSWORD='a long password' sbt "shop/runMain CreateUser"
+```
+
+`SHOP_EMAIL` and `SHOP_PASSWORD` are set for that one command and are not exported, so the server
+never sees them. Keep it that way: the server reads the same file, so a `SHOP_PASSWORD` in its
+environment is hashed at every boot for nothing, and one that bcrypt cannot read stops the boot. A
+password longer than the 72 bytes bcrypt reads is refused before any user is created, with
+`[eezo] createUser.password is longer than the 72 bytes bcrypt reads`.
+
+The server needs the session key as well:
+
+```bash
 export EEZO_SECRET=$(openssl rand -base64 32)   # or leave it out and sign in again after a restart
 sbt -batch shop/run             # http://localhost:8080
 ```

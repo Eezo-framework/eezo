@@ -7,23 +7,27 @@ tutorials build; the version string in them changes with every commit.
 ## Two layers
 
 `bin/eezo` is a shell script. Four of its commands are its own: `new`, `build`, `deploy` and
-`upgrade`. `dev` runs the sbt task `eezoDev` and shows a console built from its output: a spinner for the
-compile, the application's boot lines and logs, and none of sbt's narration. Everything else forwards to the application's own
-`main` as `sbt "run <command> <args>"`, so `eezo db status` and `sbt "run db status"` are the
-same code path, and so is the sbt task `eezoStatus`.
+`upgrade`. `dev` hands the terminal to the sbt command `eezoDev`, the dev console that the plugin
+draws: the log, the compile errors, the route table and the schema drift as panes, and the schema
+commands on keys ([the dev loop](../explanation/the-dev-loop.md) describes it). Everything else
+forwards to the application's own `main` as `sbt "run <command> <args>"`, so `eezo db status` and
+`sbt "run db status"` are the same code path, and so is the sbt task `eezoStatus`.
 
 The application's `main` is inherited from its entry trait. Each layer adds its commands: the
 http layer's two at the top level, and the database layer's eight under one namespace, `db`, so
-that `eezo db sync --apply` reads as what it touches. `help` is matched before either, so no
-layer can shadow it. No arguments runs the application.
+that `eezo db sync --apply` reads as what it touches. `config` belongs to both layers, so an
+application on either one answers it, once. `help` is matched before all of them, so no layer
+can shadow it. No arguments runs the application, after it reads `application.conf` when the
+build names a Config class.
 
 ## Commands
 
 | command | layer | needs | what it does |
 |---|---|---|---|
-| `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
-| `dev` | sbt task | | serves with restart on save, the route listing and the reload client; Ctrl-C stops it |
+| `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it, with an `AGENTS.md` that tells a coding agent how to drive the dev loop; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
+| `dev [--no-tui\|--json]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes and the drift as panes, `s` `f` `m` for the schema commands; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`), for a pipe, a log or an agent; without a terminal and without a flag only `eezoDev --once` runs |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
+| `config [--json]` | both layers | | the variables `application.conf` names, in file order, without reading them; nothing when the build names no Config class |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |
 | `db status [--json]` | database layer | a database | the model against the live database |
 | `db sync [--apply] [--force] [--json]` | database layer | a database | the diff, applied directly with `--apply` |
@@ -38,6 +42,26 @@ layer can shadow it. No arguments runs the application.
 | `upgrade` | launcher | Maven Central | moves the command line, what `new` scaffolds, and the project in the current directory to the latest release |
 | `help` | both layers | | the command table |
 
+`config` prints one line per substitution in `application.conf`, four fields separated by a tab
+and no header: the variable, the path it feeds, `redacted` or `plain`, and `required`,
+`defaulted` or `optional`. The words are fixed, so a script reads the lines with
+`while IFS=$'\t' read -r variable path redaction need` and needs no JSON parser. The shop's:
+
+```
+$ eezo config
+STRIPE_SECRET_KEY	stripe.secretKey	redacted	required
+STRIPE_WEBHOOK_SECRET	stripe.webhookSecret	redacted	required
+SHOP_URL	shopUrl	plain	defaulted
+SHOP_EMAIL	createUser.email	plain	optional
+SHOP_PASSWORD	createUser.password	plain	optional
+```
+
+It reads no environment, so the output is the same with every variable set or none, and it never
+reports a value as missing. It checks what the file alone can get wrong: a path fed from a
+variable under `EEZO_`, and a `Redacted` path stated as a literal. On either it lists nothing,
+writes one line per offender to stderr, and exits 1. When the build names a Config class and
+`application.conf` is missing, it exits 1 with one line.
+
 `db freeze` takes everything after it that isn't a flag as the migration's name, joined with
 spaces, so `eezo db freeze add isbn to book` names the migration `add_isbn_to_book`. Without a
 flag it prompts on each destructive change, `[d]` to drop, `[k]` to keep and skip.
@@ -49,15 +73,22 @@ refuses the bare form and names the `db` one.
 
 `deploy` on a first run, with no `fly.toml`, runs `fly launch`, and in a session with no
 terminal that needs `--app <name>`. Before deploying an application with migrations it checks
-that a `DATABASE_URL` or `EEZO_DB_URL` secret exists. After deploying it polls
+that a `DATABASE_URL` or `EEZO_DB_URL` secret exists. Then it runs `config` and checks each
+variable against the names Fly has. A required variable must be in `fly secrets` or in the
+`[env]` table of `fly.toml`; a redacted one must be in `fly secrets`. A redacted variable in
+`[env]` is refused even when `fly secrets` has it too, because `fly.toml` is committed. A
+defaulted or optional variable may be in neither. The deploy names every offender in one
+message and exits 1 before it builds. It reads names only, never a value, and when `config`
+itself refuses, its lines are what the deploy prints. After deploying it polls
 `/eezo/health` for up to ninety seconds.
 
 ## Which commands open a database
 
 `status`, `sync`, `migrate`, `reset` and `drop` run with a database installed, and so does the
-application itself. `freeze`, `dump`, `ddl`, `routes` and `help` never touch one: `freeze`
+application itself. `freeze`, `dump`, `ddl`, `routes`, `config` and `help` never touch one: `freeze`
 diffs the model against `db/schema.json`, and the rest read the model alone. `dev` on the
-umbrella runs the drift check first, and serves with the database down after a warning.
+umbrella runs the drift check first, and serves with the database down after a warning. A
+refused `application.conf` stops the application and `dev` before either opens a database.
 
 ## `--json`
 
@@ -86,6 +117,7 @@ The shapes, one per command:
 | command | fields |
 |---|---|
 | `routes` | `routes`, `overridden`, `shadowed` (pairs of `earlier`, `later`), `orphans`; a route is `method`, `path`, `provenance` |
+| `config` | `variables`, in file order, empty when the build names no Config class; a variable is `variable`, `path`, `redacted` (a boolean) and `need` (`required`, `defaulted`, `optional`) |
 | `status` | `inSync`, `changes` |
 | `sync` | `applied`, `refused`, `changes`, `blocked` |
 | `freeze` | `migration` (path or null), `resolutions` (each a `change` and a `decision`: `accept`, `skip`, `manual`) |
@@ -106,7 +138,7 @@ a prompt.
 | code | meaning |
 |---|---|
 | 0 | done, or in sync |
-| 1 | `db status` found drift; `db sync --apply` refused over destructive or risky changes; `db migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
+| 1 | the application or `dev` refused `application.conf`; `config` found a variable under `EEZO_` or a `Redacted` stated as a literal, or `application.conf` is missing; `db status` found drift; `db sync --apply` refused over destructive or risky changes; `db migrate` found the files tampered, or drift remains after the ledger is settled; a schema error; a failed deploy or build |
 | 2 | unknown command, or unknown `db` command |
 
 The launcher passes the application's exit code through. sbt prints three lines of its own when
@@ -136,8 +168,15 @@ the command's answer and not a build failure:
   the version file.
 - **`SBT_OPTS`**, to which it appends `--enable-native-access=ALL-UNNAMED
   --sun-misc-unsafe-memory-access=allow`, so sbt's own JVM prints no native-access warnings.
-  sbt itself runs with `-error -batch`, so only compile errors and the application's output
-  reach the terminal. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
+  The forwarded commands run sbt with `-error -batch`, so only compile errors and the
+  application's output reach the terminal. `dev` runs it with `--server -error` and the terminal
+  attached, `-Dsbt.supershell=false` added so that sbt draws no progress while the build loads,
+  since the console needs the keyboard and draws the screen itself (once running, the console
+  keeps sbt's progress off on its own, so a bare `sbt eezoDev` is clean too); `--server` is what
+  keeps an sbt 2 project out of sbt's thin client, which the console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
+- **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins. A project on a
+  plugin from before the console (0.3.0 and earlier) has only the `~eezoRestart` alias, and for
+  it the launcher builds the older line console from sbt's output, as it did before.
 - **`fly.toml`**, for the app name and region on deploy.
 
 ## What `new` writes
@@ -151,6 +190,7 @@ the command's answer and not a build failure:
   src/main/scala/app/Index.scala   GET /
   src/main/scala/models/        empty
   .gitignore
+  AGENTS.md                     how a coding agent follows the dev loop; an existing one is kept
 ```
 
 `eezo new .` writes the same files into the current directory.

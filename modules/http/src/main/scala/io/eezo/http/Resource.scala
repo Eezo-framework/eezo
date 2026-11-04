@@ -391,9 +391,11 @@ object Resource {
     * layout like a handwritten one, and the layout puts the title in the head.
     */
   private def page(heading: String, content: (Html | Seq[Html])*): Html =
-    content.foldLeft(title(heading)) {
-      case (page, node: Html)       => page ++ node
-      case (page, nodes: Seq[Html]) => nodes.foldLeft(page)(_ ++ _)
+    content.foldLeft(title(heading)) { (page, node) =>
+      node match {
+        case html: Html                  => page ++ html
+        case nodes: Seq[Html @unchecked] => nodes.foldLeft(page)(_ ++ _)
+      }
     }
 
   /** Every mounted page whose submit target is not mounted.

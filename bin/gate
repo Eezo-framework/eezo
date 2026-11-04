@@ -10,7 +10,9 @@
 #   prose      bin/prose-check                   no dash characters in docs and scaladoc
 #   compile    sbt +compile Test/compile         the plugin is cross built for sbt 1 and sbt 2
 #   test       sbt +test                         every module suite
-#   examples   sbt publishLocalForExample, then the examples build's format check and suites
+#   plugin     sbt scriptedSbt2                  sbt-eezo built for sbt 2 loads in a real sbt 2.0.6
+#   examples   sbt publishLocalForExample, then the examples build's format check and suites,
+#              then `eezoDev --once` on hello, the dev loop without a terminal
 #   site       sbt unidoc, then the site build's own suites
 #
 # For one sbt command with the same environment and none of the locks or steps, `bin/fast`:
@@ -20,8 +22,9 @@
 #
 # Several agents may run the gate at once, so it takes two locks. A checkout lock serialises runs
 # on the same checkout, because two sbt processes cannot share a target directory. A machine lock
-# wraps the examples step, because publishLocalForExample writes to ~/.ivy2/local, which every
-# checkout on the machine reads. Waiting on a lock is normal; the gate says so and how long.
+# wraps the plugin and examples steps, because publishLocal and publishLocalForExample write to
+# ~/.ivy2/local, which every checkout on the machine reads. Waiting on a lock is normal; the gate
+# says so and how long.
 #
 # What the build does not say for itself, and the gate does on its behalf:
 #
@@ -152,8 +155,9 @@ port_squatters
 step test     "$ROOT" sbt -batch +test
 
 acquire "$EXAMPLES_LOCK" examples
+step plugin   "$ROOT" sbt -batch scriptedSbt2
 step examples "$ROOT" sbt -batch publishLocalForExample
-step examples "$ROOT/examples" sbt -batch scalafmtCheckAll test
+step examples "$ROOT/examples" sbt -batch scalafmtCheckAll test "project hello" "eezoDev --once"
 release "$EXAMPLES_LOCK"
 
 step site     "$ROOT" sbt -batch unidoc

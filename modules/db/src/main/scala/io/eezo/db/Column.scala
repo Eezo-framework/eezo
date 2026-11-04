@@ -6,7 +6,7 @@ import java.util.UUID
 
 import io.eezo.core.Id
 
-trait Column[A] { self =>
+trait Column[A] { self: Column[A] =>
   def pgType: PgType
   def nullable: Boolean   = false
   def checks: List[Check] = Nil

@@ -100,22 +100,34 @@ def module(id: String): Project =
     .settings(commonSettings)
     .settings(name := s"eezo-$id")
 
-// The framework's own types: configuration, the HTML node tree and DSL, the model key `Id[T]`, and
-// what everything else builds on. `core` holds what has no dependencies of its own and at least two
-// dependent modules, which is why `Id` is here: `db` stores one and `http` reads one out of a path
-// and a form, and those two are siblings that never see each other. Not errors: the eezo exception
-// set lives in `http`, so that `db`, which depends on `core` and never on `http`, cannot reach for
-// an HTTP status.
+// The framework's own types: `Parser` and `Redacted`, the HTML node tree and DSL, the model key
+// `Id[T]`, and what everything else builds on. `core` holds what has no dependencies of its own and
+// at least two dependent modules, which is why `Id` is here: `db` stores one and `http` reads one
+// out of a path and a form, and those two are siblings that never see each other. Not errors: the
+// eezo exception set lives in `http`, so that `db`, which depends on `core` and never on `http`,
+// cannot reach for an HTTP status.
 lazy val core = module("core")
 
-// Jetty boot, request parsing, response writing, file based routing.
-lazy val http = module("http")
+// The application's configuration: `derives Config`, read from `application.conf` through Typesafe
+// Config's HOCON parser. A module of its own so that `core` stays free of dependencies, and under
+// both layers rather than in one, since an application on either layer has a configuration to
+// read and its entry trait reads it before the application starts. `test->test` on `core`, as the
+// layers have it, so a suite here can share core's helpers.
+lazy val config = module("config")
   .dependsOn(core % "compile->compile;test->test")
+  .settings(libraryDependencies += typesafeConfig)
+
+// Jetty boot, request parsing, response writing, file based routing. `config` because `HttpApp`
+// reads the application's configuration before it serves; `config` sees only `core`, so `http`
+// still never sees `db`. `test->test` on it for the loader its suites boot a Config through.
+lazy val http = module("http")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(libraryDependencies ++= Seq(jettyServer, jettyWsServer, slf4jJdk14, jettyWsClient))
 
-// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect.
+// Connection pool, the `sql` interpolator, transactions, migrations, DDL per dialect. `config`
+// because `DbApp` reads the application's configuration before it installs a `Database`.
 lazy val db = module("db")
-  .dependsOn(core % "compile->compile;test->test")
+  .dependsOn(core % "compile->compile;test->test", config % "compile->compile;test->test")
   .settings(
     libraryDependencies ++= Seq(postgresql, hikari, slf4jJdk14, testcontainersPg),
     // DESIGN §8.8. `Tx^` and `?->` do not parse without this, so it is a build setting rather than
@@ -174,7 +186,8 @@ lazy val testkit = module("testkit").dependsOn(core, http, db, live)
 // sign in rather than spell either a second time.
 lazy val eezo = (project in file("modules/eezo"))
   .dependsOn(
-    core % "compile->compile;test->test",
+    core   % "compile->compile;test->test",
+    config % "compile->compile;test->test",
     http,
     db,
     live % "compile->compile;test->test",
@@ -215,10 +228,12 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
       if (!file.exists || IO.read(file) != text) IO.write(file, text)
       Seq(file)
     }.taskValue,
-    // The build level Scala 3.8.4 cannot build an sbt 1 plugin, so a plain `sbt compile`
-    // would fail.
+    // The build level Scala 3.9.0 cannot build an sbt 1 plugin, so a plain `sbt compile`
+    // would fail. Nor can it build an sbt 2 plugin: it writes TASTy 28.9, and sbt 2 compiles
+    // `build.sbt` with a Scala 3.8.4 that reads up to 28.8, so the build would not load. Each axis
+    // takes the Scala version of the sbt it targets, see `Toolchain`.
     scalaVersion       := Toolchain.PluginScalaVersion,
-    crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.ScalaVersion),
+    crossScalaVersions := Seq(Toolchain.PluginScalaVersion, Toolchain.Sbt2PluginScalaVersion),
     // Both compilers get a stated bytecode target on both axes, so that no half of a published jar
     // inherits one from whatever JDK happened to launch the build. The floors are sbt's own, Java 8
     // for sbt 1 and JDK 17 for sbt 2, not eezo's.
@@ -249,8 +264,21 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
         case "2.12" => Toolchain.Sbt1Floor
         case _      => Toolchain.Sbt2Version
       }
-    }
+    },
+    // The tests under `src/sbt-test`, which load the plugin in a real sbt. `scripted` starts the sbt
+    // of `pluginCrossBuild / sbtVersion`, so on the sbt 2 axis it is `Toolchain.Sbt2Version`, the
+    // floor the docs promise, and the test cannot drift from it. It does not publish the plugin
+    // itself, so that is made a dependency, and the test finds it by this version.
+    scriptedLaunchOpts ++= Seq(s"-Dplugin.version=${version.value}"),
+    scriptedDependencies := scriptedDependencies.dependsOn(publishLocal).value
   )
+
+// The pin for the sbt 2 row of `docs/reference/sbt-plugin.md`: the plugin built on the sbt 2 axis,
+// loaded with `enablePlugins(EezoPlugin)` in a real sbt 2. Compiling that axis and running its
+// suite load nothing into sbt, so neither goes red when the axis writes TASTy that sbt's own Scala
+// cannot read, and this does. The Scala version comes from `Toolchain` so that the gate and CI,
+// which both run this alias, never state it a second time.
+addCommandAlias("scriptedSbt2", s";++ ${Toolchain.Sbt2PluginScalaVersion};sbtEezo/scripted")
 
 // The root has no sources today, but it still carries commonSettings. Without it, any file
 // dropped at the repo root would compile against whatever JVM launched sbt instead of the
@@ -258,7 +286,7 @@ lazy val sbtEezo = (project in file("modules/sbt-plugin"))
 lazy val root = (project in file("."))
   // `sbtEezo` is aggregated so that `ci-release`'s `+publishSigned` reaches it. See
   // `docs/adr/0002-sbt-eezo-is-cross-built-for-sbt-1-and-sbt-2.md`.
-  .aggregate(core, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
+  .aggregate(core, config, http, db, live, auth, testkit, eezo, eezoUpickle, sbtEezo)
   .enablePlugins(ScalaUnidocPlugin)
   .settings(commonSettings)
   .settings(
@@ -271,6 +299,7 @@ lazy val root = (project in file("."))
     // is a 2.12 cross build and the demo is not an API, so neither is documented here.
     ScalaUnidoc / unidoc / unidocProjectFilter := inProjects(
       core,
+      config,
       http,
       db,
       live,
