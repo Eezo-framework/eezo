@@ -166,10 +166,12 @@ private[sbt] object Loop {
 }
 
 /** The one door the events of the application's children pass to the queue. A child's pumps outlive
-  * its process, since stopping waits for the exit and not for the pipes, so a line the old child
-  * printed can still be in flight when the next one starts; without this door such a line, a config
-  * marker most of all, lands behind the next child's start and passes for that child's own. The
-  * check and the add share the lock with the swap, so no line slips between them.
+  * its process, since stopping waits for the exit and not for the pipes, so what the old child
+  * printed can still be in flight when the next one starts. Its log lines still pass, since the log
+  * shows everything the application prints, a stack trace from a shutdown hook included. Its state
+  * events, the config, routes and drift markers and the serving line, are dropped: behind the next
+  * child's start they would pass for that child's own. The check and the add share the lock with
+  * the swap, so no event slips between them.
   */
 private[sbt] final class Handover(events: java.util.Queue[Event]) {
   private var current: Option[AnyRef] = None
@@ -180,10 +182,33 @@ private[sbt] final class Handover(events: java.util.Queue[Event]) {
     events.add(started): Unit
   }
 
-  /** Queues what `child` produced, unless a later child has taken over. */
+  /** Queues what `child` produced; once a later child has taken over, only its log lines. */
   def from(child: AnyRef)(produced: => Vector[Event]): Unit = synchronized {
-    if (current.exists(_ eq child)) produced.foreach(e => events.add(e): Unit)
+    val counts = current.exists(_ eq child)
+    produced.foreach {
+      case e: Event.AppLine => events.add(e): Unit
+      case e if counts      => events.add(e): Unit
+      case _                => ()
+    }
   }
+
+  /** The doors of `child`'s two pumps and of its waiter's flush, read by one protocol of its own
+    * and each passed through [[from]], so that no pump of a child reaches the queue another way.
+    */
+  def pipes(child: AnyRef): Handover.Pipes = {
+    val protocol = new LineProtocol
+    Handover.Pipes(
+      stdout = line => from(child)(protocol.synchronized(protocol.stdout(line))),
+      stderr = line => from(child)(protocol.synchronized(protocol.stderr(line))),
+      flush = () => from(child)(protocol.synchronized(protocol.flush()))
+    )
+  }
+}
+
+private[sbt] object Handover {
+
+  /** What one child's stdout pump, stderr pump and waiter hand each line, and the end, to. */
+  final case class Pipes(stdout: String => Unit, stderr: String => Unit, flush: () => Unit)
 }
 
 /** The loop and its threads. One instance per `eezoDev`; nothing here outlives the command. */
@@ -389,24 +414,14 @@ private[sbt] final class Loop(
       replacing = false
       // Queued before the pumps start, so that the child's config marker, which starts the report
       // of this child afresh, never lands ahead of it; and from here the old child's pumps, still
-      // draining, are shut out.
+      // draining, pass only their log lines.
       handover.swap(process, Event.AppStarted(b.mainClass))
-      val protocol = new LineProtocol
-      thread("eezo-dev-stdout")(
-        pump(
-          process.getInputStream,
-          line => handover.from(process)(protocol.synchronized(protocol.stdout(line)))
-        )
-      ).start()
-      thread("eezo-dev-stderr")(
-        pump(
-          process.getErrorStream,
-          line => handover.from(process)(protocol.synchronized(protocol.stderr(line)))
-        )
-      ).start()
+      val pipes = handover.pipes(process)
+      thread("eezo-dev-stdout")(pump(process.getInputStream, pipes.stdout)).start()
+      thread("eezo-dev-stderr")(pump(process.getErrorStream, pipes.stderr)).start()
       thread("eezo-dev-wait") {
         val code = process.waitFor()
-        handover.from(process)(protocol.synchronized(protocol.flush()))
+        pipes.flush()
         if (child.contains(process) && !replacing && !stopping.get)
           events.add(Event.AppExited(code)): Unit
       }.start()
