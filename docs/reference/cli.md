@@ -187,7 +187,8 @@ the command's answer and not a build failure:
   project/plugins.sbt           addSbtPlugin("io.eezo" % "sbt-eezo" % <version>)
   build.sbt                     the umbrella dependency, EezoPlugin, run / fork := true
   src/main/scala/Main.scala     object Main extends EezoApp, Schema.empty, Routes.table()
-  src/main/scala/app/Index.scala   GET /
+  src/main/scala/app/Index.scala   GET /, a starter page that links into the docs
+  src/main/resources/assets/welcome.css   the starter page's stylesheet; --tailwind writes tailwind.css instead
   src/main/scala/models/        empty
   .gitignore
   AGENTS.md                     how a coding agent follows the dev loop; an existing one is kept

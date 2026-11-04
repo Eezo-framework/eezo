@@ -16,11 +16,11 @@ import java.nio.file.Path
   * reported either: its directory is registered one level deep so that the file's creation is seen,
   * and everything else there is dropped.
   *
-  * A directory that does not exist yet, `src/main/resources` on a fresh scaffold, is watched
-  * through its nearest existing ancestor, so that creating it and the first file in it counts. The
-  * parents of the named files are registered before the source roots, shallow before deep: the
-  * macOS watcher registering a parent after a child drops the child from its registry, and nothing
-  * under it is reported again.
+  * A directory that does not exist yet, `src/main/resources` on a fresh `--tailwind` scaffold, is
+  * watched through its nearest existing ancestor, so that creating it and the first file in it
+  * counts. The parents of the named files are registered before the source roots, shallow before
+  * deep: the macOS watcher registering a parent after a child drops the child from its registry,
+  * and nothing under it is reported again.
   *
   * Every path is registered and matched as the filesystem knows it, symlinks resolved, because that
   * is how the macOS watcher reports an event: a project under `/tmp`, which is `/private/tmp`

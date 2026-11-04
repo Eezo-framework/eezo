@@ -242,6 +242,16 @@ class PagesSuite extends FunSuite {
     )
   }
 
+  test("every docs link in the page `eezo new` writes lands on a known page") {
+    val launcher = Files.readString(root.resolve("bin/eezo"))
+    val links    = """\$Docs/([a-z/-]+)|tutorial\(\d, "[^"]+", "([^"]+)"""".r
+      .findAllMatchIn(launcher)
+      .map(m => Option(m.group(1)).getOrElse(m.group(2)))
+      .toSet
+    assert(links.size >= 8, s"the pattern lost the links: $links")
+    links.foreach(link => assert(pages.knows(s"/docs/$link"), s"bin/eezo links /docs/$link"))
+  }
+
   test("the jar's copy of the content matches the repository") {
     val jar = Content.classpath
     markdownFiles.foreach { path =>

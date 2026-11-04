@@ -905,20 +905,132 @@ import io.eezo.http.Response
   */
 object Index {
 
+  private val Docs = "https://eezo.io/docs"
+
+  private val BookModel =
+    """package models
+      |
+      |import io.eezo.core.Id
+      |import io.eezo.http.{Form, Resource}
+      |
+      |case class Book(
+      |    id: Id[Book],
+      |    title: String,
+      |    author: String
+      |) derives Form, Resource
+      |""".stripMargin
+
+  private val InlineCode =
+    "rounded bg-violet-100 px-1.5 py-0.5 font-mono text-[0.875em] text-violet-800 " +
+      "break-words dark:bg-indigo-900 dark:text-violet-200"
+
+  private val Button =
+    "rounded-full border-2 px-5 py-2 font-bold no-underline transition hover:-translate-y-0.5 " +
+      "hover:shadow-[4px_4px_0_#1e1b4b] focus-visible:outline-3 focus-visible:outline-offset-2 " +
+      "focus-visible:outline-violet-600 motion-reduce:transition-none motion-reduce:hover:translate-y-0 " +
+      "dark:hover:shadow-[4px_4px_0_#c4b5fd]"
+
+  private def codeSpan(path: String): Html = code(Attrs.cls := InlineCode, path)
+
+  private def tutorial(number: Int, name: String, path: String, about: String): Html =
+    li(
+      a(
+        Attrs.cls := "flex gap-4 rounded-xl border-2 border-indigo-950 bg-white p-4 no-underline " +
+          "transition hover:-translate-y-0.5 hover:shadow-[4px_4px_0_#1e1b4b] " +
+          "focus-visible:outline-3 focus-visible:outline-offset-2 focus-visible:outline-violet-600 " +
+          "motion-reduce:transition-none motion-reduce:hover:translate-y-0 " +
+          "dark:border-indigo-800 dark:bg-indigo-950 dark:hover:border-violet-300 dark:hover:shadow-[4px_4px_0_#c4b5fd]",
+        Attrs.href := s"$Docs/$path",
+        span(
+          Attrs.cls := "flex size-8 shrink-0 items-center justify-center rounded-full border-2 " +
+            "border-indigo-950 bg-yellow-300 font-extrabold text-indigo-950",
+          number.toString
+        ),
+        span(
+          strong(Attrs.cls := "block font-bold text-indigo-950 dark:text-white", name),
+          span(Attrs.cls := "block text-indigo-900/75 dark:text-indigo-200", about)
+        )
+      )
+    )
+
+  private def footerLink(name: String, href: String): Html =
+    a(Attrs.cls := "font-semibold text-violet-800 hover:underline dark:text-violet-300", Attrs.href := href, name)
+
   def index(request: Request): Response = {
     val _ = request
     Response.Ok(
       Html.doctype ++ html(
+        Attrs.lang := "en",
         head(
           meta(Attrs.charset := "utf-8"),
+          meta(Attrs.name := "viewport", Attrs.content := "width=device-width, initial-scale=1"),
           title("eezo"),
           link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("tailwind.css"))
         ),
         body(
-          Attrs.cls := "mx-auto max-w-xl p-8 font-sans text-stone-800",
-          h1(Attrs.cls := "text-3xl font-semibold", "it works"),
-          p(Attrs.cls := "mt-4", "Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
+          Attrs.cls := "bg-amber-50 font-sans text-indigo-950 dark:bg-[#14122b] dark:text-indigo-50",
+          main(
+            Attrs.cls := "mx-auto max-w-2xl px-6 py-12 sm:py-20",
+            header(
+              p(
+                Attrs.cls := "inline-block -rotate-2 rounded-lg border-2 border-indigo-950 bg-yellow-300 px-3 " +
+                  "py-0.5 text-xl font-extrabold text-indigo-950 shadow-[3px_3px_0_#1e1b4b] dark:shadow-none",
+                "eezo"
+              ),
+              h1(Attrs.cls := "mt-6 text-5xl font-extrabold tracking-tight sm:text-6xl", "it works"),
+              p(
+                Attrs.cls := "mt-4 text-lg/relaxed text-indigo-900/75 dark:text-indigo-200",
+                "Your application is running. This page lives in ",
+                codeSpan("src/main/scala/app/Index.scala"),
+                ". With ",
+                codeSpan("eezo dev"),
+                " running, change the heading and save, and this tab reloads."
+              ),
+              nav(
+                Attrs.cls := "mt-6 flex flex-wrap gap-3",
+                a(Attrs.cls := s"$Button border-indigo-950 bg-yellow-300 text-indigo-950", Attrs.href := s"$Docs/tutorials/getting-started", "Start the tutorial"),
+                a(Attrs.cls := s"$Button border-indigo-950 bg-white dark:border-indigo-800 dark:bg-indigo-950", Attrs.href := Docs, "Read the docs")
+              )
+            ),
+            section(
+              Attrs.cls := "mt-12",
+              h2(Attrs.cls := "text-2xl font-bold tracking-tight", "Add your first model"),
+              p(Attrs.cls := "mt-2", "Create ", codeSpan("src/main/scala/models/Book.scala"), ":"),
+              pre(
+                Attrs.cls := "mt-3 overflow-x-auto rounded-xl bg-indigo-950 p-4 font-mono text-sm/relaxed " +
+                  "text-indigo-100 dark:border-2 dark:border-indigo-800 dark:bg-[#0f0d24]",
+                code(BookModel)
+              ),
+              p(
+                Attrs.cls := "mt-3",
+                "Save it and open ",
+                codeSpan("/books"),
+                ": seven CRUD routes from one case class, with the rows in memory until you add a database. ",
+                codeSpan("eezo routes"),
+                " lists them."
+              )
+            ),
+            section(
+              Attrs.cls := "mt-12",
+              h2(Attrs.cls := "text-2xl font-bold tracking-tight", "Where to go next"),
+              p(Attrs.cls := "mt-2", "Read the tutorials in order the first time."),
+              ol(
+                Attrs.cls := "mt-4 space-y-3",
+                tutorial(1, "Your first application", "tutorials/getting-started", "Routing, handlers and the dev loop."),
+                tutorial(2, "From a case class to seven routes", "tutorials/first-model", "A model, a Postgres table and a migration."),
+                tutorial(3, "Adding sign in", "tutorials/sign-in", "Users, a login page, and rows each user owns."),
+                tutorial(4, "Deploying to Fly.io", "tutorials/deploy-to-fly", "Ship it with one command, no Dockerfile to write."),
+                tutorial(5, "A live page", "tutorials/a-live-page", "Updates in the browser with no JavaScript of yours.")
+              )
+            ),
+            footer(
+              Attrs.cls := "mt-12 flex flex-wrap gap-x-5 gap-y-2 border-t-2 border-indigo-100 pt-6 dark:border-indigo-900",
+              footerLink("How-to guides", s"$Docs/how-to"),
+              footerLink("Reference", s"$Docs/reference"),
+              footerLink("Example: a blog", s"$Docs/examples/blog"),
+              footerLink("GitHub", "https://github.com/Eezo-framework/eezo")
+            )
+          )
         )
       )
     )
@@ -926,25 +1038,342 @@ object Index {
 }
 EOF
   else
+    mkdir -p "$dir/src/main/resources/assets"
+    cat > "$dir/src/main/resources/assets/welcome.css" <<'EOF'
+/* The stylesheet of the starter page, linked from app/Index.scala. Delete it with that page.
+   Colours and shapes follow eezo.io. Nothing here reaches the network. */
+
+:root {
+  color-scheme: light dark;
+  --bg: #fffbf2;
+  --surface: #ffffff;
+  --ink: #1d1b3a;
+  --muted: #5f5c7d;
+  --line: #ece7f8;
+  --edge: #1d1b3a;
+  --sun: #ffd84d;
+  --link: #4630c9;
+  --inline-bg: #f3eeff;
+  --inline-ink: #4630c9;
+  --code-bg: #1e1b4b;
+  --code-ink: #e9e6ff;
+  --sticker: #1d1b3a;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #14122b;
+    --surface: #1e1b4b;
+    --ink: #f2f0ff;
+    --muted: #b3aed6;
+    --line: #2e2a62;
+    --edge: #3e3980;
+    --link: #c9b9ff;
+    --inline-bg: #2a2660;
+    --inline-ink: #d9cfff;
+    --code-bg: #0f0d24;
+    --sticker: #c9b9ff;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--ink);
+  font: 1rem/1.6 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+main {
+  max-width: 42rem;
+  margin: 0 auto;
+  padding: clamp(3rem, 8vw, 5rem) 1.5rem;
+}
+
+.logo {
+  display: inline-block;
+  margin: 0;
+  padding: 0.1rem 0.75rem;
+  border: 2px solid #1d1b3a;
+  border-radius: 0.5rem;
+  background: var(--sun);
+  color: #1d1b3a;
+  font-size: 1.25rem;
+  font-weight: 800;
+  transform: rotate(-2deg);
+  box-shadow: 3px 3px 0 var(--sticker);
+}
+
+h1 {
+  margin: 1.5rem 0 0;
+  font-size: clamp(3rem, 10vw, 3.75rem);
+  font-weight: 800;
+  letter-spacing: -0.025em;
+  line-height: 1.1;
+}
+
+.lead {
+  margin: 1rem 0 0;
+  color: var(--muted);
+  font-size: 1.125rem;
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.button {
+  padding: 0.5rem 1.25rem;
+  border: 2px solid var(--edge);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--ink);
+  font-weight: 700;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.button.primary {
+  border-color: #1d1b3a;
+  background: var(--sun);
+  color: #1d1b3a;
+}
+
+.button:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--sticker);
+}
+
+section {
+  margin-top: 3rem;
+}
+
+h2 {
+  margin: 0;
+  font-size: 1.5rem;
+  letter-spacing: -0.015em;
+}
+
+section p {
+  margin: 0.5rem 0 0;
+}
+
+code {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+}
+
+p code {
+  padding: 0.125em 0.375em;
+  border-radius: 0.25rem;
+  background: var(--inline-bg);
+  color: var(--inline-ink);
+  font-size: 0.875em;
+  overflow-wrap: anywhere;
+}
+
+pre {
+  margin: 0.75rem 0;
+  padding: 1rem;
+  overflow-x: auto;
+  border: 2px solid var(--edge);
+  border-radius: 0.75rem;
+  background: var(--code-bg);
+  color: var(--code-ink);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}
+
+ol {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+li + li {
+  margin-top: 0.75rem;
+}
+
+li a {
+  display: flex;
+  gap: 1rem;
+  padding: 1rem;
+  border: 2px solid var(--edge);
+  border-radius: 0.75rem;
+  background: var(--surface);
+  color: inherit;
+  text-decoration: none;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+li a:hover {
+  transform: translateY(-2px);
+  box-shadow: 4px 4px 0 var(--sticker);
+}
+
+a:focus-visible {
+  outline: 3px solid #5ab8ff;
+  outline-offset: 2px;
+}
+
+.number {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border: 2px solid #1d1b3a;
+  border-radius: 50%;
+  background: var(--sun);
+  color: #1d1b3a;
+  font-weight: 800;
+}
+
+li strong,
+li span span {
+  display: block;
+}
+
+li span span {
+  color: var(--muted);
+}
+
+footer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1.25rem;
+  margin-top: 3rem;
+  padding-top: 1.5rem;
+  border-top: 2px solid var(--line);
+}
+
+footer a {
+  color: var(--link);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+footer a:hover {
+  text-decoration: underline;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  li a,
+  .button {
+    transition: none;
+  }
+
+  li a:hover,
+  .button:hover {
+    transform: none;
+  }
+}
+EOF
     cat > "$dir/src/main/scala/app/Index.scala" <<'EOF'
 package app
 
 import io.eezo.core.html.*
+import io.eezo.http.Assets
 import io.eezo.http.Request
 import io.eezo.http.Response
 
-/** `app/Index.scala` mounts `GET /`, calling `def index` — the filename is the route. */
+/** `app/Index.scala` mounts `GET /`, calling `def index`: the filename is the route.
+  *
+  * This is a starter page. When you replace it, delete `src/main/resources/assets/welcome.css`,
+  * the stylesheet it links, along with it.
+  */
 object Index {
+
+  private val Docs = "https://eezo.io/docs"
+
+  private val BookModel =
+    """package models
+      |
+      |import io.eezo.core.Id
+      |import io.eezo.http.{Form, Resource}
+      |
+      |case class Book(
+      |    id: Id[Book],
+      |    title: String,
+      |    author: String
+      |) derives Form, Resource
+      |""".stripMargin
+
+  private def tutorial(number: Int, name: String, path: String, about: String): Html =
+    li(
+      a(
+        Attrs.href := s"$Docs/$path",
+        span(Attrs.cls := "number", number.toString),
+        span(strong(name), span(about))
+      )
+    )
 
   def index(request: Request): Response = {
     val _ = request
     Response.Ok(
       Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("eezo")),
+        Attrs.lang := "en",
+        head(
+          meta(Attrs.charset := "utf-8"),
+          meta(Attrs.name := "viewport", Attrs.content := "width=device-width, initial-scale=1"),
+          title("eezo"),
+          link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("welcome.css"))
+        ),
         body(
-          h1("it works"),
-          p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("eezo routes"), " lists them.")
+          main(
+            header(
+              p(Attrs.cls := "logo", "eezo"),
+              h1("it works"),
+              p(
+                Attrs.cls := "lead",
+                "Your application is running. This page lives in ",
+                code("src/main/scala/app/Index.scala"),
+                ". With ",
+                code("eezo dev"),
+                " running, change the heading and save, and this tab reloads."
+              ),
+              nav(
+                Attrs.cls := "actions",
+                a(Attrs.cls := "button primary", Attrs.href := s"$Docs/tutorials/getting-started", "Start the tutorial"),
+                a(Attrs.cls := "button", Attrs.href := Docs, "Read the docs")
+              )
+            ),
+            section(
+              h2("Add your first model"),
+              p("Create ", code("src/main/scala/models/Book.scala"), ":"),
+              pre(code(BookModel)),
+              p(
+                "Save it and open ",
+                code("/books"),
+                ": seven CRUD routes from one case class, with the rows in memory until you add a database. ",
+                code("eezo routes"),
+                " lists them."
+              )
+            ),
+            section(
+              h2("Where to go next"),
+              p("Read the tutorials in order the first time."),
+              ol(
+                tutorial(1, "Your first application", "tutorials/getting-started", "Routing, handlers and the dev loop."),
+                tutorial(2, "From a case class to seven routes", "tutorials/first-model", "A model, a Postgres table and a migration."),
+                tutorial(3, "Adding sign in", "tutorials/sign-in", "Users, a login page, and rows each user owns."),
+                tutorial(4, "Deploying to Fly.io", "tutorials/deploy-to-fly", "Ship it with one command, no Dockerfile to write."),
+                tutorial(5, "A live page", "tutorials/a-live-page", "Updates in the browser with no JavaScript of yours.")
+              )
+            ),
+            footer(
+              a(Attrs.href := s"$Docs/how-to", "How-to guides"),
+              a(Attrs.href := s"$Docs/reference", "Reference"),
+              a(Attrs.href := s"$Docs/examples/blog", "Example: a blog"),
+              a(Attrs.href := "https://github.com/Eezo-framework/eezo", "GitHub")
+            )
+          )
         )
       )
     )
