@@ -233,6 +233,10 @@ class DbInitSuite extends FunSuite {
       parsed("postgres://db_1/prod").jdbcUrl,
       "jdbc:postgresql://db_1/prod?sslmode=require"
     )
+    assertEquals(
+      parsed("postgres://app:secret@db_1:/prod").jdbcUrl,
+      "jdbc:postgresql://db_1/prod?sslmode=require"
+    )
   }
 
   test("a bracketed IPv6 host keeps its brackets and its port") {
@@ -248,11 +252,21 @@ class DbInitSuite extends FunSuite {
     assertEquals(parsed("postgres://host/db").user, "postgres")
   }
 
+  test("a second @ belongs to the password: the last @ ends the userinfo") {
+    assertEquals(
+      parsed("postgres://u:p@ss@host/db"),
+      DbInit.Parsed("jdbc:postgresql://host/db?sslmode=require", "u", "p@ss")
+    )
+  }
+
   test("not a postgres url, or missing the database: no half-applied parse") {
     assertEquals(DbInit.parseDatabaseUrl("mysql://host/db"), None)
     assertEquals(DbInit.parseDatabaseUrl("postgres://host"), None)
     assertEquals(DbInit.parseDatabaseUrl("postgres://host/"), None)
     assertEquals(DbInit.parseDatabaseUrl("not a url at all ::"), None)
+    assertEquals(DbInit.parseDatabaseUrl("postgres:///db"), None)
+    assertEquals(DbInit.parseDatabaseUrl("postgres://app:x@/db"), None)
+    assertEquals(DbInit.parseDatabaseUrl("postgres://host:abc/db"), None)
   }
 
   test("pool size: unset is 10, a positive integer is taken, anything else falls back to 10") {

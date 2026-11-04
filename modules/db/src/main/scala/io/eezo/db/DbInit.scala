@@ -175,12 +175,13 @@ object DbInit {
 
   /** `None` for anything that is not a postgres URL with a host and a database, because a malformed
     * platform value should fall through to the defaults and fail at connect time with the defaults
-    * in the message, not half apply.
+    * in the message, not half apply. Any host and any digit port go to the driver, which reports a
+    * bad host itself.
     *
     * User and password come out of the URL and percent decoded, because JDBC takes them as separate
     * properties, decoded, while the platform folds them into `postgres://user:pass@host/db` and
-    * encodes them (a password with `@` or `/` must be). Only `%XX` is decoded: a `+` is a `+`, as
-    * in any URL outside a form body.
+    * encodes them. Only `/`, `?` and `#` in a password must be encoded, because the last `@` ends
+    * the userinfo. Only `%XX` is decoded: a `+` is a `+`, as in any URL outside a form body.
     *
     * The authority is split here rather than by `java.net.URI`, whose `getHost` is null for a name
     * with `_` in it, which is how docker-compose names a service (`db_1`).
