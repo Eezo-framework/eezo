@@ -528,16 +528,18 @@ private[eezo] object HttpServer {
     response.write(true, ByteBuffer.wrap(bytes), callback)
   }
 
-  /** The query string, decoded. Jetty refuses one that is not valid percent encoding, such as
-    * `?q=%`, with an exception that carries a 400 eezo's boundary does not read, so it is turned
-    * into the [[BadRequest]] it means here, where the request is read.
+  /** The query string, decoded. Jetty refuses one that is not valid percent encoded UTF-8, such as
+    * `?q=%` (a broken escape) or `?q=%FF` (a valid escape whose byte is not UTF-8), with an
+    * exception that carries a 400 eezo's boundary does not read, so it is turned into the
+    * [[BadRequest]] it means here, where the request is read. The second arrives wrapped in another
+    * of Jetty's `HttpException`s, so the catch takes them all.
     */
   private def queryOf(request: JettyRequest): Map[String, Seq[String]] = {
     val fields =
       try JettyRequest.extractQueryParameters(request)
       catch {
         case _: HttpException =>
-          throw BadRequest("the query string is not valid percent encoding")
+          throw BadRequest("the query string is not valid percent encoded UTF-8")
       }
     fields.getNames.asScala.map(name => name -> fields.getValuesOrEmpty(name).asScala.toSeq).toMap
   }

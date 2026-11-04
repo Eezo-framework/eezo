@@ -74,7 +74,8 @@ class RequestSuite extends munit.FunSuite {
         headers = Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
         body = raw.getBytes("UTF-8")
       )
-      intercept[BadRequest](req.form)
+      val refusal = intercept[BadRequest](req.form)
+      assertEquals(refusal.detail, "the form body is not valid percent encoding", clue(raw))
     }
   }
 

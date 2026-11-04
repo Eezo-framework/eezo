@@ -262,12 +262,22 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
       )
     )
     serving(routes) { (_, port) =>
-      for (query <- Seq("q=%", "q=%zz", "%=1"))
-        assertEquals(status(port, s"/search?$query"), 400, clue(query))
+      // `%FF` and `%C3` are well formed escapes, but the bytes they name are not UTF-8.
+      for (query <- Seq("q=%", "q=%zz", "%=1", "q=%FF", "q=%C3")) {
+        val reply = rawGet(port, s"/search?$query")
+        assert(clue(reply).startsWith("HTTP/1.1 400 "), clue(query))
+        assert(
+          reply.contains("<p>the query string is not valid percent encoded UTF-8</p>"),
+          clue(query)
+        )
+      }
       for (body <- Seq("name=%", "name=50%", "%zz=1")) {
         val response = submit(port, "/widgets", handed(), body)
         assertEquals(response.statusCode(), 400, clue(body))
-        assert(clue(response.body()).contains("not valid percent encoding"))
+        assert(
+          clue(response.body()).contains("<p>the form body is not valid percent encoding</p>"),
+          clue(body)
+        )
       }
       assert(!ran)
     }
@@ -364,10 +374,11 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
-  /** The status of a `GET` sent over a bare socket, for a target the JDK's client refuses to send,
-    * such as a query string with a malformed percent escape.
+  /** The whole reply, status line, headers and body, to a `GET` sent over a bare socket, for a
+    * target the JDK's client refuses to send, such as a query string with a malformed percent
+    * escape.
     */
-  private def status(port: Int, target: String): Int = {
+  private def rawGet(port: Int, target: String): String = {
     val socket = new java.net.Socket(Loopback, port)
     try {
       socket.setSoTimeout(5000)
@@ -375,8 +386,7 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
         s"GET $target HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
           .getBytes(StandardCharsets.US_ASCII)
       )
-      val reply = new String(socket.getInputStream.readAllBytes(), StandardCharsets.US_ASCII)
-      reply.takeWhile(_ != '\r').split(' ')(1).toInt
+      new String(socket.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
     } finally socket.close()
   }
 }
