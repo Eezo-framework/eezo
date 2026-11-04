@@ -98,7 +98,7 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(done.prompt, None)
     assertEquals(done.supplied, Map("SHOP_PORT" -> Typed("8080"), "STRIPE_KEY" -> Typed("sk_test")))
     assert(
-      done.log.exists(_.text == "the values typed here last for this console only; restarting"),
+      done.log.exists(_.text == "the values typed here last for this session only; restarting"),
       done.log.toString
     )
   }

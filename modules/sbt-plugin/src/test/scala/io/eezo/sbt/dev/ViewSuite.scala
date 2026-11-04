@@ -142,11 +142,11 @@ class ViewSuite extends munit.FunSuite {
     assert(!row(rows, "SHOP_PORT").contains("unset"), row(rows, "SHOP_PORT"))
     assert(row(rows, "stripe.webhook").contains("✗ stripe.webhook is stated as a literal"))
     val advice =
-      rows.map(_.trim).dropWhile(_ != "e  type each missing value for this console, then restart")
+      rows.map(_.trim).dropWhile(_ != "e  type each missing value for this session, then restart")
     assertEquals(
       advice.take(2),
       Vector(
-        "e  type each missing value for this console, then restart",
+        "e  type each missing value for this session, then restart",
         "or quit, export the variables, and start again"
       ),
       rows.mkString("\n")
@@ -235,7 +235,7 @@ class ViewSuite extends munit.FunSuite {
     )
   }
 
-  test("a row the console supplied reads set (console), and no row shows a value") {
+  test("a row the console supplied reads set (session), and no row shows a value") {
     val asked = after(model(80, 24), Event.ConfigReported(two), Event.Pressed(Key.Char('e')))
     val m     = afterAll(
       asked,
@@ -243,10 +243,23 @@ class ViewSuite extends munit.FunSuite {
         Event.Pressed(Key.Enter)
     )
     val rows = frameOf(after(m, Event.Pressed(Key.Char('4'))))
-    assert(row(rows, "STRIPE_KEY").contains("set (console)"), row(rows, "STRIPE_KEY"))
-    assert(row(rows, "SHOP_CURRENCY").contains("set (console)"), row(rows, "SHOP_CURRENCY"))
-    assert(!row(rows, "SHOP_PORT").contains("console"), row(rows, "SHOP_PORT"))
+    assert(row(rows, "STRIPE_KEY").contains("set (session)"), row(rows, "STRIPE_KEY"))
+    assert(row(rows, "SHOP_CURRENCY").contains("set (session)"), row(rows, "SHOP_CURRENCY"))
+    assert(!row(rows, "SHOP_PORT").contains("session"), row(rows, "SHOP_PORT"))
     assert(!rows.exists(_.contains("sentinel")), rows.mkString("\n"))
+  }
+
+  test("a row the console supplied is cyan while the last report still refuses its path") {
+    val asked = after(model(80, 24), Event.ConfigReported(two), Event.Pressed(Key.Char('e')))
+    val first = afterAll(asked, typing("sk_sentinel") :+ Event.Pressed(Key.Enter))
+    val rows  = View.render(first, Theme(color = true, unicode = true))
+    val red   = "\u001b[31m"
+    val cyan  = "\u001b[36m"
+    val key   = row(rows, "STRIPE_KEY")
+    assert(key.contains(cyan) && !key.contains(red), key)
+    assert(key.contains("set (session)"), key)
+    assert(row(rows, "SHOP_CURRENCY").contains(red), row(rows, "SHOP_CURRENCY"))
+    assert(row(rows, "required value(s) missing").contains(red), row(rows, "required"))
   }
 
   test("e is in the footer while an offender takes a typed value, and in the help with the pane") {

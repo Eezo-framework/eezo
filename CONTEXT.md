@@ -294,8 +294,9 @@ _Avoid_: hot reload, watch mode, revolver
 **Dev console**:
 What `eezo dev` draws on the terminal: the dev loop's state, the application's log, the compile
 errors, the route table, the schema drift and the Config's variables as panes, and the schema
-commands and supplying a value boot refused as keys. One sbt command of the plugin, so the sbt
-shell has it too.
+commands and supplying a value boot refused as keys. A value supplied there lasts for that
+session of the console and its row says so; the Session entry is the browser's. One sbt command
+of the plugin, so the sbt shell has it too.
 _Avoid_: TUI, dashboard, watch mode, REPL
 
 **Dev server**:

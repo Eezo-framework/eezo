@@ -74,9 +74,9 @@ is the build: a spinner while a compile runs, labelled with the file that trigge
   masks what you type for a Redacted. Enter takes the value and asks the next one; Enter on the
   last restarts the application with them; Esc stops asking and keeps what Enter took. A value
   typed here reaches every application the console starts after it, its row reads
-  `set (console)`, and it lasts for this console only: nothing writes it to a file, the shell,
-  or a schema command. The values a variable cannot fix stay the file's, and `e` does not ask
-  for them, nor for a variable left unset that has a default.
+  `set (session)` in cyan, and it lasts for this session of the console only: nothing writes it
+  to a file, the shell, or a schema command. The values a variable cannot fix stay the file's,
+  and `e` does not ask for them, nor for a variable left unset that has a default.
 - **5 log**: everything the application prints or logs, a stack trace included, and the output
   of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and
   PgDn, `g` and `G` scroll; so does the mouse wheel, in terminals that turn it into arrows on the

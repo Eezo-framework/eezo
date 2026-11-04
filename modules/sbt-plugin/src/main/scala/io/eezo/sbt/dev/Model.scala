@@ -527,7 +527,7 @@ private[sbt] object Update {
             (
               held
                 .copy(prompt = None)
-                .note("the values typed here last for this console only; restarting"),
+                .note("the values typed here last for this session only; restarting"),
               Vector(Effect.Restart)
             )
           else (held.copy(prompt = Some(Prompt.Supply(rest, Typed.empty))), none)

@@ -122,9 +122,10 @@ private[sbt] object Panes {
         }
     }
 
-  /** The variables the file names, a row each, in red where boot refused the path; then every
-    * offender no typed value fixes, with boot's own line for it, since the file is where it is
-    * fixed. A row says whether a variable is set and never what it is set to.
+  /** The variables the file names, a row each, in red where boot refused the path, unless a value
+    * typed into this session covers it, which paints it cyan until the next boot proves it; then
+    * every offender no typed value fixes, with boot's own line for it, since the file is where it
+    * is fixed. A row says whether a variable is set and never what it is set to.
     */
   private def config(m: Model, width: Int)(implicit theme: Theme): Vector[String] =
     m.config match {
@@ -143,7 +144,7 @@ private[sbt] object Panes {
         val path     = report.rows.map(_.path.length).foldLeft(0)(math.max)
         val table    = report.rows.map { r =>
           val console = m.supplied.contains(r.variable)
-          val state   = if (console) "set (console)" else if (r.set) "set" else "unset"
+          val state   = if (console) "set (session)" else if (r.set) "set" else "unset"
           val name    = padRight(r.variable, variable)
           val text    =
             if (narrow) s"$name  $state"
@@ -151,7 +152,7 @@ private[sbt] object Panes {
               s"$name  ${padRight(r.path, path)}  ${padRight(r.need, 9)} " +
                 s"${padRight(if (r.redacted) "redacted" else "plain", 8)}  $state"
           val style =
-            if (refused(r.path)) Red else if (console) Cyan else if (r.set) Green else Plain
+            if (console) Cyan else if (refused(r.path)) Red else if (r.set) Green else Plain
           truncate(style(text), width)
         }
         val reasons = report.offenders
@@ -161,7 +162,7 @@ private[sbt] object Panes {
           if (report.fixable.nonEmpty)
             Vector(
               "",
-              Dim("e  type each missing value for this console, then restart"),
+              Dim("e  type each missing value for this session, then restart"),
               Dim("   or quit, export the variables, and start again")
             )
           else Vector.empty
