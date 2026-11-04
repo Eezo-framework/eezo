@@ -26,7 +26,10 @@ import io.eezo.http.cli.{Commands, Render, RenderJson}
   *
   * Both start only after `ConfigApp` has read the application's Config, when the build names one:
   * the read wraps the `dev` arm here and not [[devServer]], so the umbrella's override, with its
-  * `Database` and its drift check, runs after the read too and never for a refused one.
+  * `Database` and its drift check, runs after the read too and never for a refused one. The `dev`
+  * arm alone prints that read's report as the `config` marker, on a good read and on a refusal,
+  * since a refused child prints nothing else the dev console could open its pane on; `run` never
+  * does, so a deployment prints no variable name.
   */
 trait HttpApp extends ConfigApp {
 
@@ -99,7 +102,10 @@ trait HttpApp extends ConfigApp {
   protected def program(): Unit = boot()
 
   override protected def commands: PartialFunction[List[String], Int] = ({
-    case "dev" :: flags    => configured(flags)(devServer())
+    case "dev" :: flags =>
+      reporting(flags)(report =>
+        if (DevMarkers.enabledIn(environment)) println(DevMarkers.line("config", report.json))
+      )(devServer())
     case "routes" :: flags =>
       val result = Commands.routes(routes)
       emit(flags)(RenderJson.routes(result), Render.routes(result))

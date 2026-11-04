@@ -180,7 +180,7 @@ stopping anything**:
 
 Break the file on purpose (delete a `)`) and save: the compile fails, the errors pane opens with
 the diagnostic, **the old server keeps serving**. Fix it and save: back in the loop. `2` is the
-route table, `3` the schema, `4` the log, `?` every key, `q` stops the loop and the app.
+route table, `3` the schema, `5` the log, `?` every key, `q` stops the loop and the app.
 
 ## 6. Additive drift: banner, but serving
 

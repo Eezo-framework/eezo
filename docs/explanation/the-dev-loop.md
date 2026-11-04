@@ -42,7 +42,7 @@ one is done.
 `eezo dev` takes the whole terminal. The top row names the project and, at its right end, the
 address the application serves on, or that it is starting, stopped, or exited. The bottom right
 is the build: a spinner while a compile runs, labelled with the file that triggered it, then
-`✓ built in 0.4s`, or `✗ 2 errors`. Between them, four panes, one key each:
+`✓ built in 0.4s`, or `✗ 2 errors`. Between them, five panes, one key each:
 
 - **1 errors**: the compiler's diagnostics as values, one block each: the file, line and
   column, then the compiler's own rendering with the excerpt and the caret. Warnings after
@@ -62,13 +62,31 @@ is the build: a spinner while a compile runs, labelled with the file that trigge
   of its exit code; everything the command printed is in the log. An application with no
   database layer has no schema pane: one with the layer reports its drift before it serves, so
   serving without a report is how the console tells them apart.
-- **4 log**: everything the application prints or logs, a stack trace included, and the output
+- **4 config**: the variables `application.conf` names, one row each, with the path it feeds,
+  whether it is required, defaulted or optional, whether it is redacted, and whether it is set.
+  A row never shows a value. The pane comes with an application whose build names a Config class
+  with `eezoConfigClass`, and it opens by itself when boot refuses: the rows boot refused are
+  red, and a refusal that only the file can fix, a variable under `EEZO_`, a Redacted stated as
+  a literal, a file that is missing or does not parse, a value no variable feeds, shows in red
+  with boot's own line for it. The tab shows the number of offenders, or a green tick when there
+  are none. `e` asks for each value a variable can fix, one path at a time: it names the path,
+  the variable to set, the other one when the file names two, and how many more follow, and it
+  masks what you type for a Redacted. A malformed value is asked of the variables that fed it,
+  which boot's report names: of two fed in turn, `port = ${?SHOP_PORT}` and then
+  `port = ${?PORT}`, only the later one set, since it wins; of a concatenation,
+  `${?PREFIX}${?PORT}`, every set part in turn, since any of them can hold the bad text. Enter
+  takes the value and asks the next one; Enter on the last restarts the application with them;
+  Esc stops asking and keeps what Enter took. A value typed here reaches every application the
+  console starts after it, its row reads `set (session)` in cyan, and it lasts for this session
+  of the console only: nothing writes it to a file, the shell, or a schema command. The values a variable cannot fix stay the file's,
+  and `e` does not ask for them, nor for a variable left unset that has a default.
+- **5 log**: everything the application prints or logs, a stack trace included, and the output
   of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and
   PgDn, `g` and `G` scroll; so does the mouse wheel, in terminals that turn it into arrows on the
   alternate screen, which VS Code, iTerm2, GNOME Terminal and Windows Terminal do.
 
 The bottom row is the keys that apply right now, and where a question is asked: a migration's
-name, or whether to force. `r` rebuilds and restarts without a save, `c` clears the log, `?` lists
+name, whether to force, or a value the config pane asks for. `r` rebuilds and restarts without a save, `c` clears the log, `?` lists
 every key, `q` or Ctrl-C stops the loop and the application with it.
 
 The layout follows the terminal. Under sixty columns the tabs shorten and the footer keeps only
@@ -97,10 +115,13 @@ it, so it runs only as `sbt "eezoDev --once"`: the plain lines, cut short once t
 serves or exits, and the command fails when it did not serve, which is what a build check wants.
 A watch nobody asked for as lines is refused rather than left running after its reader is gone.
 
-The console learns what the application mounted and what drifted from three lines the
-application prints at boot: `serving on <url>`, and, when the plugin asks for them with
-`EEZO_DEV_MARKERS`, `eezo dev: routes <json>` and `eezo dev: drift <json>`, the same values
-`eezo routes --json` and `eezo db status --json` print, on one line each. `sbt eezoDev` from the
+The console learns what the application mounted, what drifted and what its Config read from
+four lines the application prints at boot: `serving on <url>`, and, when the plugin asks for
+them with `EEZO_DEV_MARKERS`, `eezo dev: routes <json>` and `eezo dev: drift <json>`, the same
+values `eezo routes --json` and `eezo db status --json` print, and `eezo dev: config <json>`,
+the variables `eezo config` lists with whether each is set and every offender of the read, on
+one line each. The config line comes from `dev` alone, also when boot refuses, and never from
+`run`, so a deployment prints no variable name. `sbt eezoDev` from the
 sbt shell is the same console; `sbt "run dev"` by hand is the application alone, without them.
 
 ## What the browser does

@@ -155,6 +155,62 @@ private[sbt] object DevCommand {
   }
 }
 
+/** What the loop hands a fork, kept apart from the fork itself so that a suite can follow a value
+  * from the prompt that took it to the environment of the child: the fork needs a real JVM.
+  */
+private[sbt] object Loop {
+
+  /** The only place a typed value leaves its holder, since the child must read the text itself. */
+  def supplied(model: Model): Map[String, String] =
+    model.supplied.map { case (variable, typed) => variable -> typed.reveal }
+}
+
+/** The one door the events of the application's children pass to the queue. A child's pumps outlive
+  * its process, since stopping waits for the exit and not for the pipes, so what the old child
+  * printed can still be in flight when the next one starts. Its log lines still pass, since the log
+  * shows everything the application prints, a stack trace from a shutdown hook included. Its state
+  * events, the config, routes and drift markers and the serving line, are dropped: behind the next
+  * child's start they would pass for that child's own. The check and the add share the lock with
+  * the swap, so no event slips between them.
+  */
+private[sbt] final class Handover(events: java.util.Queue[Event]) {
+  private var current: Option[AnyRef] = None
+
+  /** `next` becomes the child whose events count, and `started` is queued ahead of any of them. */
+  def swap(next: AnyRef, started: Event): Unit = synchronized {
+    current = Some(next)
+    events.add(started): Unit
+  }
+
+  /** Queues what `child` produced; once a later child has taken over, only its log lines. */
+  def from(child: AnyRef)(produced: => Vector[Event]): Unit = synchronized {
+    val counts = current.exists(_ eq child)
+    produced.foreach {
+      case e: Event.AppLine => events.add(e): Unit
+      case e if counts      => events.add(e): Unit
+      case _                => ()
+    }
+  }
+
+  /** The doors of `child`'s two pumps and of its waiter's flush, read by one protocol of its own
+    * and each passed through [[from]], so that no pump of a child reaches the queue another way.
+    */
+  def pipes(child: AnyRef): Handover.Pipes = {
+    val protocol = new LineProtocol
+    Handover.Pipes(
+      stdout = line => from(child)(protocol.synchronized(protocol.stdout(line))),
+      stderr = line => from(child)(protocol.synchronized(protocol.stderr(line))),
+      flush = () => from(child)(protocol.synchronized(protocol.flush()))
+    )
+  }
+}
+
+private[sbt] object Handover {
+
+  /** What one child's stdout pump, stderr pump and waiter hand each line, and the end, to. */
+  final case class Pipes(stdout: String => Unit, stderr: String => Unit, flush: () => Unit)
+}
+
 /** The loop and its threads. One instance per `eezoDev`; nothing here outlives the command. */
 private[sbt] final class Loop(
     state: State,
@@ -173,6 +229,7 @@ private[sbt] final class Loop(
 ) {
 
   private val events   = new LinkedBlockingQueue[Event]
+  private val handover = new Handover(events)
   private val stopping = new AtomicBoolean(false)
   // Fed by the keys thread, expired by the tick thread; each holds its monitor while it does.
   private val decoder  = new KeyDecoder
@@ -348,26 +405,26 @@ private[sbt] final class Loop(
         b.mainClass,
         Seq("dev"),
         base,
-        piped = true
+        piped = true,
+        supplied = Loop.supplied(model)
       )
       // The new child is in place before `replacing` clears, so the old one's waiter, which checks
       // both, never reads its exit as the application's.
       child = Some(process)
       replacing = false
-      val protocol = new LineProtocol
-      thread("eezo-dev-stdout")(
-        pump(process.getInputStream, line => protocol.synchronized(protocol.stdout(line)))
-      ).start()
-      thread("eezo-dev-stderr")(
-        pump(process.getErrorStream, line => protocol.synchronized(protocol.stderr(line)))
-      ).start()
+      // Queued before the pumps start, so that the child's config marker, which starts the report
+      // of this child afresh, never lands ahead of it; and from here the old child's pumps, still
+      // draining, pass only their log lines.
+      handover.swap(process, Event.AppStarted(b.mainClass))
+      val pipes = handover.pipes(process)
+      thread("eezo-dev-stdout")(pump(process.getInputStream, pipes.stdout)).start()
+      thread("eezo-dev-stderr")(pump(process.getErrorStream, pipes.stderr)).start()
       thread("eezo-dev-wait") {
         val code = process.waitFor()
-        protocol.synchronized(protocol.flush()).foreach(e => events.add(e): Unit)
+        pipes.flush()
         if (child.contains(process) && !replacing && !stopping.get)
           events.add(Event.AppExited(code)): Unit
       }.start()
-      events.add(Event.AppStarted(b.mainClass)): Unit
   }
 
   private def runCommand(command: SchemaCommand): Unit = built match {
@@ -431,12 +488,12 @@ private[sbt] final class Loop(
     }
   }
 
-  private def pump(in: java.io.InputStream, classify: String => Vector[Event]): Unit = {
+  private def pump(in: java.io.InputStream, deliver: String => Unit): Unit = {
     val reader = new BufferedReader(new InputStreamReader(in, "UTF-8"))
     try {
       var line = reader.readLine()
       while (line != null) {
-        classify(line).foreach(e => events.add(e): Unit)
+        deliver(line)
         line = reader.readLine()
       }
     } catch { case _: java.io.IOException => () }

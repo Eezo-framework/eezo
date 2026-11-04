@@ -22,7 +22,7 @@ The plugin does nothing until a project enables it. An application with no route
 |---|---|
 | `eezoGenerateRoutes` | writes `Routes.scala`; runs on every compile as a source generator, cached on the sources' hashes |
 | `eezoGenerateConfig` | writes `ConfigFile.scala` when `eezoConfigClass` names a class, and deletes it when it names none; runs on every compile as a source generator |
-| `eezoDev [--once\|--plain\|--json]` | a command, not a task: the dev console. Watches the sources, compiles on every save, forks `Main dev` with its output piped into a pane, and draws the log, the errors, the routes and the drift on the terminal; the schema commands on keys. `--plain` is the same loop printed as lines, no screen and no keys, which `eezo dev --no-tui` passes, and `--json` the same loop as one JSON object per line (the event stream below), which `eezo dev --json` passes; a pipe or an agent reads either and Ctrl-C stops it. Without a terminal and without a flag only `--once` runs: it builds, starts, prints the events as lines, waits for the application to serve, stops, and fails when it did not |
+| `eezoDev [--once\|--plain\|--json]` | a command, not a task: the dev console. Watches the sources, compiles on every save, forks `Main dev` with its output piped into a pane, and draws the log, the errors, the routes, the drift and the config on the terminal; the schema commands on keys, and `e` for a value boot refused. `--plain` is the same loop printed as lines, no screen and no keys, which `eezo dev --no-tui` passes, and `--json` the same loop as one JSON object per line (the event stream below), which `eezo dev --json` passes; a pipe or an agent reads either and Ctrl-C stops it. Without a terminal and without a flag only `--once` runs: it builds, starts, prints the events as lines, waits for the application to serve, stops, and fails when it did not |
 | `eezoRestart` | prints `eezo dev: building`, compiles, kills the running application, forks a fresh JVM running `Main dev` with its output inherited, prints `eezo dev: started <Main>`; `~eezoRestart` is the loop without the console |
 | `eezoStop` | stops the forked application, if any |
 | `eezoRoutes` | `run routes` |
@@ -59,9 +59,21 @@ runs on the JDK floor, and sbt's own JVM may not be on it.
 `eezoDev` asks for the full classpath, which compiles the project first. A failed compile
 leaves the running application untouched, so it keeps serving, and its diagnostics fill the
 errors pane. On success the previous process is destroyed, forcibly after ten seconds, then the
-next is forked, with `EEZO_DEV_MARKERS` set so the application prints its route table and its
-drift as one JSON line each (`eezo dev: routes`, `eezo dev: drift`), which the console reads.
+next is forked, with `EEZO_DEV_MARKERS` set so the application prints its route table, its
+drift and its Config's read as one JSON line each (`eezo dev: routes`, `eezo dev: drift`,
+`eezo dev: config`), which the console reads. The config line is printed under `dev` only, on a
+good read and on a refusal, when the build names a Config class: `variables`, one object per
+variable `application.conf` names with `variable`, `path`, `redacted`, `need` and `set` (a
+boolean, never the value), and `offenders`, one object per reason boot refused, with `kind`
+(`missing`, `malformed`, `reserved`, `literal`, `absent` or `unparsable`), `path`, the
+`variables` the file names for the path, among them the ones `feeding` the value boot read
+(of two fed in turn only the later one set, of a concatenation every set part; none for a
+missing value), `reason` for a malformed value, `variable` for a reserved one, and boot's own
+`line`.
 One secret per sbt session is passed as `EEZO_SECRET` unless the environment already sets one.
+The values the config pane took are passed to every fork after it took them, over a variable of
+the same name in sbt's environment; never a variable under `EEZO_`, and never to a schema
+command.
 A `reload` of the build strands the running child until sbt exits, and makes a fresh secret.
 
 The console runs sbt's tasks under a session with console logging and the progress bars off,
@@ -94,6 +106,7 @@ its save knows which `built` or `failed` answers it.
 | `line` | `stream` (`stdout` or `stderr`), `text`: the application's own output, routine boot records removed |
 | `routes` | the `routes --json` body: `routes`, `overridden`, `shadowed`, `orphans`; routes under `/eezo` have provenance `eezo` |
 | `drift` | the `db status --json` body plus `blocking`, and `unreachable` with the reason when the database could not be asked |
+| `config` | the config marker: `variables` (`variable`, `path`, `redacted`, `need`, `set`) and `offenders` (`kind`, `path`, `variables`, `feeding`, `line`); no value, and nothing of what the console was given |
 | `command` | `command`, `status` (`started` or `finished`); when finished, `code`, `ok`, `summary` and the command's own JSON answer as `result` |
 
 A diagnostic is `path`, `line`, `column`, `severity` (`error`, `warning` or `info`), `message`

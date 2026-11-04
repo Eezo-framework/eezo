@@ -19,11 +19,11 @@ private[sbt] object PlainRenderer {
     case Event.AppStarted(mainClass) => Vector(s"started $mainClass")
     case Event.AppExited(code)       => Vector(s"the application exited with code $code")
     case Event.AppLine(text, _)      => Vector(text)
-    // The application prints its own listing and its own drift banner beside the markers, so the
-    // values are not printed again.
-    case Event.RoutesReported(_) | Event.DriftReported(_) => Vector.empty
-    case Event.CommandStarted(command)                    => Vector(s"$$ eezo ${command.label}")
-    case Event.CommandFinished(outcome)                   =>
+    // The application prints its own listing and its own drift banner beside the markers, and its
+    // refusal lines beside the config one, so the values are not printed again.
+    case Event.RoutesReported(_) | Event.DriftReported(_) | Event.ConfigReported(_) => Vector.empty
+    case Event.CommandStarted(command)  => Vector(s"$$ eezo ${command.label}")
+    case Event.CommandFinished(outcome) =>
       (Describe.outcome(outcome) ++ LineProtocol.quiet(outcome.err)) :+
         s"${if (outcome.ok) theme.ok else theme.fail} eezo ${outcome.command.label}: ${Describe.summary(outcome)}"
     case Event.Serving(_) | Event.AppStopped | Event.Pressed(_) | Event.Resized(_, _) |

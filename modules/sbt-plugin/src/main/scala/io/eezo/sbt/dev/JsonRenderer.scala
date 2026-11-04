@@ -6,8 +6,10 @@ package io.eezo.sbt.dev
   * `built` or `failed` answers it. Nothing is rendered for a key, a tick or a resize.
   *
   * The shapes mirror the lines the application prints under `EEZO_DEV_MARKERS`: `routes` is the
-  * `routes --json` body, `drift` the `db status --json` body plus `blocking` and `unreachable`, and
-  * a finished command carries its own JSON answer as `result`.
+  * `routes --json` body, `drift` the `db status --json` body plus `blocking` and `unreachable`,
+  * `config` the config marker's variables and offenders, and a finished command carries its own
+  * JSON answer as `result`. A value the console took is never here: the console holds it, and this
+  * front only reports.
   *
   * An event's own object comes first and the `compiling` of a build it set off after it, so that a
   * save remembered during a build prints `built` with the first number and then `compiling` with
@@ -116,6 +118,34 @@ private[sbt] final class JsonRenderer {
             "ok"      -> JBool(o.ok),
             "summary" -> JStr(Describe.summary(o)),
             "result"  -> o.json.getOrElse(JNull)
+          )
+        )
+      case Event.ConfigReported(report) =>
+        Vector(
+          obj(
+            "event"     -> JStr("config"),
+            "variables" -> JArr(
+              report.rows.map(r =>
+                obj(
+                  "variable" -> JStr(r.variable),
+                  "path"     -> JStr(r.path),
+                  "redacted" -> JBool(r.redacted),
+                  "need"     -> JStr(r.need),
+                  "set"      -> JBool(r.set)
+                )
+              )
+            ),
+            "offenders" -> JArr(
+              report.offenders.map(o =>
+                obj(
+                  "kind"      -> JStr(o.kind.name),
+                  "path"      -> JStr(o.path),
+                  "variables" -> JArr(o.variables.map(JStr(_))),
+                  "feeding"   -> JArr(o.feeding.map(JStr(_))),
+                  "line"      -> JStr(o.line)
+                )
+              )
+            )
           )
         )
       case Event.Changed(_) | Event.Pressed(_) | Event.Resized(_, _) | Event.Tick(_) =>
