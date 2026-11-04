@@ -203,19 +203,14 @@ private[sbt] final case class Model(
 
   /** The paths `e` asks a value for, from the last report, every one of them each time: a value
     * typed before is asked again, since the report still names the path. A malformed value is asked
-    * of every variable that is set among those the file names for the path, in file order. The
-    * report does not say whether they are fallbacks, where the last one set wins, or the parts of a
-    * concatenation, where any one of them can hold the bad text, so the console asks each and
-    * leaves it to the developer, who can skip with Enter on an empty value the ones that do not
-    * hold it.
+    * of the variables the report says fed it: the one that won of two fed in turn, or every set
+    * part of a concatenation, since the file alone knows its shape. A missing value, or one whose
+    * report says nothing of feeding, is asked of the first variable the file names.
     */
   def asks: Vector[Ask] =
     config.toVector.flatMap { report =>
-      def set(variable: String): Boolean = report.rows.exists(r => r.variable == variable && r.set)
       report.fixable.flatMap { o =>
-        val setOnes =
-          if (o.kind == ConfigOffender.Malformed) o.variables.filter(set) else Vector.empty
-        val asked = if (setOnes.isEmpty) Vector(o.variables.head) else setOnes
+        val asked = if (o.feeding.isEmpty) Vector(o.variables.head) else o.feeding
         asked.map { variable =>
           // Masked unless the report says the variable is plain.
           val redacted = report.rows
@@ -529,14 +524,9 @@ private[sbt] object Update {
               )
           }
       case (Prompt.Supply(ask +: rest, typed), Key.Enter) =>
-        // An empty value skips an ask only when the path is asked of several variables, since
-        // some of those cannot matter and the environment's own value is the right answer for
-        // them; a path asked of one variable has nothing else to fall back on.
-        val skippable = m.asks.count(_.path == ask.path) > 1
-        if (typed.isEmpty && !skippable) (m, none)
+        if (typed.isEmpty) (m, none)
         else {
-          val held =
-            if (typed.isEmpty) m else m.copy(supplied = m.supplied.updated(ask.variable, typed))
+          val held = m.copy(supplied = m.supplied.updated(ask.variable, typed))
           if (rest.isEmpty)
             (
               held

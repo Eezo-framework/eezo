@@ -141,6 +141,7 @@ private[sbt] final class JsonRenderer {
                   "kind"      -> JStr(o.kind.name),
                   "path"      -> JStr(o.path),
                   "variables" -> JArr(o.variables.map(JStr(_))),
+                  "feeding"   -> JArr(o.feeding.map(JStr(_))),
                   "line"      -> JStr(o.line)
                 )
               )

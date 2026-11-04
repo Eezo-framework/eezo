@@ -217,6 +217,20 @@ object Config {
       */
     def variables(path: String): List[String] =
       byPath.getOrElse(path, Nil).filterNot(_.startsWith(FrameworkPrefix))
+
+    /** The variables, among those the file names for `path`, whose value reaches the path under
+      * `env`: every set part of a concatenation, and of two fed in turn only the later one set,
+      * since it wins. Each set one is answered with the placeholder in turn, and feeds the path
+      * when the placeholder lands there; the file alone says which variable a shape of the file
+      * reads, so a reader of the report never has to know the shape.
+      */
+    def feeding(path: String, env: Map[String, String]): List[String] =
+      variables(path).filter(env.contains).filter { variable =>
+        try {
+          val tree = resolve(file, env.updated(variable, Landing))
+          tree.hasPath(path) && tree.getValue(path).unwrapped().toString.contains(Landing)
+        } catch { case _: ConfigException => false }
+      }
   }
 
   /** The value at `path` in an unresolved object, literal or substitution, or `None` where the file

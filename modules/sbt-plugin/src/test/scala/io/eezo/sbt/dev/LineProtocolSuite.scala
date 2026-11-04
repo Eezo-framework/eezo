@@ -53,7 +53,7 @@ class LineProtocolSuite extends munit.FunSuite {
     val p = new LineProtocol
     assertEquals(
       p.stdout(
-        """eezo dev: config {"variables":[{"variable":"SHOP_PORT","path":"port","redacted":false,"need":"required","set":true},{"variable":"STRIPE_SECRET_KEY","path":"stripe.secretKey","redacted":true,"need":"required","set":false}],"offenders":[{"kind":"missing","path":"stripe.secretKey","variables":["STRIPE_SECRET_KEY"],"line":"stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"},{"kind":"malformed","path":"port","variables":["SHOP_PORT"],"reason":"is not a whole number","line":"port is not a whole number"}]}"""
+        """eezo dev: config {"variables":[{"variable":"SHOP_PORT","path":"port","redacted":false,"need":"required","set":true},{"variable":"STRIPE_SECRET_KEY","path":"stripe.secretKey","redacted":true,"need":"required","set":false}],"offenders":[{"kind":"missing","path":"stripe.secretKey","variables":["STRIPE_SECRET_KEY"],"line":"stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"},{"kind":"malformed","path":"port","variables":["SHOP_PORT"],"feeding":["SHOP_PORT"],"reason":"is not a whole number","line":"port is not a whole number"}]}"""
       ),
       Vector(
         Event.ConfigReported(
@@ -73,11 +73,13 @@ class LineProtocolSuite extends munit.FunSuite {
                 ConfigOffender.Missing,
                 "stripe.secretKey",
                 Vector("STRIPE_SECRET_KEY"),
+                Vector.empty,
                 "stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"
               ),
               ConfigOffender(
                 ConfigOffender.Malformed,
                 "port",
+                Vector("SHOP_PORT"),
                 Vector("SHOP_PORT"),
                 "port is not a whole number"
               )
@@ -113,9 +115,10 @@ class LineProtocolSuite extends munit.FunSuite {
                 ConfigOffender.Other("shadowed"),
                 "stripe.secretKey",
                 Vector("STRIPE_SECRET_KEY"),
+                Vector.empty,
                 "stripe.secretKey is shadowed"
               ),
-              ConfigOffender(ConfigOffender.Missing, "port", Vector.empty, "")
+              ConfigOffender(ConfigOffender.Missing, "port", Vector.empty, Vector.empty, "")
             )
           )
         )

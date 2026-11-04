@@ -176,12 +176,22 @@ class HttpAppSuite extends munit.FunSuite {
       )
     )
 
-  private def offender(kind: String, path: String, variables: List[String], rest: (String, Json)*) =
+  /** An offender of the marker: `variables` the file names for the path, `feeding` the ones whose
+    * value reached it.
+    */
+  private def offender(
+      kind: String,
+      path: String,
+      variables: List[String],
+      feeding: List[String],
+      rest: (String, Json)*
+  ) =
     Json.Obj(
       List(
         "kind"      -> Json.Str(kind),
         "path"      -> Json.Str(path),
-        "variables" -> Json.Arr(variables.map(Json.Str(_)))
+        "variables" -> Json.Arr(variables.map(Json.Str(_))),
+        "feeding"   -> Json.Arr(feeding.map(Json.Str(_)))
       ) ++ rest
     )
 
@@ -242,20 +252,31 @@ class HttpAppSuite extends munit.FunSuite {
 
   test("a missing value is a missing offender, with the variables the file names for it") {
     val (marker, line) = refused(Map.empty, Some("booth.conf"))
-    assertEquals(only(marker, line), offender("missing", "key", List("BOOTH_KEY", "BOOTH_SECRET")))
+    assertEquals(
+      only(marker, line),
+      offender("missing", "key", List("BOOTH_KEY", "BOOTH_SECRET"), Nil)
+    )
     assertEquals(
       line,
       "key is missing: set BOOTH_KEY or BOOTH_SECRET, which application.conf names for it"
     )
   }
 
-  test("a malformed value carries the Parser's reason and the variables named for it") {
+  test(
+    "a malformed value carries the Parser's reason, the variables named and the one feeding it"
+  ) {
     val (marker, line) =
       refused(Map("BOOTH_PORT" -> "eighty", "BOOTH_KEY" -> "k"), Some("booth.conf"))
     val reason = line.stripPrefix("port ")
     assertEquals(
       only(marker, line),
-      offender("malformed", "port", List("BOOTH_PORT"), "reason" -> Json.Str(reason))
+      offender(
+        "malformed",
+        "port",
+        List("BOOTH_PORT"),
+        List("BOOTH_PORT"),
+        "reason" -> Json.Str(reason)
+      )
     )
   }
 
@@ -263,14 +284,14 @@ class HttpAppSuite extends munit.FunSuite {
     val (reserved, reservedLine) = refused(Map("BOOTH_KEY" -> "k"), Some("booth-reserved.conf"))
     assertEquals(
       only(reserved, reservedLine),
-      offender("reserved", "port", Nil, "variable" -> Json.Str("EEZO_PORT"))
+      offender("reserved", "port", Nil, Nil, "variable" -> Json.Str("EEZO_PORT"))
     )
     val (literal, literalLine) = refused(Map.empty, Some("booth-literal.conf"))
-    assertEquals(only(literal, literalLine), offender("literal", "key", Nil))
+    assertEquals(only(literal, literalLine), offender("literal", "key", Nil, Nil))
     val (absent, absentLine) = refused(Map.empty, conf = None)
-    assertEquals(only(absent, absentLine), offender("absent", "application.conf", Nil))
+    assertEquals(only(absent, absentLine), offender("absent", "application.conf", Nil, Nil))
     val (unparsable, line) = refused(Map.empty, Some("booth-unparsable.conf"))
-    assertEquals(only(unparsable, line), offender("unparsable", "application.conf", Nil))
+    assertEquals(only(unparsable, line), offender("unparsable", "application.conf", Nil, Nil))
     assert(line.startsWith("application.conf does not parse"), line)
   }
 

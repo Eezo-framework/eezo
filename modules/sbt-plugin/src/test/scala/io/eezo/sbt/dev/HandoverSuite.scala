@@ -11,7 +11,13 @@ class HandoverSuite extends munit.FunSuite {
   private val report = ConfigReport(
     Vector(port),
     Vector(
-      ConfigOffender(ConfigOffender.Missing, "port", Vector("SHOP_PORT"), "port is missing")
+      ConfigOffender(
+        ConfigOffender.Missing,
+        "port",
+        Vector("SHOP_PORT"),
+        Vector.empty,
+        "port is missing"
+      )
     )
   )
 

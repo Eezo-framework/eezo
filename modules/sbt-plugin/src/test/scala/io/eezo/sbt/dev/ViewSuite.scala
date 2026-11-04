@@ -58,11 +58,13 @@ class ViewSuite extends munit.FunSuite {
         ConfigOffender.Missing,
         "stripe.key",
         Vector("STRIPE_KEY"),
+        Vector.empty,
         "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
       ),
       ConfigOffender(
         ConfigOffender.Literal,
         "stripe.webhook",
+        Vector.empty,
         Vector.empty,
         "stripe.webhook is stated as a literal in application.conf, and it is a Redacted"
       )
@@ -187,6 +189,7 @@ class ViewSuite extends munit.FunSuite {
       ConfigOffender.Missing,
       "stripe.currency",
       Vector("SHOP_CURRENCY", "CURRENCY"),
+      Vector.empty,
       "stripe.currency is missing"
     )
   )
@@ -215,6 +218,7 @@ class ViewSuite extends munit.FunSuite {
         ConfigOffender.Missing,
         "port",
         Vector("SHOP_PORT"),
+        Vector.empty,
         "port is missing"
       )
     )

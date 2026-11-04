@@ -33,6 +33,7 @@ class JsonRendererSuite extends munit.FunSuite {
         ConfigOffender.Missing,
         "stripe.key",
         Vector("STRIPE_KEY"),
+        Vector.empty,
         "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
       )
     )
@@ -75,6 +76,7 @@ class JsonRendererSuite extends munit.FunSuite {
                     "kind"      -> JStr("missing"),
                     "path"      -> JStr("stripe.key"),
                     "variables" -> JArr(Vector(JStr("STRIPE_KEY"))),
+                    "feeding"   -> JArr(Vector.empty),
                     "line"      -> JStr(
                       "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
                     )

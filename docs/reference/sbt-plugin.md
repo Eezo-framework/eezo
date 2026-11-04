@@ -66,8 +66,10 @@ good read and on a refusal, when the build names a Config class: `variables`, on
 variable `application.conf` names with `variable`, `path`, `redacted`, `need` and `set` (a
 boolean, never the value), and `offenders`, one object per reason boot refused, with `kind`
 (`missing`, `malformed`, `reserved`, `literal`, `absent` or `unparsable`), `path`, the
-`variables` the file names for the path, `reason` for a malformed value, `variable` for a
-reserved one, and boot's own `line`.
+`variables` the file names for the path, among them the ones `feeding` the value boot read
+(of two fed in turn only the later one set, of a concatenation every set part; none for a
+missing value), `reason` for a malformed value, `variable` for a reserved one, and boot's own
+`line`.
 One secret per sbt session is passed as `EEZO_SECRET` unless the environment already sets one.
 The values the config pane took are passed to every fork after it took them, over a variable of
 the same name in sbt's environment; never a variable under `EEZO_`, and never to a schema
@@ -104,7 +106,7 @@ its save knows which `built` or `failed` answers it.
 | `line` | `stream` (`stdout` or `stderr`), `text`: the application's own output, routine boot records removed |
 | `routes` | the `routes --json` body: `routes`, `overridden`, `shadowed`, `orphans`; routes under `/eezo` have provenance `eezo` |
 | `drift` | the `db status --json` body plus `blocking`, and `unreachable` with the reason when the database could not be asked |
-| `config` | the config marker: `variables` (`variable`, `path`, `redacted`, `need`, `set`) and `offenders` (`kind`, `path`, `variables`, `line`); no value, and nothing of what the console was given |
+| `config` | the config marker: `variables` (`variable`, `path`, `redacted`, `need`, `set`) and `offenders` (`kind`, `path`, `variables`, `feeding`, `line`); no value, and nothing of what the console was given |
 | `command` | `command`, `status` (`started` or `finished`); when finished, `code`, `ok`, `summary` and the command's own JSON answer as `result` |
 
 A diagnostic is `path`, `line`, `column`, `severity` (`error`, `warning` or `info`), `message`

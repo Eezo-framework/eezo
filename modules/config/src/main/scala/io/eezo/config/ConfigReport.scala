@@ -54,9 +54,12 @@ private[eezo] object ConfigReport {
   }
 
   /** An offender of the read, with the variables the file names for its path, so that the console
-    * knows what to ask for a value that is missing or wrong.
+    * knows what to ask for a value that is missing or wrong, and among them the ones `feeding` the
+    * value the read saw: for a malformed value, the ones a new value replaces, whatever shape the
+    * file gives the path. A missing value none feeds.
     */
-  final case class Read(offender: Config.Offender, variables: List[String]) extends Offender {
+  final case class Read(offender: Config.Offender, variables: List[String], feeding: List[String])
+      extends Offender {
 
     def line: String = Config.Refused(List(offender)).lines.mkString
 
@@ -73,7 +76,8 @@ private[eezo] object ConfigReport {
         List(
           "kind"      -> Json.Str(kind),
           "path"      -> Json.Str(path),
-          "variables" -> Json.Arr(variables.map(Json.Str(_)))
+          "variables" -> Json.Arr(variables.map(Json.Str(_))),
+          "feeding"   -> Json.Arr(feeding.map(Json.Str(_)))
         ) ++ own :+ ("line" -> Json.Str(line))
       )
     }
@@ -90,6 +94,7 @@ private[eezo] object ConfigReport {
           "kind"      -> Json.Str(kind.toString.toLowerCase(java.util.Locale.ROOT)),
           "path"      -> Json.Str("application.conf"),
           "variables" -> Json.Arr(Nil),
+          "feeding"   -> Json.Arr(Nil),
           "line"      -> Json.Str(line)
         )
       )
@@ -111,13 +116,15 @@ private[eezo] object ConfigReport {
       refused: Option[Config.Refused]
   ): ConfigReport = {
     def named(path: String): List[String] = written.variables(path).distinct
+    def read(o: Config.Offender, path: String, variables: List[String]): Read =
+      Read(o, variables, written.feeding(path, env))
     ConfigReport(
       names.toList.map(name => Variable(name, env.contains(name.variable))),
       refused.toList.flatMap(_.offenders).map {
-        case o @ Config.Offender.Missing(_, variables) => Read(o, variables)
-        case o @ Config.Offender.Malformed(path, _)    => Read(o, named(path))
-        case o @ Config.Offender.Reserved(path, _)     => Read(o, named(path))
-        case o @ Config.Offender.Literal(path)         => Read(o, named(path))
+        case o @ Config.Offender.Missing(path, variables) => read(o, path, variables)
+        case o @ Config.Offender.Malformed(path, _)       => read(o, path, named(path))
+        case o @ Config.Offender.Reserved(path, _)        => read(o, path, named(path))
+        case o @ Config.Offender.Literal(path)            => read(o, path, named(path))
       }
     )
   }

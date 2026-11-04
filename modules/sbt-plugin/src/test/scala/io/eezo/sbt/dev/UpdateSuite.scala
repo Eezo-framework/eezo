@@ -36,7 +36,13 @@ class UpdateSuite extends munit.FunSuite {
     ConfigRow("STRIPE_SECRET", "stripe.key", redacted = true, "required", set = false)
 
   private def missing(path: String, variables: String*): ConfigOffender =
-    ConfigOffender(ConfigOffender.Missing, path, variables.toVector, s"$path is missing")
+    ConfigOffender(
+      ConfigOffender.Missing,
+      path,
+      variables.toVector,
+      Vector.empty,
+      s"$path is missing"
+    )
 
   private val clean   = ConfigReport(Vector(port, key), Vector.empty)
   private val refused = ConfigReport(
@@ -127,35 +133,52 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(closed.supplied, Map("SHOP_PORT" -> Typed("8080")))
   }
 
-  private def malformed(path: String, variables: String*): ConfigOffender =
-    ConfigOffender(ConfigOffender.Malformed, path, variables.toVector, s"$path is not a number")
-
-  test("a malformed value from the environment is asked of the variable that supplied it") {
-    val first  = port.copy(set = true)
-    val second = ConfigRow("PORT", "port", redacted = false, "required", set = true)
-    val bad    = ConfigReport(Vector(first, second), Vector(malformed("port", "SHOP_PORT", "PORT")))
-    val onlySecond = bad.copy(rows = Vector(first.copy(set = false), second))
-    val (asked, _) = run(start, Event.ConfigReported(onlySecond), Event.Pressed(Key.Char('e')))
-    val (both, _)  = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
-    assertEquals(
-      both.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
-      Some(Vector("SHOP_PORT", "PORT"))
+  /** A malformed path: `variables` are the ones the file names for it, `feeding` the ones the
+    * report says fed the value boot refused.
+    */
+  private def malformed(
+      path: String,
+      variables: Seq[String],
+      feeding: Seq[String]
+  ): ConfigOffender =
+    ConfigOffender(
+      ConfigOffender.Malformed,
+      path,
+      variables.toVector,
+      feeding.toVector,
+      s"$path is not a number"
     )
+
+  private val shopPort  = port.copy(set = true)
+  private val plainPort = ConfigRow("PORT", "port", redacted = false, "required", set = true)
+
+  test("a malformed value is asked of the variable the report says fed it, naming the other one") {
+    val bad = ConfigReport(
+      Vector(shopPort, plainPort),
+      Vector(malformed("port", Seq("SHOP_PORT", "PORT"), Seq("PORT")))
+    )
+    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
     assertEquals(
       asked.prompt,
       Some(
         Prompt.Supply(Vector(Ask("port", "PORT", Some("SHOP_PORT"), redacted = false)), Typed.empty)
       )
     )
-    val onlyFirst   = bad.copy(rows = Vector(first, second.copy(set = false)))
-    val (first2, _) = run(start, Event.ConfigReported(onlyFirst), Event.Pressed(Key.Char('e')))
-    assertEquals(
-      first2.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
-      Some(Vector("SHOP_PORT"))
-    )
     val (retyped, restart) = runAll(asked, typing("8080") :+ Event.Pressed(Key.Enter))
     assertEquals(restart, Vector[Effect](Effect.Restart))
     assertEquals(retyped.supplied, Map("PORT" -> Typed("8080")))
+  }
+
+  test("a malformed value whose report names nothing feeding it is asked of the first variable") {
+    val older = ConfigReport(
+      Vector(shopPort, plainPort),
+      Vector(malformed("port", Seq("SHOP_PORT", "PORT"), Nil))
+    )
+    val (asked, _) = run(start, Event.ConfigReported(older), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      asked.prompt.collect { case p: Prompt.Supply => p.asks },
+      Some(Vector(Ask("port", "SHOP_PORT", Some("PORT"), redacted = false)))
+    )
   }
 
   test("bytes of a UTF-8 value typed in the prompt reach the child as the text typed") {
@@ -180,11 +203,13 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(shown, Some("a"))
   }
 
-  test("a malformed concatenation asks every variable set in it, in file order") {
-    val prefix = ConfigRow("PREFIX", "port", redacted = false, "required", set = true)
-    val number = ConfigRow("PORT", "port", redacted = false, "required", set = true)
-    val bad    = ConfigReport(Vector(prefix, number), Vector(malformed("port", "PREFIX", "PORT")))
-    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+  private val joined = ConfigReport(
+    Vector(ConfigRow("PREFIX", "port", redacted = false, "required", set = true), plainPort),
+    Vector(malformed("port", Seq("PREFIX", "PORT"), Seq("PREFIX", "PORT")))
+  )
+
+  test("a malformed concatenation asks every variable the report says feeds it, in its order") {
+    val (asked, _) = run(start, Event.ConfigReported(joined), Event.Pressed(Key.Char('e')))
     assertEquals(
       asked.prompt,
       Some(
@@ -204,46 +229,13 @@ class UpdateSuite extends munit.FunSuite {
     assertEquals(typed.supplied, Map("PREFIX" -> Typed("80"), "PORT" -> Typed("81")))
   }
 
-  test(
-    "Enter on an empty value skips an ask of a path asked of several variables, keeping the environment's"
-  ) {
-    val first  = ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = true)
-    val second = ConfigRow("PORT", "port", redacted = false, "required", set = true)
-    val bad    = ConfigReport(Vector(first, second), Vector(malformed("port", "SHOP_PORT", "PORT")))
-    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
-    assertEquals(
-      asked.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
-      Some(Vector("SHOP_PORT", "PORT"))
-    )
-    val (skipped, none) = run(asked, Event.Pressed(Key.Enter))
-    assertEquals(none, Vector.empty[Effect])
-    assertEquals(skipped.supplied, Map.empty[String, Typed])
-    assertEquals(
-      skipped.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
-      Some(Vector("PORT"))
-    )
-    val (done, restart) = runAll(skipped, typing("8080") :+ Event.Pressed(Key.Enter))
-    assertEquals(restart, Vector[Effect](Effect.Restart))
-    assertEquals(done.supplied, Map("PORT" -> Typed("8080")))
-  }
-
-  test("a part of a concatenation can be left as it is: the first typed, the last skipped") {
-    val prefix = ConfigRow("PREFIX", "port", redacted = false, "required", set = true)
-    val number = ConfigRow("PORT", "port", redacted = false, "required", set = true)
-    val bad    = ConfigReport(Vector(prefix, number), Vector(malformed("port", "PREFIX", "PORT")))
-    val (asked, _)      = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
-    val keys            = typing("1") ++ Seq(Event.Pressed(Key.Enter), Event.Pressed(Key.Enter))
-    val (done, restart) = runAll(asked, keys)
-    assertEquals(restart, Vector[Effect](Effect.Restart))
-    assertEquals(done.supplied, Map("PREFIX" -> Typed("1")))
-    assertEquals(done.prompt, None)
-  }
-
-  test("Enter on an empty value still does nothing when the path is asked of one variable") {
-    val (asked, _)      = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
-    val (same, effects) = run(asked, Event.Pressed(Key.Enter))
-    assertEquals(same, asked)
-    assertEquals(effects, Vector.empty[Effect])
+  test("Enter on an empty value does nothing, a path asked of several variables included") {
+    for (report <- Seq(refused, joined)) {
+      val (asked, _)      = run(start, Event.ConfigReported(report), Event.Pressed(Key.Char('e')))
+      val (same, effects) = run(asked, Event.Pressed(Key.Enter))
+      assertEquals(same, asked)
+      assertEquals(effects, Vector.empty[Effect])
+    }
   }
 
   test("a malformed value the console supplied is asked again, and the retyped one replaces it") {
@@ -252,7 +244,10 @@ class UpdateSuite extends munit.FunSuite {
       runAll(asked, typing("eighty") ++ Seq(Event.Pressed(Key.Enter), Event.Pressed(Key.Escape)))
     assertEquals(wrong.supplied, Map("SHOP_PORT" -> Typed("eighty")))
     val bad =
-      ConfigReport(Vector(port.copy(set = true), key), Vector(malformed("port", "SHOP_PORT")))
+      ConfigReport(
+        Vector(port.copy(set = true), key),
+        Vector(malformed("port", Seq("SHOP_PORT"), Seq("SHOP_PORT")))
+      )
     val (again, _) = run(wrong, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
     assertEquals(
       again.prompt,

@@ -71,11 +71,14 @@ is the build: a spinner while a compile runs, labelled with the file that trigge
   with boot's own line for it. The tab shows the number of offenders, or a green tick when there
   are none. `e` asks for each value a variable can fix, one path at a time: it names the path,
   the variable to set, the other one when the file names two, and how many more follow, and it
-  masks what you type for a Redacted. Enter takes the value and asks the next one; Enter on the
-  last restarts the application with them; Esc stops asking and keeps what Enter took. A value
-  typed here reaches every application the console starts after it, its row reads
-  `set (session)` in cyan, and it lasts for this session of the console only: nothing writes it
-  to a file, the shell, or a schema command. The values a variable cannot fix stay the file's,
+  masks what you type for a Redacted. A malformed value is asked of the variables that fed it,
+  which boot's report names: of two fed in turn, `port = ${?SHOP_PORT}` and then
+  `port = ${?PORT}`, only the later one set, since it wins; of a concatenation,
+  `${?PREFIX}${?PORT}`, every set part in turn, since any of them can hold the bad text. Enter
+  takes the value and asks the next one; Enter on the last restarts the application with them;
+  Esc stops asking and keeps what Enter took. A value typed here reaches every application the
+  console starts after it, its row reads `set (session)` in cyan, and it lasts for this session
+  of the console only: nothing writes it to a file, the shell, or a schema command. The values a variable cannot fix stay the file's,
   and `e` does not ask for them, nor for a variable left unset that has a default.
 - **5 log**: everything the application prints or logs, a stack trace included, and the output
   of every schema command, following its tail until you scroll up. Arrows, `j` and `k`, PgUp and

@@ -4,6 +4,7 @@ import com.typesafe.config.Config as Tree
 
 import io.eezo.config.support.ConfigFileLoader
 import io.eezo.core.Redacted
+import io.eezo.core.internal.Json
 
 /** The report the dev console reads, from the one read boot does: the variables the file names and
   * whether each is set, and every offender, from a single read that installs a good value once.
@@ -43,6 +44,28 @@ class ConfigReportSuite extends munit.FunSuite {
     assertEquals(lines(0), "name is missing: add it to application.conf")
     assert(lines(1).startsWith("port "), lines)
     assertEquals(lines(2), "stripe.secretKey is missing: add it to application.conf")
+  }
+
+  private def malformed(report: Option[ConfigReport]): List[(String, List[String], List[String])] =
+    report.toList.flatMap(_.offenders).collect {
+      case ConfigReport.Read(Config.Offender.Malformed(path, _), variables, feeding) =>
+        (path, variables, feeding)
+    }
+
+  test("a malformed concatenation names every set part as feeding the value") {
+    val env    = Map("PREFIX" -> "eighty", "PORT" -> "80", "STRIPE_SECRET_KEY" -> "sk_test")
+    val report = boot(Some("boot-shop-concatenated.conf"), env)
+    assertEquals(malformed(report), List(("port", List("PREFIX", "PORT"), List("PREFIX", "PORT"))))
+    val onlyPort = boot(Some("boot-shop-concatenated.conf"), env - "PREFIX" + ("PORT" -> "eighty"))
+    assertEquals(malformed(onlyPort), List(("port", List("PREFIX", "PORT"), List("PORT"))))
+  }
+
+  test("a malformed fallback names only the variable that won as feeding the value") {
+    val env    = Map("SHOP_PORT" -> "80", "PORT" -> "eighty", "STRIPE_SECRET_KEY" -> "sk_test")
+    val report = boot(Some("boot-shop-fallback.conf"), env)
+    assertEquals(malformed(report), List(("port", List("SHOP_PORT", "PORT"), List("PORT"))))
+    val json = report.toList.flatMap(_.offenders).map(o => Json.compact(o.json)).mkString
+    assert(json.contains("\"feeding\":[\"PORT\"]"), json)
   }
 
   test("an absent or unparsable file is one offender, and nothing is read") {

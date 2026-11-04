@@ -211,12 +211,16 @@ private[sbt] final case class ConfigRow(
 )
 
 /** Why boot refused, one path at a time. `line` is boot's own refusal line for it, the reason the
-  * pane shows; `variables` are the ones the file names for the path, what the console can ask for.
+  * pane shows; `variables` are the ones the file names for the path, what the console can ask for;
+  * `feeding` are the ones among them whose value reached the path, the ones a malformed value is
+  * asked of, since the file alone knows whether they stand in turn or side by side. Empty from an
+  * application on an older eezo, whose marker does not say.
   */
 private[sbt] final case class ConfigOffender(
     kind: ConfigOffender.Kind,
     path: String,
     variables: Vector[String],
+    feeding: Vector[String],
     line: String
 ) {
 
@@ -274,6 +278,7 @@ private[sbt] object ConfigReport {
           ConfigOffender.kind(o("kind").strOr("?")),
           o("path").strOr("?"),
           o("variables").arr.flatMap(_.str),
+          o("feeding").arr.flatMap(_.str),
           o("line").strOr("")
         )
       )
