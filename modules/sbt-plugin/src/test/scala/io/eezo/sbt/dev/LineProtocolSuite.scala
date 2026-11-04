@@ -49,6 +49,98 @@ class LineProtocolSuite extends munit.FunSuite {
     )
   }
 
+  test("a config marker is one event with the variables and the offenders, and never a log line") {
+    val p = new LineProtocol
+    assertEquals(
+      p.stdout(
+        """eezo dev: config {"variables":[{"variable":"SHOP_PORT","path":"port","redacted":false,"need":"required","set":true},{"variable":"STRIPE_SECRET_KEY","path":"stripe.secretKey","redacted":true,"need":"required","set":false}],"offenders":[{"kind":"missing","path":"stripe.secretKey","variables":["STRIPE_SECRET_KEY"],"line":"stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"},{"kind":"malformed","path":"port","variables":["SHOP_PORT"],"feeding":["SHOP_PORT"],"reason":"is not a whole number","line":"port is not a whole number"}]}"""
+      ),
+      Vector(
+        Event.ConfigReported(
+          ConfigReport(
+            Vector(
+              ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = true),
+              ConfigRow(
+                "STRIPE_SECRET_KEY",
+                "stripe.secretKey",
+                redacted = true,
+                "required",
+                set = false
+              )
+            ),
+            Vector(
+              ConfigOffender(
+                ConfigOffender.Missing,
+                "stripe.secretKey",
+                Vector("STRIPE_SECRET_KEY"),
+                Vector.empty,
+                "stripe.secretKey is missing: set STRIPE_SECRET_KEY, which application.conf names for it"
+              ),
+              ConfigOffender(
+                ConfigOffender.Malformed,
+                "port",
+                Vector("SHOP_PORT"),
+                Vector("SHOP_PORT"),
+                "port is not a whole number"
+              )
+            )
+          )
+        )
+      )
+    )
+  }
+
+  test(
+    "a config marker that leaves a field out decodes to the safe reading: masked, never asked, nothing named"
+  ) {
+    val p = new LineProtocol
+    assertEquals(
+      p.stdout(
+        """eezo dev: config {"variables":[{"variable":"STRIPE_SECRET_KEY","path":"stripe.secretKey","need":"required","set":false}],"offenders":[{"kind":"shadowed","path":"stripe.secretKey","variables":["STRIPE_SECRET_KEY"],"line":"stripe.secretKey is shadowed"},{"kind":"missing","path":"port"}]}"""
+      ),
+      Vector(
+        Event.ConfigReported(
+          ConfigReport(
+            Vector(
+              ConfigRow(
+                "STRIPE_SECRET_KEY",
+                "stripe.secretKey",
+                redacted = true,
+                "required",
+                set = false
+              )
+            ),
+            Vector(
+              ConfigOffender(
+                ConfigOffender.Other("shadowed"),
+                "stripe.secretKey",
+                Vector("STRIPE_SECRET_KEY"),
+                Vector.empty,
+                "stripe.secretKey is shadowed"
+              ),
+              ConfigOffender(ConfigOffender.Missing, "port", Vector.empty, Vector.empty, "")
+            )
+          )
+        )
+      )
+    )
+    p.stdout(
+      """eezo dev: config {"variables":[],"offenders":[{"kind":"shadowed","path":"a","variables":["A"],"line":"a"},{"kind":"missing","path":"port"}]}"""
+    ) match {
+      case Vector(Event.ConfigReported(report)) => assertEquals(report.fixable, Vector.empty)
+      case other                                => fail(other.toString)
+    }
+  }
+
+  test("an unreadable config marker lands in the log, as routes and drift do") {
+    val p = new LineProtocol
+    p.stdout("eezo dev: config {not json") match {
+      case Vector(Event.AppLine(text, true)) =>
+        assert(text.contains("[eezo dev] unreadable config marker"), text)
+      case other => fail(other.toString)
+    }
+  }
+
   test("an unreadable marker lands in the log instead of crashing the loop") {
     val p = new LineProtocol
     p.stdout("eezo dev: drift {not json") match {

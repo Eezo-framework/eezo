@@ -23,6 +23,78 @@ class JsonRendererSuite extends munit.FunSuite {
     Some("-- [E006] Not Found Error\n7 |  foo\n  |  ^^^")
   )
 
+  private val report = ConfigReport(
+    Vector(
+      ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = true),
+      ConfigRow("STRIPE_KEY", "stripe.key", redacted = true, "required", set = false)
+    ),
+    Vector(
+      ConfigOffender(
+        ConfigOffender.Missing,
+        "stripe.key",
+        Vector("STRIPE_KEY"),
+        Vector.empty,
+        "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
+      )
+    )
+  )
+
+  test("a config report is one config event with the rows and the offenders, and no value") {
+    val out = render(Event.ConfigReported(report))
+    assertEquals(
+      out,
+      Vector(
+        JObj(
+          Vector(
+            "event"     -> JStr("config"),
+            "variables" -> JArr(
+              Vector(
+                JObj(
+                  Vector(
+                    "variable" -> JStr("SHOP_PORT"),
+                    "path"     -> JStr("port"),
+                    "redacted" -> JBool(false),
+                    "need"     -> JStr("required"),
+                    "set"      -> JBool(true)
+                  )
+                ),
+                JObj(
+                  Vector(
+                    "variable" -> JStr("STRIPE_KEY"),
+                    "path"     -> JStr("stripe.key"),
+                    "redacted" -> JBool(true),
+                    "need"     -> JStr("required"),
+                    "set"      -> JBool(false)
+                  )
+                )
+              )
+            ),
+            "offenders" -> JArr(
+              Vector(
+                JObj(
+                  Vector(
+                    "kind"      -> JStr("missing"),
+                    "path"      -> JStr("stripe.key"),
+                    "variables" -> JArr(Vector(JStr("STRIPE_KEY"))),
+                    "feeding"   -> JArr(Vector.empty),
+                    "line"      -> JStr(
+                      "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  }
+
+  test("the plain front prints nothing for a config report: the refusal lines are the record") {
+    implicit val theme: Ansi.Theme = Ansi.Theme(color = false, unicode = true)
+    assertEquals(PlainRenderer.lines(Event.ConfigReported(report)), Vector.empty[String])
+  }
+
   test("a save is compiling, then built, under one build number; a second save is the next") {
     val out = render(
       Event.Changed(Set("src/main/scala/app/Index.scala")),

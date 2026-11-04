@@ -37,6 +37,7 @@ private[sbt] object Panes {
         case Tab.Errors => errors(m, width)
         case Tab.Routes => routes(m, width)
         case Tab.Schema => schema(m, width)
+        case Tab.Config => config(m, width)
       }
 
   private def log(m: Model, width: Int)(implicit theme: Theme): Vector[String] =
@@ -119,6 +120,53 @@ private[sbt] object Panes {
           (title +: table) ++ (if (warnings.isEmpty) Vector.empty
                                else "" +: warnings.flatMap(w => wrap(w, width)))
         }
+    }
+
+  /** The variables the file names, a row each, in red where boot refused the path, unless a value
+    * typed into this session covers it, which paints it cyan until the next boot proves it; then
+    * every offender no typed value fixes, with boot's own line for it, since the file is where it
+    * is fixed. A row says whether a variable is set and never what it is set to.
+    */
+  private def config(m: Model, width: Int)(implicit theme: Theme): Vector[String] =
+    m.config match {
+      case None => Vector(Dim("no config report yet: it arrives when the application boots"))
+      case Some(report) =>
+        val title =
+          if (report.offenders.nonEmpty)
+            Red(
+              s"${theme.fail} ${report.offenders.size} required value(s) missing; the application did not start"
+            )
+          else if (report.rows.isEmpty) Dim("application.conf names no variable")
+          else Green(s"${theme.ok} every required value is set")
+        val refused  = report.offenders.map(_.path).toSet
+        val narrow   = Layout(m.width, m.height).narrow
+        val variable = report.rows.map(_.variable.length).foldLeft(0)(math.max)
+        val path     = report.rows.map(_.path.length).foldLeft(0)(math.max)
+        val table    = report.rows.map { r =>
+          val console = m.supplied.contains(r.variable)
+          val state   = if (console) "set (session)" else if (r.set) "set" else "unset"
+          val name    = padRight(r.variable, variable)
+          val text    =
+            if (narrow) s"$name  $state"
+            else
+              s"$name  ${padRight(r.path, path)}  ${padRight(r.need, 9)} " +
+                s"${padRight(if (r.redacted) "redacted" else "plain", 8)}  $state"
+          val style =
+            if (console) Cyan else if (refused(r.path)) Red else if (r.set) Green else Plain
+          truncate(style(text), width)
+        }
+        val reasons = report.offenders
+          .filterNot(o => o.kind == ConfigOffender.Missing && o.fixable)
+          .flatMap(o => wrap(s"${theme.fail} ${o.line}", width).map(Red(_)))
+        val advice =
+          if (report.fixable.nonEmpty)
+            Vector(
+              "",
+              Dim("e  type each missing value for this session, then restart"),
+              Dim("   or quit, export the variables, and start again")
+            )
+          else Vector.empty
+        (title +: "" +: table) ++ (if (reasons.isEmpty) Vector.empty else "" +: reasons) ++ advice
     }
 
   private def schema(m: Model, width: Int)(implicit theme: Theme): Vector[String] = {
@@ -206,13 +254,17 @@ private[sbt] object Panes {
           ("S", "status: diff the model against the database now")
         )
       else Vector.empty
+    val config =
+      if (m.config.isDefined)
+        Vector(("e", "type the values the config pane asks for, then restart"))
+      else Vector.empty
     val keys = Vector(
-      ("1-4", "the panes: errors, routes, schema, log"),
+      (s"1-${Tab.all.size}", s"the panes: ${Tab.all.map(_.name).mkString(", ")}"),
       ("tab", "next pane"),
       ("j k", "scroll (also arrows, PgUp, PgDn, g, G)"),
       ("r", "rebuild and restart now"),
       ("c", "clear the log")
-    ) ++ db ++ Vector(("?", "this help"), ("q", "quit (also Ctrl-C)"))
+    ) ++ config ++ db ++ Vector(("?", "this help"), ("q", "quit (also Ctrl-C)"))
     val w = keys.map(_._1.length).max
     Bold("keys") +: keys.map { case (k, what) => s"  ${Bold(padRight(k, w))}  $what" } :+ "" :+ Dim(
       "any key closes this"
@@ -432,6 +484,14 @@ private[sbt] object View {
             case SchemaState.Known(_) => " " + Green(theme.ok)
             case _                    => ""
           }
+        // From the last report alone, so the tab is never green after a refusal, whichever of the
+        // marker and the exit arrived first.
+        case Tab.Config =>
+          m.config match {
+            case Some(r) if r.offenders.nonEmpty => " " + Red(s"${theme.fail}${r.offenders.size}")
+            case Some(_)                         => " " + Green(theme.ok)
+            case None                            => ""
+          }
         case Tab.Log => ""
       }
       val name  = if (layout.narrow) t.short else t.name
@@ -457,8 +517,10 @@ private[sbt] object View {
       if (m.hasDatabase && m.busy.isEmpty)
         Vector(key("s", "sync"), key("f", "freeze"), key("m", "migrate"))
       else Vector.empty
-    val always = Vector(key("r", "restart")) ++ db ++ Vector(key("?", "help"), key("q", "quit"))
-    val keys   = if (layout.narrow) always.take(1) ++ always.takeRight(2) else always
+    val config = if (m.asks.nonEmpty) Vector(key("e", "set")) else Vector.empty
+    val always =
+      Vector(key("r", "restart")) ++ config ++ db ++ Vector(key("?", "help"), key("q", "quit"))
+    val keys = if (layout.narrow) always.take(1) ++ always.takeRight(2) else always
     val busy = m.busy.map(a => Cyan(s"${theme.spinner(m.spinner)} ${a.label}") + "  ").getOrElse("")
     val all  = Panes.lines(m, m.tab, Panes.width(m)).size
     val offset = Update.effectiveOffset(m)
@@ -498,6 +560,19 @@ private[sbt] object View {
           Yellow(s" ${theme.warn} $n destructive change(s) in $name: ") + Bold(
             "k"
           ) + " keep the data (skip them)  " + Bold("d") + " drop  " + Bold("Esc") + " cancels"
+      case Prompt.Supply(asks, typed) =>
+        val ask   = asks.head
+        val shown =
+          Bold(if (ask.redacted) theme.mask * typed.length else typed.reveal) + Reverse(" ")
+        val follow = asks.size - 1 match {
+          case 0 => "the last one"
+          case 1 => "1 more follows"
+          case n => s"$n more follow"
+        }
+        if (narrow) s" ${Bold(ask.variable)}: " + shown
+        else
+          s" ${ask.path}: ${Bold(ask.variable)}" + ask.alternative.fold("")(a => Dim(s" (or $a)")) +
+            " " + shown + Dim(s"   $follow; Enter sets it, Esc cancels")
       case Prompt.ConfirmMigrate(n) =>
         if (narrow) s" $n pending. " + Bold("Enter") + " apply " + Bold("Esc") + " cancel"
         else

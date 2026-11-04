@@ -84,7 +84,8 @@ private[sbt] object DevProcess {
   /** The dev console's fork: the previous application killed, the next one started with its stdout
     * and stderr piped to the caller, each its own stream so a marker line on stdout can never be
     * split by a log record on stderr, its stdin closed, since the console owns the terminal, and
-    * the marker lines turned on. The caller drains both pipes.
+    * the marker lines turned on. The caller drains both pipes. `supplied` are the values the
+    * console's config pane took, which the caller hands to every fork after it took them.
     */
   def launch(
       javaHome: Option[File],
@@ -93,7 +94,8 @@ private[sbt] object DevProcess {
       mainClass: String,
       args: Seq[String],
       workingDirectory: File,
-      piped: Boolean
+      piped: Boolean,
+      supplied: Map[String, String] = Map.empty
   ): Process = {
     hook
     stop(quiet = true)
@@ -109,16 +111,33 @@ private[sbt] object DevProcess {
       // so that a reader of sbt's output reads the app's with it.
       builder.inheritIO()
     // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
-    val environment = builder.environment()
-    secretFor(Option(environment.get(SecretVar)))
-      .foreach(secret => environment.put(SecretVar, secret): Unit)
-    if (piped) environment.put(MarkersVar, "1"): Unit
+    this.environment(builder.environment(), piped, supplied)
 
     val process = builder.start()
     if (piped) process.getOutputStream.close()
     running = Some(process)
     process
   }
+
+  /** The variables a fork gets on top of sbt's own, `environment`. A supplied value goes over an
+    * inherited one, since retyping a malformed value is what it is for; one under the framework's
+    * prefix never does, so the secret and the markers stay the loop's.
+    */
+  private[sbt] def environment(
+      environment: java.util.Map[String, String],
+      piped: Boolean,
+      supplied: Map[String, String]
+  ): Unit = {
+    supplied.foreach { case (variable, value) =>
+      if (!variable.startsWith(FrameworkPrefix)) environment.put(variable, value): Unit
+    }
+    secretFor(Option(environment.get(SecretVar)))
+      .foreach(secret => environment.put(SecretVar, secret): Unit)
+    if (piped) environment.put(MarkersVar, "1"): Unit
+  }
+
+  /** `Config`'s reserved prefix, spelled again here for the reason `SecretVar` is. */
+  private val FrameworkPrefix: String = "EEZO_"
 
   /** `java <options> -cp <classpath> <main> <args>`, the one spelling every fork and every one-off
     * command of the console uses.

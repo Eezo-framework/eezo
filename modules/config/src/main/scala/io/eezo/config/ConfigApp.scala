@@ -26,16 +26,29 @@ trait ConfigApp extends Dispatch {
 
   /** Reads and installs the Config before `body`, and on a refusal prints each offender and runs
     * nothing, so that no port is bound and no pool is opened for an application that cannot start.
-    * The layers call it around everything that starts the application, `program` and `dev`, and
-    * around nothing else: no other command reads a value.
+    * `program` goes through it, and the http layer's `dev` arm goes through [[reporting]] instead,
+    * so that it gets the same one read and its report as well. No other command reads a value.
     */
   protected final def configured(flags: List[String])(body: => Unit): Int =
-    ConfigApp.refusal(environment) match {
+    reporting(flags)(_ => ())(body)
+
+  /** [[configured]], handing `told` the report of the read before `body` runs or the refusal is
+    * printed: what the http layer's `dev` arm prints for the dev console. The same one read, so the
+    * console sees what boot decided. A build that names no class has no report, and `told` never
+    * runs.
+    */
+  private[eezo] final def reporting(
+      flags: List[String]
+  )(told: ConfigReport => Unit)(body: => Unit): Int = {
+    val report = ConfigApp.boot(environment)
+    report.foreach(told)
+    report.fold(Nil)(_.lines) match {
       case Nil =>
         body
         0
       case lines => refuse(flags, lines)
     }
+  }
 
   /** One `fail` per offender, so each line carries the `[eezo] ` prefix, or under `--json` is an
     * object of its own.
@@ -73,20 +86,22 @@ trait ConfigApp extends Dispatch {
 
 object ConfigApp {
 
-  /** What boot prints in place of starting: nothing when the build names no class or the read
-    * succeeded, which installed the value.
+  /** Boot's one read: the file read against `env`, the value installed when it is good, and the
+    * report of both, whose lines are what boot prints in place of starting. `None` when the build
+    * names no class, which reads nothing.
     */
-  private[config] def refusal(env: Map[String, String]): List[String] =
-    Config.Root.generated.fold(Nil) { root =>
+  private[eezo] def boot(env: Map[String, String]): Option[ConfigReport] =
+    Config.Root.generated.map { root =>
       application match {
-        case Left(line)  => List(line)
-        case Right(file) => root.boot(file, env).fold(Nil)(_.lines.toList)
+        case Left(file)  => ConfigReport(Nil, List(file))
+        case Right(file) =>
+          ConfigReport.of(root.config.names(file), Config.Written(file), env, root.boot(file, env))
       }
     }
 
   private def variables: Either[List[String], Seq[Config.Name]] =
     Config.Root.generated.fold(Right(Nil)) { root =>
-      application.left.map(List(_)).flatMap { file =>
+      application.left.map(file => List(file.line)).flatMap { file =>
         root.config.check(file) match {
           case Nil       => Right(root.config.names(file))
           case offenders => Left(Config.Refused(offenders).lines.toList)
@@ -102,12 +117,7 @@ object ConfigApp {
 
   private def redaction(name: Config.Name): String = if (name.redacted) "redacted" else "plain"
 
-  private def need(name: Config.Name): String =
-    name.need match {
-      case Config.Need.Required  => "required"
-      case Config.Need.Defaulted => "defaulted"
-      case Config.Need.Optional  => "optional"
-    }
+  private def need(name: Config.Name): String = ConfigReport.need(name.need)
 
   private def json(names: Seq[Config.Name]): String =
     Json.render(
@@ -137,15 +147,21 @@ object ConfigApp {
     * would list a file boot does not read. An absent file is a refusal and not an empty one, or a
     * class whose every field has a default would boot on nothing.
     */
-  private def application: Either[String, Tree] =
+  private def application: Either[ConfigReport.File, Tree] =
     Option(Config.loader.getResource("application.conf")) match {
       case None =>
         Left(
-          "application.conf is missing: the build names a Config class with eezoConfigClass, " +
-            "and boot reads it from src/main/resources/application.conf"
+          ConfigReport.File(
+            ConfigReport.File.Kind.Absent,
+            "application.conf is missing: the build names a Config class with eezoConfigClass, " +
+              "and boot reads it from src/main/resources/application.conf"
+          )
         )
       case Some(url) =>
         try Right(ConfigFactory.parseURL(url, ConfigParseOptions.defaults().setAllowMissing(false)))
-        catch { case e: ConfigException => Left(Config.unparsable(e)) }
+        catch {
+          case e: ConfigException =>
+            Left(ConfigReport.File(ConfigReport.File.Kind.Unparsable, Config.unparsable(e)))
+        }
     }
 }

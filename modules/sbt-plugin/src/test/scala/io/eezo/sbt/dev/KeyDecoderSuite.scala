@@ -16,6 +16,27 @@ class KeyDecoderSuite extends munit.FunSuite {
     assertEquals(decode(3), Vector(Key.CtrlC))
   }
 
+  test("a multibyte UTF-8 character is one key, not one per byte") {
+    assertEquals(
+      decode('c', 'a', 'f', 0xc3, 0xa9),
+      Vector(Key.Char('c'), Key.Char('a'), Key.Char('f'), Key.Char('\u00e9'))
+    )
+    assertEquals(decode(0xe2, 0x82, 0xac), Vector(Key.Char('\u20ac')))
+    // U+1F600 is a surrogate pair in UTF-16: two keys, high then low.
+    assertEquals(
+      decode(0xf0, 0x9f, 0x98, 0x80),
+      Vector(Key.Char('\ud83d'), Key.Char('\ude00'))
+    )
+  }
+
+  test("a stray continuation byte or a broken sequence is dropped, the next key survives") {
+    assertEquals(decode(0xa9, 'x'), Vector(Key.Char('x')))
+    assertEquals(decode(0xc3, 'x'), Vector(Key.Char('x')))
+    assertEquals(decode(0xe2, 0x82, 'x'), Vector(Key.Char('x')))
+    assertEquals(decode(0xc0, 0x80, 'x'), Vector(Key.Char('x')))
+    assertEquals(decode(0xc3, 13), Vector(Key.Enter))
+  }
+
   test("arrows, paging and home/end arrive as escape sequences in both spellings") {
     assertEquals(decode(27, '[', 'A'), Vector(Key.Up))
     assertEquals(decode(27, 'O', 'B'), Vector(Key.Down))

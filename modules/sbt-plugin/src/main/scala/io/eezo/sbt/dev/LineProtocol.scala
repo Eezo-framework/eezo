@@ -5,11 +5,11 @@ import java.util.logging.Level
 /** What the application's two output streams mean to the console, one line at a time.
   *
   * This is the dev loop's contract with the application, moved out of the bash console where
-  * `dev_console` matched the same lines. Three lines on stdout are markers: `serving on <url>`,
-  * which the server prints after its bind, and the two the application prints only when
-  * `EEZO_DEV_MARKERS` is set, `eezo dev: routes <json>` and `eezo dev: drift <json>`, each one line
-  * so that one line is one event. Everything else is the application's own output and lands in the
-  * log as it is.
+  * `dev_console` matched the same lines. Four lines on stdout are markers: `serving on <url>`,
+  * which the server prints after its bind, and the three the application prints only when
+  * `EEZO_DEV_MARKERS` is set, `eezo dev: routes <json>`, `eezo dev: drift <json>` and
+  * `eezo dev: config <json>`, each one line so that one line is one event. Everything else is the
+  * application's own output and lands in the log as it is.
   *
   * On stderr the `java.util.logging` records Jetty and HikariCP write at INFO on every boot are
   * dropped, as the bash console dropped them: a record is two lines, a header naming the logger
@@ -32,6 +32,10 @@ private[sbt] final class LineProtocol {
     else if (line.startsWith(DriftMarker))
       decode(line.substring(DriftMarker.length), "drift")(j =>
         Event.DriftReported(Drift.fromJson(j))
+      )
+    else if (line.startsWith(ConfigMarker))
+      decode(line.substring(ConfigMarker.length), "config")(j =>
+        Event.ConfigReported(ConfigReport.fromJson(j))
       )
     else if (line.startsWith(ServingMarker))
       Vector(
@@ -77,6 +81,7 @@ private[sbt] object LineProtocol {
 
   val RoutesMarker: String  = "eezo dev: routes "
   val DriftMarker: String   = "eezo dev: drift "
+  val ConfigMarker: String  = "eezo dev: config "
   val ServingMarker: String = "serving on "
 
   /** A `java.util.logging` record header: `<date> <time> <logger class> <method>`, no parentheses,
