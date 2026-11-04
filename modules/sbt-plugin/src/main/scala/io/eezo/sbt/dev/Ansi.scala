@@ -69,6 +69,9 @@ private[sbt] object Ansi {
     def up: String       = if (unicode) "↑" else "^"
     def down: String     = if (unicode) "↓" else "v"
 
+    /** One character typed for a Redacted variable, shown in its place. */
+    def mask: String = if (unicode) "•" else "*"
+
     /** The braille wheel the bash console span, with an ASCII wheel beside it. */
     def spinner(frame: Int): String =
       if (unicode) Spinner(frame % Spinner.length) else AsciiSpinner(frame % AsciiSpinner.length)

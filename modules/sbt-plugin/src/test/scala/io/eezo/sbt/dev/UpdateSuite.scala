@@ -30,6 +30,197 @@ class UpdateSuite extends munit.FunSuite {
   private val blocking =
     Drift(Vector(Change("- todo.notes", destructive = true, risky = false, "")), blocking = true)
 
+  private val port = ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = false)
+  private val key  = ConfigRow("STRIPE_KEY", "stripe.key", redacted = true, "required", set = false)
+  private val other =
+    ConfigRow("STRIPE_SECRET", "stripe.key", redacted = true, "required", set = false)
+
+  private def missing(path: String, variables: String*): ConfigOffender =
+    ConfigOffender(ConfigOffender.Missing, path, variables.toVector, s"$path is missing")
+
+  private val clean   = ConfigReport(Vector(port, key), Vector.empty)
+  private val refused = ConfigReport(
+    Vector(port, key, other),
+    Vector(missing("port", "SHOP_PORT"), missing("stripe.key", "STRIPE_KEY", "STRIPE_SECRET"))
+  )
+
+  test("a config report with an offender opens the config pane; a clean one does not") {
+    val (opened, effects) = run(start, Event.ConfigReported(refused))
+    assertEquals(opened.tab, Tab.Config)
+    assertEquals(opened.config, Some(refused))
+    assertEquals(effects, Vector.empty[Effect])
+    val (stayed, _) = run(start, Event.ConfigReported(clean))
+    assertEquals(stayed.tab, Tab.Log)
+    assertEquals(stayed.config, Some(clean))
+  }
+
+  test("a refusal's report and its exit give one model in either order, from two threads") {
+    val (starting, _) = run(start, Event.AppStarted("Main"), Event.Pressed(Key.Char('2')))
+    val (first, _)    = run(starting, Event.ConfigReported(refused), Event.AppExited(1))
+    val (second, _)   = run(starting, Event.AppExited(1), Event.ConfigReported(refused))
+    assertEquals(first, second)
+    assertEquals(first.tab, Tab.Config)
+    assertEquals(first.app, AppState.Exited(1))
+  }
+
+  test("e walks the paths a typed value fixes: the path, the variable, the other one, the rest") {
+    val (reported, _) = run(start, Event.ConfigReported(refused))
+    val (asked, none) = run(reported, Event.Pressed(Key.Char('e')))
+    assertEquals(none, Vector.empty[Effect])
+    assertEquals(
+      asked.prompt,
+      Some(
+        Prompt.Supply(
+          Vector(
+            Ask("port", "SHOP_PORT", None, redacted = false),
+            Ask("stripe.key", "STRIPE_KEY", Some("STRIPE_SECRET"), redacted = true)
+          ),
+          Typed.empty
+        )
+      )
+    )
+  }
+
+  private def typing(text: String): Seq[Event] = text.map(c => Event.Pressed(Key.Char(c)))
+
+  test("Enter holds what was typed and asks the next path; Enter on the last one restarts") {
+    val (asked, _)   = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (next, none) =
+      runAll(asked, typing("80800") ++ Seq(Event.Pressed(Key.Backspace), Event.Pressed(Key.Enter)))
+    assertEquals(none, Vector.empty[Effect])
+    assertEquals(next.supplied, Map("SHOP_PORT" -> Typed("8080")))
+    assertEquals(
+      next.prompt.collect { case p: Prompt.Supply => p.asks.map(_.path) },
+      Some(Vector("stripe.key"))
+    )
+    val (done, restart) = runAll(next, typing("sk_test") :+ Event.Pressed(Key.Enter))
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(done.prompt, None)
+    assertEquals(done.supplied, Map("SHOP_PORT" -> Typed("8080"), "STRIPE_KEY" -> Typed("sk_test")))
+    assert(
+      done.log.exists(_.text == "the values typed here last for this console only; restarting"),
+      done.log.toString
+    )
+  }
+
+  test("what the prompt took reaches the environment of the next fork, over an inherited value") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (done, _)  = runAll(
+      asked,
+      typing("8080") ++ Seq(Event.Pressed(Key.Enter)) ++ typing("sk_test") :+ Event.Pressed(
+        Key.Enter
+      )
+    )
+    val env = new java.util.HashMap[String, String]
+    env.put("SHOP_PORT", "eighty")
+    io.eezo.sbt.DevProcess.environment(env, piped = true, Loop.supplied(done))
+    assertEquals(env.get("SHOP_PORT"), "8080")
+    assertEquals(env.get("STRIPE_KEY"), "sk_test")
+  }
+
+  test("Esc closes the prompt, keeps what Enter held, and restarts nothing") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (held, _)  = runAll(asked, typing("8080") ++ Seq(Event.Pressed(Key.Enter)) ++ typing("sk"))
+    val (closed, effects) = run(held, Event.Pressed(Key.Escape))
+    assertEquals(effects, Vector.empty[Effect])
+    assertEquals(closed.prompt, None)
+    assertEquals(closed.supplied, Map("SHOP_PORT" -> Typed("8080")))
+  }
+
+  private def malformed(path: String, variables: String*): ConfigOffender =
+    ConfigOffender(ConfigOffender.Malformed, path, variables.toVector, s"$path is not a number")
+
+  test("a malformed value from the environment is asked of the variable that supplied it") {
+    val first  = port.copy(set = true)
+    val second = ConfigRow("PORT", "port", redacted = false, "required", set = true)
+    val bad    = ConfigReport(Vector(first, second), Vector(malformed("port", "SHOP_PORT", "PORT")))
+    val (asked, _) = run(start, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      asked.prompt,
+      Some(
+        Prompt.Supply(Vector(Ask("port", "PORT", Some("SHOP_PORT"), redacted = false)), Typed.empty)
+      )
+    )
+    val onlyFirst   = bad.copy(rows = Vector(first, second.copy(set = false)))
+    val (first2, _) = run(start, Event.ConfigReported(onlyFirst), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      first2.prompt.collect { case p: Prompt.Supply => p.asks.map(_.variable) },
+      Some(Vector("SHOP_PORT"))
+    )
+    val (retyped, restart) = runAll(asked, typing("8080") :+ Event.Pressed(Key.Enter))
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(retyped.supplied, Map("PORT" -> Typed("8080")))
+  }
+
+  test("a malformed value the console supplied is asked again, and the retyped one replaces it") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (wrong, _) =
+      runAll(asked, typing("eighty") ++ Seq(Event.Pressed(Key.Enter), Event.Pressed(Key.Escape)))
+    assertEquals(wrong.supplied, Map("SHOP_PORT" -> Typed("eighty")))
+    val bad =
+      ConfigReport(Vector(port.copy(set = true), key), Vector(malformed("port", "SHOP_PORT")))
+    val (again, _) = run(wrong, Event.ConfigReported(bad), Event.Pressed(Key.Char('e')))
+    assertEquals(
+      again.prompt,
+      Some(Prompt.Supply(Vector(Ask("port", "SHOP_PORT", None, redacted = false)), Typed.empty))
+    )
+    val (fixed, restart) = runAll(again, typing("8080") :+ Event.Pressed(Key.Enter))
+    assertEquals(restart, Vector[Effect](Effect.Restart))
+    assertEquals(fixed.supplied, Map("SHOP_PORT" -> Typed("8080")))
+  }
+
+  test("no toString prints a typed value: not the holder's, the prompt's or the model's") {
+    val (asked, _) = run(start, Event.ConfigReported(refused), Event.Pressed(Key.Char('e')))
+    val (m, _)     =
+      runAll(asked, typing("sentinel1") ++ Seq(Event.Pressed(Key.Enter)) ++ typing("sentinel2"))
+    assertEquals(m.supplied.keySet, Set("SHOP_PORT"))
+    val prompt = m.prompt.getOrElse(fail("no prompt"))
+    List(Typed("sentinel0").toString, prompt.toString, m.toString).foreach { text =>
+      assert(!text.contains("sentinel"), text)
+    }
+  }
+
+  test("no config report, no config pane and no e") {
+    assert(!start.tabs.contains(Tab.Config), start.tabs.toString)
+    val (pressed, effects) = run(start, Event.Pressed(Key.Char('e')), Event.Pressed(Key.Char('4')))
+    assertEquals(effects, Vector.empty[Effect])
+    assertEquals(pressed.prompt, None)
+    assertEquals(pressed.tab, Tab.Log)
+    val (clean, _) = run(start, Event.ConfigReported(ConfigReport(Vector(port), Vector.empty)))
+    assertEquals(run(clean, Event.Pressed(Key.Char('e')))._1.prompt, None)
+  }
+
+  test("a child that serves without a config report retires the pane, as the schema pane goes") {
+    val (opened, _) = run(start, Event.ConfigReported(refused))
+    assertEquals(opened.tab, Tab.Config)
+    val (served, _) =
+      run(opened, Event.AppStarted("Main"), Event.Serving("http://localhost:8080"))
+    assertEquals(served.config, None)
+    assertEquals(served.tab, Tab.Log)
+    assert(!served.tabs.contains(Tab.Config), served.tabs.toString)
+
+    val (kept, _) = run(
+      opened,
+      Event.AppStarted("Main"),
+      Event.ConfigReported(clean),
+      Event.Serving("http://localhost:8080")
+    )
+    assertEquals(kept.config, Some(clean))
+    assertEquals(kept.tab, Tab.Config)
+  }
+
+  test("the number keys reach every pane, the config pane fourth and the log last") {
+    val (reported, _) = run(start, Event.ConfigReported(clean))
+    assertEquals(reported.tabs, Vector(Tab.Errors, Tab.Routes, Tab.Schema, Tab.Config, Tab.Log))
+    assertEquals(
+      "12345".map(c => run(reported, Event.Pressed(Key.Char(c)))._1.tab).toVector,
+      Vector[Tab](Tab.Errors, Tab.Routes, Tab.Schema, Tab.Config, Tab.Log)
+    )
+    val (cycled, _) = run(reported, Event.Pressed(Key.Char('3')), Event.Pressed(Key.Tab))
+    assertEquals(cycled.tab, Tab.Config)
+    assertEquals(run(reported, Event.Pressed(Key.Char('6')))._1.tab, Tab.Log)
+  }
+
   test("a change starts a build; one during a build is remembered and runs after it") {
     val (compiling, effects) = run(start, Event.Changed(Set("src/main/scala/app/Index.scala")))
     assertEquals(effects, Vector(Effect.Build))

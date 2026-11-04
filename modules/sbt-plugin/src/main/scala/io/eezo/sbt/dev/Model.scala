@@ -39,22 +39,74 @@ private[sbt] object SchemaState {
   final case class Known(drift: Drift) extends SchemaState
 }
 
+private[sbt] sealed trait ConfigState
+
+private[sbt] object ConfigState {
+
+  /** No report: no child has booted, or the last one served without printing one. */
+  case object Unknown extends ConfigState
+
+  /** From an earlier child, kept on screen while the new one starts: the pane goes if the new child
+    * serves without a report of its own, since its build may no longer name a Config.
+    */
+  final case class Stale(report: ConfigReport) extends ConfigState
+
+  /** Printed by the running child. */
+  final case class Fresh(report: ConfigReport) extends ConfigState
+}
+
 private[sbt] sealed abstract class Tab(val number: Int, val name: String, val short: String)
 
 private[sbt] object Tab {
   case object Errors extends Tab(1, "errors", "err")
   case object Routes extends Tab(2, "routes", "rt")
   case object Schema extends Tab(3, "schema", "db")
+  case object Config extends Tab(4, "config", "cfg")
 
-  /** Last, since it is the one pane that is never short: the three before it are the answers, the
+  /** Last, since it is the one pane that is never short: the panes before it are the answers, the
     * log is where the output went.
     */
-  case object Log extends Tab(4, "log", "log")
+  case object Log extends Tab(5, "log", "log")
 
-  val all: Vector[Tab] = Vector(Errors, Routes, Schema, Log)
+  val all: Vector[Tab] = Vector(Errors, Routes, Schema, Config, Log)
 
   def numbered(n: Int): Option[Tab] = all.find(_.number == n)
 }
+
+/** What the developer types into the console. Not a case class, so that no `toString`, the model's,
+  * a prompt's or a suite's failure message, can print it: only [[reveal]] hands it out, to the view
+  * for a plain variable and to the child's environment.
+  */
+private[sbt] final class Typed private (private val text: String) {
+  def +(c: Char): Typed         = new Typed(text + c)
+  def dropLast: Typed           = new Typed(text.dropRight(1))
+  def isEmpty: Boolean          = text.isEmpty
+  def length: Int               = text.length
+  def reveal: String            = text
+  override def toString: String = "Typed(hidden)"
+
+  override def equals(other: Any): Boolean = other match {
+    case t: Typed => t.text == text
+    case _        => false
+  }
+
+  override def hashCode: Int = text.hashCode
+}
+
+private[sbt] object Typed {
+  val empty: Typed               = new Typed("")
+  def apply(text: String): Typed = new Typed(text)
+}
+
+/** One path the config pane asks a value for: the variable to set, the other one the file names for
+  * the path when there are two, and whether what is typed is masked.
+  */
+private[sbt] final case class Ask(
+    path: String,
+    variable: String,
+    alternative: Option[String],
+    redacted: Boolean
+)
 
 /** A question in the footer. Data, not a callback, so a suite can look at it. */
 private[sbt] sealed trait Prompt
@@ -70,6 +122,9 @@ private[sbt] object Prompt {
   final case class FreezePolicy(name: String, destructive: Int) extends Prompt
 
   final case class ConfirmMigrate(pending: Int) extends Prompt
+
+  /** A value for the first of `asks`, typed so far into `typed`; the rest follow it. */
+  final case class Supply(asks: Vector[Ask], typed: Typed) extends Prompt
 }
 
 private[sbt] final case class LogLine(text: String, kind: LogLine.Kind)
@@ -95,6 +150,8 @@ private[sbt] final case class Model(
     log: Vector[LogLine],
     routes: Option[RouteListing],
     schema: SchemaState,
+    configState: ConfigState,
+    supplied: Map[String, Typed],
     outcome: Option[Outcome],
     busy: Option[SchemaCommand],
     tab: Tab,
@@ -124,8 +181,43 @@ private[sbt] final case class Model(
 
   def hasDatabase: Boolean = schema != SchemaState.NoDatabase
 
-  /** The panes this application has: the schema pane goes with the database layer. */
-  def tabs: Vector[Tab] = if (hasDatabase) Tab.all else Tab.all.filterNot(_ == Tab.Schema)
+  def config: Option[ConfigReport] = configState match {
+    case ConfigState.Unknown       => None
+    case ConfigState.Stale(report) => Some(report)
+    case ConfigState.Fresh(report) => Some(report)
+  }
+
+  /** The panes this application has: the schema pane goes with the database layer, and the config
+    * pane comes with a config report, which only an application whose build names a Config prints.
+    */
+  def tabs: Vector[Tab] =
+    Tab.all.filter {
+      case Tab.Schema => hasDatabase
+      case Tab.Config => config.isDefined
+      case _          => true
+    }
+
+  /** The paths `e` asks a value for, from the last report, every one of them each time: a value
+    * typed before is asked again, since the report still names the path. A malformed value is asked
+    * of the variable that supplied it, the last one named that is set, because HOCON lets a later
+    * substitution win and a value typed for an earlier one would change nothing.
+    */
+  def asks: Vector[Ask] =
+    config.toVector.flatMap { report =>
+      def set(variable: String): Boolean = report.rows.exists(r => r.variable == variable && r.set)
+      report.fixable.map { o =>
+        val variable =
+          if (o.kind == ConfigOffender.Malformed) o.variables.filter(set).lastOption
+          else None
+        val asked = variable.getOrElse(o.variables.head)
+        // Masked unless the report says the variable is plain.
+        val redacted = report.rows
+          .find(r => r.path == o.path && r.variable == asked)
+          .orElse(report.rows.find(_.path == o.path))
+          .forall(_.redacted)
+        Ask(o.path, asked, o.variables.find(_ != asked), redacted)
+      }
+    }
 
   def drift: Option[Drift] = schema match {
     case SchemaState.Known(d) => Some(d)
@@ -155,6 +247,8 @@ private[sbt] object Model {
       log = Vector.empty,
       routes = None,
       schema = SchemaState.Unknown,
+      configState = ConfigState.Unknown,
+      supplied = Map.empty,
       outcome = None,
       busy = None,
       tab = Tab.Log,
@@ -198,7 +292,16 @@ private[sbt] object Update {
       queuedBuild(m.copy(build = BuildState.Idle).note(message, LogLine.Fail))
 
     case Event.AppStarted(mainClass) =>
-      (m.copy(app = AppState.Starting(mainClass)).note(s"started $mainClass"), none)
+      (
+        m.copy(
+          app = AppState.Starting(mainClass),
+          configState = m.configState match {
+            case ConfigState.Fresh(report) => ConfigState.Stale(report)
+            case other                     => other
+          }
+        ).note(s"started $mainClass"),
+        none
+      )
 
     case Event.AppStopped => (m.copy(app = AppState.Stopped), none)
 
@@ -215,12 +318,29 @@ private[sbt] object Update {
     case Event.Serving(url) =>
       // An application with a database layer reports its drift before it binds, so one that serves
       // without a word has none: the schema pane goes, and so do its keys.
+      // So does a build that names no Config: its report goes with the child that printed it, and
+      // one that serves without a word has none.
       val schema = if (m.schema == SchemaState.Unknown) SchemaState.NoDatabase else m.schema
-      val tab    = if (schema == SchemaState.NoDatabase && m.tab == Tab.Schema) Tab.Log else m.tab
-      (m.copy(app = AppState.Running(Some(url)), schema = schema, tab = tab), none)
+      val config = m.configState match {
+        case fresh: ConfigState.Fresh => fresh
+        case _                        => ConfigState.Unknown
+      }
+      val tab = m.tab match {
+        case Tab.Schema if schema == SchemaState.NoDatabase => Tab.Log
+        case Tab.Config if config == ConfigState.Unknown    => Tab.Log
+        case other                                          => other
+      }
+      (
+        m.copy(app = AppState.Running(Some(url)), schema = schema, configState = config, tab = tab),
+        none
+      )
 
     case Event.RoutesReported(listing) =>
       (clampAll(m.copy(routes = Some(listing))), none)
+
+    case Event.ConfigReported(report) =>
+      val known = m.copy(configState = ConfigState.Fresh(report))
+      (clampAll(if (report.offenders.nonEmpty) known.copy(tab = Tab.Config) else known), none)
 
     case Event.DriftReported(drift) =>
       val known = m.copy(schema = SchemaState.Known(drift))
@@ -345,14 +465,16 @@ private[sbt] object Update {
     }
 
   private def plain(m: Model, key: Key): (Model, Vector[Effect]) = key match {
-    case Key.Char('q') | Key.CtrlC | Key.CtrlD => (m, Vector(Effect.Quit))
-    case Key.Char('?')                         => (m.copy(help = true), none)
-    case Key.Char(c) if c >= '1' && c <= '4'   =>
-      (m.copy(tab = m.tabs.find(_.number == c - '0').getOrElse(m.tab)), none)
+    case Key.Char('q') | Key.CtrlC | Key.CtrlD          => (m, Vector(Effect.Quit))
+    case Key.Char('?')                                  => (m.copy(help = true), none)
+    case Key.Char(c) if Tab.numbered(c - '0').isDefined =>
+      (m.copy(tab = Tab.numbered(c - '0').filter(m.tabs.contains).getOrElse(m.tab)), none)
     case Key.Tab     => (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + 1) % m.tabs.size)), none)
     case Key.BackTab =>
       (m.copy(tab = m.tabs((m.tabs.indexOf(m.tab) + m.tabs.size - 1) % m.tabs.size)), none)
-    case Key.Char('r') => startBuild(m, Set.empty)
+    case Key.Char('r')                    => startBuild(m, Set.empty)
+    case Key.Char('e') if m.asks.nonEmpty =>
+      (m.copy(prompt = Some(Prompt.Supply(m.asks, Typed.empty))), none)
     case Key.Char('c') =>
       (m.copy(log = Vector.empty, offsets = m.offsets.updated(Tab.Log, 0), follow = true), none)
     case Key.Char('s') if m.hasDatabase && m.busy.isEmpty =>
@@ -397,6 +519,23 @@ private[sbt] object Update {
                 Vector(Effect.Run(SchemaCommand.Freeze(name, dropAll = false)))
               )
           }
+      case (Prompt.Supply(ask +: rest, typed), Key.Enter) =>
+        if (typed.isEmpty) (m, none)
+        else {
+          val held = m.copy(supplied = m.supplied.updated(ask.variable, typed))
+          if (rest.isEmpty)
+            (
+              held
+                .copy(prompt = None)
+                .note("the values typed here last for this console only; restarting"),
+              Vector(Effect.Restart)
+            )
+          else (held.copy(prompt = Some(Prompt.Supply(rest, Typed.empty))), none)
+        }
+      case (Prompt.Supply(asks, typed), Key.Backspace) =>
+        (m.copy(prompt = Some(Prompt.Supply(asks, typed.dropLast))), none)
+      case (Prompt.Supply(asks, typed), Key.Char(c)) =>
+        (m.copy(prompt = Some(Prompt.Supply(asks, typed + c))), none)
       case (Prompt.FreezeName(buffer), Key.Backspace) =>
         (m.copy(prompt = Some(Prompt.FreezeName(buffer.dropRight(1)))), none)
       case (Prompt.FreezeName(buffer), Key.Char(c)) =>

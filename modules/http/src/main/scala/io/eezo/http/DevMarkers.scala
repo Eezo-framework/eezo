@@ -5,13 +5,15 @@ import io.eezo.core.internal.Json
 /** The dev loop's marker lines: what the application tells the dev console at boot, one line each,
   * on stdout.
   *
-  * The console is the sbt plugin, reading the forked application's output. It wants two things the
-  * boot already prints for a human, the route table and the drift, as values rather than prose:
-  * `eezo dev: routes <json>` and `eezo dev: drift <json>`, the same shapes `routes --json` and
-  * `db status --json` print, compacted onto one line so that one line is one event. They are
-  * printed only when `EEZO_DEV_MARKERS` is set, which the plugin does for the child it forks, so
-  * `sbt "run dev"` by hand stays readable. `serving on <url>` is the third marker, printed always,
-  * since it was the console's last boot line before any of this.
+  * The console is the sbt plugin, reading the forked application's output. It wants three things
+  * the boot already decides for a human, the route table, the drift and the Config's read, as
+  * values rather than prose: `eezo dev: routes <json>` and `eezo dev: drift <json>`, the same
+  * shapes `routes --json` and `db status --json` print, and `eezo dev: config <json>`, the
+  * variables `config` lists with whether each is set and the read's offenders, compacted onto one
+  * line so that one line is one event. They are printed only when `EEZO_DEV_MARKERS` is set, which
+  * the plugin does for the child it forks, so `sbt "run dev"` by hand stays readable.
+  * `serving on <url>` is the fourth marker, printed always, since it was the console's last boot
+  * line before any of this.
   */
 private[eezo] object DevMarkers {
 

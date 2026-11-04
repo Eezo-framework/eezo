@@ -46,6 +46,38 @@ class ViewSuite extends munit.FunSuite {
     m
   }
 
+  private val port = ConfigRow("SHOP_PORT", "port", redacted = false, "required", set = true)
+  private val key  = ConfigRow("STRIPE_KEY", "stripe.key", redacted = true, "required", set = false)
+  private val currency =
+    ConfigRow("SHOP_CURRENCY", "stripe.currency", redacted = false, "defaulted", set = false)
+
+  private val refused = ConfigReport(
+    Vector(port, key, currency),
+    Vector(
+      ConfigOffender(
+        ConfigOffender.Missing,
+        "stripe.key",
+        Vector("STRIPE_KEY"),
+        "stripe.key is missing: set STRIPE_KEY, which application.conf names for it"
+      ),
+      ConfigOffender(
+        ConfigOffender.Literal,
+        "stripe.webhook",
+        Vector.empty,
+        "stripe.webhook is stated as a literal in application.conf, and it is a Redacted"
+      )
+    )
+  )
+
+  private val clean = ConfigReport(Vector(port, key.copy(set = true), currency), Vector.empty)
+
+  /** [[model]], then `events` after it. */
+  private def after(m: Model, events: Event*): Model = afterAll(m, events)
+
+  // A `Seq` overload rather than a splice: `xs: _*` and `xs*` are each one axis's spelling.
+  private def afterAll(m: Model, events: Seq[Event]): Model =
+    events.foldLeft(m)((acc, e) => Update(acc, e)._1)
+
   private def frameOf(m: Model): Vector[String] = View.frame(m)
 
   private def assertSized(rows: Vector[String], w: Int, h: Int): Unit = {
@@ -64,7 +96,7 @@ class ViewSuite extends munit.FunSuite {
     assert(
       rows(1).contains("1 errors") && rows(1).contains("2 routes 4") && rows(1).contains(
         "3 schema ⚠1"
-      ) && rows(1).endsWith("4 log "),
+      ) && rows(1).endsWith("5 log "),
       rows(1)
     )
     assert(rows(2).forall(_ == '─'), rows(2))
@@ -75,6 +107,163 @@ class ViewSuite extends munit.FunSuite {
     )
     assert(rows(23).endsWith("✓ built in 0.4s "), rows(23))
     assert(rows.exists(_.contains("serving on http://localhost:8090")))
+  }
+
+  test("the config tab counts the offenders, and is green only for a report without one") {
+    val failing = frameOf(after(model(80, 24), Event.ConfigReported(refused)))(1)
+    assert(failing.contains("4 config ✗2") && failing.contains("5 log"), failing)
+    val passing = frameOf(after(model(80, 24), Event.ConfigReported(clean)))(1)
+    assert(passing.contains("4 config ✓"), passing)
+    val exited = frameOf(after(model(80, 24), Event.ConfigReported(refused), Event.AppExited(1)))(1)
+    assert(exited.contains("4 config ✗2") && !exited.contains("4 config ✓"), exited)
+    val narrow = frameOf(after(model(59, 12), Event.ConfigReported(refused)))(1)
+    assert(narrow.contains("4 cfg ✗2"), narrow)
+  }
+
+  /** The pane's row naming `text`, from `rows`. */
+  private def row(rows: Vector[String], text: String): String =
+    rows.find(_.contains(text)).getOrElse(fail(s"no row with $text in\n${rows.mkString("\n")}"))
+
+  test("the config pane is one row per variable, offending ones red, file offenders with reasons") {
+    val m    = after(model(80, 24), Event.ConfigReported(refused))
+    val rows = frameOf(m)
+    assert(
+      rows(3).contains("✗ 2 required value(s) missing; the application did not start"),
+      rows(3)
+    )
+    List(
+      ("SHOP_PORT", List("port", "required", "plain", "set")),
+      ("STRIPE_KEY", List("stripe.key", "required", "redacted", "unset")),
+      ("SHOP_CURRENCY", List("stripe.currency", "defaulted", "plain", "unset"))
+    ).foreach { case (variable, words) =>
+      val r = row(rows, variable)
+      words.foreach(w => assert(r.contains(w), s"$w in $r"))
+    }
+    assert(!row(rows, "SHOP_PORT").contains("unset"), row(rows, "SHOP_PORT"))
+    assert(row(rows, "stripe.webhook").contains("✗ stripe.webhook is stated as a literal"))
+    val advice =
+      rows.map(_.trim).dropWhile(_ != "e  type each missing value for this console, then restart")
+    assertEquals(
+      advice.take(2),
+      Vector(
+        "e  type each missing value for this console, then restart",
+        "or quit, export the variables, and start again"
+      ),
+      rows.mkString("\n")
+    )
+
+    val coloured = View.render(m, Theme(color = true, unicode = true))
+    val red      = "\u001b[31m"
+    assert(row(coloured, "STRIPE_KEY").contains(red), row(coloured, "STRIPE_KEY"))
+    assert(row(coloured, "stripe.webhook is stated").contains(red))
+    assert(!row(coloured, "SHOP_PORT").contains(red), row(coloured, "SHOP_PORT"))
+  }
+
+  test("a narrow config pane keeps the variable and its state, and drops the other columns") {
+    val rows = frameOf(after(model(59, 24), Event.ConfigReported(refused)))
+    val r    = row(rows, "STRIPE_KEY")
+    assert(r.contains("unset") && !r.contains("stripe.key") && !r.contains("redacted"), r)
+  }
+
+  test("a clean config pane says every required value is set") {
+    val rows =
+      frameOf(after(model(80, 24), Event.ConfigReported(clean), Event.Pressed(Key.Char('4'))))
+    assert(rows(3).contains("✓ every required value is set"), rows(3))
+  }
+
+  test("a config pane for a file that names no variable says so") {
+    val rows = frameOf(
+      after(
+        model(80, 24),
+        Event.ConfigReported(ConfigReport(Vector.empty, Vector.empty)),
+        Event.Pressed(Key.Char('4'))
+      )
+    )
+    assertEquals(rows(3).trim, "application.conf names no variable")
+  }
+
+  private val two = refused.copy(offenders =
+    refused.offenders :+ ConfigOffender(
+      ConfigOffender.Missing,
+      "stripe.currency",
+      Vector("SHOP_CURRENCY", "CURRENCY"),
+      "stripe.currency is missing"
+    )
+  )
+
+  private def typing(text: String): Seq[Event] = text.map(c => Event.Pressed(Key.Char(c)))
+
+  test(
+    "the prompt names the path, the variable, the other one and how many follow; masks a Redacted"
+  ) {
+    val asked    = after(model(80, 24), Event.ConfigReported(two), Event.Pressed(Key.Char('e')))
+    val redacted = afterAll(asked, typing("sk_test"))
+    val first    = frameOf(redacted)(23)
+    assert(first.contains("stripe.key") && first.contains("STRIPE_KEY"), first)
+    assert(first.contains("1 more follows"), first)
+    assert(first.contains("•••••••") && !first.contains("sk_test"), first)
+    val plain = afterAll(redacted, Event.Pressed(Key.Enter) +: typing("eur"))
+    val last  = frameOf(plain)(23)
+    assert(last.contains("stripe.currency") && last.contains("SHOP_CURRENCY"), last)
+    assert(last.contains("or CURRENCY") && last.contains("eur"), last)
+    assert(last.contains("the last one"), last)
+  }
+
+  test("the prompt row counts the paths that follow, down to the last one") {
+    val three = two.copy(offenders =
+      two.offenders :+ ConfigOffender(
+        ConfigOffender.Missing,
+        "port",
+        Vector("SHOP_PORT"),
+        "port is missing"
+      )
+    )
+    val asked  = after(model(100, 24), Event.ConfigReported(three), Event.Pressed(Key.Char('e')))
+    val second = afterAll(asked, typing("sk") :+ Event.Pressed(Key.Enter))
+    val last   = afterAll(second, typing("eur") :+ Event.Pressed(Key.Enter))
+    assertEquals(
+      frameOf(afterAll(asked, typing("sk")))(23).trim,
+      "stripe.key: STRIPE_KEY ••    2 more follow; Enter sets it, Esc cancels"
+    )
+    assertEquals(
+      frameOf(second)(23).trim,
+      "stripe.currency: SHOP_CURRENCY (or CURRENCY)     1 more follows; Enter sets it, Esc cancels"
+    )
+    assertEquals(
+      frameOf(afterAll(last, typing("80")))(23).trim,
+      "port: SHOP_PORT 80    the last one; Enter sets it, Esc cancels"
+    )
+  }
+
+  test("a row the console supplied reads set (console), and no row shows a value") {
+    val asked = after(model(80, 24), Event.ConfigReported(two), Event.Pressed(Key.Char('e')))
+    val m     = afterAll(
+      asked,
+      typing("sk_sentinel") ++ Seq(Event.Pressed(Key.Enter)) ++ typing("eur_sentinel") :+
+        Event.Pressed(Key.Enter)
+    )
+    val rows = frameOf(after(m, Event.Pressed(Key.Char('4'))))
+    assert(row(rows, "STRIPE_KEY").contains("set (console)"), row(rows, "STRIPE_KEY"))
+    assert(row(rows, "SHOP_CURRENCY").contains("set (console)"), row(rows, "SHOP_CURRENCY"))
+    assert(!row(rows, "SHOP_PORT").contains("console"), row(rows, "SHOP_PORT"))
+    assert(!rows.exists(_.contains("sentinel")), rows.mkString("\n"))
+  }
+
+  test("e is in the footer while an offender takes a typed value, and in the help with the pane") {
+    val refusing = after(model(80, 24), Event.ConfigReported(refused))
+    assert(frameOf(refusing)(23).contains("e set"), frameOf(refusing)(23))
+    val passing = after(model(80, 24), Event.ConfigReported(clean))
+    assert(!frameOf(passing)(23).contains("e set"), frameOf(passing)(23))
+    val helped = frameOf(after(passing, Event.Pressed(Key.Char('?'))))
+    assert(helped.exists(_.contains("1-5")), helped.mkString("\n"))
+    assert(helped.exists(_.contains("config")), helped.mkString("\n"))
+    assertEquals(
+      helped.find(_.startsWith("   e ")).map(_.trim.drop(1).trim),
+      Some("type the values the config pane asks for, then restart"),
+      helped.mkString("\n")
+    )
+    val without = frameOf(after(model(80, 24), Event.Pressed(Key.Char('?'))))
+    assert(!without.exists(_.startsWith("   e ")), without.mkString("\n"))
   }
 
   test("the footer's right end follows the build: spinner and trigger, then the verdict") {
@@ -108,7 +297,7 @@ class ViewSuite extends munit.FunSuite {
   test("40x11 is compact: header and tabs on one row, no rules, no footer") {
     val rows = frameOf(model(40, 11))
     assertSized(rows, 40, 11)
-    assert(rows(0).contains("4 log"), rows(0))
+    assert(rows(0).contains("5 log"), rows(0))
     assert(!rows.exists(r => r.nonEmpty && r.forall(_ == '─')), "no rule rows")
     assert(!rows(10).contains("quit"), rows(10))
   }
@@ -181,7 +370,7 @@ class ViewSuite extends munit.FunSuite {
     ).foldLeft((model(80, 24), Vector.empty[Effect])) { case ((acc, _), e) => Update(acc, e) }
     val rows = frameOf(m)
     assert(rows(9).contains("✓ eezo db sync --apply: applied to the dev database"), rows(9))
-    assert(rows(9).contains("output in 4 log"), rows(9))
+    assert(rows(9).contains("output in 5 log"), rows(9))
     assert(!rows.exists(_.contains("HikariDataSource")), rows.mkString("\n"))
     assert(m.log.exists(_.text == "$ eezo db sync --apply"))
     assert(m.log.exists(_.text == "  + todo.priority"))

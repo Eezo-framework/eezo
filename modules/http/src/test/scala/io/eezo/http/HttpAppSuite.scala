@@ -4,6 +4,7 @@ import io.eezo.config.Config
 import io.eezo.config.support.ConfigFileLoader
 import io.eezo.core.Redacted
 import io.eezo.core.html.Tags.p
+import io.eezo.core.internal.Json
 import io.eezo.core.support.Captured.captured
 
 /** The http layer's entry trait: what `sbt "run <command>"` answers on an application that has only
@@ -143,6 +144,163 @@ class HttpAppSuite extends munit.FunSuite {
     assertEquals(captured(new Recording().run(List("config"))), (0, "", ""))
   }
 
+  /** The application, as one whose build names [[Booth]], with `env` for its environment. */
+  private class Boothed(env: Map[String, String]) extends Recording {
+    override private[eezo] def environment: Map[String, String] = env
+  }
+
+  private val Markers = Map("EEZO_DEV_MARKERS" -> "1")
+
+  private def booth(env: Map[String, String], args: List[String], conf: Option[String]) =
+    ConfigFileLoader.generating(classOf[BoothFile.type], conf)(
+      captured(new Boothed(env).run(args))
+    )
+
+  /** The `config` markers among `out`'s lines, parsed. */
+  private def markers(out: String): List[Json] =
+    out.linesIterator
+      .filter(_.startsWith("eezo dev: config "))
+      .map(line =>
+        Json.parse(line.stripPrefix("eezo dev: config ")).fold(e => fail(s"$e in $line"), identity)
+      )
+      .toList
+
+  private def variable(name: String, path: String, redacted: Boolean, need: String, set: Boolean) =
+    Json.Obj(
+      List(
+        "variable" -> Json.Str(name),
+        "path"     -> Json.Str(path),
+        "redacted" -> Json.Bool(redacted),
+        "need"     -> Json.Str(need),
+        "set"      -> Json.Bool(set)
+      )
+    )
+
+  private def offender(kind: String, path: String, variables: List[String], rest: (String, Json)*) =
+    Json.Obj(
+      List(
+        "kind"      -> Json.Str(kind),
+        "path"      -> Json.Str(path),
+        "variables" -> Json.Arr(variables.map(Json.Str(_)))
+      ) ++ rest
+    )
+
+  private def offenders(marker: Json): List[Json] = marker match {
+    case Json.Obj(fields) =>
+      fields.toMap.get("offenders") match {
+        case Some(Json.Arr(items)) => items
+        case other                 => fail(s"no offenders in $marker: $other")
+      }
+    case other => fail(s"not an object: $other")
+  }
+
+  /** `marker`'s only offender, without its line once that line is `line`: the console shows a file
+    * offender by boot's own words, so the marker must carry the `[eezo]` line verbatim.
+    */
+  private def only(marker: Json, line: String): Json = offenders(marker) match {
+    case List(Json.Obj(fields)) =>
+      assertEquals(fields.toMap.get("line"), Some(Json.Str(line)), marker)
+      Json.Obj(fields.filterNot(_._1 == "line"))
+    case other => fail(s"not one offender: $other")
+  }
+
+  test("dev with markers prints one config marker on a good boot: every variable, no offender") {
+    val env              = Markers ++ Map("BOOTH_KEY" -> "k")
+    val (code, out, err) = booth(env, List("dev"), Some("booth.conf"))
+    assertEquals(code, 0, err)
+    assertEquals(
+      markers(out),
+      List(
+        Json.Obj(
+          List(
+            "variables" -> Json.Arr(
+              List(
+                variable("BOOTH_PORT", "port", redacted = false, "required", set = false),
+                variable("BOOTH_KEY", "key", redacted = true, "required", set = true),
+                variable("BOOTH_SECRET", "key", redacted = true, "required", set = false)
+              )
+            ),
+            "offenders" -> Json.Arr(Nil)
+          )
+        )
+      )
+    )
+  }
+
+  /** A refused `dev` under markers: exit 1, the `[eezo]` line on stderr, and the one marker. */
+  private def refused(env: Map[String, String], conf: Option[String]): (Json, String) = {
+    val (code, out, err) = booth(Markers ++ env, List("dev"), conf)
+    assertEquals(code, 1, err)
+    val lines = err.linesIterator.toList
+    assertEquals(lines.length, 1, err)
+    assert(lines.head.startsWith("[eezo] "), err)
+    markers(out) match {
+      case List(marker) => (marker, lines.head.stripPrefix("[eezo] "))
+      case other        => fail(s"not one marker: $other in $out")
+    }
+  }
+
+  test("a missing value is a missing offender, with the variables the file names for it") {
+    val (marker, line) = refused(Map.empty, Some("booth.conf"))
+    assertEquals(only(marker, line), offender("missing", "key", List("BOOTH_KEY", "BOOTH_SECRET")))
+    assertEquals(
+      line,
+      "key is missing: set BOOTH_KEY or BOOTH_SECRET, which application.conf names for it"
+    )
+  }
+
+  test("a malformed value carries the Parser's reason and the variables named for it") {
+    val (marker, line) =
+      refused(Map("BOOTH_PORT" -> "eighty", "BOOTH_KEY" -> "k"), Some("booth.conf"))
+    val reason = line.stripPrefix("port ")
+    assertEquals(
+      only(marker, line),
+      offender("malformed", "port", List("BOOTH_PORT"), "reason" -> Json.Str(reason))
+    )
+  }
+
+  test("a reserved variable, a stated Redacted and the file itself are offenders of their kind") {
+    val (reserved, reservedLine) = refused(Map("BOOTH_KEY" -> "k"), Some("booth-reserved.conf"))
+    assertEquals(
+      only(reserved, reservedLine),
+      offender("reserved", "port", Nil, "variable" -> Json.Str("EEZO_PORT"))
+    )
+    val (literal, literalLine) = refused(Map.empty, Some("booth-literal.conf"))
+    assertEquals(only(literal, literalLine), offender("literal", "key", Nil))
+    val (absent, absentLine) = refused(Map.empty, conf = None)
+    assertEquals(only(absent, absentLine), offender("absent", "application.conf", Nil))
+    val (unparsable, line) = refused(Map.empty, Some("booth-unparsable.conf"))
+    assertEquals(only(unparsable, line), offender("unparsable", "application.conf", Nil))
+    assert(line.startsWith("application.conf does not parse"), line)
+  }
+
+  test("the marker never carries a value, on a good boot or on a malformed one") {
+    val sentinel = "booth_sentinel_secret"
+    val good     = booth(Markers ++ Map("BOOTH_KEY" -> sentinel), List("dev"), Some("booth.conf"))
+    val bad      = booth(
+      Markers ++ Map("BOOTH_KEY" -> sentinel, "BOOTH_PORT" -> s"port_$sentinel"),
+      List("dev"),
+      Some("booth.conf")
+    )
+    List(good, bad).foreach { case (_, out, err) =>
+      assertEquals(markers(out).length, 1, out)
+      assert(!out.contains("sentinel"), out)
+      assert(!err.contains("sentinel"), err)
+    }
+  }
+
+  test("no config marker under run, under dev without markers, or for a build with no class") {
+    val env = Map("BOOTH_KEY" -> "k")
+    assertEquals(markers(booth(Markers ++ env, Nil, Some("booth.conf"))._2), Nil)
+    assertEquals(markers(booth(env, List("dev"), Some("booth.conf"))._2), Nil)
+    assertEquals(markers(booth(Map.empty, List("dev"), Some("booth.conf"))._2), Nil)
+    val plain = ConfigFileLoader.plain(Some("booth.conf"))(
+      captured(new Boothed(Markers).run(List("dev")))
+    )
+    assertEquals(plain._1, 0)
+    assertEquals(markers(plain._2), Nil)
+  }
+
   test("every server setting is an override with the server's own default") {
     val app = new Recording
     assertEquals(app.port, 8080)
@@ -163,5 +321,12 @@ object HttpAppSuite {
 
   object KioskFile extends Config.Root.Generated {
     val root: Config.Root[Kiosk] = Config.root[Kiosk]
+  }
+
+  /** Read by this suite alone, for the dev marker. */
+  final case class Booth(port: Int, key: Redacted) derives Config
+
+  object BoothFile extends Config.Root.Generated {
+    val root: Config.Root[Booth] = Config.root[Booth]
   }
 }

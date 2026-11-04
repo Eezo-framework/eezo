@@ -155,6 +155,16 @@ private[sbt] object DevCommand {
   }
 }
 
+/** What the loop hands a fork, kept apart from the fork itself so that a suite can follow a value
+  * from the prompt that took it to the environment of the child: the fork needs a real JVM.
+  */
+private[sbt] object Loop {
+
+  /** The only place a typed value leaves its holder, since the child must read the text itself. */
+  def supplied(model: Model): Map[String, String] =
+    model.supplied.map { case (variable, typed) => variable -> typed.reveal }
+}
+
 /** The loop and its threads. One instance per `eezoDev`; nothing here outlives the command. */
 private[sbt] final class Loop(
     state: State,
@@ -348,12 +358,16 @@ private[sbt] final class Loop(
         b.mainClass,
         Seq("dev"),
         base,
-        piped = true
+        piped = true,
+        supplied = Loop.supplied(model)
       )
       // The new child is in place before `replacing` clears, so the old one's waiter, which checks
       // both, never reads its exit as the application's.
       child = Some(process)
       replacing = false
+      // Queued before the pumps start, so that the child's config marker, which starts the report
+      // of this child afresh, never lands ahead of it.
+      events.add(Event.AppStarted(b.mainClass)): Unit
       val protocol = new LineProtocol
       thread("eezo-dev-stdout")(
         pump(process.getInputStream, line => protocol.synchronized(protocol.stdout(line)))
@@ -367,7 +381,6 @@ private[sbt] final class Loop(
         if (child.contains(process) && !replacing && !stopping.get)
           events.add(Event.AppExited(code)): Unit
       }.start()
-      events.add(Event.AppStarted(b.mainClass)): Unit
   }
 
   private def runCommand(command: SchemaCommand): Unit = built match {

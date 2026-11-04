@@ -8,8 +8,8 @@ tutorials build; the version string in them changes with every commit.
 
 `bin/eezo` is a shell script. Four of its commands are its own: `new`, `build`, `deploy` and
 `upgrade`. `dev` hands the terminal to the sbt command `eezoDev`, the dev console that the plugin
-draws: the log, the compile errors, the route table and the schema drift as panes, and the schema
-commands on keys ([the dev loop](../explanation/the-dev-loop.md) describes it). Everything else
+draws: the log, the compile errors, the route table, the schema drift and the Config's variables
+as panes, and the schema commands on keys ([the dev loop](../explanation/the-dev-loop.md) describes it). Everything else
 forwards to the application's own `main` as `sbt "run <command> <args>"`, so `eezo db status` and
 `sbt "run db status"` are the same code path, and so is the sbt task `eezoStatus`.
 
@@ -25,7 +25,7 @@ build names a Config class.
 | command | layer | needs | what it does |
 |---|---|---|---|
 | `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it, with an `AGENTS.md` that tells a coding agent how to drive the dev loop; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
-| `dev [--no-tui\|--json]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes and the drift as panes, `s` `f` `m` for the schema commands; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`), for a pipe, a log or an agent; without a terminal and without a flag only `eezoDev --once` runs |
+| `dev [--no-tui\|--json]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes, the drift and the config as panes, `s` `f` `m` for the schema commands, `e` for a value boot refused; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`), for a pipe, a log or an agent; without a terminal and without a flag only `eezoDev --once` runs |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `config [--json]` | both layers | | the variables `application.conf` names, in file order, without reading them; nothing when the build names no Config class |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |

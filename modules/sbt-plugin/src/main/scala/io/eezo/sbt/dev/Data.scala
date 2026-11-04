@@ -198,3 +198,84 @@ private[sbt] final case class Outcome(
   /** Exit 2 is `Dispatch`'s unknown command: the application has no database layer. */
   def unknownCommand: Boolean = code == 2
 }
+
+/** One variable `application.conf` names, as the `config` marker reports it. `set` is whether the
+  * child's environment held it, never what it held: the marker carries no value.
+  */
+private[sbt] final case class ConfigRow(
+    variable: String,
+    path: String,
+    redacted: Boolean,
+    need: String,
+    set: Boolean
+)
+
+/** Why boot refused, one path at a time. `line` is boot's own refusal line for it, the reason the
+  * pane shows; `variables` are the ones the file names for the path, what the console can ask for.
+  */
+private[sbt] final case class ConfigOffender(
+    kind: ConfigOffender.Kind,
+    path: String,
+    variables: Vector[String],
+    line: String
+) {
+
+  /** A value the console can supply: missing or malformed, at a path the file feeds from a
+    * variable. Every other offender is the file's to fix, and no value typed here would.
+    */
+  def fixable: Boolean =
+    variables.nonEmpty && (kind == ConfigOffender.Missing || kind == ConfigOffender.Malformed)
+}
+
+private[sbt] object ConfigOffender {
+
+  sealed abstract class Kind(val name: String)
+  case object Missing    extends Kind("missing")
+  case object Malformed  extends Kind("malformed")
+  case object Reserved   extends Kind("reserved")
+  case object Literal    extends Kind("literal")
+  case object Absent     extends Kind("absent")
+  case object Unparsable extends Kind("unparsable")
+
+  /** A kind this console does not know, from an application on a newer eezo: shown, never asked. */
+  final case class Other(override val name: String) extends Kind(name)
+
+  private val known: Vector[Kind] =
+    Vector(Missing, Malformed, Reserved, Literal, Absent, Unparsable)
+
+  def kind(name: String): Kind = known.find(_.name == name).getOrElse(Other(name))
+}
+
+/** The `config` marker, decoded: every variable the file names, and every offender of the read. */
+private[sbt] final case class ConfigReport(
+    rows: Vector[ConfigRow],
+    offenders: Vector[ConfigOffender]
+) {
+
+  /** The offenders the console can ask a value for, in the order boot found them. */
+  def fixable: Vector[ConfigOffender] = offenders.filter(_.fixable)
+}
+
+private[sbt] object ConfigReport {
+
+  def fromJson(j: JValue): ConfigReport =
+    ConfigReport(
+      rows = j("variables").arr.map(v =>
+        ConfigRow(
+          v("variable").strOr("?"),
+          v("path").strOr("?"),
+          v("redacted").boolOr(true),
+          v("need").strOr("?"),
+          v("set").boolOr(false)
+        )
+      ),
+      offenders = j("offenders").arr.map(o =>
+        ConfigOffender(
+          ConfigOffender.kind(o("kind").strOr("?")),
+          o("path").strOr("?"),
+          o("variables").arr.flatMap(_.str),
+          o("line").strOr("")
+        )
+      )
+    )
+}

@@ -100,8 +100,10 @@ port. Boot does these steps:
 When the read fails, boot writes one line per offender to stderr and exits with code 1. It
 writes no stack trace and starts nothing. A substitution under `EEZO_` comes first, then each
 substitution that does not resolve, and the other fields follow in the order the class declares
-them. Under `eezo dev` a refused read shows the same lines in the log. Each save restarts the
-application, and the restart reads the file again.
+them. Under `eezo dev` a refused read shows the same lines in the log, and the console's config
+pane opens on the offenders: `e` there takes each missing or malformed value a variable feeds and
+restarts with it, for that console only. Each save restarts the application, and the restart
+reads the file again.
 
 The other commands do not read the file's values: `routes`, `config`, `help` and the `db` commands
 work when a variable the file needs is unset.
