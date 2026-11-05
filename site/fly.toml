@@ -5,6 +5,13 @@
 app = 'eezo-site'
 primary_region = 'fra'
 
+# Blue green rather than Fly's default rolling update: with one machine, rolling replaces it in
+# place, and a version that never passes its health check leaves nobody serving, which is how the
+# 0.4.1 release took the site down. Blue green starts the new machine beside the old one, waits for
+# the check below to pass, then retires the old one; a bad release is a failed job and nothing else.
+[deploy]
+  strategy = 'bluegreen'
+
 [http_service]
   # Must match the app's `port` (HttpApp default: 8080).
   internal_port = 8080

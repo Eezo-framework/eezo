@@ -1,5 +1,6 @@
 package site
 
+import io.eezo.http.Assets
 import io.eezo.core.html.*
 import io.eezo.http.Request
 import io.eezo.live.Live
@@ -44,7 +45,7 @@ object Layout {
         Tags.meta(Attrs.attr("property") := "og:url", Attrs.content         := Origin + meta.path),
         Tags.meta(
           Attrs.attr("property") := "og:image",
-          Attrs.content          := Origin + Assets.url("og-image.png")
+          Attrs.content          := Origin + Assets.url("og-image.png").path
         ),
         Tags.meta(Attrs.attr("property") := "og:image:width", Attrs.content  := "1200"),
         Tags.meta(Attrs.attr("property") := "og:image:height", Attrs.content := "630"),
