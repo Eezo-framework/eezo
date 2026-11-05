@@ -1,5 +1,6 @@
 package site
 
+import io.eezo.http.Assets
 import io.eezo.core.html.*
 import io.eezo.http.Request
 
@@ -29,7 +30,7 @@ object ApiPages {
 
   def dress(page: String, request: Request): String = {
     val stylesheet =
-      s"""<link rel="stylesheet" href="${Assets.url("api.css")}">"""
+      s"""<link rel="stylesheet" href="${Assets.url("api.css").path}">"""
     val links = nav(request).render
 
     // scaladoc decides light or dark from `localStorage` before it paints. The site's choice is in

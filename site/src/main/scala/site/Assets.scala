@@ -1,13 +1,12 @@
 package site
 
-import java.security.MessageDigest
-
-/** The site's static files, served out of the jar's `assets/` directory.
+/** The API reference's files, served out of the jar's `api/` directory, where the build copied the
+  * scaladoc `sbt unidoc` generated.
   *
-  * eezo has no static file route of its own yet, so the site carries the few lines one needs: a
-  * content type by extension, a refusal of any path that tries to leave the directory, and a
-  * version in every URL so that a stylesheet can be cached for a year and still change on the next
-  * deploy.
+  * The site's own assets, the stylesheet, the scripts, the fonts and the icons, are the framework's
+  * to serve since eezo 0.4.0: `io.eezo.http.Assets` reads them out of `assets/` and versions every
+  * address, and its route is one of the framework routes every entry trait mounts. What stays here
+  * is the reading under another directory, with the content types scaladoc's output needs.
   */
 object Assets {
 
@@ -32,12 +31,9 @@ object Assets {
   def contentType(name: String): Option[String] =
     ContentTypes.get(name.drop(name.lastIndexOf('.') + 1).toLowerCase)
 
-  /** The file's bytes, or nothing: for a path that is not a plain descent into `assets/`, and for a
-    * file that is not there. Both are the same 404 to the client.
+  /** The file's bytes under a directory of the jar, or nothing: for a path that is not a plain
+    * descent into it, and for a file that is not there. Both are the same 404 to the client.
     */
-  def read(path: String): Option[Array[Byte]] = readUnder("assets", path)
-
-  /** The same, under another directory of the jar: `api` for the generated scaladoc. */
   def readUnder(root: String, path: String): Option[Array[Byte]] = {
     val segments = path.split('/').toVector
     val safe     = segments.nonEmpty && segments.forall(s => s.nonEmpty && s != "." && s != "..")
@@ -48,30 +44,4 @@ object Assets {
         finally in.close()
       }
   }
-
-  /** A short digest of the stylesheets and scripts, spelled into every asset URL, so that a change
-    * to it is a new address and a year long cache is safe.
-    */
-  lazy val version: String = {
-    val digest = MessageDigest.getInstance("SHA-256")
-    Vector(
-      "site.css",
-      "api.css",
-      "keys.js",
-      "code.js",
-      "mascot.png",
-      "favicon-32.png",
-      "apple-touch-icon.png",
-      "og-image.png",
-      "hljs/highlight.min.js",
-      "hljs/scala.min.js",
-      "hljs/nginx.min.js"
-    )
-      .flatMap(read)
-      .foreach(digest.update)
-    digest.digest().take(6).map(b => f"$b%02x").mkString
-  }
-
-  /** The address the pages link an asset under. */
-  def url(name: String): String = s"/assets/$name?v=$version"
 }

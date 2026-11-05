@@ -1,6 +1,6 @@
 package site
 
-import io.eezo.generated.Routes
+import io.eezo.http.Assets
 import io.eezo.http.Body
 import io.eezo.http.Method
 import io.eezo.http.NotFound
@@ -8,15 +8,20 @@ import io.eezo.http.Request
 import io.eezo.http.Response
 import munit.FunSuite
 
-/** The generated table, driven the way a request drives it. */
+/** The served table, driven the way a request drives it. */
 class RoutesSuite extends FunSuite {
 
   private def get(path: String, query: Map[String, Seq[String]] = Map.empty): Response =
-    Routes.table().dispatch(Request(Method.GET, path, query, Map.empty, Array.empty, Map.empty))
+    Served.table.dispatch(Request(Method.GET, path, query, Map.empty, Array.empty, Map.empty))
 
   private def page(response: Response): String = response.body match {
     case Body.Html(html) => html.render
     case other           => fail(s"expected a page, got $other")
+  }
+
+  test("the site's routes and the framework's compose into the one table boot serves") {
+    assertEquals(get("/").status, 200)
+    assert(Served.table.routes.exists(_.describe == "GET /assets/*file"))
   }
 
   test("the search page opens the dialog, and every page offers the shortcut") {
@@ -122,7 +127,7 @@ class RoutesSuite extends FunSuite {
     assertEquals(response.header("Cache-Control"), Some("public, max-age=300"))
     assert(response.body.isInstanceOf[Body.Bytes])
 
-    val versioned = get("/assets/site.css", Map("v" -> Seq(Assets.version)))
+    val versioned = get("/assets/site.css", Map("v" -> Seq(Assets.version("site.css").get)))
     assertEquals(versioned.header("Cache-Control"), Some("public, max-age=31536000, immutable"))
 
     assertEquals(get("/assets/fonts/nunito.woff2").header("Content-Type"), Some("font/woff2"))

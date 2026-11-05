@@ -3,9 +3,8 @@ package app
 import io.eezo.http.Body
 import io.eezo.http.NotFound
 import io.eezo.http.Request
+import io.eezo.http.Assets
 import io.eezo.http.Response
-
-import site.Assets
 
 /** `GET /install`: the installer, for `curl -fsSL https://eezo.io/install | bash`.
   *
