@@ -10,8 +10,8 @@ page in this tutorial; the first users are created from the command line.
 Add `eezo-auth` to `build.sbt`, next to the umbrella:
 
 ```scala
-libraryDependencies += "io.eezo" %% "eezo" % "0.4.0"
-libraryDependencies += "io.eezo" %% "eezo-auth" % "0.4.0"
+libraryDependencies += "io.eezo" %% "eezo" % "0.4.1"
+libraryDependencies += "io.eezo" %% "eezo-auth" % "0.4.1"
 
 // two mains now: the application and CreateUser, written below
 Compile / run / mainClass := Some("Main")
