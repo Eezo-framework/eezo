@@ -25,7 +25,7 @@ eezo new bookshelf
 ```
 
 ```
-created bookshelf at /home/<username>/projects/bookshelf (eezo 0.3.0, Scala 3.9.0, sbt 1.12.14)
+created bookshelf at /home/<username>/projects/bookshelf (eezo 0.4.0, Scala 3.9.0, sbt 1.12.14)
 
 next:
   cd bookshelf
@@ -55,7 +55,7 @@ scalaVersion := "3.9.0"
 
 enablePlugins(EezoPlugin)
 
-libraryDependencies += "io.eezo" %% "eezo" % "0.3.0"
+libraryDependencies += "io.eezo" %% "eezo" % "0.4.0"
 
 scalacOptions ++= Seq("-release", "25", "-deprecation", "-feature", "-unchecked", "-no-indent")
 
@@ -75,7 +75,7 @@ written in indentation syntax is a compile error.
 ### project/plugins.sbt
 
 ```scala
-addSbtPlugin("io.eezo" % "sbt-eezo" % "0.3.0")
+addSbtPlugin("io.eezo" % "sbt-eezo" % "0.4.0")
 ```
 
 The plugin, at the same version as the framework.
