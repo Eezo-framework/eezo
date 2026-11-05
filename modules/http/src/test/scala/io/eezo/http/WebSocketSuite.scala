@@ -262,6 +262,28 @@ class WebSocketSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
+  test("an upgrade whose query string is a malformed percent escape is a 400, not a 500") {
+    @volatile var opened = false
+    val live             = Route.Ws(
+      PathPattern.parse("/live"),
+      _ =>
+        new WsListener {
+          override def onOpen(conn: WsConn): Unit = opened = true
+        }
+    )
+    servingSockets(RouteTable(Seq(live))) { (_, port) =>
+      val body = refusalBody(port, "/live?q=%")
+      assert(
+        clue(body).startsWith(
+          """<!DOCTYPE html><html><head><meta charset="utf-8"><title>400 Bad Request</title>""" +
+            "</head><body><h1>400 Bad Request</h1>" +
+            "<p>the query string is not valid percent encoded UTF-8</p>"
+        )
+      )
+      assert(!opened)
+    }
+  }
+
   test("a throw answers the upgrade through the boundary, Forbidden as a 403 with no challenge") {
     // The status a guarded socket handshake really earns, and the reason it is this one: a client
     // has to be able to read the refusal, and Jetty's own client hides a 401 that carries no

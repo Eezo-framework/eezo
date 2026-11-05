@@ -3,6 +3,7 @@ package io.eezo.http
 import java.net.URI
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
+import java.nio.charset.StandardCharsets
 import java.time.Duration
 import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
@@ -244,6 +245,44 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     }
   }
 
+  test("a malformed percent escape in the query string or the form body is a 400, not a 500") {
+    @volatile var ran = false
+    val routes        = RouteTable(
+      Seq(
+        Route.Http(
+          Method.GET,
+          PathPattern.parse("/search"),
+          _ => { ran = true; Response.Ok(Html.text("ok")) }
+        ),
+        Route.Http(
+          Method.POST,
+          PathPattern.parse("/widgets"),
+          req => { ran = true; Response.Ok(Html.text(req.form.toString)) }
+        )
+      )
+    )
+    serving(routes) { (_, port) =>
+      // `%FF` and `%C3` are well formed escapes, but the bytes they name are not UTF-8.
+      for (query <- Seq("q=%", "q=%zz", "%=1", "q=%FF", "q=%C3")) {
+        val reply = rawGet(port, s"/search?$query")
+        assert(clue(reply).startsWith("HTTP/1.1 400 "), clue(query))
+        assert(
+          reply.contains("<p>the query string is not valid percent encoded UTF-8</p>"),
+          clue(query)
+        )
+      }
+      for (body <- Seq("name=%", "name=50%", "%zz=1")) {
+        val response = submit(port, "/widgets", handed(), body)
+        assertEquals(response.statusCode(), 400, clue(body))
+        assert(
+          clue(response.body()).contains("<p>the form body is not valid percent encoding</p>"),
+          clue(body)
+        )
+      }
+      assert(!ran)
+    }
+  }
+
   test("a byte body is written as it stands, with the headers the handler set") {
     val routes = RouteTable(
       Seq(
@@ -333,5 +372,21 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
     serving(hello, dev = true) { (_, port) =>
       assertEquals(get(port, Reload.path).statusCode(), 404)
     }
+  }
+
+  /** The whole reply, status line, headers and body, to a `GET` sent over a bare socket, for a
+    * target the JDK's client refuses to send, such as a query string with a malformed percent
+    * escape.
+    */
+  private def rawGet(port: Int, target: String): String = {
+    val socket = new java.net.Socket(Loopback, port)
+    try {
+      socket.setSoTimeout(5000)
+      socket.getOutputStream.write(
+        s"GET $target HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n"
+          .getBytes(StandardCharsets.US_ASCII)
+      )
+      new String(socket.getInputStream.readAllBytes(), StandardCharsets.UTF_8)
+    } finally socket.close()
   }
 }

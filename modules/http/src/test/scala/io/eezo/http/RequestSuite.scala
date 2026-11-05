@@ -67,6 +67,18 @@ class RequestSuite extends munit.FunSuite {
     assertEquals(req.form, Map("name" -> Seq(""), "flag" -> Seq("")))
   }
 
+  test("a malformed percent escape in the form body is a BadRequest, so a 400") {
+    for (raw <- Seq("name=%", "name=50%", "name=%zz", "%=1")) {
+      val req = request(
+        method = Method.POST,
+        headers = Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
+        body = raw.getBytes("UTF-8")
+      )
+      val refusal = intercept[BadRequest](req.form)
+      assertEquals(refusal.detail, "the form body is not valid percent encoding", clue(raw))
+    }
+  }
+
   test("param converts a path parameter through FromPath") {
     val id  = UUID.randomUUID()
     val req =
