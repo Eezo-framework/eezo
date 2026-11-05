@@ -333,6 +333,22 @@ class HttpAppSuite extends munit.FunSuite {
   test("the asset route is a framework route, so every way of serving carries it") {
     assertEquals(new Recording().framework.map(_.describe), Seq("GET /assets/*file"))
   }
+
+  test("an application's own catch all under /assets boots, and answers ahead of the asset route") {
+    // The composition serve hands the server: the application's table first, the framework's after.
+    val own    = RouteTable(Seq(Route.Http(Method.GET, PathPattern.parse("/assets/*file"), ok)))
+    val served = own ++ RouteTable(new Recording().framework)
+    assertEquals(served.routes.map(_.describe), Seq("GET /assets/*file"))
+    val request = Request(
+      Method.GET,
+      "/assets/nothing.css",
+      Map.empty,
+      Map.empty,
+      Array.emptyByteArray,
+      Map.empty
+    )
+    assertEquals(served.dispatch(request).status, 200)
+  }
 }
 
 object HttpAppSuite {
