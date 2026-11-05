@@ -11,7 +11,8 @@ import munit.FunSuite
   * nothing else but `/usr/bin` and `/bin`, so no real Fly account and no real build can be reached
   * from a suite. On macOS that PATH also makes the launcher run under `/bin/bash` 3.2, the shell
   * many users get from `#!/usr/bin/env bash`, which is how a bash 4 construct is caught before a
-  * user meets it.
+  * user meets it. The fake sbt behaves as sbt does under CI, where the site deploys from: it writes
+  * a screen clear escape on stdout at exit unless it is asked for no format.
   *
   * It lives here because the launcher has no module of its own, and this is the project `+test`
   * reaches that already holds the deploy pins.
@@ -462,6 +463,17 @@ class DeployPreflightSuite extends FunSuite {
     assertNoStage(run)
   }
 
+  test("the screen clear sbt writes on stdout at exit under CI never reaches the rows") {
+    // The 0.4.0 site deploy stopped on GitHub Actions on exactly this: the escape, unterminated,
+    // read as one more line of `eezo config`. The launcher asks sbt for no format on every
+    // captured run, so what it parses is what the application printed and nothing of sbt's.
+    val run = deploy(
+      config = "SHOP_PORT\tport\tplain\trequired\n",
+      flyToml = generatedToml + "\n[env]\n  SHOP_PORT = '8080'\n"
+    )
+    assertStaged(run)
+  }
+
   test("the launcher uses nothing macOS's /bin/bash 3.2 lacks") {
     val source = new String(Files.readAllBytes(launcher.toPath), UTF_8)
     val bash4  = List("declare -A", "local -A", "typeset -A", "mapfile", "readarray", ",,}", "^^}")
@@ -490,10 +502,10 @@ class DeployPreflightSuite extends FunSuite {
 object DeployPreflightSuite {
 
   /** What the fake sbt logs for the preflight's `eezo config`. */
-  val Config = "-error -batch run config"
+  val Config = "-error -batch -Dsbt.log.noformat=true run config"
 
   /** What the fake sbt logs for the staging step. */
-  val Stage = "-error -batch eezoStage"
+  val Stage = "-error -batch -Dsbt.log.noformat=true eezoStage"
 
   /** The header of every preflight refusal, which the per variable lines follow. */
   val header: String =
@@ -574,16 +586,26 @@ object DeployPreflightSuite {
          |exit 1
          |""".stripMargin
     )
+    // Like sbt 1.13 under CI, the fake writes the clear to end of screen escape on stdout when it
+    // exits, at every log level, unless it is told no format. The harness sets CI below, so the
+    // launcher meets the escape here the way it does on GitHub Actions.
     executable(
       bin.resolve("sbt"),
       s"""#!/bin/sh
          |printf '%s\\n' "$$*" >> '$f/sbt.log'
-         |case "$$3" in
-         |  "run config")
+         |clear=''
+         |case " $$* " in
+         |  *" -Dsbt.log.noformat=true "*) ;;
+         |  *) [ -z "$$CI" ] || clear='\\033[0J' ;;
+         |esac
+         |case "$$*" in
+         |  *"run config")
          |    cat '$f/config.out'
+         |    printf "$$clear"
          |    cat '$f/config.err' >&2
          |    exit "$$(cat '$f/config.code')" ;;
          |esac
+         |printf "$$clear"
          |exit 1
          |""".stripMargin
     )
@@ -596,6 +618,8 @@ object DeployPreflightSuite {
       .redirectOutput(out)
       .redirectError(err)
     builder.environment().put("PATH", s"$bin:/usr/bin:/bin")
+    // The site deploys from GitHub Actions, which sets CI; the fake sbt reads it the way sbt does.
+    builder.environment().put("CI", "true")
     val process = builder.start()
     if (!process.waitFor(60, TimeUnit.SECONDS)) {
       process.destroyForcibly().waitFor()
