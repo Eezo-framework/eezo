@@ -13,7 +13,7 @@ input, the parse, and what an absent submission means. The types are in [the API
 | `String` | `text` | `text` | required | |
 | `Int` | `integer` | `number` | required | "is not a number" |
 | `Long` | `bigint` | `number` | required | "is not a number" |
-| `Double` | none | `number` | required | "is not a number" |
+| `Double` | none | `number`, with `step="any"` | required | "is not a number" |
 | `Boolean` | `boolean` | `checkbox` | `false` | |
 | `BigDecimal` | `numeric(19,4)` | none | | |
 | `UUID` | `uuid` | `text` | required | "is not an id" |

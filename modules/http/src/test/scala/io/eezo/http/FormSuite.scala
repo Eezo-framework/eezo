@@ -184,6 +184,23 @@ class FormSuite extends munit.FunSuite {
     assert(html.contains("""value="ann""""), html)
   }
 
+  case class Item(price: Double, discount: Option[Double], count: Int) derives Form
+
+  test("a Double input accepts any fraction, and an Int input stays whole") {
+    // A number input with no step only takes whole steps from its value, so a browser refuses to
+    // submit 9.99 in an empty box and asks for 9 or 10.
+    val html = Form[Item].render("/items", Method.POST, None, token).render
+    assert(
+      html.contains("""<input type="number" id="price" name="price" value="" step="any">"""),
+      html
+    )
+    assert(
+      html.contains("""<input type="number" id="discount" name="discount" value="" step="any">"""),
+      html
+    )
+    assert(html.contains("""<input type="number" id="count" name="count" value="">"""), html)
+  }
+
   test("errors render beside their field") {
     val errs = FormErrors(Seq(FieldError("price", "is not a number")))
     val html = Form[Widget].render("/widgets", Method.POST, None, token, errs).render
