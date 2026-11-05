@@ -103,9 +103,12 @@ object Assets {
         )
     }
 
-  /** The route every entry trait serves: the catch all under `/assets`. */
-  private[http] val route: Route =
-    Route.Http(Method.GET, PathPattern.parse(s"$Prefix/*file"), serve)
+  /** The route every entry trait serves: the catch all under `/assets`. Derived, the way a
+    * `Resource`'s routes are, because eezo made it and the user did not: an application that mounts
+    * its own catch all under `/assets` then wins by decision 18, the table dropping this one, where
+    * two handwritten routes on one method and path would refuse to boot.
+    */
+  private[http] val route: Route = Route.derived(Method.GET, s"$Prefix/*file", serve)
 
   private val versions = new ConcurrentHashMap[String, Option[String]]
 
