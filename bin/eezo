@@ -101,7 +101,11 @@ sbt_at() { # <level flag> <sbt args...>: sbt with its own JVM's warnings off, at
     sbt "$1" -batch "${@:2}"
 }
 
-sbt_cmd() { sbt_at -error "$@"; }
+# At -error sbt itself prints nothing but a build error, so the stream is the application's. No
+# format as well: under CI (the CI variable set, as GitHub Actions sets it) sbt 1.13 writes the
+# clear to end of screen escape, ESC[0J, on stdout when it exits, at every log level, and the
+# deploy preflight, which parses that stream, took it for one more line.
+sbt_cmd() { sbt_at -error -Dsbt.log.noformat=true "$@"; }
 
 # Runs a command under the spinner, streams captured separately (stdout must stay machine-pure),
 # replayed by replay_captured afterwards. Returns the command's code.
