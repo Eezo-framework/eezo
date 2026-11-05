@@ -21,7 +21,7 @@ input, the parse, and what an absent submission means. The types are in [the API
 | `Ref[T]` | `uuid`, a foreign key to `T`'s table, column named `<field>_id` | none | | |
 | `LocalDate` | `date` | `date` | required | "is not a date" |
 | `LocalDateTime` | none | `datetime-local` | required | "is not a date and time" |
-| `Instant` | `timestamptz` | `datetime-local` | required | "is not a date and time" |
+| `Instant` | `timestamptz` | `datetime-local`, read and shown in UTC | required | "is not a date and time" |
 | `Array[Byte]` | `bytea` | none | | |
 | `Option[A]` | `A`'s type, nullable | `A`'s input | `None`; empty text is also `None` | `A`'s |
 | `Password` (`eezo-auth`) | written by you, `Column[String].imap(Password.stored)(_.value)` | `password`, hashed on read, never shown | required | "is longer than the 72 bytes bcrypt reads" |

@@ -86,6 +86,19 @@ class FieldSuite extends munit.FunSuite {
     assert(!field.checked(FieldSuite.Isbn("978")))
   }
 
+  test("an Instant reads and shows the text a datetime-local input holds, in UTC") {
+    val field = Field[java.time.Instant]
+    val at    = java.time.Instant.parse("2026-10-13T10:00:00Z")
+    assertEquals(field.inputType, "datetime-local")
+    // A browser sends no zone and no seconds, and refuses a value that carries a Z.
+    assertEquals(field.read("2026-10-13T10:00"), Right(at))
+    assertEquals(field.show(at), "2026-10-13T10:00")
+    assertEquals(field.read(field.show(at)), Right(at))
+    // A program may still send a full instant, and Option lifts the same reading.
+    assertEquals(field.read("2026-10-13T12:00:00+02:00"), Right(at))
+    assertEquals(Field[Option[java.time.Instant]].read("2026-10-13T10:00"), Right(Some(at)))
+  }
+
   test("a type with no Field names itself and the Field.of line that gives it one") {
     val errors = compileErrors("Field[FieldSuite.Unknown]")
     assert(errors.contains("No Field instance for io.eezo.http.FieldSuite.Unknown"), errors)

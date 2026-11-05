@@ -1,9 +1,11 @@
 package io.eezo.http
 
-import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.{Instant, LocalDate, LocalDateTime, ZoneOffset}
+import java.time.temporal.ChronoUnit
 import java.util.UUID
 
 import scala.annotation.implicitNotFound
+import scala.util.Try
 
 import io.eezo.core.{Id, Parser}
 
@@ -123,7 +125,22 @@ object Field {
 
   given Field[LocalDateTime] = new Field[LocalDateTime]("datetime-local", _.toString)
 
-  given Field[Instant] = new Field[Instant]("datetime-local", _.toString)
+  /** A `datetime-local` input, read and shown in UTC.
+    *
+    * The input holds a date and a time with no zone, such as `2026-10-13T10:00`, and a browser
+    * refuses a value that ends in `Z`. Core's Parser reads only a full instant, so this Field reads
+    * the input's text as UTC and still takes a full instant from a program. It shows the instant as
+    * UTC text, to the millisecond, which is the finest a `datetime-local` input holds.
+    */
+  given Field[Instant] = Field.of[Instant]("datetime-local")(at =>
+    LocalDateTime.ofInstant(at, ZoneOffset.UTC).truncatedTo(ChronoUnit.MILLIS).toString
+  )(text =>
+    summon[Parser[Instant]].read(text) match {
+      case Left(why) =>
+        Try(LocalDateTime.parse(text.trim).toInstant(ZoneOffset.UTC)).toOption.toRight(why)
+      case read => read
+    }
+  )
 
   /** A model's key.
     *
