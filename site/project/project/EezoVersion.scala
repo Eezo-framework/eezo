@@ -9,7 +9,7 @@
 object EezoVersion {
 
   /** The published eezo version. */
-  val value: String = "0.4.1"
+  val value: String = "0.4.2"
 
   /** `Toolchain.ScalaVersion` from the main build, carried across for `scalaVersion` here. */
   val scalaVersion: String = "3.9.0"
