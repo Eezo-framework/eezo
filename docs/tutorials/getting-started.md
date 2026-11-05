@@ -40,6 +40,7 @@ bookshelf/
   build.sbt
   project/build.properties
   project/plugins.sbt
+  src/main/resources/assets/welcome.css
   src/main/scala/Main.scala
   src/main/scala/app/Index.scala
 ```
@@ -106,20 +107,28 @@ transform it before serving it, and if the plugin isn't enabled this line doesn'
 package app
 
 import io.eezo.core.html.*
+import io.eezo.http.Assets
 import io.eezo.http.Request
 import io.eezo.http.Response
 
 object Index {
 
+  // simplified: the scaffold's page goes on with a first model and links into these docs
   def index(request: Request): Response = {
     val _ = request
     Response.Ok(
       Html.doctype ++ html(
-        head(meta(Attrs.charset := "utf-8"), title("eezo")),
+        head(
+          meta(Attrs.charset := "utf-8"),
+          title("eezo"),
+          link(Attrs.rel := "stylesheet", Attrs.href := Assets.url("welcome.css"))
+        ),
         body(
-          h1("it works"),
-          p("Add a case class with ", code("derives Form, Resource"), " under models/ "),
-          p("and it mounts seven CRUD routes. ", code("sbt \"run routes\""), " lists them.")
+          main(
+            header(
+              h1("it works")
+            )
+          )
         )
       )
     )
@@ -138,6 +147,10 @@ The page is built with eezo's HTML DSL. `html`, `head`, `body`, `h1` and the res
 attributes are written `Attrs.charset := "utf-8"`, and strings become escaped text. There's no
 template language, and your views are type-checked like everything else.
 
+The stylesheet is `src/main/resources/assets/welcome.css`. A file under `assets/` is served at
+`/assets/<name>`, and `Assets.url` gives you its address. When you replace this page with your own,
+delete the stylesheet too.
+
 The `val _ = request` line is there because the scaffold doesn't read the request. You'll
 delete it as soon as you do.
 
@@ -152,18 +165,21 @@ A spinner runs while sbt loads and compiles, a minute the first time. Then eezo 
 it serves:
 
 ```
-3 routes:
+4 routes:
   GET /
+  GET /assets/*file
   WS /eezo/live/:page
   GET /eezo/live.js
 serving on http://localhost:8080
 ```
 
-The routes under `/eezo` are the framework's: the live layer's socket and client script.
+All but the first are the framework's: your assets, then the live layer's socket and client
+script.
 `/eezo/health` is there too, without showing in the list; it answers `ok`, and a deploy's health
 check polls it later.
 
-Open http://localhost:8080. You'll see "it works".
+Open http://localhost:8080. You'll see "it works", a first model to try, and links to the
+tutorials and the docs.
 
 You'll also see a warning in the console about a throwaway secret. That's the key eezo signs
 session cookies with. You haven't set one, so eezo mints one for the life of the process. It's

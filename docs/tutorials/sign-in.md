@@ -275,7 +275,7 @@ forgets it is refused. Put it on the index page, where it renders a Sign out but
 that's signed in and nothing for one that isn't:
 
 ```scala
-body(
+header(
   h1("it works"),
   User.guard.logoutForm(request)
 )
