@@ -15,9 +15,10 @@ import io.eezo.core.{Id, Parser}
   *
   * Composed over a [[io.eezo.core.Parser]] rather than being one, because how text becomes a value
   * is not a form's question: a configuration value asks it too, from a module that never sees a
-  * browser. What a Field adds is only what an input needs, its type, its shown text and whether it
-  * renders ticked. It does not extend Parser, so a Field can never stand where a Parser is asked
-  * for, and a checkbox's lenient reading of `on` cannot leak into anything that is not a form.
+  * browser. What a Field adds is only what an input needs, its type, its shown text, whether it
+  * renders ticked and the step a number input takes. It does not extend Parser, so a Field can
+  * never stand where a Parser is asked for, and a checkbox's lenient reading of `on` cannot leak
+  * into anything that is not a form.
   *
   * A final class rather than a trait, so the reading has one place to live and a hand written
   * instance cannot override `read` past its Parser. [[Field.of]] is how an author writes one.
@@ -38,7 +39,8 @@ import io.eezo.core.{Id, Parser}
 final class Field[X: Parser](
     val inputType: String,
     write: X => String,
-    ticked: X => Boolean = (_: X) => false
+    ticked: X => Boolean = (_: X) => false,
+    val step: Option[String] = None
 ) {
 
   /** Public so a Field built over another can compose over the same reading, rather than summoning
@@ -102,7 +104,10 @@ object Field {
 
   given Field[Long] = new Field[Long]("number", _.toString)
 
-  given Field[Double] = new Field[Double]("number", _.toString)
+  /** A number input whose step is `any`. Without one a browser takes only whole steps from the
+    * input's value, and refuses to submit 9.99 in an empty box.
+    */
+  given Field[Double] = new Field[Double]("number", _.toString, step = Some("any"))
 
   /** A checkbox, read through [[Checkbox]] rather than the core Boolean.
     *
@@ -139,6 +144,7 @@ object Field {
     new Field[Option[X]](
       inner.inputType,
       _.map(inner.show).getOrElse(""),
-      _.exists(inner.checked)
+      _.exists(inner.checked),
+      inner.step
     )(using Parser.option(using inner.parser))
 }

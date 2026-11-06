@@ -249,7 +249,8 @@ object Form {
                 Attrs.tpe   := f.inputType,
                 Attrs.id    := f.name,
                 Attrs.name  := f.name,
-                Attrs.value := (if (f.inputType == Password) "" else current.getOrElse(""))
+                Attrs.value := (if (f.inputType == Password) "" else current.getOrElse("")),
+                instances(i).step.map(Attrs.step := _)
               )
 
           div(
