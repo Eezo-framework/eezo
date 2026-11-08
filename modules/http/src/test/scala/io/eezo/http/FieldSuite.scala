@@ -99,6 +99,35 @@ class FieldSuite extends munit.FunSuite {
     assertEquals(Field[Option[java.time.Instant]].read("2026-10-13T10:00"), Right(Some(at)))
   }
 
+  test("an Instant reads each part of the datetime-local text, and names the text it refuses") {
+    val field = Field[java.time.Instant]
+    val at    = java.time.Instant.parse("2026-10-13T10:00:00Z")
+    assertEquals(
+      field.read("2026-10-13T10:00:30"),
+      Right(java.time.Instant.parse("2026-10-13T10:00:30Z"))
+    )
+    assertEquals(
+      field.read("2026-10-13T10:00:30.123"),
+      Right(java.time.Instant.parse("2026-10-13T10:00:30.123Z"))
+    )
+    assertEquals(field.read(" 2026-10-13T10:00 "), Right(at))
+    assertEquals(field.read("2026-10-13T10:00:00Z"), Right(at))
+    assertEquals(field.read("now"), Left("is not a date and time"))
+    assertEquals(field.read("2026-10-13"), Left("is not a date and time"))
+    assertEquals(field.read(""), Left("is not a date and time"))
+  }
+
+  test("an Instant shows to the millisecond, and shows any instant as text") {
+    val field = Field[java.time.Instant]
+    assertEquals(
+      field.show(java.time.Instant.parse("2026-10-13T10:00:30.123456Z")),
+      "2026-10-13T10:00:30.123"
+    )
+    // A LocalDateTime cannot hold these, so the Field shows the instant's own text.
+    assertEquals(field.show(java.time.Instant.MAX), java.time.Instant.MAX.toString)
+    assertEquals(field.show(java.time.Instant.MIN), java.time.Instant.MIN.toString)
+  }
+
   test("a type with no Field names itself and the Field.of line that gives it one") {
     val errors = compileErrors("Field[FieldSuite.Unknown]")
     assert(errors.contains("No Field instance for io.eezo.http.FieldSuite.Unknown"), errors)
