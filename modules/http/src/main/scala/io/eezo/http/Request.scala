@@ -1,7 +1,8 @@
 package io.eezo.http
 
 import java.net.URLDecoder
-import java.nio.charset.StandardCharsets
+import java.nio.ByteBuffer
+import java.nio.charset.{CharacterCodingException, StandardCharsets}
 import java.util.UUID
 
 import io.eezo.core.Id
@@ -111,9 +112,9 @@ final case class Request(
     * the body before dispatch and the handler reads it again. `multipart/form-data` is out of
     * scope: this is `application/x-www-form-urlencoded` only.
     *
-    * A body that is not valid percent encoding, such as `name=50%`, is the client's mistake, so it
-    * is a [[BadRequest]] rather than the decoder's own exception, which the boundary would answer
-    * with a 500.
+    * A body that is not valid percent encoded UTF-8, such as `name=50%` or `name=%FF`, is the
+    * client's mistake, so it is a [[BadRequest]] rather than the decoder's own exception, which the
+    * boundary would answer with a 500. The query string is held to the same rule.
     */
   lazy val form: Map[String, Seq[String]] =
     if (!isFormEncoded) Map.empty
@@ -121,7 +122,7 @@ final case class Request(
       try Request.decodeForm(new String(body, StandardCharsets.UTF_8))
       catch {
         case _: IllegalArgumentException =>
-          throw BadRequest("the form body is not valid percent encoding")
+          throw BadRequest("the form body is not valid percent encoded UTF-8")
       }
 
   /** Whether the body is one a form submission produces, which is the single place that question is
@@ -215,7 +216,9 @@ object Request {
         case None         => request
       }
 
-  /** Decodes `a=1&b=2`, UTF-8, `+` as a space, percent decoded, keeping repeats in order. */
+  /** Decodes `a=1&b=2`, UTF-8, `+` as a space, percent decoded, keeping repeats in order. Throws
+    * `IllegalArgumentException` for a broken escape, or for escapes whose bytes are not UTF-8.
+    */
   private[http] def decodeForm(raw: String): Map[String, Seq[String]] =
     raw
       .split('&')
@@ -230,6 +233,17 @@ object Request {
       .toVector
       .groupMap(_._1)(_._2)
 
-  private def decode(value: String): String =
+  /** `URLDecoder` turns escaped bytes that are not UTF-8 into U+FFFD, so each run of escapes is
+    * checked first and refused, as Jetty refuses the query string.
+    */
+  private def decode(value: String): String = {
+    Escapes.findAllIn(value).foreach { run =>
+      val bytes = run.grouped(3).map(escape => Integer.parseInt(escape.drop(1), 16).toByte).toArray
+      try StandardCharsets.UTF_8.newDecoder().decode(ByteBuffer.wrap(bytes))
+      catch { case e: CharacterCodingException => throw new IllegalArgumentException(e) }
+    }
     URLDecoder.decode(value, StandardCharsets.UTF_8)
+  }
+
+  private val Escapes = "(?:%[0-9A-Fa-f]{2})+".r
 }

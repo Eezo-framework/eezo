@@ -271,11 +271,14 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
           clue(query)
         )
       }
-      for (body <- Seq("name=%", "name=50%", "%zz=1")) {
+      // The form body is held to the same rule as the query string.
+      for (body <- Seq("name=%", "name=50%", "%zz=1", "name=%FF", "name=%C3", "name=a%C3b")) {
         val response = submit(port, "/widgets", handed(), body)
         assertEquals(response.statusCode(), 400, clue(body))
         assert(
-          clue(response.body()).contains("<p>the form body is not valid percent encoding</p>"),
+          clue(response.body()).contains(
+            "<p>the form body is not valid percent encoded UTF-8</p>"
+          ),
           clue(body)
         )
       }

@@ -123,6 +123,23 @@ class SessionSuite extends munit.FunSuite {
     assert(!SessionCookie.decode(cookie, secret).isEmpty, "the untouched cookie still reads")
   }
 
+  test(
+    "a session cookie with text outside ASCII still reads, and a signed bad escape reads as empty"
+  ) {
+    val out = Session.empty.set("user", "café 🍰").flash("notice", "déjà vu")
+    val in  = SessionCookie.decode(SessionCookie.encode(out, secret), secret)
+    assertEquals(in.get("user"), Some("café 🍰"))
+    assertEquals(in.flash("notice"), Some("déjà vu"))
+    // eezo never writes a payload whose escapes are not UTF-8, so one that is signed anyway is read
+    // like any other cookie it cannot read: as the empty session.
+    for (raw <- Seq("user=%FF", "user=%C3", "user=%")) {
+      val encoder = java.util.Base64.getUrlEncoder.withoutPadding
+      val payload = encoder.encodeToString(raw.getBytes("UTF-8"))
+      val tag     = encoder.encodeToString(secret.sign(payload.getBytes("US-ASCII")))
+      assert(SessionCookie.decode(s"$payload.$tag", secret).isEmpty, clue(raw))
+    }
+  }
+
   // The write rule: once, after dispatch, only when something changed
 
   private def request(cookie: Option[String]): Request = {
