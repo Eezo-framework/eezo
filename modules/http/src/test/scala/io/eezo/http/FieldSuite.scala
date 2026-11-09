@@ -128,6 +128,17 @@ class FieldSuite extends munit.FunSuite {
     assertEquals(field.show(java.time.Instant.MIN), java.time.Instant.MIN.toString)
   }
 
+  test("an Instant displays its UTC text with the zone, and its input text stays without one") {
+    val field = Field[java.time.Instant]
+    val at    = java.time.Instant.parse("2026-10-13T10:00:00Z")
+    assertEquals(field.display(at), "2026-10-13T10:00 UTC")
+    assertEquals(field.show(at), "2026-10-13T10:00")
+    assertEquals(Field[Option[java.time.Instant]].display(Some(at)), "2026-10-13T10:00 UTC")
+    assertEquals(Field[Option[java.time.Instant]].display(None), "")
+    // A Field that gives no text of its own displays what it shows.
+    assertEquals(Field[Int].display(3), "3")
+  }
+
   test("a type with no Field names itself and the Field.of line that gives it one") {
     val errors = compileErrors("Field[FieldSuite.Unknown]")
     assert(errors.contains("No Field instance for io.eezo.http.FieldSuite.Unknown"), errors)

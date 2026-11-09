@@ -63,6 +63,9 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     */
   case class Chore(id: Id[Chore], name: String, done: Boolean) derives Form, Resource
 
+  /** An instant, whose input refuses a zone and whose pages print one. */
+  case class Meeting(id: Id[Meeting], at: java.time.Instant) derives Form, Resource
+
   /** Forms, and deliberately does not mount: it has no key. */
   case class Login(email: String, password: String) derives Form
 
@@ -178,6 +181,25 @@ class ResourceSuite extends munit.FunSuite with ResourceFixtures {
     val mopped = s"/chores/${byName("Mop").id.show}"
     assert(markup(routes.dispatch(request(Method.GET, mopped))).contains("<dd>false</dd>"))
     assert(!markup(routes.dispatch(request(Method.GET, s"$mopped/edit"))).contains("checked"))
+  }
+
+  test("an Instant is listed and shown with UTC, and its input holds the text without it") {
+    val store  = InMemoryStore[Meeting]()
+    val routes = table[Meeting](store)
+    routes.dispatch(request(Method.POST, "/meetings", "at" -> "2026-10-13T10:00"))
+    val meeting = store.all().head
+    assertEquals(meeting.at, java.time.Instant.parse("2026-10-13T10:00:00Z"))
+
+    val index = markup(routes.dispatch(request(Method.GET, "/meetings")))
+    assert(index.contains(">2026-10-13T10:00 UTC</a>"), index)
+
+    val path = s"/meetings/${meeting.id.show}"
+    val show = markup(routes.dispatch(request(Method.GET, path)))
+    assert(show.contains("<dt>At</dt><dd>2026-10-13T10:00 UTC</dd>"), show)
+
+    val edit = markup(routes.dispatch(request(Method.GET, s"$path/edit")))
+    assert(edit.contains("""value="2026-10-13T10:00""""), edit)
+    assert(!edit.contains("UTC"), edit)
   }
 
   test("index links to new when New is mounted, and does not when it is not") {

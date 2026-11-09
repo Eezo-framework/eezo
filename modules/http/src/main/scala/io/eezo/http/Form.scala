@@ -62,8 +62,9 @@ trait Form[A] {
 
   /** One record's fields paired with their values, as a `show` page renders them.
     *
-    * The values come from the same [[Field.show]] the inputs use, so a show page and the edit form
-    * for the same record cannot disagree about one field's text. The alternative, reading
+    * The values come from each field's [[Field.display]], which is the same [[Field.show]] the
+    * inputs use unless the Field gives the pages a text of its own, so a show page and the edit
+    * form for the same record cannot disagree about one field's text. The alternative, reading
     * `productElement(i).toString`, prints `Some(3)` for an `Option` field and disagrees on the
     * spot. The key is absent, exactly as it is from [[fields]].
     */
@@ -209,7 +210,9 @@ object Form {
       val fields: Seq[FormField] = visible.map(_._1)
 
       def show(value: A): Seq[(FormField, String)] =
-        visible.map { case (f, i) => f -> text(value, i) }
+        visible.map { case (f, i) =>
+          f -> instances(i).display(value.asInstanceOf[Product].productElement(i))
+        }
 
       private def text(value: A, i: Int): String =
         instances(i).show(value.asInstanceOf[Product].productElement(i))

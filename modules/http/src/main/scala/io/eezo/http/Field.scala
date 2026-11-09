@@ -41,7 +41,8 @@ final class Field[X: Parser](
     val inputType: String,
     write: X => String,
     ticked: X => Boolean = (_: X) => false,
-    val step: Option[String] = None
+    val step: Option[String] = None,
+    displayed: Option[X => String] = None
 ) {
 
   /** Public so a Field built over another can compose over the same reading, rather than summoning
@@ -49,10 +50,16 @@ final class Field[X: Parser](
     */
   def parser: Parser[X] = summon[Parser[X]]
 
-  /** The field's value as text: what an input is filled with, and what a show page or an index
-    * prints. A checkbox has no text to fill, so `Form.render` asks [[checked]] instead.
+  /** The field's value as text: what an input is filled with. A checkbox has no text to fill, so
+    * `Form.render` asks [[checked]] instead.
     */
   def show(x: X): String = write(x)
+
+  /** The field's value as a show page and an index print it. It is [[show]], unless the Field gives
+    * the pages a text of its own, because the input refuses a text that a reader needs, such as the
+    * zone of an `Instant`.
+    */
+  def display(x: X): String = displayed.fold(write(x))(_(x))
 
   /** Reads submitted text through the Parser. The message is what reaches the user, so it reads as
     * a predicate about the value rather than as a parser's complaint.
@@ -131,18 +138,27 @@ object Field {
     * the input's text through core's `LocalDateTime` Parser as UTC, and still takes a full instant
     * from a program. It shows the instant as UTC text, to the millisecond, which is the finest a
     * `datetime-local` input holds. An instant outside the years a `LocalDateTime` holds, such as
-    * `Instant.MAX`, shows as the instant's own text.
+    * `Instant.MAX`, shows as the instant's own text. A show page and an index print the same text
+    * followed by ` UTC`, so a reader knows the zone. ADR 0010 records why the zone is UTC.
     */
-  given Field[Instant] = Field.of[Instant]("datetime-local")(at =>
-    try LocalDateTime.ofInstant(at, ZoneOffset.UTC).truncatedTo(ChronoUnit.MILLIS).toString
-    catch { case _: DateTimeException => at.toString }
-  )(text =>
-    summon[Parser[Instant]].read(text) match {
-      case Left(why) =>
-        summon[Parser[LocalDateTime]].read(text).map(_.toInstant(ZoneOffset.UTC)).left.map(_ => why)
-      case read => read
-    }
-  )
+  given Field[Instant] = {
+    val parser: Parser[Instant] = text =>
+      summon[Parser[Instant]].read(text) match {
+        case Left(why) =>
+          summon[Parser[LocalDateTime]]
+            .read(text)
+            .map(_.toInstant(ZoneOffset.UTC))
+            .left
+            .map(_ => why)
+        case read => read
+      }
+    def utc(at: Instant): String =
+      try LocalDateTime.ofInstant(at, ZoneOffset.UTC).truncatedTo(ChronoUnit.MILLIS).toString
+      catch { case _: DateTimeException => at.toString }
+    new Field[Instant]("datetime-local", utc, displayed = Some(at => s"${utc(at)} UTC"))(using
+      parser
+    )
+  }
 
   /** A model's key.
     *
@@ -164,6 +180,7 @@ object Field {
       inner.inputType,
       _.map(inner.show).getOrElse(""),
       _.exists(inner.checked),
-      inner.step
+      inner.step,
+      Some(_.map(inner.display).getOrElse(""))
     )(using Parser.option(using inner.parser))
 }
