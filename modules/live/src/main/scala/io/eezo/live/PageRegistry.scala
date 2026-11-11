@@ -18,7 +18,7 @@ import java.time.Duration
   * arithmetic testable without sleeping.
   *
   * Plain `synchronized` over a map, deliberately: every operation here happens once per page
-  * lifetime (mount, connect, drop, close) — nothing is per-event — and a lock that is trivially
+  * lifetime (mount, connect, drop, close), nothing is per-event, and a lock that is trivially
   * correct beats a lock-free design nobody benchmarked.
   */
 private[live] final class PageRegistry(
@@ -35,7 +35,7 @@ private[live] final class PageRegistry(
   private val slots  = scala.collection.mutable.HashMap.empty[String, Slot]
   private val random = new SecureRandom()
 
-  /** Mints an id and registers the page built for it, or `None` at the cap — the mount's cue to
+  /** Mints an id and registers the page built for it, or `None` at the cap: the mount's cue to
     * render the page dead rather than fail the response (M3 decides the rendering). `renderedFor`
     * is the current user the render was for; `None` is a page rendered on a public route.
     */
@@ -51,7 +51,7 @@ private[live] final class PageRegistry(
     }
 
   /** Claims the page for a socket. One connection at a time: a second upgrade on a page that is
-    * already connected is refused, not shared — two writers through one mailbox would be legal, but
+    * already connected is refused, not shared. Two writers through one mailbox would be legal, but
     * two browsers believing one DOM is not a page, it is a bug kept.
     *
     * `who` is the current user the upgrade was stamped with, and on a bound page it has to be the
@@ -114,6 +114,13 @@ private[live] final class PageRegistry(
   }
 
   def size: Int = synchronized(slots.size)
+
+  /** Whether the page is inside its grace window. For tests that must wait for the server to see a
+    * drop the client already saw, not logic.
+    */
+  private[live] def disconnectedForTests(id: String): Boolean = synchronized {
+    slots.get(id).exists(_.status.isInstanceOf[Status.Disconnected])
+  }
 
   private def newId(): String = {
     val bytes = new Array[Byte](16)
