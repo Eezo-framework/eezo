@@ -426,7 +426,7 @@ object Landing {
       h2("What's coming"),
       p(
         Attrs.cls := "roadmap-lede",
-        "In priority order. Everything above the line is what 1.0 waits for."
+        "Roughly in this order. We have big plans for Eezo."
       ),
       Roadmap.render(Planned)
     )
