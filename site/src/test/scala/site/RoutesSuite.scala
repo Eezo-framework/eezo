@@ -49,6 +49,7 @@ class RoutesSuite extends FunSuite {
       page(get("/")).contains(s"https://www.youtube-nocookie.com/embed/${Landing.VideoId}"),
       "the talk on the front page"
     )
+    assert(page(get("/")).contains(Landing.Release), "the roadmap on the front page")
     val launcher = get("/install/eezo")
     assertEquals(launcher.status, 200)
     val text = launcher.body match {

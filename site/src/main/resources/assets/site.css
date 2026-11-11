@@ -1262,6 +1262,117 @@ html:not(.mac) .shortcut.mac {
   text-decoration: none;
 }
 
+/* roadmap */
+
+.landing-main .roadmap-section h2 {
+  margin-bottom: 10px;
+}
+
+.roadmap-lede {
+  color: var(--muted);
+  font-size: 1.08rem;
+  margin: 0 0 28px;
+}
+
+.roadmap {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 14px;
+  counter-reset: roadmap;
+}
+
+.roadmap-item {
+  position: relative;
+  counter-increment: roadmap;
+  background: var(--surface);
+  border: 2px solid var(--line);
+  border-radius: 14px;
+  padding: 16px 20px 16px 72px;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.roadmap-item:hover {
+  transform: translateY(-3px) rotate(-0.3deg);
+  box-shadow: var(--shadow);
+  border-color: var(--line-strong);
+}
+
+.roadmap-item::before {
+  content: counter(roadmap);
+  position: absolute;
+  top: 16px;
+  left: 18px;
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  color: var(--ink-fixed);
+  background: var(--sun);
+  transform: rotate(-6deg);
+}
+
+.roadmap-item:nth-child(5n + 2)::before { background: var(--mint); }
+.roadmap-item:nth-child(5n + 3)::before { background: var(--sky); }
+.roadmap-item:nth-child(5n + 4)::before { background: var(--coral); }
+.roadmap-item:nth-child(5n + 5)::before { background: var(--pink); }
+
+.roadmap-item h3 {
+  font-size: 1.15rem;
+  margin: 0 0 4px;
+}
+
+.roadmap-item p {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+/* What can follow the release: drawn lighter, so the line reads as a cut. */
+.roadmap-milestone ~ .roadmap-item {
+  border-style: dashed;
+}
+
+.roadmap-milestone ~ .roadmap-item::before {
+  background: var(--surface-2);
+  color: var(--muted);
+}
+
+.roadmap-milestone {
+  grid-column: 1 / -1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  margin: 18px 0;
+}
+
+.roadmap-milestone::before,
+.roadmap-milestone::after {
+  content: "";
+  flex: 1;
+  border-top: 3px dashed var(--line-strong);
+}
+
+.roadmap-milestone-label {
+  flex: none;
+  background: var(--sun);
+  color: var(--ink-fixed);
+  border: 2.5px solid var(--sticker-border);
+  border-radius: 999px;
+  padding: 8px 18px;
+  box-shadow: var(--shadow-sticker);
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 1.05rem;
+  transform: rotate(-2deg);
+}
+
 /* closing */
 
 .closing {
@@ -2084,6 +2195,10 @@ html:not(.mac) .shortcut.mac {
   .landing-main .pillar-cards,
   .module-cards {
     grid-template-columns: 1fr;
+  }
+
+  .roadmap-milestone {
+    gap: 10px;
   }
 
   .layer-card {

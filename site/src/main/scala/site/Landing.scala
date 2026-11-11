@@ -107,6 +107,7 @@ object Landing {
         steps,
         features,
         layers,
+        roadmap,
         closing
       )
     )
@@ -307,6 +308,127 @@ object Landing {
       code(Attrs.cls := "artifact", s""""io.eezo" %% "$artifact""""),
       p(strong(entry), " · ", layers),
       a(Attrs.href := href, s"See $example →")
+    )
+
+  /** The label on the line between what 1.0 waits for and what can follow it, spelled here so a
+    * test can hold the page to it.
+    */
+  val Release: String = "Potential 1.0 release"
+
+  private val Planned: Vector[Roadmap.Entry] = Vector(
+    Roadmap.Item(
+      "Observability and OpenTelemetry",
+      "Structured logs with request ids, an access log, a readiness check that pings the pool, metrics, and OTel spans around requests, queries and live events."
+    ),
+    Roadmap.Item(
+      "Testkit and Testcontainers",
+      "Request builders, signed-in sessions, CSRF handled for you, a rollback per test, and a Postgres that starts itself."
+    ),
+    Roadmap.Item(
+      "Security policy and login throttling",
+      "A SECURITY.md with a disclosure path, and sign-in attempts throttled so a password guard can't be brute forced."
+    ),
+    Roadmap.Item(
+      "Database joins",
+      "hasMany and belongsTo over Ref, joins with eager loading so a list page doesn't run N+1 queries, and typed aggregates."
+    ),
+    Roadmap.Item(
+      "OAuth integration",
+      "Sign in with GitHub, Google or any OIDC provider, onto the same user model the password guard uses."
+    ),
+    Roadmap.Item(
+      "Uploads, multipart and storage",
+      "Multipart forms with size limits, and files kept on disk or in S3."
+    ),
+    Roadmap.Item(
+      "HTTP streaming and SSE",
+      "Stream a response body as it's produced, and push Server-Sent Events from a plain handler."
+    ),
+    Roadmap.Item(
+      "Validation rules",
+      "Length, range, format and cross-field rules declared once on the model, enforced in the form, the JSON API and the database. Iron's refined types are the candidate."
+    ),
+    Roadmap.Item(
+      "JSON outputs",
+      "Every eezo command can answer in JSON, so scripts and agents read its results instead of scraping text."
+    ),
+    Roadmap.Item(
+      "Agentic tools",
+      "Skills and tools that let a coding agent read your routes, models, drift and logs from a running eezo dev."
+    ),
+    Roadmap.Item(
+      "The admin",
+      "An admin interface derived from every Table, mounted with one Route.under(\"/admin\")."
+    ),
+    Roadmap.Item(
+      "i18n",
+      "Translated messages and derived pages: form labels, validation errors and CRUD screens in the reader's language."
+    ),
+    Roadmap.Milestone(Release),
+    Roadmap.Item(
+      "Pagination",
+      "Pages, sorting and filters on the derived index and the JSON API, so a table with 10k rows doesn't load all of them."
+    ),
+    Roadmap.Item(
+      "OpenAPI from the data model",
+      "An OpenAPI 3.1 document derived from derives Api at compile time, and checked in CI like schema drift."
+    ),
+    Roadmap.Item(
+      "Email",
+      "Mail written as Html values, with a dev inbox and preview pages while you build."
+    ),
+    Roadmap.Item(
+      "Background jobs",
+      "Jobs on the Postgres you already run, with retries and scheduling. No Redis needed."
+    ),
+    Roadmap.Item(
+      "Local caching",
+      "An in-process cache for the reads that rarely change."
+    ),
+    Roadmap.Item(
+      "Distributed topics",
+      "A Topic that fans out across machines over Postgres LISTEN/NOTIFY, so every live page sees every update."
+    ),
+    Roadmap.Item(
+      "Horizontal scale",
+      "Several machines behind a load balancer, sharing live state and surviving one going away."
+    ),
+    Roadmap.Item(
+      "Magic link sign-in",
+      "Sign in from a link in an email, with no password to remember."
+    ),
+    Roadmap.Item(
+      "Dev Services",
+      "eezo dev starts a throwaway Postgres when none is reachable, so a fresh clone runs with no setup."
+    ),
+    Roadmap.Item(
+      "A test tab in the TUI",
+      "A tab in the eezo dev console that reruns the affected tests on save."
+    ),
+    Roadmap.Item(
+      "The dev console in the browser",
+      "The same routes, models, drift and logs as the TUI, in a browser tab."
+    ),
+    Roadmap.Item(
+      "Attachments on the model",
+      "A file field declared on the case class, with storage, signed URLs and cleanup derived for it."
+    ),
+    Roadmap.Item(
+      "Deploy check and built-in CSP",
+      "eezo check before a deploy: secret set, debug off, headers on. Plus a Content Security Policy with nonces in the layout."
+    )
+  )
+
+  private def roadmap: Html =
+    section(
+      Attrs.cls := "roadmap-section",
+      p(Attrs.cls := "eyebrow", "Roadmap"),
+      h2("What's coming"),
+      p(
+        Attrs.cls := "roadmap-lede",
+        "In priority order. Everything above the line is what 1.0 waits for."
+      ),
+      Roadmap.render(Planned)
     )
 
   private def closing: Html =
