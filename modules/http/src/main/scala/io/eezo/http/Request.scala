@@ -112,9 +112,10 @@ final case class Request(
     * the body before dispatch and the handler reads it again. `multipart/form-data` is out of
     * scope: this is `application/x-www-form-urlencoded` only.
     *
-    * A body that is not valid percent encoded UTF-8, such as `name=50%` or `name=%FF`, is the
-    * client's mistake, so it is a [[BadRequest]] rather than the decoder's own exception, which the
-    * boundary would answer with a 500. The query string is held to the same rule.
+    * A body with a broken escape, such as `name=50%`, or with escapes whose bytes are not UTF-8,
+    * such as `name=%FF`, is the client's mistake, so it is a [[BadRequest]] rather than the
+    * decoder's own exception, which the boundary would answer with a 500. The query string is held
+    * to the same rule. Raw bytes that are not UTF-8 are not checked: they become U+FFFD.
     */
   lazy val form: Map[String, Seq[String]] =
     if (!isFormEncoded) Map.empty

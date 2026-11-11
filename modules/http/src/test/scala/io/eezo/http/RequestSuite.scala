@@ -69,7 +69,18 @@ class RequestSuite extends munit.FunSuite {
 
   test("a malformed percent escape in the form body is a BadRequest, so a 400") {
     // `%FF`, `%C3` and `%C3%28` are well formed escapes, but the bytes they name are not UTF-8.
-    for (raw <- Seq("name=%", "name=50%", "name=%zz", "%=1", "name=%FF", "name=%C3", "%C3%28=1")) {
+    for (
+      raw <- Seq(
+        "name=%",
+        "name=50%",
+        "name=%zz",
+        "%=1",
+        "name=%FF",
+        "name=%C3",
+        "name=a%C3b",
+        "%C3%28=1"
+      )
+    ) {
       val req = request(
         method = Method.POST,
         headers = Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
