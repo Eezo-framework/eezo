@@ -73,6 +73,19 @@ trait LiveServerFixtures { self: munit.FunSuite =>
       http.send(builder.build(), HttpResponse.BodyHandlers.ofString())
     }
 
+    /** Waits until the server has seen the page's socket drop. A [[Wire.drop]] is over for the
+      * client at once, but the server's close callback runs later; until it has, the old listener
+      * is still attached, a frame sent to it vanishes unnoticed, and a reconnect is refused as
+      * already connected.
+      */
+    def awaitDropped(pageId: String): Unit = {
+      val deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5)
+      while (!Live.disconnectedForTests(pageId)) {
+        if (System.nanoTime() > deadline) fail(s"the server never saw page $pageId drop")
+        Thread.sleep(5)
+      }
+    }
+
     /** Mounts a fresh page over HTTP and returns its id, read off the marker. */
     def mountedPageId(at: String = "/counter", headers: Seq[(String, String)] = Nil): String =
       pageIdIn(get(at, headers).body())

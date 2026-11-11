@@ -45,6 +45,12 @@ object Live {
   private val log      = System.getLogger("io.eezo.live")
   private val registry = new PageRegistry()
 
+  /** Whether the server has seen the page's socket drop: the listener is detached by then, since
+    * `onClose` detaches before it tells the registry. For tests, not logic.
+    */
+  private[live] def disconnectedForTests(pageId: String): Boolean =
+    registry.disconnectedForTests(pageId)
+
   private val PageAttr     = AttrName("data-eezo-page")
   private val DeadAttr     = AttrName("data-eezo-dead")
   private val ClickAttr    = AttrName("data-eezo-click")

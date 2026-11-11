@@ -401,6 +401,7 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
 
       first.drop() // a hard transport close: the server sees 1006 and opens the grace window
       val _ = first.closeCode()
+      rig.awaitDropped(pageId)
 
       // Nothing moved while the socket was away, so the rejoin gets no resync: the tab's DOM is
       // still right. The state is the first socket's, as the next event shows.
@@ -425,6 +426,9 @@ class LiveServerSuite extends munit.FunSuite with LiveServerFixtures {
       val _ = first.frame()
       first.drop()
       val _ = first.closeCode()
+      // Only once the server has detached the first socket: a publish before that is sent to it
+      // and lost without a trace, so the page owes the rejoin nothing.
+      rig.awaitDropped(pageId)
 
       bumps.publish(()) // no socket attached: the frame drops, and the page remembers the drop
       val second = rig.connect(pageId)
