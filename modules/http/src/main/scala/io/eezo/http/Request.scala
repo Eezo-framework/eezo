@@ -132,9 +132,14 @@ final case class Request(
     * Both [[form]] and the `_method` override ask it, and they have to agree: an override that
     * fired on a body [[form]] refuses to read would let a request that is not a form submission at
     * all choose its own verb.
+    *
+    * The media type is compared without its parameters and without regard to case, as RFC 9110
+    * says, so `Application/X-WWW-Form-Urlencoded; charset=UTF-8` is a form too.
     */
   private[http] def isFormEncoded: Boolean =
-    header("Content-Type").exists(_.startsWith("application/x-www-form-urlencoded"))
+    header("Content-Type").exists(
+      _.takeWhile(_ != ';').trim.equalsIgnoreCase("application/x-www-form-urlencoded")
+    )
 
   /** A path parameter, converted. Throws [[BadRequest]], which the boundary maps to a 400. */
   def param[A](name: String)(using from: FromPath[A]): A = Request.param(pathParams, name)
