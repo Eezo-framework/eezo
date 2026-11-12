@@ -271,15 +271,40 @@ class EezoServerSuite extends munit.FunSuite with ServerFixtures {
           clue(query)
         )
       }
-      for (body <- Seq("name=%", "name=50%", "%zz=1")) {
+      // The form body is held to the same rule as the query string.
+      for (
+        body <- Seq("name=%", "name=50%", "%zz=1", "name=%FF", "name=%C3", "name=a%C3b", "%C3%28=1")
+      ) {
         val response = submit(port, "/widgets", handed(), body)
         assertEquals(response.statusCode(), 400, clue(body))
         assert(
-          clue(response.body()).contains("<p>the form body is not valid percent encoding</p>"),
+          clue(response.body()).contains(
+            "<p>the form body is not valid percent encoded UTF-8</p>"
+          ),
           clue(body)
         )
       }
       assert(!ran)
+    }
+  }
+
+  test("the query string and the form body agree on the edge sequences of UTF-8") {
+    val routes = RouteTable(
+      Seq(
+        Route.Http(Method.GET, PathPattern.parse("/search"), _ => Response.Ok(Html.text("ok"))),
+        Route.Http(
+          Method.POST,
+          PathPattern.parse("/widgets"),
+          req => Response.Ok(Html.text(req.form.toString))
+        )
+      )
+    )
+    serving(routes) { (_, port) =>
+      for (escape <- Seq("%C0%AF", "%ED%A0%80", "%F4%90%80%80", "%EF%BF%BE", "%c3%a9")) {
+        val query = rawGet(port, s"/search?q=$escape").startsWith("HTTP/1.1 400 ")
+        val form  = submit(port, "/widgets", handed(), s"name=$escape").statusCode() == 400
+        assertEquals(form, query, clue(escape))
+      }
     }
   }
 

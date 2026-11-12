@@ -68,15 +68,44 @@ class RequestSuite extends munit.FunSuite {
   }
 
   test("a malformed percent escape in the form body is a BadRequest, so a 400") {
-    for (raw <- Seq("name=%", "name=50%", "name=%zz", "%=1")) {
+    // `%FF`, `%C3` and `%C3%28` are well formed escapes, but the bytes they name are not UTF-8.
+    for (
+      raw <- Seq(
+        "name=%",
+        "name=50%",
+        "name=%zz",
+        "%=1",
+        "name=%FF",
+        "name=%C3",
+        "name=a%C3b",
+        "%C3%28=1"
+      )
+    ) {
       val req = request(
         method = Method.POST,
         headers = Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
         body = raw.getBytes("UTF-8")
       )
       val refusal = intercept[BadRequest](req.form)
-      assertEquals(refusal.detail, "the form body is not valid percent encoding", clue(raw))
+      assertEquals(refusal.detail, "the form body is not valid percent encoded UTF-8", clue(raw))
     }
+  }
+
+  test("a form body with UTF-8 escapes, raw text and plus signs still decodes") {
+    val req = request(
+      method = Method.POST,
+      headers = Map("Content-Type" -> Seq("application/x-www-form-urlencoded")),
+      body = "name=caf%C3%A9+%F0%9F%8D%B0&note=d%C3%A9j%C3%A0+vu&raw=é&pct=50%25".getBytes("UTF-8")
+    )
+    assertEquals(
+      req.form,
+      Map(
+        "name" -> Seq("café 🍰"),
+        "note" -> Seq("déjà vu"),
+        "raw"  -> Seq("é"),
+        "pct"  -> Seq("50%")
+      )
+    )
   }
 
   test("param converts a path parameter through FromPath") {
