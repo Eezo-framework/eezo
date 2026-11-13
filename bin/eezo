@@ -26,6 +26,7 @@ eezo — the framework launcher
   eezo dev              the dev console: serve, restart on save, errors, routes, schema
       --no-tui          the same loop as lines, no screen and no keys: for a pipe or a log
       --json            the same loop as one JSON object per line: for an agent or a tool
+      --project <id>    the module, when the directory does not name one
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -33,7 +34,7 @@ eezo — the framework launcher
   eezo upgrade          move to the latest eezo on Maven Central: this command, what
                         `new` scaffolds, and the project in the current directory
 
-forwarded to the application (run from the project directory):
+forwarded to the application (a module directory is enough; --project names one):
   eezo routes           what is mounted
   eezo config           the variables application.conf names, one per line: variable,
                         path, redacted|plain, required|defaulted|optional, tab separated
@@ -197,29 +198,301 @@ pinned_since() { # pinned_since <release>
   [ "$(printf '%s\n%s\n' "$1" "$pinned" | sort -V | head -1)" = "$1" ]
 }
 
-dev() { # [--no-tui | --json]
-  need_sbt
-  local command="eezoDev"
+# ---------------------------------------------------------------------------------------------
+# Which module. The directory names it. `--project` overrides. These functions do not start sbt,
+# so a fixture can read the command string they would hand it.
+# ---------------------------------------------------------------------------------------------
+
+EEZO_PROJECT=""
+EEZO_MODULE=""
+EEZO_BUILD_ROOT=""
+EEZO_REST=()
+
+extract_project_flag() {
+  EEZO_PROJECT=""
+  EEZO_REST=()
   while [ $# -gt 0 ]; do
     case "$1" in
-      --no-tui) command="eezoDev --plain" ;;
-      --json) command="eezoDev --json" ;;
+      --project)
+        if [ $# -lt 2 ] || [ -z "${2:-}" ]; then
+          echo "eezo: --project needs a project id" >&2
+          return 1
+        fi
+        EEZO_PROJECT="$2"
+        shift 2
+        ;;
+      --project=*)
+        EEZO_PROJECT="${1#--project=}"
+        if [ -z "$EEZO_PROJECT" ]; then
+          echo "eezo: --project needs a project id" >&2
+          return 1
+        fi
+        shift
+        ;;
       *)
-        echo "eezo dev: unknown option $1 (the options are --no-tui and --json)" >&2
+        EEZO_REST+=("$1")
+        shift
+        ;;
+    esac
+  done
+}
+
+eezo_abs() { # <dir>
+  (cd "$1" && pwd -P)
+}
+
+eezo_build_root() { # <start> ; prints the directory that holds build.sbt
+  local dir parent
+  dir="$(eezo_abs "$1")" || return 1
+  while [ ! -f "$dir/build.sbt" ]; do
+    parent="$(dirname "$dir")"
+    [ "$parent" != "$dir" ] || return 1
+    dir="$parent"
+  done
+  printf '%s\n' "$dir"
+}
+
+eezo_under() { # <root> <rel> ; absolute base, even when the directory is not there yet
+  local root="$1" rel="$2" parent name
+  if [ -d "$root/$rel" ]; then
+    eezo_abs "$root/$rel"
+  else
+    parent="$(dirname "$root/$rel")"
+    name="$(basename "$rel")"
+    if [ -d "$parent" ]; then
+      printf '%s/%s\n' "$(eezo_abs "$parent")" "$name"
+    else
+      printf '%s/%s\n' "$(eezo_abs "$root")" "$rel"
+    fi
+  fi
+}
+
+# id<TAB>absolute-base per line. Returns 2 when the build names projects this cannot read.
+eezo_projects_of() { # <root>
+  local root="$1" text="" f chunk saw=0 n=0 line id rel base
+  local files=()
+  [ -f "$root/build.sbt" ] && files+=("$root/build.sbt")
+  if [ -d "$root/project" ]; then
+    for f in "$root/project"/*.scala; do
+      [ -f "$f" ] || continue
+      files+=("$f")
+    done
+  fi
+  for f in "${files[@]+"${files[@]}"}"; do
+    [ -n "$f" ] && [ -f "$f" ] || continue
+    chunk="$(sed -e 's|//.*||' "$f" | tr '\n' ' ')"
+    text="${text} ${chunk}"
+  done
+  if printf '%s' "$text" | grep -qE 'project[[:space:]]+in[[:space:]]+file|project[[:space:]]*\.[[:space:]]*in[[:space:]]*\([[:space:]]*file|[[:space:]]Project[[:space:]]*\('; then
+    saw=1
+  fi
+  eezo_emit_projects() {
+    local pattern="$1" kind="$2"
+    while IFS= read -r line; do
+      [ -n "$line" ] || continue
+      if [ "$kind" = "project" ]; then
+        id="$(printf '%s' "$line" | sed -nE 's/.*Project[[:space:]]*\([[:space:]]*"([^"]+)".*/\1/p')"
+      else
+        id="$(printf '%s' "$line" | sed -nE 's/.*val[[:space:]]+([A-Za-z_][A-Za-z0-9_]*).*/\1/p')"
+      fi
+      rel="$(printf '%s' "$line" | sed -nE 's/.*file[[:space:]]*\([[:space:]]*"([^"]+)".*/\1/p')"
+      [ -n "$id" ] && [ -n "$rel" ] || continue
+      base="$(eezo_under "$root" "$rel")" || return 1
+      printf '%s\t%s\n' "$id" "$base"
+      n=$((n + 1))
+    done < <(printf '%s' "$text" | grep -oE "$pattern" || true)
+  }
+  eezo_emit_projects 'val[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*\(?[[:space:]]*project[[:space:]]+in[[:space:]]+file[[:space:]]*\([[:space:]]*"[^"]+"' val
+  eezo_emit_projects 'val[[:space:]]+[A-Za-z_][A-Za-z0-9_]*[[:space:]]*=[[:space:]]*project[[:space:]]*\.[[:space:]]*in[[:space:]]*\([[:space:]]*file[[:space:]]*\([[:space:]]*"[^"]+"' val
+  eezo_emit_projects 'Project[[:space:]]*\([[:space:]]*"[^"]+"[[:space:]]*,[[:space:]]*file[[:space:]]*\([[:space:]]*"[^"]+"' project
+  unset -f eezo_emit_projects
+  if [ "$n" -eq 0 ] && [ "$saw" -eq 1 ]; then
+    return 2
+  fi
+}
+
+eezo_is_prefix() { # <base> <path>
+  case "$2/" in
+    "$1/"*) return 0 ;;
+  esac
+  return 1
+}
+
+eezo_join() { # ids...
+  local out="" id
+  for id in "$@"; do
+    if [ -z "$out" ]; then out="$id"; else out="$out, $id"; fi
+  done
+  printf '%s' "$out"
+}
+
+# Prints the selected id, or nothing when the build is the one root project. Errors name --project.
+eezo_choose_from() { # <cwd> <root> <explicit> ; projects on stdin as id<TAB>base
+  local cwd="$1" root="$2" explicit="$3"
+  local -a ids=() bases=()
+  local id base i len best="" bestlen=-1
+  while IFS=$'\t' read -r id base; do
+    [ -n "$id" ] || continue
+    ids+=("$id")
+    bases+=("$base")
+  done
+  if [ -n "$explicit" ]; then
+    for i in "${!ids[@]}"; do
+      if [ "${ids[$i]}" = "$explicit" ]; then
+        printf '%s\n' "$explicit"
+        return 0
+      fi
+    done
+    if [ "${#ids[@]}" -eq 0 ]; then
+      if [ "$explicit" = "$(basename "$root")" ]; then
+        printf '\n'
+        return 0
+      fi
+      echo "eezo: unknown project '$explicit'. The only project is $(basename "$root")." >&2
+      return 1
+    fi
+    echo "eezo: unknown project '$explicit'. Projects: $(eezo_join "${ids[@]}"). Pass --project <id>." >&2
+    return 1
+  fi
+  for i in "${!ids[@]}"; do
+    if eezo_is_prefix "${bases[$i]}" "$cwd"; then
+      len="${#bases[$i]}"
+      if [ "$len" -gt "$bestlen" ]; then
+        best="${ids[$i]}"
+        bestlen=$len
+      fi
+    fi
+  done
+  if [ -n "$best" ]; then
+    printf '%s\n' "$best"
+    return 0
+  fi
+  if [ "${#ids[@]}" -eq 0 ]; then
+    if eezo_is_prefix "$root" "$cwd"; then
+      printf '\n'
+      return 0
+    fi
+  fi
+  if [ "${#ids[@]}" -eq 1 ] && [ "$cwd" = "$root" ]; then
+    printf '%s\n' "${ids[0]}"
+    return 0
+  fi
+  if [ "${#ids[@]}" -gt 1 ] && [ "$cwd" = "$root" ]; then
+    echo "eezo: $root has several projects. Pass --project <id>. Projects: $(eezo_join "${ids[@]}")." >&2
+    return 1
+  fi
+  if [ "${#ids[@]}" -eq 0 ]; then
+    echo "eezo: $cwd is not inside a project of $root. Pass --project <id>." >&2
+  else
+    echo "eezo: $cwd is not inside a project of $root. Pass --project <id>. Projects: $(eezo_join "${ids[@]}")." >&2
+  fi
+  return 1
+}
+
+# Prints build-root<TAB>module. The module is empty when sbt's current project is already the app.
+eezo_resolve() { # <cwd> [explicit]
+  local start="$1" explicit="${2:-}" cwd root projects code module
+  cwd="$(eezo_abs "$start")" || {
+    echo "eezo: cannot read $start." >&2
+    return 1
+  }
+  root="$(eezo_build_root "$cwd")" || {
+    echo "eezo: no build.sbt found from $start upward." >&2
+    return 1
+  }
+  set +e
+  projects="$(eezo_projects_of "$root")"
+  code=$?
+  set -e
+  if [ "$code" -eq 2 ]; then
+    echo "eezo: could not read the projects in $root. Pass --project <id>." >&2
+    return 1
+  fi
+  if [ "$code" -ne 0 ]; then
+    return "$code"
+  fi
+  set +e
+  module="$(printf '%s\n' "$projects" | eezo_choose_from "$cwd" "$root" "$explicit")"
+  code=$?
+  set -e
+  if [ "$code" -ne 0 ]; then
+    return "$code"
+  fi
+  printf '%s\t%s\n' "$root" "$module"
+}
+
+# The sbt command, without starting sbt. kind is dev, run or stage.
+eezo_scoped_command() { # <kind> <module> [args...]
+  local kind="$1" module="$2"
+  shift 2
+  local rest="$*"
+  case "$kind" in
+    dev)
+      if [ -n "$module" ]; then
+        if [ -n "$rest" ]; then printf 'project %s; eezoDev %s\n' "$module" "$rest"
+        else printf 'project %s; eezoDev\n' "$module"
+        fi
+      else
+        if [ -n "$rest" ]; then printf 'eezoDev %s\n' "$rest"
+        else printf 'eezoDev\n'
+        fi
+      fi
+      ;;
+    run)
+      if [ -n "$module" ]; then
+        if [ -n "$rest" ]; then printf '%s/run %s\n' "$module" "$rest"
+        else printf '%s/run\n' "$module"
+        fi
+      else
+        if [ -n "$rest" ]; then printf 'run %s\n' "$rest"
+        else printf 'run\n'
+        fi
+      fi
+      ;;
+    stage)
+      if [ -n "$module" ]; then printf '%s/eezoStage\n' "$module"
+      else printf 'eezoStage\n'
+      fi
+      ;;
+  esac
+}
+
+enter_module() {
+  local resolved
+  resolved="$(eezo_resolve "$(pwd -P)" "$EEZO_PROJECT")" || return 1
+  EEZO_BUILD_ROOT="${resolved%%$'\t'*}"
+  EEZO_MODULE="${resolved#*$'\t'}"
+  cd "$EEZO_BUILD_ROOT"
+}
+
+dev() { # [--no-tui | --json]
+  need_sbt
+  local flags=() scoped
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --no-tui) flags+=(--plain) ;;
+      --json) flags+=(--json) ;;
+      *)
+        echo "eezo dev: unknown option $1 (the options are --no-tui, --json and --project)" >&2
         exit 1
         ;;
     esac
     shift
   done
+  if [ "${#flags[@]}" -eq 0 ]; then
+    scoped="$(eezo_scoped_command dev "$EEZO_MODULE")"
+  else
+    scoped="$(eezo_scoped_command dev "$EEZO_MODULE" "${flags[@]}")"
+  fi
   if pinned_since "$DEV_CONSOLE_SINCE"; then
     # `--server`: on an sbt 2 project the sbt script runs a thin client by default, and the
     # console must run in the process that owns this terminal.
     SBT_OPTS="${SBT_OPTS:-} --enable-native-access=ALL-UNNAMED --sun-misc-unsafe-memory-access=allow -Dsbt.supershell=false" \
-      exec sbt --server -error "$command"
+      exec sbt --server -error "$scoped"
   fi
   # The older plugin's console is lines already, so `--no-tui` changes nothing here, and it has
   # no event stream, so `--json` gets the lines too.
-  dev_legacy
+  dev_legacy "$scoped"
 }
 
 # ---- the console built here, for a project on an older plugin ------------------------------
@@ -310,7 +583,7 @@ dev_console() {
 
 dev_legacy() {
   set +e
-  sbt_at -warn eezoDev 2>&1 | dev_console
+  sbt_at -warn "$1" 2>&1 | dev_console
   local code="${PIPESTATUS[0]}"
   set -e
   exit "$code"
@@ -1398,7 +1671,34 @@ EOF
   echo "  eezo routes        # what is mounted"
 }
 
+# Sourced by the module fixture, which reads the command string and does not start sbt.
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+extract_project_flag "$@" || exit 1
+set -- "${EEZO_REST[@]+"${EEZO_REST[@]}"}"
 cmd="${1:-}"
+case "$cmd" in
+  new | deploy | upgrade)
+    if [ -n "$EEZO_PROJECT" ]; then
+      echo "eezo: --project is not used with $cmd" >&2
+      exit 1
+    fi
+    ;;
+  dev | build | db | routes | config | help)
+    enter_module || exit 1
+    ;;
+  "" | -h | --help)
+    if [ -n "$EEZO_PROJECT" ]; then
+      echo "eezo: --project needs a command." >&2
+      exit 1
+    fi
+    ;;
+  *)
+    if [ -n "$EEZO_PROJECT" ]; then
+      echo "eezo: --project is not used with this command" >&2
+      exit 1
+    fi
+    ;;
+esac
 case "$cmd" in
   "" | -h | --help)
     usage
@@ -1413,7 +1713,7 @@ case "$cmd" in
     ;;
   build)
     need_sbt
-    forward "staging the application" eezoStage
+    forward "staging the application" "$(eezo_scoped_command stage "$EEZO_MODULE")"
     ;;
   deploy)
     shift
@@ -1429,14 +1729,14 @@ case "$cmd" in
   db)
     need_sbt
     if [ "${2:-}" = "freeze" ]; then
-      forward_live "run $*"
+      forward_live "$(eezo_scoped_command run "$EEZO_MODULE" "$@")"
     else
-      forward "eezo db ${2:-}" "run $*"
+      forward "eezo db ${2:-}" "$(eezo_scoped_command run "$EEZO_MODULE" "$@")"
     fi
     ;;
   routes | config | help)
     need_sbt
-    forward "eezo $cmd" "run $*"
+    forward "eezo $cmd" "$(eezo_scoped_command run "$EEZO_MODULE" "$@")"
     ;;
   status | sync | freeze | migrate | reset | drop | dump | ddl)
     echo "eezo: the schema commands live under db: eezo db $*" >&2
@@ -1448,3 +1748,4 @@ case "$cmd" in
     exit 1
     ;;
 esac
+fi

@@ -17,7 +17,8 @@ sbt publishLocalForExample      # once, at the repository root
 cd examples
 sbt hello/run                   # http://localhost:8080/hello
 sbt "hello/run routes"          # the table: 1 route, GET /hello
-sbt "hello/run dev"             # the listing and the reload client; `hello/eezoDev` restarts on save
+sbt "hello/run dev"             # the listing and the reload client
+sbt "project hello" eezoDev     # restarts on save
 ```
 
 ## What does not exist here

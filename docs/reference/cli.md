@@ -10,8 +10,12 @@ tutorials build; the version string in them changes with every commit.
 `upgrade`. `dev` hands the terminal to the sbt command `eezoDev`, the dev console that the plugin
 draws: the log, the compile errors, the route table, the schema drift and the Config's variables
 as panes, and the schema commands on keys ([the dev loop](../explanation/the-dev-loop.md) describes it). Everything else
-forwards to the application's own `main` as `sbt "run <command> <args>"`, so `eezo db status` and
-`sbt "run db status"` are the same code path, and so is the sbt task `eezoStatus`.
+forwards to the application's own `main`. Standing in a module, that is
+`sbt "<id>/run <command> <args>"`. A build with one project keeps `sbt "run <command> <args>"`.
+`eezo db status` and `sbt "run db status"` are the same code path, and so is the sbt task
+`eezoStatus`. A module directory is a valid place to stand: the launcher walks up to the build
+root, selects the project that contains that directory, and runs sbt from the build root. At a
+build root with several projects, name one with `--project`.
 
 The application's `main` is inherited from its entry trait. Each layer adds its commands: the
 http layer's two at the top level, and the database layer's eight under one namespace, `db`, so
@@ -25,7 +29,7 @@ build names a Config class.
 | command | layer | needs | what it does |
 |---|---|---|---|
 | `new <name> [--tailwind]`, `new . [--tailwind]` | launcher | `~/.eezo/eezo-version` | scaffolds `./<name>`, or the current directory, named after it, with an `AGENTS.md` that tells a coding agent how to drive the dev loop; `--tailwind` adds a `tailwind.css` and links the stylesheet from the page |
-| `dev [--no-tui\|--json]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes, the drift and the config as panes, `s` `f` `m` for the schema commands, `e` for a value boot refused; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`), for a pipe, a log or an agent; without a terminal and without a flag only `eezoDev --once` runs |
+| `dev [--no-tui\|--json] [--project <id>]` | sbt command | a terminal, or not | the dev console: restart on save, the log, the errors, the routes, the drift and the config as panes, `s` `f` `m` for the schema commands, `e` for a value boot refused; `q` or Ctrl-C stops it. `--no-tui` is the same loop printed as lines (`eezoDev --plain`) and `--json` as one JSON object per line (`eezoDev --json`), for a pipe, a log or an agent; without a terminal and without a flag only `eezoDev --once` runs. `--project` names the module when the directory does not |
 | `routes [--json]` | http layer | | the mounted table and boot's warnings |
 | `config [--json]` | both layers | | the variables `application.conf` names, in file order, without reading them; nothing when the build names no Config class |
 | `db` | database layer | | the eight schema commands, listed; `db help` is the same |
@@ -174,7 +178,8 @@ the command's answer and not a build failure:
   since the console needs the keyboard and draws the screen itself (once running, the console
   keeps sbt's progress off on its own, so a bare `sbt eezoDev` is clean too); `--server` is what
   keeps an sbt 2 project out of sbt's thin client, which the console refuses to run behind. The forked application gets `run / javaOptions`, not `SBT_OPTS`.
-- **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins. A project on a
+- **`project/plugins.sbt`**, for `dev` alone: the `sbt-eezo` version it pins, read from the build
+  root, so a module directory is a valid place to stand. A project on a
   plugin from before the console (0.3.0 and earlier) has only the `~eezoRestart` alias, and for
   it the launcher builds the older line console from sbt's output, as it did before.
 - **`fly.toml`**, for the app name and region on deploy.

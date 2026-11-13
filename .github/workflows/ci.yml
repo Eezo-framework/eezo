@@ -61,6 +61,11 @@ jobs:
       - name: Check prose
         run: bin/prose-check
 
+      # The launcher chooses a module before it starts sbt. The fixture asserts that command
+      # string and does not start sbt.
+      - name: Check the launcher module choice
+        run: bash bin/eezo-module-test
+
       # `+compile` rather than `compile`, and the `+` is there for the sbt plugin alone. `sbt-eezo`
       # is built from one source set on two axes, Scala 2.12 with sbt 1 and Scala 3.8.4 with sbt 2,
       # and no compiler flag enforces the shared subset that requires: `-Xsource:3` on the 2.12 axis
