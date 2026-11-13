@@ -58,6 +58,29 @@ class RequestSuite extends munit.FunSuite {
     assertEquals(req.form, Map.empty[String, Seq[String]])
   }
 
+  test("the form media type is read without regard to case or parameters") {
+    for (
+      contentType <- Seq(
+        "Application/X-WWW-Form-Urlencoded",
+        "APPLICATION/X-WWW-FORM-URLENCODED; charset=UTF-8",
+        "application/x-www-form-urlencoded;charset=utf-8"
+      )
+    ) {
+      val req = request(
+        method = Method.POST,
+        headers = Map("Content-Type" -> Seq(contentType)),
+        body = "a=1".getBytes("UTF-8")
+      )
+      assertEquals(req.form, Map("a" -> Seq("1")), clue(contentType))
+    }
+    val other = request(
+      method = Method.POST,
+      headers = Map("Content-Type" -> Seq("application/x-www-form-urlencodedx")),
+      body = "a=1".getBytes("UTF-8")
+    )
+    assertEquals(other.form, Map.empty[String, Seq[String]])
+  }
+
   test("a field with no value decodes to the empty string") {
     val req = request(
       method = Method.POST,
