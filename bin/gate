@@ -8,6 +8,7 @@
 #
 #   format     sbt scalafmtCheckAll scalafmtSbtCheck
 #   prose      bin/prose-check                   no dash characters in docs and scaladoc
+#   launcher   bin/eezo-module-test              the module the launcher would select, no sbt
 #   compile    sbt +compile Test/compile         the plugin is cross built for sbt 1 and sbt 2
 #   test       sbt +test                         every module suite
 #   plugin     sbt scriptedSbt2                  sbt-eezo built for sbt 2 loads in a real sbt 2.0.6
@@ -150,6 +151,7 @@ acquire "$CHECKOUT_LOCK" checkout
 
 step format   "$ROOT" sbt -batch scalafmtCheckAll scalafmtSbtCheck
 step prose    "$ROOT" bin/prose-check
+step launcher "$ROOT" bash bin/eezo-module-test
 step compile  "$ROOT" sbt -batch db/clean +compile Test/compile
 port_squatters
 step test     "$ROOT" sbt -batch +test

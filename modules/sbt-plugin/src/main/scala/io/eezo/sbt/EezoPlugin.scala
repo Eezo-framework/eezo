@@ -184,7 +184,11 @@ object EezoPlugin extends AutoPlugin {
         }
       )
       .value,
-    eezoStop         := DevProcess.stop(quiet = false, log = message => println(message)),
+    eezoStop := DevProcess.stop(
+      baseDirectory.value,
+      quiet = false,
+      log = message => println(message)
+    ),
     eezoDevClasspath := EezoClasspath.files.value,
     eezoJavaVersion  := "25",
     // The stylesheet, built inside the same classpath request that compiles the project, so that

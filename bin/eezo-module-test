@@ -1,0 +1,154 @@
+#!/usr/bin/env bash
+# The module the launcher would select, and the sbt command it would run. No sbt.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+# shellcheck source=eezo
+source "$ROOT/bin/eezo"
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+assert_eq() { # <got> <want> <what>
+  [ "$1" = "$2" ] || fail "$3: got [$1] want [$2]"
+}
+
+module_of() { # <resolved>
+  printf '%s' "${1#*$'\t'}"
+}
+
+root_of() { # <resolved>
+  printf '%s' "${1%%$'\t'*}"
+}
+
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+
+multi="$TMP/multi"
+mkdir -p "$multi/hello/src" "$multi/todo" "$multi/project" "$multi/hello-extra"
+cat > "$multi/build.sbt" <<'EOF'
+// an old pin, commented out, must not count
+// lazy val old = (project in file("old"))
+lazy val hello = (project in file("hello"))
+lazy val todo = project
+  .in(file("todo"))
+EOF
+cat > "$multi/project/Api.scala" <<'EOF'
+lazy val api = Project("api", file("api"))
+EOF
+mkdir -p "$multi/api"
+
+resolved="$(eezo_resolve "$multi/hello")"
+assert_eq "$(root_of "$resolved")" "$(cd "$multi" && pwd -P)" "build root from hello"
+assert_eq "$(module_of "$resolved")" "hello" "module from hello"
+assert_eq "$(eezo_scoped_command dev hello)" "project hello; eezoDev" "dev command"
+assert_eq "$(eezo_scoped_command dev hello --plain)" "project hello; eezoDev --plain" "dev plain command"
+assert_eq "$(eezo_scoped_command run hello routes)" "hello/run routes" "routes command"
+assert_eq "$(eezo_scoped_command run hello db sync --apply)" "hello/run db sync --apply" "db command"
+assert_eq "$(eezo_scoped_command stage hello)" "hello/eezoStage" "stage command"
+
+resolved="$(eezo_resolve "$multi/hello/src")"
+assert_eq "$(module_of "$resolved")" "hello" "nested path"
+
+resolved="$(eezo_resolve "$multi/todo")"
+assert_eq "$(module_of "$resolved")" "todo" "project.in form"
+
+resolved="$(eezo_resolve "$multi/api")"
+assert_eq "$(module_of "$resolved")" "api" "Project() form"
+
+set +e
+err="$(eezo_resolve "$multi" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "root with several projects should refuse"
+printf '%s' "$err" | grep -q "hello" || fail "refusal should name hello: $err"
+printf '%s' "$err" | grep -q "todo" || fail "refusal should name todo: $err"
+printf '%s' "$err" | grep -q -- "--project" || fail "refusal should name --project: $err"
+
+resolved="$(eezo_resolve "$multi" hello)"
+assert_eq "$(module_of "$resolved")" "hello" "explicit id at the root"
+
+set +e
+err="$(eezo_resolve "$multi/hello" nope 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "unknown project should refuse"
+printf '%s' "$err" | grep -q "nope" || fail "unknown project should name the id: $err"
+
+set +e
+err="$(eezo_resolve "$multi/hello-extra" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "a sibling directory must not select hello"
+
+withroot="$TMP/withroot"
+mkdir -p "$withroot/app" "$withroot/lib" "$withroot/app-extra"
+cat > "$withroot/build.sbt" <<'EOF'
+lazy val root = (project in file("."))
+lazy val app = (project in file("app"))
+lazy val lib = (project in file("lib"))
+EOF
+
+set +e
+err="$(eezo_resolve "$withroot" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "file(\".\") aggregate at the root should refuse"
+printf '%s' "$err" | grep -q "app" || fail "file(\".\") refusal should name app: $err"
+printf '%s' "$err" | grep -q -- "--project" || fail "file(\".\") refusal should name --project: $err"
+
+resolved="$(eezo_resolve "$withroot/app")"
+assert_eq "$(module_of "$resolved")" "app" "module under file(\".\") root"
+resolved="$(eezo_resolve "$withroot" app)"
+assert_eq "$(module_of "$resolved")" "app" "explicit id with file(\".\") root"
+
+set +e
+err="$(eezo_resolve "$withroot/app-extra" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "a sibling under file(\".\") must not select the aggregate"
+
+examples="$ROOT/examples"
+resolved="$(eezo_resolve "$examples/hello")"
+assert_eq "$(root_of "$resolved")" "$(cd "$examples" && pwd -P)" "examples build root from hello"
+assert_eq "$(module_of "$resolved")" "hello" "examples/hello"
+
+set +e
+err="$(eezo_resolve "$examples" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "examples root should refuse"
+printf '%s' "$err" | grep -q "hello" || fail "examples refusal should name hello: $err"
+printf '%s' "$err" | grep -q -- "--project" || fail "examples refusal should name --project: $err"
+
+resolved="$(eezo_resolve "$examples" hello)"
+assert_eq "$(module_of "$resolved")" "hello" "examples --project hello"
+
+single="$TMP/single"
+mkdir -p "$single/src"
+printf 'name := "app"\n' > "$single/build.sbt"
+resolved="$(eezo_resolve "$single/src")"
+assert_eq "$(module_of "$resolved")" "" "single project stays unscoped"
+assert_eq "$(eezo_scoped_command dev "")" "eezoDev" "unscoped dev"
+assert_eq "$(eezo_scoped_command run "" routes)" "run routes" "unscoped run"
+assert_eq "$(eezo_scoped_command stage "")" "eezoStage" "unscoped stage"
+
+bad="$TMP/bad"
+mkdir -p "$bad"
+printf 'lazy val hello = project in file(helloDir)\n' > "$bad/build.sbt"
+set +e
+err="$(eezo_resolve "$bad" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "an unreadable build should refuse"
+printf '%s' "$err" | grep -q -- "--project" || fail "unreadable build should name --project: $err"
+
+missing="$TMP/missing"
+mkdir -p "$missing"
+set +e
+err="$(eezo_resolve "$missing" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "a missing build should refuse"
+printf '%s' "$err" | grep -q "build.sbt" || fail "missing build should say so: $err"
+
+echo "eezo module choice: ok"

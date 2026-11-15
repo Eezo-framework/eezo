@@ -73,7 +73,6 @@ private[sbt] object DevCommand {
     val plain       = args.contains("--plain") || json
     val terminal    = TerminalAccess.current
     val interactive = !once && !plain && terminal.getWidth > 0 && terminal.isAnsiSupported
-    val extracted   = Project.extract(state)
 
     // The console writes to sbt's own terminal and must not run behind a thin client: the client
     // returns at the first failed task and leaves the loop, and the application, running in a
@@ -92,15 +91,18 @@ private[sbt] object DevCommand {
       System.out.println(terminalRefusal)
       return state.fail
     }
-    // The command is global, the settings it reads are the plugin's: at a project without it, the
-    // root of a build of several applications for one, say so rather than throw.
+    // The command is global, the settings it reads are the plugin's. At the aggregate, one project
+    // that enables the plugin is that project. Several are a refusal. A project the directory
+    // named that does not enable the plugin is a refusal too, not a sibling taken in its place.
+    val ready = scoped(state) match {
+      case Left(failed) => return failed
+      case Right(next)  => next
+    }
+    val extracted  = Project.extract(ready)
     val stylesheet = EezoPlugin.autoImport.eezoTailwindInput
     if (extracted.getOpt(stylesheet).isEmpty) {
-      val candidates = extracted.structure.allProjectRefs
-        .filter(ref => extracted.getOpt(ref / stylesheet).isDefined)
-        .map(_.project)
-      System.out.println(projectRefusal(candidates))
-      return state.fail
+      System.out.println(projectRefusal(pluginProjects(extracted)))
+      return ready.fail
     }
 
     // The session the console's tasks run under: console logging off, since the screen is the
@@ -123,7 +125,7 @@ private[sbt] object DevCommand {
         project / Compile / compileIncremental / logManager :=
           LogManager.defaults(extraAppenders.value, quietOut)
       ),
-      state
+      ready
     )
     val still = TerminalAccess.withoutProgress(quiet)
 
@@ -151,7 +153,56 @@ private[sbt] object DevCommand {
       direct = onConsole
     )
     val ok = loop.run()
-    if (once && !ok) state.fail else state
+    if (once && !ok) ready.fail else ready
+  }
+
+  /** The project the console reads, or a failed state when this directory is not one. */
+  private def scoped(state: State): Either[State, State] = {
+    val extracted  = Project.extract(state)
+    val stylesheet = EezoPlugin.autoImport.eezoTailwindInput
+    if (extracted.getOpt(stylesheet).isDefined) Right(state)
+    else {
+      val rootId = extracted.structure.rootProject(extracted.currentRef.build)
+      val eezo   = pluginProjects(extracted)
+      // A project the launcher already selected, `reminders` for one, is not the aggregate. Do
+      // not look at the build root and take a sibling that does enable the plugin.
+      if (extracted.currentRef.project != rootId) {
+        System.out.println(projectRefusal(eezo))
+        Left(state.fail)
+      } else {
+        val projects = extracted.structure.allProjectRefs.map { ref =>
+          ModuleChoice.Project(ref.project, extracted.get(ref / baseDirectory))
+        }
+        val choice = ModuleChoice.choose(
+          cwd = new File(sys.props("user.dir")),
+          buildRoot = extracted.get(baseDirectory),
+          projects = projects,
+          explicit = None
+        )
+        ModuleChoice.forConsole(choice, eezo, rootId) match {
+          case Right(id) =>
+            extracted.structure.allProjectRefs.find(_.project == id) match {
+              case Some(ref) =>
+                val session = extracted.session
+                val next    = session.setCurrent(ref.build, ref.project, session.currentEval)
+                Right(Project.setProject(next, extracted.structure, state))
+              case None =>
+                System.out.println(projectRefusal(eezo))
+                Left(state.fail)
+            }
+          case Left(candidates) =>
+            System.out.println(projectRefusal(candidates))
+            Left(state.fail)
+        }
+      }
+    }
+  }
+
+  private def pluginProjects(extracted: Extracted): Seq[String] = {
+    val stylesheet = EezoPlugin.autoImport.eezoTailwindInput
+    extracted.structure.allProjectRefs
+      .filter(ref => extracted.getOpt(ref / stylesheet).isDefined)
+      .map(_.project)
   }
 }
 
@@ -282,7 +333,7 @@ private[sbt] final class Loop(
       // A compile in flight runs on the quiet session; the shell must not have the terminal back,
       // and the next command must not run, while it does.
       buildThread.foreach(_.join())
-      DevProcess.stop(quiet = true)
+      DevProcess.stop(base, quiet = true)
     }
     outcome
   }

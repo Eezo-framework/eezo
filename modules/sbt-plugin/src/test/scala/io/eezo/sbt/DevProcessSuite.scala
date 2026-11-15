@@ -65,4 +65,43 @@ class DevProcessSuite extends munit.FunSuite {
   test("the variable is the one the http layer reads") {
     assertEquals(DevProcess.SecretVar, "EEZO_SECRET")
   }
+
+  private def sleeper(): Process = {
+    val windows = sys.props("os.name").toLowerCase.contains("windows")
+    val command =
+      if (windows) Seq("ping", "-n", "40", "127.0.0.1")
+      else Seq("sleep", "40")
+    // A list, not a splice: `xs: _*` and `xs*` are each one axis's spelling.
+    val args = new java.util.ArrayList[String]
+    command.foreach(arg => args.add(arg): Unit)
+    val sink = java.io.File.createTempFile("eezo-slot", ".log")
+    sink.deleteOnExit()
+    new ProcessBuilder(args).redirectOutput(sink).redirectError(sink).start()
+  }
+
+  test("restarting one base leaves the other running, and stop with no argument reaps both") {
+    val a         = java.nio.file.Files.createTempDirectory("eezo-a").toFile
+    val b         = java.nio.file.Files.createTempDirectory("eezo-b").toFile
+    val first     = sleeper()
+    val other     = sleeper()
+    val restarted = sleeper()
+    try {
+      DevProcess.claim(a, () => first)
+      DevProcess.claim(b, () => other)
+      DevProcess.claim(a, () => restarted)
+      assert(!first.isAlive)
+      assert(other.isAlive)
+      assert(restarted.isAlive)
+      DevProcess.stop(b)
+      assert(!other.isAlive)
+      assert(restarted.isAlive)
+      DevProcess.stop()
+      assert(!restarted.isAlive)
+    } finally {
+      DevProcess.stop()
+      Seq(first, other, restarted).foreach { process =>
+        if (process.isAlive) process.destroyForcibly(): Unit
+      }
+    }
+  }
 }

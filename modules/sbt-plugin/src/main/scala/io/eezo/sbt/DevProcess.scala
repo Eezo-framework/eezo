@@ -5,7 +5,7 @@ import java.security.SecureRandom
 import java.util.Base64
 import java.util.concurrent.TimeUnit
 
-/** The dev loop's process kernel: at most one forked application JVM, replaced on each restart.
+/** The dev loop's process kernel: one forked application JVM per project base, replaced on restart.
   *
   * This is the ~100 lines `research/build-reload.md` §3.2 said eezo should write instead of
   * depending on sbt-revolver (sbt 1 only, dormant since 2023); revolver's process handling is the
@@ -27,7 +27,13 @@ import java.util.concurrent.TimeUnit
   */
 private[sbt] object DevProcess {
 
-  @volatile private var running: Option[Process] = None
+  // One slot per project base. Restarting one application must not drop another. The
+  // shutdown hook reaps every slot.
+  private var running: Map[String, Process] = Map.empty
+
+  private def key(base: File): String =
+    try base.getCanonicalPath
+    catch { case _: java.io.IOException => base.getAbsolutePath }
 
   /** The variable the http layer reads its secret from. Spelled again here rather than read off
     * `Secret.EnvVar`, because the plugin must not depend on the http module.
@@ -52,7 +58,7 @@ private[sbt] object DevProcess {
     if (inherited.isDefined) None else Some(sessionSecret)
 
   private lazy val hook: Unit = {
-    val reaper = new Thread(() => stop(quiet = true), "eezo-dev-reaper")
+    val reaper = new Thread(() => stop(), "eezo-dev-reaper")
     java.lang.Runtime.getRuntime.addShutdownHook(reaper)
   }
 
@@ -98,24 +104,34 @@ private[sbt] object DevProcess {
       supplied: Map[String, String] = Map.empty
   ): Process = {
     hook
-    stop(quiet = true)
+    claim(
+      workingDirectory,
+      () => {
+        val builder = new ProcessBuilder(command(javaHome, jvmOptions, classpath, mainClass, args))
+        builder.directory(workingDirectory)
+        if (piped) {
+          builder.redirectOutput(ProcessBuilder.Redirect.PIPE)
+          builder.redirectError(ProcessBuilder.Redirect.PIPE)
+          builder.redirectInput(ProcessBuilder.Redirect.PIPE)
+        } else
+          // The app's output belongs in the same console as the compile that produced it:
+          // inherited, so that a reader of sbt's output reads the app's with it.
+          builder.inheritIO()
+        // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
+        this.environment(builder.environment(), piped, supplied)
 
-    val builder = new ProcessBuilder(command(javaHome, jvmOptions, classpath, mainClass, args))
-    builder.directory(workingDirectory)
-    if (piped) {
-      builder.redirectOutput(ProcessBuilder.Redirect.PIPE)
-      builder.redirectError(ProcessBuilder.Redirect.PIPE)
-      builder.redirectInput(ProcessBuilder.Redirect.PIPE)
-    } else
-      // The app's output belongs in the same console as the compile that produced it: inherited,
-      // so that a reader of sbt's output reads the app's with it.
-      builder.inheritIO()
-    // `environment()` starts as a copy of sbt's own, so an inherited secret is already there.
-    this.environment(builder.environment(), piped, supplied)
+        val process = builder.start()
+        if (piped) process.getOutputStream.close()
+        process
+      }
+    )
+  }
 
-    val process = builder.start()
-    if (piped) process.getOutputStream.close()
-    running = Some(process)
+  /** Stops whatever `base` is running, then stores what `start` returns in that slot alone. */
+  private[sbt] def claim(base: File, start: () => Process): Process = synchronized {
+    reap(Some(key(base)), quiet = true, log = _ => ())
+    val process = start()
+    running = running.updated(key(base), process)
     process
   }
 
@@ -165,12 +181,22 @@ private[sbt] object DevProcess {
       .getOrElse(new File(new File(new File(sys.props("java.home")), "bin"), "java"))
       .getAbsolutePath
 
-  /** Whether the application the console started is still alive. */
-  def alive: Boolean = running.exists(_.isAlive)
+  /** Whether any application this JVM started is still alive. */
+  def alive: Boolean = synchronized { running.values.exists(_.isAlive) }
 
-  /** Stops the running application, politely and then not. */
-  def stop(quiet: Boolean = false, log: String => Unit = _ => ()): Unit = {
-    running.foreach { process =>
+  /** Stops the application at `base` only. */
+  def stop(base: File, quiet: Boolean = false, log: String => Unit = _ => ()): Unit =
+    synchronized { reap(Some(key(base)), quiet, log) }
+
+  /** Stops every application this JVM started. The shutdown hook, and a call with no project. */
+  def stop(): Unit = synchronized { reap(None, quiet = true, log = _ => ()) }
+
+  private def reap(slot: Option[String], quiet: Boolean, log: String => Unit): Unit = {
+    val targets = slot match {
+      case Some(one) => running.get(one).toList
+      case None      => running.values.toList
+    }
+    targets.foreach { process =>
       if (process.isAlive) {
         process.destroy()
         if (!process.waitFor(10, TimeUnit.SECONDS)) {
@@ -180,6 +206,9 @@ private[sbt] object DevProcess {
         if (!quiet) log("eezo dev: stopped")
       }
     }
-    running = None
+    slot match {
+      case Some(one) => running = running - one
+      case None      => running = Map.empty
+    }
   }
 }
