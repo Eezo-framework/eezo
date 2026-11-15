@@ -46,6 +46,13 @@ class DevCommandSuite extends munit.FunSuite {
   private def projects(hello: java.io.File, todo: java.io.File): Seq[ModuleChoice.Project] =
     Seq(ModuleChoice.Project("hello", hello), ModuleChoice.Project("todo", todo))
 
+  private def withRoot(
+      root: java.io.File,
+      hello: java.io.File,
+      todo: java.io.File
+  ): Seq[ModuleChoice.Project] =
+    ModuleChoice.Project("root", root) +: projects(hello, todo)
+
   test("a module directory selects that project") {
     val (root, hello, todo) = layout()
     assertEquals(
@@ -76,6 +83,30 @@ class DevCommandSuite extends munit.FunSuite {
     assertEquals(
       ModuleChoice.choose(root, root, projects(hello, todo), None),
       ModuleChoice.Ambiguous(Seq("hello", "todo"))
+    )
+  }
+
+  test("the aggregate root in the project list does not hide several modules") {
+    val (root, hello, todo) = layout()
+    val all                 = withRoot(root, hello, todo)
+    assertEquals(
+      ModuleChoice.choose(root, root, all, None),
+      ModuleChoice.Ambiguous(Seq("root", "hello", "todo"))
+    )
+    assertEquals(ModuleChoice.choose(hello, root, all, None), ModuleChoice.Selected("hello"))
+  }
+
+  test("a sibling directory does not select a prefix project") {
+    val (root, hello, todo) = layout()
+    val extra               = new java.io.File(root, "hello-extra")
+    extra.mkdirs(): Unit
+    assertEquals(
+      ModuleChoice.choose(extra, root, projects(hello, todo), None),
+      ModuleChoice.Unmatched
+    )
+    assertEquals(
+      ModuleChoice.choose(extra, root, withRoot(root, hello, todo), None),
+      ModuleChoice.Unmatched
     )
   }
 
@@ -113,6 +144,10 @@ class DevCommandSuite extends munit.FunSuite {
         Seq("hello", "todo"),
         "root"
       ),
+      Left(Seq("hello", "todo"))
+    )
+    assertEquals(
+      ModuleChoice.forConsole(ModuleChoice.Selected("root"), Seq("hello", "todo"), "root"),
       Left(Seq("hello", "todo"))
     )
   }

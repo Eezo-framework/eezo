@@ -26,7 +26,8 @@ eezo — the framework launcher
   eezo dev              the dev console: serve, restart on save, errors, routes, schema
       --no-tui          the same loop as lines, no screen and no keys: for a pipe or a log
       --json            the same loop as one JSON object per line: for an agent or a tool
-      --project <id>    the module, when the directory does not name one
+      --project <id>    the module, when the directory does not name one; also on
+                        build, routes, config, db and help
   eezo build            stage the app for deployment (jars, migrations, Dockerfile)
   eezo deploy           ship it: build, deploy to Fly.io, migrate, wait for health
       --fly             the Fly.io target (the default; long form: --target fly)
@@ -330,7 +331,7 @@ eezo_join() { # ids...
 eezo_choose_from() { # <cwd> <root> <explicit> ; projects on stdin as id<TAB>base
   local cwd="$1" root="$2" explicit="$3"
   local -a ids=() bases=()
-  local id base i len best="" bestlen=-1
+  local id base i len best="" bestbase="" bestlen=-1
   while IFS=$'\t' read -r id base; do
     [ -n "$id" ] || continue
     ids+=("$id")
@@ -359,11 +360,15 @@ eezo_choose_from() { # <cwd> <root> <explicit> ; projects on stdin as id<TAB>bas
       len="${#bases[$i]}"
       if [ "$len" -gt "$bestlen" ]; then
         best="${ids[$i]}"
+        bestbase="${bases[$i]}"
         bestlen=$len
       fi
     fi
   done
-  if [ -n "$best" ]; then
+  # A project at file(".") has the build root as its base, so it matches every directory under
+  # the root. Nested modules win over that. The aggregate itself is not a module: several projects
+  # at the root stay a refusal, and a sibling directory is unmatched rather than root.
+  if [ -n "$best" ] && { [ "${#ids[@]}" -eq 1 ] || [ "$bestbase" != "$root" ]; }; then
     printf '%s\n' "$best"
     return 0
   fi

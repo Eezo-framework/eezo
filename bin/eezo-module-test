@@ -80,6 +80,49 @@ code=$?
 set -e
 [ "$code" -ne 0 ] || fail "a sibling directory must not select hello"
 
+withroot="$TMP/withroot"
+mkdir -p "$withroot/app" "$withroot/lib" "$withroot/app-extra"
+cat > "$withroot/build.sbt" <<'EOF'
+lazy val root = (project in file("."))
+lazy val app = (project in file("app"))
+lazy val lib = (project in file("lib"))
+EOF
+
+set +e
+err="$(eezo_resolve "$withroot" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "file(\".\") aggregate at the root should refuse"
+printf '%s' "$err" | grep -q "app" || fail "file(\".\") refusal should name app: $err"
+printf '%s' "$err" | grep -q -- "--project" || fail "file(\".\") refusal should name --project: $err"
+
+resolved="$(eezo_resolve "$withroot/app")"
+assert_eq "$(module_of "$resolved")" "app" "module under file(\".\") root"
+resolved="$(eezo_resolve "$withroot" app)"
+assert_eq "$(module_of "$resolved")" "app" "explicit id with file(\".\") root"
+
+set +e
+err="$(eezo_resolve "$withroot/app-extra" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "a sibling under file(\".\") must not select the aggregate"
+
+examples="$ROOT/examples"
+resolved="$(eezo_resolve "$examples/hello")"
+assert_eq "$(root_of "$resolved")" "$(cd "$examples" && pwd -P)" "examples build root from hello"
+assert_eq "$(module_of "$resolved")" "hello" "examples/hello"
+
+set +e
+err="$(eezo_resolve "$examples" 2>&1 >/dev/null)"
+code=$?
+set -e
+[ "$code" -ne 0 ] || fail "examples root should refuse"
+printf '%s' "$err" | grep -q "hello" || fail "examples refusal should name hello: $err"
+printf '%s' "$err" | grep -q -- "--project" || fail "examples refusal should name --project: $err"
+
+resolved="$(eezo_resolve "$examples" hello)"
+assert_eq "$(module_of "$resolved")" "hello" "examples --project hello"
+
 single="$TMP/single"
 mkdir -p "$single/src"
 printf 'name := "app"\n' > "$single/build.sbt"

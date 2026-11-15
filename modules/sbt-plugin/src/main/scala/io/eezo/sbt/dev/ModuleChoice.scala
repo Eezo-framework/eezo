@@ -8,7 +8,8 @@ import java.io.File
   * The launcher applies the same rule to the projects it read from the build definition, because it
   * has to choose before sbt starts. `eezoDev` applies this one to sbt's own project list when the
   * current project does not enable the plugin. One project at the build root is that project.
-  * Several are a refusal. An id that is not a project is unknown.
+  * Several are a refusal, including when one of them is the aggregate at `.`, which would otherwise
+  * match the root directory. An id that is not a project is unknown.
   */
 private[sbt] object ModuleChoice {
 
@@ -36,8 +37,12 @@ private[sbt] object ModuleChoice {
       case Some(id) =>
         if (located.exists(_.id == id)) Selected(id) else Unknown(id)
       case None =>
+        // A project at the build root matches every directory under it. Nested modules must win
+        // over that, and at the root itself several projects stay a refusal rather than selecting
+        // the aggregate.
         val matches = located.filter(project => isPrefix(project.base, here))
-        if (matches.nonEmpty) Selected(longest(matches).id)
+        val nested  = matches.filterNot(project => same(project.base, root))
+        if (nested.nonEmpty) Selected(longest(nested).id)
         else if (located.isEmpty && isPrefix(root, here)) Unmatched
         else if (located.size == 1 && same(here, root)) Selected(located.head.id)
         else if (located.size > 1 && same(here, root)) Ambiguous(located.map(_.id))

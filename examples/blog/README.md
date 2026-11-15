@@ -152,7 +152,7 @@ that does not echo instead of being written into the command.
 It hashes through `Password.hash`, which is the only door: `User.password` is a `Password`, and the
 only way to make one from text is to hash it.
 
-`sbt "blog/run dev"` (or `blog/eezoDev`) runs the drift check before serving and answers the drift
+`sbt "blog/run dev"` (or `sbt "project blog" eezoDev`) runs the drift check before serving and answers the drift
 page while the drift is dangerous; `../todo/README.md` walks through that loop and the rest of the
 schema commands.
 

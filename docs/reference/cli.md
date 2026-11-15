@@ -46,6 +46,9 @@ build names a Config class.
 | `upgrade` | launcher | Maven Central | moves the command line, what `new` scaffolds, and the project in the current directory to the latest release |
 | `help` | both layers | | the command table |
 
+`--project <id>` is accepted on `dev`, `build`, `routes`, `config`, `db` and `help`, when the
+directory does not name a module. `new`, `deploy` and `upgrade` refuse it.
+
 `config` prints one line per substitution in `application.conf`, four fields separated by a tab
 and no header: the variable, the path it feeds, `redacted` or `plain`, and `required`,
 `defaulted` or `optional`. The words are fixed, so a script reads the lines with
