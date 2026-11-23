@@ -69,18 +69,18 @@ object GeneratedSuite {
     * NoClassDefFoundError, so a second run of this suite in one JVM would not see the failure.
     */
   private def fresh(cls: Class[?]): Class[?] = {
-    val name   = cls.getName
-    val stream = cls.getClassLoader.getResourceAsStream(name.replace('.', '/') + ".class")
+    val binary = cls.getName
+    val stream = cls.getClassLoader.getResourceAsStream(binary.replace('.', '/') + ".class")
     val bytes  =
       try stream.readAllBytes()
       finally stream.close()
     new ClassLoader(cls.getClassLoader) {
       override protected def loadClass(n: String, resolve: Boolean): Class[?] =
-        if (n == name) getClassLoadingLock(n).synchronized {
+        if (n == binary) getClassLoadingLock(n).synchronized {
           Option(findLoadedClass(n)).getOrElse(defineClass(n, bytes, 0, bytes.length))
         }
         else super.loadClass(n, resolve)
-    }.loadClass(name)
+    }.loadClass(binary)
   }
 
   final case class Till(name: String) derives Config
