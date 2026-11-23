@@ -63,17 +63,17 @@ object TableMacro {
           report.errorAndAbort(TableRules.noMapping(Type.show[A], f.name), f.pos)
         )
 
-    private def reference[A: Type]: Option[Expr[RefTarget[A]]] = Expr.summon[RefTarget[A]]
+    private def refTarget[A: Type]: Option[Expr[RefTarget[A]]] = Expr.summon[RefTarget[A]]
 
     private def columnName[A: Type](f: s.FieldInfo): Expr[String] =
-      Expr(TableRules.columnName(f.name, reference[A].isDefined))
+      Expr(TableRules.columnName(f.name, refTarget[A].isDefined))
 
     private def columnDef(f: s.FieldInfo): Expr[ColumnDef] =
       f.tpe.asType match {
         case '[t] =>
           val c                            = column[t](f)
           val target: Expr[Option[String]] =
-            reference[t].map(r => '{ Some($r.table) }).getOrElse('{ None })
+            refTarget[t].map(r => '{ Some($r.table) }).getOrElse('{ None })
           '{
             ColumnDef
               .of[t](${ columnName[t](f) }, ${ Expr(TableRules.isKey(f.name)) }, $target)(using $c)
