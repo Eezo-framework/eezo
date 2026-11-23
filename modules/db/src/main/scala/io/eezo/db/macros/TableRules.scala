@@ -5,9 +5,9 @@ import io.eezo.core.internal.util.snake
 /** The decisions of `derives Table` that need no compiler: the names a table and its columns get,
   * where the key is, and the text of each compile error.
   *
-  * `TableMacro` calls these while the compiler expands a derivation. No test run executes a macro
-  * body, so the logic lives here, where `TableRulesSuite` calls it directly, and the macro keeps
-  * only the work that needs `Quotes`.
+  * `TableMacro` calls these while the compiler expands a derivation. A suite sees a macro body only
+  * through the trees it builds and the compile errors it reports, so the logic lives here, where
+  * `TableRulesSuite` calls it directly, and the macro keeps only the work that needs `Quotes`.
   */
 private[db] object TableRules {
 
@@ -17,7 +17,7 @@ private[db] object TableRules {
   def columnName(fieldName: String, isRef: Boolean): String =
     if (isRef) snake(fieldName) + "_id" else snake(fieldName)
 
-  /** The field every table reads its key from. */
+  /** Whether a field is the key: only the name `id`, in lower case. */
   def isKey(fieldName: String): Boolean = fieldName == "id"
 
   /** The place of the key among the fields, or the compile error that refuses the model. */

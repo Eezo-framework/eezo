@@ -10,14 +10,17 @@ import io.eezo.core.Id
 
 /** `derives Table`. Only what needs `Quotes` is here: reading the case class, summoning the givens,
   * building the trees. Every decision that needs no compiler is in `TableRules`, where a suite
-  * calls it, because no test run executes this code.
+  * calls it. This code runs in the compiler while it compiles the test sources, so a suite sees
+  * only the trees it builds and the compile errors it reports.
   */
 object TableMacro {
 
   def derive[T: Type](using q: Quotes): Expr[Table[T]] = new Expansion[T].table
 
-  /** One expansion of `derives Table` for `T`. The checks run in the order the fields below are
-    * read, so a model that breaks several rules is refused for the first one.
+  /** One expansion of `derives Table` for `T`. The checks run in this order: the case class checks
+    * of `Structure` and then no fields and no `id`, while the fields below are read; then the type
+    * of `id`, and then the first field with no `Column` given, while `table` runs. A model that
+    * breaks several rules is refused for the first one.
     */
   private final class Expansion[T: Type](using val q: Quotes) {
     import q.reflect.*
