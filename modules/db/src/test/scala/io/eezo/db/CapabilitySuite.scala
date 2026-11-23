@@ -9,7 +9,7 @@ import scala.compiletime.testing.typeCheckErrors
   *
   * Every assertion here is on the **message**, not on "did not compile". An unrelated implicit
   * error in the same compilation unit suppresses `summonFrom`'s output, so a test that checked only
-  * for failure could pass for the wrong reason — DESIGN §8.6.
+  * for failure could pass for the wrong reason, see DESIGN §8.6.
   */
 class CapabilitySuite extends FunSuite {
 
