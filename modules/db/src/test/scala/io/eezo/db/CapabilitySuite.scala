@@ -121,7 +121,7 @@ class CapabilitySuite extends FunSuite {
     assert(e.contains("has no `id` field"), e)
   }
 
-  // The four tests below assert the whole text and that it is the only error. Each derivation
+  // The five tests below assert the whole text and that it is the only error. Each derivation
   // expands in the compiler, so `typeCheckErrors` is how a suite sees the refusal it makes.
 
   test("a model with no fields is refused") {
@@ -147,6 +147,20 @@ class CapabilitySuite extends FunSuite {
       typeCheckErrors("case class Twice(id: String, home: java.net.URI) derives Table")
         .map(_.message),
       List("`id` must be `Id[Twice]`, but is `scala.Predef.String`.")
+    )
+  }
+
+  test("a field with no mapping is refused, and the message shows the given to add") {
+    assertEquals(
+      typeCheckErrors("case class Homed(id: Id[Homed], home: java.net.URI) derives Table")
+        .map(_.message),
+      List(
+        """No database mapping for java.net.URI at field `home`.
+          |
+          |Provide one in scope:
+          |  given Column[java.net.URI] = Column[String].imap(...)(...)
+          |""".stripMargin
+      )
     )
   }
 

@@ -4,9 +4,9 @@ import munit.FunSuite
 
 /** The decisions of `derives Table` that need no compiler, called directly.
   *
-  * `TableMacro` calls these while the compiler expands a derivation, which no test run sees, so
-  * this suite is what proves them. `TableDerivationSuite` and `CapabilitySuite` prove the same
-  * rules again through a derived `Table`.
+  * `TableMacro` calls these while the compiler expands a derivation, where no assertion can reach
+  * them, so this suite is what proves them. `TableDerivationSuite` and `CapabilitySuite` prove the
+  * same rules again through a derived `Table`.
   */
 class TableRulesSuite extends FunSuite {
 
@@ -27,6 +27,11 @@ class TableRulesSuite extends FunSuite {
     assert(TableRules.isKey("id"))
     assert(!TableRules.isKey("ids"))
     assert(!TableRules.isKey(""))
+  }
+
+  test("the key name is spelled in lower case only") {
+    assert(!TableRules.isKey("ID"))
+    assert(!TableRules.isKey("Id"))
   }
 
   test("the key is found at its place among the fields") {
