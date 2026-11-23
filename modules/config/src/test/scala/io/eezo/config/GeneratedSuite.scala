@@ -24,7 +24,7 @@ class GeneratedSuite extends munit.FunSuite {
   }
 
   test("a ConfigFile that fails to initialise fails loudly and is not read as no class") {
-    ConfigFileLoader.generating(classOf[Broken.type], conf = None) {
+    ConfigFileLoader.generating(fresh(classOf[Broken.type]), conf = None) {
       // By hand rather than through `intercept`, which lets a LinkageError through as fatal.
       val thrown =
         try Left(Config.Root.generated)
@@ -63,6 +63,25 @@ class GeneratedSuite extends munit.FunSuite {
 }
 
 object GeneratedSuite {
+
+  /** A copy of `cls` defined anew by a loader of its own, so its initialiser runs on each call: a
+    * JVM runs a class's initialiser once, and after it failed, every later use is a
+    * NoClassDefFoundError, so a second run of this suite in one JVM would not see the failure.
+    */
+  private def fresh(cls: Class[?]): Class[?] = {
+    val name   = cls.getName
+    val stream = cls.getClassLoader.getResourceAsStream(name.replace('.', '/') + ".class")
+    val bytes  =
+      try stream.readAllBytes()
+      finally stream.close()
+    new ClassLoader(cls.getClassLoader) {
+      override protected def loadClass(n: String, resolve: Boolean): Class[?] =
+        if (n == name) getClassLoadingLock(n).synchronized {
+          Option(findLoadedClass(n)).getOrElse(defineClass(n, bytes, 0, bytes.length))
+        }
+        else super.loadClass(n, resolve)
+    }.loadClass(name)
+  }
 
   final case class Till(name: String) derives Config
 
