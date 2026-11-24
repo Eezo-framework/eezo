@@ -36,16 +36,12 @@ given idReadWriter[A]: ReadWriter[Id[A]] =
   * wire in a shape of its own keeps it; otherwise a case class has one derived, so a flat model
   * needs no `derives` clause to be a payload. Derivation reaches no further than that one case
   * class: each of its fields needs a `ReadWriter` of its own, and so does the model when it sits
-  * inside a `List` or an `Option`. Only a case class is derived because `List` and `Option` are
-  * sums of the standard library too, and deriving them would end in an error about `::` or `Some`
-  * rather than the collection the author wrote; anything else is asked for as an instance, so the
-  * compiler's message names the type at the summon site. Inline because both questions can only be
-  * asked where the model is known: neither the instance nor the `Mirror` and `ClassTag` derivation
-  * needs resolves for an abstract `A`.
+  * inside a `List` or an `Option`. When an instance is missing, the compiler's message names the
+  * type that needs it at the place where the `Serde` is summoned.
   *
-  * Imported, so it sits in the caller's lexical scope and is found before any `Serde` in a model's
-  * companion. An application that writes its own `Serde` for one model brings it into scope at a
-  * nearer level than this import for it to win.
+  * Imported, it is found before any `Serde` in a model's companion. An application that writes its
+  * own `Serde` for one model and brings it into scope, by a given or an import at any level, has
+  * that `Serde` win over this one.
   */
 inline given serde[A]: Serde[A] = summonFrom {
   case rw: ReadWriter[A]         => adapt(rw)
@@ -57,21 +53,8 @@ inline given serde[A]: Serde[A] = summonFrom {
   case _ => adapt(summonInline[ReadWriter[A]])
 }
 
-/** The one place the inline given hands off to compiled code, so the class behind it is compiled
-  * once rather than copied into every call site, and stays out of the public API: an application
-  * writes `serde`, never this.
-  */
 private def adapt[A](rw: ReadWriter[A]): Serde[A] = UpickleSerde(rw)
 
-/** A `ReadWriter` seen through the seam. It answers `Either` and throws nothing of eezo's: the HTTP
-  * status a failure earns is `http`'s decision, and an adapter that threw would make it twice.
-  *
-  * A JSON number becomes an `Int` or a `Long` the way upickle's own readers make it: a fraction is
-  * dropped, a quoted number is read, and a number past the range of an `Int` wraps. Strict readers
-  * would need an upickle `Api` of eezo's, whose `ReadWriter` is a type apart from the one an author
-  * writes, so the author's instance would stop winning; a model that must refuse such a number says
-  * so in a `ReadWriter` of its own.
-  */
 private final class UpickleSerde[A](rw: ReadWriter[A]) extends Serde[A] {
 
   def serialize(value: A): String = _root_.upickle.default.write(value)(using rw)
@@ -82,36 +65,18 @@ private final class UpickleSerde[A](rw: ReadWriter[A]) extends Serde[A] {
   def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, A] =
     parsed(body).flatMap(_ => fitted(body, Decided(rw, decided.view.mapValues(_.show).toMap)))
 
-  /** Whether the body is JSON at all, checked on its own before any reading, so that which step
-    * failed is what tells a body that was never JSON from one that was and did not fit, rather than
-    * which exception the library happened to wrap. Nothing is built: the parser walks the bytes
-    * with a stack of its own, so a body nested past any model costs no thread stack.
-    */
   private def parsed(body: Array[Byte]): Either[Serde.Failure, Unit] =
     traced(
       TraceVisitor.withTrace(true, NoOpVisitor)(Readable.fromByteArray(body).transform(_))
     ).left
       .map(Serde.Failure.Malformed(_))
 
-  /** The body read into the model straight from its bytes. Through no `ujson.Value` in between,
-    * because that tree holds every number as a `Double`, so a `Long` past 2^53 would come back
-    * changed, and reading it back walks the tree by recursion, which a deeply nested body turns
-    * into a `StackOverflowError` no `Either` can hold.
-    *
-    * The reader goes through [[NoNulls]] because upickle takes a JSON `null` for the model and for
-    * any of its fields, which no handler is written to receive.
-    */
   private def fitted(body: Array[Byte], model: Visitor[Any, A]): Either[Serde.Failure, A] =
     traced(
       TraceVisitor.withTrace(true, NoNulls(model))(Readable.fromByteArray(body).transform(_))
     ).left
       .map(Serde.Failure.Unfit(_))
 
-  /** upickle reports a failure as the JSON path, with the complaint as its cause, and both go in
-    * the one reason, so a client learns what was wrong and where. A complaint the model raised
-    * leaves out the byte offset the parser adds to it, because the path already says where, in
-    * words a client can act on.
-    */
   private def traced[B](reading: => B): Either[String, B] =
     try Right(reading)
     catch {
@@ -124,16 +89,6 @@ private final class UpickleSerde[A](rw: ReadWriter[A]) extends Serde[A] {
     }
 }
 
-/** A model's reader with every field eezo decided put under its name as the body streams through
-  * it, each as the text its key has on the wire.
-  *
-  * On the way past rather than by editing a parsed tree, for the same reasons the body is never
-  * parsed into one: numbers stay exact and nesting costs no thread stack. Whatever the body carried
-  * under a decided name is skipped unread, as often as it names it, and the decided values go in
-  * last, so a body that said nothing there reads the same as one that said something else. A name
-  * is compared after the parser has undone its escapes, so no spelling of it gets through. Anything
-  * but an object at the top goes to the model untouched, which refuses it in its own words.
-  */
 private final class Decided[A](model: Visitor[Any, A], decided: Map[String, String])
     extends Visitor.Delegate[Any, A](model) {
 
@@ -173,16 +128,6 @@ private final class Decided[A](model: Visitor[Any, A], decided: Map[String, Stri
   }
 }
 
-/** A reader that refuses a JSON `null` wherever the reader it wraps would turn it into a Scala
-  * `null`, at the top and in every field and element below it.
-  *
-  * upickle's own readers take `null` for a `String`, a key or a decimal and hand it on as a `null`,
-  * and for an `Int` they hand on a boxed `null` that unboxes to `0`, so a client that sent nothing
-  * would be read as having sent something, and the handler would meet the `null` later as a 500
-  * rather than the client hearing a 422 now. A reader that gives `null` a meaning of its own, as an
-  * `Option` reads it as `None`, keeps it: only a `null` that came out as `null` is refused, and at
-  * its own path, because the refusal is raised inside the trace.
-  */
 private final class NoNulls[T, J](model: Visitor[T, J]) extends Visitor.Delegate[T, J](model) {
 
   override def visitNull(index: Int): J = {

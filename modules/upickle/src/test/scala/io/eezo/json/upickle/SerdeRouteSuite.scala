@@ -9,19 +9,8 @@ import io.eezo.core.html.Tags.p
 import io.eezo.core.internal.Json
 import io.eezo.http.*
 
-/** A payload an API route reads and answers with. */
 final case class Basket(product: String, quantity: Int)
 
-/** The seam and the adapter meeting on the wire: what a client sends and reads back, with the
-  * status each outcome of the adapter becomes and the problem it carries.
-  *
-  * Inside the adapter's package, so its given is in scope here as it is after the import in an
-  * application, and so the routes can be built the way the generated table builds them.
-  *
-  * Booted rather than called, because the status of a refusal is decided at the boundary and the
-  * content type of a JSON body where the response is written, and neither shows on the value a
-  * handler returns.
-  */
 class SerdeRouteSuite extends munit.FunSuite with ServerFixtures {
 
   private val routes: RouteTable = RouteTable(
@@ -64,15 +53,13 @@ class SerdeRouteSuite extends munit.FunSuite with ServerFixtures {
   private def contentTypes(response: HttpResponse[String]): Seq[String] =
     response.headers().allValues("Content-Type").asScala.toSeq
 
-  /** The problem a refusal carries, read with the parser `http`'s own suites read one with. */
   private def problem(response: HttpResponse[String]): Map[String, Json] =
     Json.parse(response.body()) match {
       case Right(Json.Obj(fields)) => fields.toMap
       case other                   => fail(s"not a JSON object: $other in ${response.body()}")
     }
 
-  /** What the adapter itself says about a body, which the problem's detail must repeat. */
-  private def reason(body: String): String =
+  private def adapterReason(body: String): String =
     summon[api.Serde[Basket]].deserialize(body.getBytes("UTF-8")) match {
       case Left(api.Serde.Failure.Malformed(reason)) => reason
       case Left(api.Serde.Failure.Unfit(reason))     => reason
@@ -84,7 +71,7 @@ class SerdeRouteSuite extends munit.FunSuite with ServerFixtures {
       val response = post(port, "/api/baskets", "not json")
       assertEquals(response.statusCode(), 400)
       assertEquals(contentTypes(response), Seq("application/problem+json"))
-      assertEquals(problem(response)("detail"), Json.Str(reason("not json")))
+      assertEquals(problem(response)("detail"), Json.Str(adapterReason("not json")))
     }
   }
 
@@ -92,7 +79,7 @@ class SerdeRouteSuite extends munit.FunSuite with ServerFixtures {
     serving(routes) { (_, port) =>
       val response = get(port, "/api/read")
       assertEquals(response.statusCode(), 400)
-      assertEquals(problem(response)("detail"), Json.Str(reason("")))
+      assertEquals(problem(response)("detail"), Json.Str(adapterReason("")))
     }
   }
 
@@ -104,7 +91,7 @@ class SerdeRouteSuite extends munit.FunSuite with ServerFixtures {
           assertEquals(response.statusCode(), 422, body)
           assertEquals(contentTypes(response), Seq("application/problem+json"))
           assertEquals(problem(response)("title"), Json.Str("Unprocessable Content"))
-          assertEquals(problem(response)("detail"), Json.Str(reason(body)))
+          assertEquals(problem(response)("detail"), Json.Str(adapterReason(body)))
         }
     }
   }

@@ -8,9 +8,6 @@ import io.eezo.core.Id
 import io.eezo.http.api.Serde
 import io.eezo.json.upickle.given
 
-/** A model whose author wrote the JSON shape by hand, naming `name` as `nome`, so that whether the
-  * adapter took this instance or derived its own is visible in the text.
-  */
 final case class Renamed(name: String)
 
 object Renamed {
@@ -21,44 +18,41 @@ object Renamed {
     )
 }
 
-/** The same shape with no instance and no `derives` clause: the adapter has to derive one. */
 final case class Plain(name: String)
 
 final case class Product(name: String)
 
-/** A model with a key, a key of another model, and a field of each JSON kind a payload carries. */
 final case class Order(id: Id[Order], product: Id[Product], quantity: Int, price: BigDecimal)
 
-/** A class upickle has no way to write: not a case class, and no instance anywhere. */
 final class Opaque(val secret: String)
 
-/** A case class whose one field is a type upickle cannot write. */
 final case class Holder(opaque: Opaque)
 
-/** A key and a count past what a `Double` holds exactly, the way a 64 bit id or an amount in cents
-  * arrives as a JSON number.
-  */
 final case class Tally(id: Id[Tally], count: Long)
 
-/** A flat model with an integral field, the shape a quantity in an order payload has. */
 final case class Line(sku: String, quantity: Int)
 
-/** A model with a key, an owner that is another model's key, and a count past what a `Double`
-  * holds, the shape an owned row has when a program writes it.
-  */
 final case class Entry(id: Id[Entry], owner: Id[Product], count: Long)
 
-/** A model whose one field the author left optional, so a JSON `null` there means absent. */
 final case class Note(text: Option[String])
 
-/** The adapter, as an application meets it: one import, and the Serde of any model it names.
-  *
-  * In a package outside `io.eezo` on purpose. The given is inline and expands here, in the
-  * application's code, so whatever it reaches for has to be reachable from here at compile time and
-  * still be there at run time; a suite inside `io.eezo` would be let through by qualified access an
-  * application never has. No server is booted: the adapter knows nothing of HTTP, so its answers
-  * are read straight off the `Serde`.
-  */
+final class Fixed[A](text: String) extends Serde[A] {
+  def serialize(value: A): String                              = text
+  def deserialize(body: Array[Byte]): Either[Serde.Failure, A] = Left(Serde.Failure.Unfit(text))
+  def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, A] =
+    deserialize(body)
+}
+
+final case class Companioned(name: String)
+
+object Companioned {
+  given Serde[Companioned] = Fixed("companion")
+}
+
+final case class Preferred(name: String)
+
+given Serde[Preferred] = Fixed("application")
+
 class UpickleAdapterSuite extends munit.FunSuite {
 
   private def bytes(text: String): Array[Byte] = text.getBytes(StandardCharsets.UTF_8)
@@ -79,6 +73,16 @@ class UpickleAdapterSuite extends munit.FunSuite {
     val serde = summon[Serde[Renamed]]
     assertEquals(serde.serialize(Renamed("x")), """{"nome":"x"}""")
     assertEquals(serde.deserialize(bytes("""{"nome":"y"}""")), Right(Renamed("y")))
+  }
+
+  test("the imported serde wins over a Serde in the model's companion") {
+    assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), """{"name":"x"}""")
+  }
+
+  test("a Serde the application gives for one model wins over the imported serde, at any level") {
+    assertEquals(summon[Serde[Preferred]].serialize(Preferred("x")), "application")
+    given Serde[Companioned] = Fixed("nearer")
+    assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), "nearer")
   }
 
   test("a model with no ReadWriter is derived, with its fields named as declared") {
@@ -190,16 +194,18 @@ class UpickleAdapterSuite extends munit.FunSuite {
     assert(clue(unfit(serde.deserialize(bytes(wrong)))).endsWith(" at $['quantity']"))
   }
 
+  test("a complaint the model raises carries its JSON path and not the parser's byte offset") {
+    val line   = summon[Serde[Line]]
+    val reason = unfit(line.deserialize(bytes("""{"sku":"a","quantity":true}""")))
+    assertEquals(reason, "expected number got boolean at $['quantity']")
+  }
+
   test("a key that is not a UUID is Unfit at its path") {
     val serde = summon[Serde[Order]]
     val body  = s"""{"id":"${order.id.show}","product":"seven","quantity":2,"price":"9.50"}"""
     assert(clue(unfit(serde.deserialize(bytes(body)))).endsWith(" at $['product']"))
   }
 
-  // Decided against the ticket's four test rule, which calls a body that is not an object
-  // Malformed: `[1,2]` and `42` are JSON, the seam's own definition puts JSON that does not fit the
-  // model in Unfit, and the accepted spike answered the same. Calling them Malformed would also
-  // refuse a payload that is a list or a number, which a Serde for any type can rightly read.
   test("JSON that is not an object is Unfit for a record, with or without a key") {
     val serde = summon[Serde[Order]]
     Seq("[1,2]", "42", "\"text\"", "null").foreach { body =>
@@ -210,6 +216,9 @@ class UpickleAdapterSuite extends munit.FunSuite {
       unfit(serde.deserialize(bytes("[1,2]"), order.id)),
       "expected dictionary got sequence at $"
     )
+  }
+
+  test("a JSON array reads into a Serde of a list") {
     assertEquals(summon[Serde[List[Int]]].deserialize(bytes("[1,2]")), Right(List(1, 2)))
   }
 
@@ -265,11 +274,9 @@ class UpickleAdapterSuite extends munit.FunSuite {
     assert(clue(serde.deserialize(body, Id.gen[Plain]())).isLeft)
   }
 
-  // upickle reads a JSON number into an Int or a Long the way its own readers do, and the adapter
-  // takes those readers as they are: making them strict would mean an Api object of eezo's, whose
-  // ReadWriter is a different type from the one an author writes, so the author's instance would
-  // stop winning. These pin what that choice lets through.
-  test("a number with a fraction, or past the range of an Int, is read the way upickle reads it") {
+  test(
+    "a number with a fraction, in quotes or past the range of an Int reads as upickle reads it"
+  ) {
     val serde = summon[Serde[Line]]
     assertEquals(
       serde.deserialize(bytes("""{"sku":"a","quantity":1.5}""")),
