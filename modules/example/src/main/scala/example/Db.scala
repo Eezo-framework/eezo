@@ -3,8 +3,8 @@ package example
 import java.sql.{Connection, DriverManager}
 
 /** The connection settings of the example app, read from `EEZO_DB_URL`, `EEZO_DB_USER` and
-  * `EEZO_DB_PASS`. Without them, the settings name the database `eezo` of a local Postgres on
-  * port 5442, as user `postgres`.
+  * `EEZO_DB_PASS`. Without them, the settings name the database `eezo` of a local Postgres on port
+  * 5442, as user `postgres`.
   */
 object Db {
 
