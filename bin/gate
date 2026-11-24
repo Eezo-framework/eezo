@@ -47,6 +47,16 @@
 # probe failed at load there. sbt-ci-release 1.12.1 dropped sbt-git, and the file now breaks the
 # load instead: "not found: value git". The gate removes the one an earlier gate wrote.
 #
+# The compiler reads the classes of the JDK it runs on, and with `-release` set to an older JDK
+# it sees only the public API of that one. A name that a package private member of a JDK class makes ambiguous
+# on CI then compiles here: that is how pull request 426 was green at the gate and red on CI. So
+# the gate runs sbt on the JDK CI builds on, JdkFloor in project/Toolchain.scala. When the java on
+# the PATH is another JDK, the gate takes one of the right version from JAVA_HOME or from the
+# directories in EEZO_JDK_DIRS, which are ~/.sdkman/candidates/java, ~/Library/Java/
+# JavaVirtualMachines, /Library/Java/JavaVirtualMachines and /usr/lib/jvm unless set. With none,
+# the gate refuses to run, because its green would not be CI's; EEZO_GATE_ANY_JDK=1 runs it
+# anyway. bin/fast only warns.
+#
 # The repository's git hooks live in .githooks and git does not run them until core.hooksPath
 # says so. The gate sets it. The commit-msg hook enforces the commit message rules, the one
 # accepted co author trailer and no dash characters in prose, so a commit refused with a message
@@ -80,6 +90,20 @@ done
 TOOL=gate
 # shellcheck source=lib/env.sh
 . "$ROOT/bin/lib/env.sh"
+
+refuse_jdk() {
+  echo "gate: the gate runs what CI runs, and CI builds on JDK $EEZO_JDK_WANTED." \
+    "EEZO_GATE_ANY_JDK=1 runs it on this JDK anyway, and its green is then not CI's green."
+  echo "GATE RED: jdk"
+}
+
+if [ "$EEZO_JDK_MISMATCH" -eq 1 ]; then
+  if [ "${EEZO_GATE_ANY_JDK:-0}" != 1 ]; then
+    refuse_jdk
+    exit 1
+  fi
+  echo "gate: EEZO_GATE_ANY_JDK=1, so the gate runs on this JDK, and its green is not CI's green"
+fi
 
 # ---------- locks ----------
 

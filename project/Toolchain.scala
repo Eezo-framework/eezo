@@ -1,6 +1,10 @@
 import java.io.File
 import java.io.FileInputStream
+import java.nio.charset.StandardCharsets.UTF_8
+import java.nio.file.Files
 import java.util.Properties
+
+import scala.collection.JavaConverters._
 
 /** Facts about the toolchain eezo is built with, and the assertions that keep them honest.
   *
@@ -67,6 +71,33 @@ object Toolchain {
         s"eezo needs JDK $JdkFloor or newer to build, and this is JDK $running. " +
           "JEP 491 (JDK 24) removed virtual-thread pinning on `synchronized`, JDK 25 is the first " +
           "LTS carrying it, and eezo's server design depends on it. See research/http-server.md."
+      )
+  }
+
+  private val JavaVersionLine = """^\s*java-version:\s*["']?([0-9]+)["']?\s*(#.*)?$""".r
+
+  /** Fails the build, at load time and with the reason, when a workflow under `.github/workflows`
+    * sets up a JDK other than `JdkFloor`. CI must build on the JDK that `-release` names, because
+    * on a newer JDK the compiler sees only the public API of the older one, and `bin/gate` and
+    * `bin/fast` read `JdkFloor` to choose the JDK sbt runs on. A YAML file cannot read this object,
+    * so the workflows keep a copy and this check keeps the copy honest.
+    */
+  def assertWorkflowJdkMatches(rootBaseDirectory: File): Unit = {
+    val workflows = Option(new File(rootBaseDirectory, ".github/workflows").listFiles())
+      .getOrElse(Array.empty[File])
+      .filter(_.getName.endsWith(".yml"))
+      .sortBy(_.getName)
+    val drifted = for {
+      workflow       <- workflows.toList
+      (line, number) <- Files.readAllLines(workflow.toPath, UTF_8).asScala.toList.zipWithIndex
+      m              <- JavaVersionLine.findFirstMatchIn(line).toList
+      if m.group(1) != JdkFloor.toString
+    } yield s".github/workflows/${workflow.getName}:${number + 1} sets up JDK ${m.group(1)}"
+    if (drifted.nonEmpty)
+      sys.error(
+        s"JDK drift: JdkFloor in project/Toolchain.scala is $JdkFloor, but " +
+          drifted.mkString(", ") + ". Update the workflow by hand to match: CI builds on the " +
+          "JDK that -release names, and bin/gate chooses the same one from JdkFloor."
       )
   }
 

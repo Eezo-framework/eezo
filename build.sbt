@@ -32,12 +32,14 @@ inThisBuild(
 // of with a `-release` error forty lines into a compile. `sbt.version` is checked for the same
 // reason: it is read by the sbt launcher before any Scala code runs, so the examples build cannot get
 // it from `Toolchain` the way it gets `ScalaVersion` and `JdkFloor`, and a drift there would
-// otherwise go unnoticed.
+// otherwise go unnoticed. The JDK the workflows set up is checked against `JdkFloor`, since a
+// YAML file cannot read `Toolchain` either.
 Global / onLoad := {
   val root = (ThisBuild / baseDirectory).value
   (Global / onLoad).value.andThen { state =>
     Toolchain.assertJdk()
     Toolchain.assertExampleSbtVersionMatches(root)
+    Toolchain.assertWorkflowJdkMatches(root)
     state
   }
 }
