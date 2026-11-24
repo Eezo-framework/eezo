@@ -15,8 +15,6 @@ import io.eezo.db.{DbApp, Schema}
   */
 object Cli extends DbApp {
 
-  // One source of truth for connection settings: `Db` already reads these, and `Db.withConnection`
-  // is still how the chapters that demonstrate raw JDBC get a connection.
   override def databaseUrl: String      = Db.url
   override def databaseUser: String     = Db.user
   override def databasePassword: String = Db.pass
