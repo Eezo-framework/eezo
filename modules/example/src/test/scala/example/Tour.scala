@@ -372,14 +372,15 @@ object Tour extends DbApp {
   private def prepare(c: Connection): Unit = {
     header()
     exec(c, s"""drop schema if exists "$TourSchema" cascade""")
-    // `if not exists`: the pool fills in the background while this runs, and each new connection
-    // creates the schema `databaseSchema` names when it is missing, maybe between the drop and here.
-    exec(c, s"""create schema if not exists "$TourSchema"""")
+    createTourSchemaRacingThePool(c)
     exec(c, s"""set search_path to "$TourSchema"""")
     note(s"Working in schema `$TourSchema` on ${Db.url}, so nothing else is touched.")
     note("Everything is dropped again at the end.")
     pause()
   }
+
+  private def createTourSchemaRacingThePool(c: Connection): Unit =
+    exec(c, s"""create schema if not exists "$TourSchema"""")
 
   private def finish(c: Connection, dir: Path): Unit = {
     chapter(12, "Done")
