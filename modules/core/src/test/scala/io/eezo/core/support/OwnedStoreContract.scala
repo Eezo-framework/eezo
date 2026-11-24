@@ -67,4 +67,12 @@ trait OwnedStoreContract[A, V] { self: munit.FunSuite =>
 
     assertEquals(plain.find(keyAt(1)), Some(written))
   }
+
+  test("every test starts from a world with no rows, whatever the tests before it wrote") {
+    val (plain, by) = emptyWorld()
+
+    assertEquals(plain.all(), Seq.empty[A])
+    assertEquals(by(mine).all(), Seq.empty[A])
+    assertEquals(by(theirs).all(), Seq.empty[A])
+  }
 }

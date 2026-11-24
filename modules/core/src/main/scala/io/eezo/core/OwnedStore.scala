@@ -19,7 +19,10 @@ trait OwnedStore[A, V] {
   * off a row.
   *
   * The database layer renders [[name]] into the owner condition of its statements, and the http
-  * layer calls [[get]] to compare the owner of a row with the current user. Build it from a field
-  * selector, with the `owning` of `io.eezo.auth.Guard`.
+  * layer calls [[get]] to compare the owner of a row with the current user, so the two must name
+  * the same field. Build it from a field selector, as `User.guard.required[Post].owning(_.author)`
+  * in `io.eezo.auth` does, and the compiler takes both from that one field. Built by hand, a name
+  * that is no column of the table stops the database store at boot, and the name of a different
+  * column narrows the rows by that column while the http layer compares through [[get]].
   */
 final case class OwnerOf[A, V](name: String, get: A => V)

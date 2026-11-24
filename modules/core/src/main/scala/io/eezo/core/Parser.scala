@@ -90,7 +90,8 @@ object Parser {
   }
 
   /** Always an `Absolute`, because text from outside is a finished address. The surrounding blanks
-    * are trimmed and the rest is kept verbatim.
+    * are trimmed and the rest is kept verbatim. Blank text, and text that `java.net.URI` refuses,
+    * is refused.
     */
   given Parser[Url] = text => {
     val trimmed = text.trim

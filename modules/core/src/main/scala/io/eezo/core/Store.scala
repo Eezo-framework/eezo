@@ -19,7 +19,9 @@ trait Store[A] {
   /** The row under `key`, or nothing. */
   def find(key: Id[A]): Option[A]
 
-  /** Adds a row. The key is new: a derived `create` mints it with `Id.gen()` just before. */
+  /** Adds a row under a key that the store does not hold, such as a key from `Id.gen()`. What a
+    * store does with a key that it holds already is not part of this contract.
+    */
   def insert(key: Id[A], row: A): Unit
 
   /** Replaces the row under `key`. `false` when there is none, which is what a derived `update`

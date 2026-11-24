@@ -36,8 +36,9 @@ enum Html {
     * A tag splices a `Fragment` child into its own children, then merges adjacent `Text` children
     * and drops empty ones. So `div(span("a"), text("x") ++ text("y"), span("z"))` holds three
     * children, as the browser parses `<div><span>a</span>xy<span>z</span></div>`. An `Element`
-    * built by hand, or a `Fragment` inside a `Fragment`, does not get this guard. At the root, a
-    * `Fragment` renders its children.
+    * built by hand, or a `Fragment` inside a `Fragment`, does not get this guard. Use a `Fragment`
+    * for several nodes with no parent element, such as a view that answers two siblings or the
+    * result of `++`: it renders its children and nothing of its own.
     */
   case Fragment(children: Vector[Html])
 

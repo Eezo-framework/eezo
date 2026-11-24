@@ -42,6 +42,13 @@ class DslSuite extends munit.FunSuite {
     assertEquals(div(Attrs.cls := "a", Attrs.cls := "b").render, """<div class="b"></div>""")
   }
 
+  test("a repeated attribute keeps its last value at the position of its last occurrence") {
+    assertEquals(
+      div(Attrs.cls := "a", Attrs.id := "x", Attrs.cls := "b").render,
+      """<div id="x" class="b"></div>"""
+    )
+  }
+
   test("the three Scala keywords are spelled cls, tpe and htmlFor") {
     assertEquals(
       label(Attrs.htmlFor := "n", input(Attrs.tpe := "text", Attrs.cls := "field")).render,
@@ -127,28 +134,14 @@ class DslSuite extends munit.FunSuite {
     assert(compileErrors("""UrlAttrName("class")""").nonEmpty)
   }
 
-  test("Html.Text cannot be built outside the html package, and still matches there") {
-    val escaped = Html.text("<b>") match {
-      case Html.Text(value) => value
-      case other            => fail(s"expected text, got $other")
-    }
-    assertEquals(escaped, "&lt;b&gt;")
+  test("an Attr and a Link cannot be built outside the html package") {
+    assert(compileErrors("""Attr("data-to", Some(AttrValue.Literal("x")))""").nonEmpty)
+    assert(compileErrors("""AttrValue.Link(Url.Mounted("/posts"))""").nonEmpty)
   }
 
   test("a tag refuses at compile time an Iterable of a type the Mod union does not name") {
     assert(compileErrors("div(List(true))").nonEmpty)
     assert(compileErrors("div(Vector(Some(\"a\")))").nonEmpty)
-  }
-
-  test(
-    "a runtime match on an Iterable cannot see its element type, so only the Mod union refuses one"
-  ) {
-    val booleans: Any = List(true)
-    val matched       = booleans match {
-      case _: Iterable[String @unchecked] => true
-      case _                              => false
-    }
-    assert(matched)
   }
 
   test("children that need no merging come out of a tag as they went in") {

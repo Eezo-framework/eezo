@@ -30,7 +30,7 @@ final class Redacted private (text: String) {
 
 object Redacted {
 
-  /** Wraps `text`. A test builds one directly, with no Parser. */
+  /** Wraps `text`. */
   def apply(text: String): Redacted = new Redacted(text)
 
   /** Accepts any text, the empty text included, and never refuses. */

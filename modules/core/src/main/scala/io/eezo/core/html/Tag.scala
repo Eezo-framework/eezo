@@ -17,9 +17,10 @@ final class Tag(val name: String) {
 
   /** Builds the element.
     *
-    * Attributes keep insertion order, and a repeated name keeps its last value, `class` included. A
-    * `Fragment` child is spliced into the children of this element and adjacent text is merged, so
-    * the element never contains a `Fragment`.
+    * Attributes keep insertion order. A repeated name keeps its last value, at the position of its
+    * last occurrence, and `class` is no exception. A `Fragment` child is spliced into the children
+    * of this element, adjacent text is merged and empty text is dropped, so the element never
+    * contains a `Fragment`.
     */
   def apply(mods: Mod*): Html = {
     val attrs    = Vector.newBuilder[Attr]

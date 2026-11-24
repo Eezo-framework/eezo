@@ -50,7 +50,8 @@ object Url {
   /** One rooted spelling for a path, so that two spellings of one path are equal.
     *
     * Only the part before the first `?` or `#` is a path: a query string or a fragment keeps its
-    * doubled slashes. `Route.under` normalises a mount prefix with this function too.
+    * doubled slashes. Normalise a mount prefix with it too, and the prefix and the mounted urls
+    * under it spell one path in one way.
     */
   def normalise(path: String): String = {
     val splitAt          = path.indexWhere(c => c == '?' || c == '#')
