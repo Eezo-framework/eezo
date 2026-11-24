@@ -1,6 +1,7 @@
 package io.eezo.core
 
 import java.time.{Instant, LocalDate, LocalDateTime}
+import java.time.format.DateTimeParseException
 import java.util.UUID
 
 import io.eezo.core.html.Url
@@ -110,6 +111,34 @@ class ParserSuite extends munit.FunSuite {
       ),
       errors
     )
+  }
+
+  test("the JDK's UUID, date and time parse methods refuse bad text by throwing") {
+    intercept[IllegalArgumentException](UUID.fromString("nope"))
+    intercept[DateTimeParseException](LocalDate.parse("tomorrow"))
+    intercept[DateTimeParseException](LocalDateTime.parse("2026-10-27"))
+    intercept[DateTimeParseException](Instant.parse("now"))
+  }
+
+  test("no message of a core Parser repeats the text it refused, since the text may be a secret") {
+    val secret   = "sk_live_s3cr3t"
+    val refusals = List(
+      summon[Parser[Int]].read(secret),
+      summon[Parser[Long]].read(secret),
+      summon[Parser[Double]].read(secret),
+      summon[Parser[UUID]].read(secret),
+      summon[Parser[LocalDate]].read(secret),
+      summon[Parser[LocalDateTime]].read(secret),
+      summon[Parser[Instant]].read(secret),
+      summon[Parser[Boolean]].read(secret),
+      summon[Parser[Id[Widget]]].read(secret),
+      summon[Parser[Option[Int]]].read(secret),
+      summon[Parser[Url]].read(s"http://[$secret")
+    )
+    refusals.foreach { refusal =>
+      assert(refusal.isLeft, refusal)
+      assert(!refusal.left.exists(_.contains(secret)), refusal)
+    }
   }
 }
 

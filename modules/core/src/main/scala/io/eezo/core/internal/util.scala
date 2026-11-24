@@ -1,12 +1,6 @@
 package io.eezo.core.internal
 
-/** Naming helpers with no dependencies and more than one module reading them, which is the rule
-  * `core` exists under.
-  *
-  * `snake` is here rather than in `db` because both sides of the framework name things with it and
-  * neither can see the other: `db` turns a class name into a table name, and `http` turns the same
-  * class name into a route path. One camel case rule, or the two go wrong differently.
-  */
+/** Naming helpers that more than one module uses. */
 object util {
 
   /** `BookReview` becomes `book_review`, `HTTPLog` becomes `http_log`. */

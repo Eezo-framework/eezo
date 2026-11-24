@@ -1,13 +1,6 @@
 package io.eezo.core.internal
 
-/** A JSON value and its writer, hand rolled and deliberately small.
-  *
-  * It lives in `core` for the reason `build.sbt` gives for everything here: no dependencies of its
-  * own and two dependents that never see each other. The database layer writes the schema snapshot
-  * and its command results with it, the http layer writes the route listing, and a second hand
-  * written escape in either would be the same code twice. It is not a JSON library, and
-  * `derives Api` will not be built on it.
-  */
+/** A JSON value, with a small hand rolled writer and reader. It is not a JSON library. */
 enum Json {
   case Str(v: String)
   case Num(v: Long)
@@ -30,14 +23,9 @@ object Json {
 
   /** Parses one JSON value, strictly: the whole input must be that value plus whitespace.
     *
-    * The reader exists for the wire messages `modules/live` receives from a browser, which is why
-    * it returns `Either` rather than throwing: every inbound frame is untrusted input, and a
-    * malformed one is an ordinary value the page loop logs and survives. The message carries the
-    * zero-based offset, because "unexpected character" without a position is a debugging session.
-    *
-    * Numbers are integers only, like [[Json.Num]] itself. A fraction or an exponent is refused by
-    * name rather than truncated: nothing eezo puts on the wire is fractional, and a client that
-    * sends `1.5` where the server expects an index is a client whose message should fail loudly.
+    * A malformed input is a `Left` whose message carries the zero based offset. Numbers are
+    * integers only, like [[Json.Num]]: a fraction or an exponent is refused by name, not truncated.
+    * Nesting deeper than 64 levels is refused.
     */
   def parse(s: String): Either[String, Json] = {
     val p = new Parser(s)
@@ -207,11 +195,9 @@ object Json {
     }
   }
 
-  /** One line, no padding: the shape for a value that travels as a single line of text, which is
-    * what the dev loop's marker lines are (`eezo dev: drift {...}`), where a reader takes one line
-    * as one event and a newline inside the value would split it. [[render]] stays the shape every
-    * `--json` command prints, because a human reads those. The two agree on everything but
-    * whitespace, so `parse` reads both.
+  /** One line, no padding: the shape for a value that travels as a single line of text, such as the
+    * marker lines of the dev loop (`eezo dev: drift {...}`). [[render]] is the indented shape that
+    * every `--json` command prints. [[parse]] reads both.
     */
   def compact(j: Json): String = j match {
     case Json.Str(v)  => "\"" + escape(v) + "\""
