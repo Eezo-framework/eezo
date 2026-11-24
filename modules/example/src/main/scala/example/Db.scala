@@ -2,12 +2,9 @@ package example
 
 import java.sql.{Connection, DriverManager}
 
-/** Connection plumbing for the example app.
-  *
-  * Deliberately not part of the `db` module: every entry point there takes a `Connection`
-  * (`Introspect.snapshot(c)`, `Migrator.apply(c, _)`), so the library never needs to know
-  * how one is obtained. Reading a URL into a `val` at object init also can't serve a test
-  * whose database doesn't exist until a container starts.
+/** The connection settings of the example app, read from `EEZO_DB_URL`, `EEZO_DB_USER` and
+  * `EEZO_DB_PASS`. Without them, the settings name the database `eezo` of a local Postgres on port
+  * 5442, as user `postgres`.
   */
 object Db {
 

@@ -15,26 +15,8 @@ import java.sql.{Connection, DriverManager}
 import scala.io.StdIn
 import scala.util.control.NonFatal
 
-/** A guided run through everything the `db` module does, against a real Postgres.
-  *
-  * Each chapter changes something and then shows what the framework noticed. Nothing here is
-  * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
-  * migrations are real files on disk that you can open.
-  *
-  * sbt "example/Test/runMain example.Tour" steps through it; TOUR_NOPAUSE=1 runs it start to
-  * finish. An environment variable rather than an argument, because the empty argument list is
-  * the application and any first argument is a command; and rather than a `-D` property, because
-  * `Test / run` forks a child JVM that inherits the environment but not the sbt launcher's system
-  * properties.
-  */
 object Tour extends DbApp {
 
-  /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
-    *
-    * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
-    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `TOUR_NOPAUSE=1` to let it run
-    * straight through.
-    */
   private lazy val container: PostgreSQLContainer[?] = {
     val c = new PostgreSQLContainer(DockerImageName.parse("postgres:17"))
     c.start()
@@ -48,11 +30,7 @@ object Tour extends DbApp {
   override def databaseUser: String     = container.getUsername
   override def databasePassword: String = container.getPassword
 
-  /** The tour works in its own schema, and naming it is all eezo needs: every connection the pool
-    * opens creates it if it is missing and sets `search_path` to it, so the migrator writes where
-    * the drift checks read. DESIGN §8.7.
-    */
-  override def databaseSchema: String = Schema0
+  override def databaseSchema: String = TourDatabaseSchema
 
   private var paused = true
 
@@ -80,8 +58,6 @@ object Tour extends DbApp {
         } finally c.close()
     }
   }
-
-  // ── chapters ─────────────────────────────────────────────────────────────────────────
 
   private def ch1_theModelIsTheSchema(): Unit = {
     chapter(1, "The model is the schema")
@@ -320,7 +296,7 @@ object Tour extends DbApp {
         pause("Press Enter to apply them")
         transact { Migrator.apply(pending) }
         blank()
-        DeployCheck.verify(c, AppSchema.snapshot, Schema0) match {
+        DeployCheck.verify(c, AppSchema.snapshot, TourDatabaseSchema) match {
           case Right(_) => ok("replayed from empty and landed exactly on the model")
           case Left(d)  => d.foreach(ch => warn(ch.describe))
         }
@@ -371,10 +347,7 @@ object Tour extends DbApp {
     pause()
   }
 
-  // ── plumbing ─────────────────────────────────────────────────────────────────────────
-
-  /** The tour works in its own Postgres schema, so it cannot disturb anything else. */
-  private val Schema0 = "eezo_tour"
+  private val TourDatabaseSchema = "eezo_tour"
 
   private def connect(): Option[Connection] =
     try Some(DriverManager.getConnection(databaseUrl, databaseUser, databasePassword))
@@ -394,12 +367,10 @@ object Tour extends DbApp {
 
   private def prepare(c: Connection): Unit = {
     header()
-    exec(c, s"""drop schema if exists "$Schema0" cascade""")
-    // `if not exists`: the pool fills in the background while this runs, and each new connection
-    // creates the schema `databaseSchema` names when it is missing, maybe between the drop and here.
-    exec(c, s"""create schema if not exists "$Schema0"""")
-    exec(c, s"""set search_path to "$Schema0"""")
-    note(s"Working in schema `$Schema0` on ${Db.url}, so nothing else is touched.")
+    exec(c, s"""drop schema if exists "$TourDatabaseSchema" cascade""")
+    exec(c, s"""create schema if not exists "$TourDatabaseSchema"""")
+    exec(c, s"""set search_path to "$TourDatabaseSchema"""")
+    note(s"Working in schema `$TourDatabaseSchema` on ${Db.url}, so nothing else is touched.")
     note("Everything is dropped again at the end.")
     pause()
   }
@@ -407,8 +378,8 @@ object Tour extends DbApp {
   private def finish(c: Connection, dir: Path): Unit = {
     chapter(12, "Done")
     dropAll(c)
-    exec(c, s"""drop schema if exists "$Schema0" cascade""")
-    ok(s"schema `$Schema0` dropped")
+    exec(c, s"""drop schema if exists "$TourDatabaseSchema" cascade""")
+    ok(s"schema `$TourDatabaseSchema` dropped")
     ok(s"migration files left in $dir if you want to read them")
     blank()
     note("The whole loop, in one sentence: one case class produced the DDL, the codecs, the")
@@ -417,7 +388,7 @@ object Tour extends DbApp {
     println()
   }
 
-  private def snapshotOf(c: Connection): SchemaSnap = Introspect.snapshot(c, Schema0)
+  private def snapshotOf(c: Connection): SchemaSnap = Introspect.snapshot(c, TourDatabaseSchema)
 
   private def dropAll(c: Connection): Unit = {
     snapshotOf(c).tables.foreach(t => exec(c, s"""drop table if exists "${t.name}" cascade"""))
@@ -446,8 +417,6 @@ object Tour extends DbApp {
     val first = m.linesIterator.find(_.trim.nonEmpty).getOrElse(m).trim
     if (first.length > 96) first.take(93) + "..." else first
   }
-
-  // ── output ───────────────────────────────────────────────────────────────────────────
 
   private def header(): Unit = {
     println()
