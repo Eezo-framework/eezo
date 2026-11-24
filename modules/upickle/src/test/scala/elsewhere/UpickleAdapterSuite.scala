@@ -49,6 +49,10 @@ object Companioned {
   given Serde[Companioned] = Fixed("companion")
 }
 
+final case class Preferred(name: String)
+
+given Serde[Preferred] = Fixed("application")
+
 class UpickleAdapterSuite extends munit.FunSuite {
 
   private def bytes(text: String): Array[Byte] = text.getBytes(StandardCharsets.UTF_8)
@@ -75,7 +79,8 @@ class UpickleAdapterSuite extends munit.FunSuite {
     assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), """{"name":"x"}""")
   }
 
-  test("a Serde the application brings into a nearer scope wins over the imported serde") {
+  test("a Serde the application gives for one model wins over the imported serde, at any level") {
+    assertEquals(summon[Serde[Preferred]].serialize(Preferred("x")), "application")
     given Serde[Companioned] = Fixed("nearer")
     assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), "nearer")
   }
@@ -213,7 +218,7 @@ class UpickleAdapterSuite extends munit.FunSuite {
     )
   }
 
-  test("a JSON array is never Malformed, since a Serde of a list reads it") {
+  test("a JSON array reads into a Serde of a list") {
     assertEquals(summon[Serde[List[Int]]].deserialize(bytes("[1,2]")), Right(List(1, 2)))
   }
 

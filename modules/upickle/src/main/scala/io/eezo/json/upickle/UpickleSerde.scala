@@ -40,7 +40,8 @@ given idReadWriter[A]: ReadWriter[Id[A]] =
   * type that needs it at the place where the `Serde` is summoned.
   *
   * Imported, it is found before any `Serde` in a model's companion. An application that writes its
-  * own `Serde` for one model brings it into scope at a nearer level than this import for it to win.
+  * own `Serde` for one model and brings it into scope, by a given or an import at any level, has
+  * that `Serde` win over this one.
   */
 inline given serde[A]: Serde[A] = summonFrom {
   case rw: ReadWriter[A]         => adapt(rw)
