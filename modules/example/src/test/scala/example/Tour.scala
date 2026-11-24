@@ -15,26 +15,8 @@ import java.sql.{Connection, DriverManager}
 import scala.io.StdIn
 import scala.util.control.NonFatal
 
-/** A guided run through everything the `db` module does, against a real Postgres.
-  *
-  * Each chapter changes something and then shows what the framework noticed. Nothing here is
-  * simulated: the drift is real ALTERs, the rejections are real constraint violations, and the
-  * migrations are real files on disk that you can open.
-  *
-  * sbt "example/Test/runMain example.Tour" steps through it; TOUR_NOPAUSE=1 runs it start to
-  * finish. An environment variable rather than an argument, because the empty argument list is
-  * the application and any first argument is a command; and rather than a `-D` property, because
-  * `Test / run` forks a child JVM that inherits the environment but not the sbt launcher's system
-  * properties.
-  */
 object Tour extends DbApp {
 
-  /** The tour starts its own Postgres, so it needs nothing installed and disturbs nothing.
-    *
-    * It lives in `src/test` for the container rather than because it is a test: it asserts nothing
-    * and prints everything. `sbt "example/Test/runMain example.Tour"`, `TOUR_NOPAUSE=1` to let it run
-    * straight through.
-    */
   private lazy val container: PostgreSQLContainer[?] = {
     val c = new PostgreSQLContainer(DockerImageName.parse("postgres:17"))
     c.start()
@@ -48,10 +30,6 @@ object Tour extends DbApp {
   override def databaseUser: String     = container.getUsername
   override def databasePassword: String = container.getPassword
 
-  /** The tour works in its own schema, and naming it is all eezo needs: every connection the pool
-    * opens creates it if it is missing and sets `search_path` to it, so the migrator writes where
-    * the drift checks read. DESIGN §8.7.
-    */
   override def databaseSchema: String = Schema0
 
   private var paused = true
