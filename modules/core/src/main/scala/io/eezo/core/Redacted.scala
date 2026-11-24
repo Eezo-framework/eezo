@@ -4,20 +4,14 @@ import java.nio.ByteBuffer
 import java.nio.charset.StandardCharsets
 import java.security.MessageDigest
 
-/** Text an application must not leak, such as an API key, held so that the usual ways a value
-  * escapes do not apply to it.
+/** Text an application must not leak, such as an API key.
   *
-  * Not a case class, because one would hand the text to anyone through `unapply`, `copy` and
-  * `productElement`; and not a `String`, which `toString`, logging and interpolation show as it is.
-  * `equals` compares in constant time, as the session's Secret does, so that checking a value an
-  * attacker sent against one of these cannot be timed into revealing it.
-  *
-  * Unlike Secret, it has no length rule and no single use: a Secret is the one key a session is
-  * signed with, and a Redacted is whatever the application itself must keep quiet.
+  * `toString` shows `Redacted(redacted)`, no pattern match or copy gives the text back, and
+  * [[reveal]] is the one way to read it. `equals` compares in constant time.
   */
 final class Redacted private (text: String) {
 
-  /** The only way back to the text, named so that every place that needs it reads as a choice. */
+  /** The only way back to the text. */
   def reveal: String = text
 
   private def bytes: Array[Byte] = text.getBytes(StandardCharsets.UTF_8)
@@ -27,8 +21,7 @@ final class Redacted private (text: String) {
     case _              => false
   }
 
-  /** From a digest of the text, not the text's own hash, which a short text can be read back from.
-    */
+  /** From a digest of the text, not from the hash of the text itself. */
   override def hashCode: Int =
     ByteBuffer.wrap(MessageDigest.getInstance("SHA-256").digest(bytes)).getInt
 
@@ -37,11 +30,9 @@ final class Redacted private (text: String) {
 
 object Redacted {
 
-  /** Public, so that a handler under test is handed a case class built directly, with no map. */
+  /** Wraps `text`. */
   def apply(text: String): Redacted = new Redacted(text)
 
-  /** Accepts any text, the empty text included: what a valid key looks like is the provider's
-    * business, and a Parser that never refuses never has a reason that could repeat the text.
-    */
+  /** Accepts any text, the empty text included, and never refuses. */
   given Parser[Redacted] = text => Right(Redacted(text))
 }

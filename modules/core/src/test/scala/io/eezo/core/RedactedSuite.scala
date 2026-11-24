@@ -25,4 +25,10 @@ class RedactedSuite extends munit.FunSuite {
       assertEquals(p.read(text), Right(Redacted(text)))
     )
   }
+
+  test("toString shows no text, and no copy or pattern match gives it back") {
+    assertEquals(Redacted("whsec_1").toString, "Redacted(redacted)")
+    assert(compileErrors("Redacted(\"a\").copy()").nonEmpty)
+    assert(compileErrors("Redacted(\"a\") match { case Redacted(t) => t }").nonEmpty)
+  }
 }

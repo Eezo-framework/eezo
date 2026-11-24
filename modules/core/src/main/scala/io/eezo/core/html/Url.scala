@@ -2,30 +2,23 @@ package io.eezo.core.html
 
 /** A URL a page emits, in the two kinds a mount has to tell apart.
   *
-  * A `String` in an `href` is a finished address, and finished is exactly what a mounted
-  * application's own links are not: `Route.under("/admin")` moves the route and the page has no way
-  * to hear about it. The two cases are that difference, made a type rather than a convention, so
-  * that relocation is decided where the URL is written instead of guessed where it is served.
-  *
-  * There is no third case for "resolved". Prefixing a [[Mounted]] keeps it [[Mounted]], because a
-  * set of routes can be mounted again, and a case saying the work is done would have to be undone
-  * by the next layer.
+  * [[Absolute]] is a finished address. [[Mounted]] is an address of this application, and it takes
+  * the prefix of the routes it is mounted under. A mounted url stays [[Mounted]] after a mount, so
+  * a second mount moves it again.
   */
 enum Url {
 
-  /** Declared here so that code holding a `Url` can read the payload without matching first. */
+  /** The payload, readable without a match. */
   def path: String
 
   /** An address eezo never touches: another site, a `mailto:`, or a path the author means
-    * literally. It is kept verbatim rather than normalised, because a scheme is not a path and
-    * `/https://eezo.io` is what normalising one would produce.
+    * literally. The payload is kept verbatim.
     */
   case Absolute private (path: String)
 
   /** An address inside this application, which travels with the prefix its routes are mounted
-    * under. The payload is normalised on the way in by [[Url.normalise]], the same function
-    * `Route.under` normalises a prefix with, so that `Mounted("posts")` and `Mounted("/posts")` are
-    * one value rather than two that render alike.
+    * under. The payload is normalised on the way in by [[Url.normalise]], as `Route.under`
+    * normalises a prefix, so `Mounted("posts")` and `Mounted("/posts")` are one value.
     */
   case Mounted private (path: String)
 
@@ -35,11 +28,8 @@ enum Url {
     case Mounted(base)  => Url.Mounted(Url.join(base, segment))
   }
 
-  /** This URL as seen from under `prefix`. Absolute is the answer to "not mine to move".
-    *
-    * The concatenation goes back through [[Url.Mounted.apply]] rather than the private constructor,
-    * so the result is normalised the way any other `Mounted` is. That is what keeps a root url from
-    * leaving a slash behind it: `Mounted("/").under("/admin")` is `/admin`, not `/admin/`.
+  /** This URL as seen from under `prefix`. An [[Absolute]] is unchanged. A [[Mounted]] takes the
+    * prefix and is normalised again, so `Mounted("/").under("/admin")` is `/admin`, not `/admin/`.
     */
   def under(prefix: String): Url = this match {
     case Absolute(_)   => this
@@ -49,9 +39,6 @@ enum Url {
 
 object Url {
 
-  /** Written out rather than left to the enum's own constructor, because the payload has to be
-    * normalised before it becomes part of the value's identity.
-    */
   object Absolute {
     def apply(path: String): Url.Absolute = new Url.Absolute(path)
   }
@@ -60,15 +47,11 @@ object Url {
     def apply(path: String): Url.Mounted = new Url.Mounted(normalise(path))
   }
 
-  /** One rooted spelling for a path, so equality answers the question a reader is asking.
+  /** One rooted spelling for a path, so that two spellings of one path are equal.
     *
-    * Only the part before the first `?` or `#` is a path; a query string or a fragment can carry
-    * its own doubled slash, an encoded absolute URL among them, that means something to whatever
-    * reads it and is not eezo's to collapse.
-    *
-    * Public because a mount prefix is the same concept: `Route.under` normalises what it is handed
-    * with this rather than trimming slashes of its own, so the path a route answers on and the path
-    * its links point at cannot spell the same prefix two ways.
+    * Only the part before the first `?` or `#` is a path: a query string or a fragment keeps its
+    * doubled slashes. Normalise a mount prefix with it too, and the prefix and the mounted urls
+    * under it spell one path in one way.
     */
   def normalise(path: String): String = {
     val splitAt          = path.indexWhere(c => c == '?' || c == '#')

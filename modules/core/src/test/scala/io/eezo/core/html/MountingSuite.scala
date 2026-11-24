@@ -2,7 +2,6 @@ package io.eezo.core.html
 
 import io.eezo.core.html.Tags.*
 
-/** What moving a rendered tree under a prefix does, and what it deliberately leaves alone. */
 class MountingSuite extends munit.FunSuite {
 
   test("every mounted url in the tree takes the prefix, however deep it sits") {
@@ -41,5 +40,32 @@ class MountingSuite extends munit.FunSuite {
       page.under("/admin").render,
       """<a href="/admin/a">a</a><a href="/admin/b">b</a>"""
     )
+  }
+
+  test("a tree mounted twice takes both prefixes, the outer one first") {
+    val page = p(a(Attrs.href := Url.Mounted("/posts"), "all"))
+    assertEquals(
+      page.under("/v1").under("/admin").render,
+      """<p><a href="/admin/v1/posts">all</a></p>"""
+    )
+  }
+
+  test("a mount that moves nothing gives back the same tree, not a copy") {
+    val page = div(p("static"), a(Attrs.href := "/posts", "handwritten"))
+    assert(page.under("/admin") eq page)
+  }
+
+  test("a mount rebuilds only the nodes above a moved url, and keeps every other subtree") {
+    val still = p("static")
+    val page  = div(still, a(Attrs.href := Url.Mounted("/posts"), "all"))
+    page.under("/admin") match {
+      case Html.Element(_, _, _, children) => assert(children.head eq still)
+      case other                           => fail(s"expected an element, got $other")
+    }
+  }
+
+  test("a mount moves the live base marker with the page") {
+    val anchor = div(Attrs.eezoBase := Url.Mounted("/"))
+    assertEquals(anchor.under("/admin").render, """<div data-eezo-base="/admin"></div>""")
   }
 }

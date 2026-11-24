@@ -2,9 +2,6 @@ package io.eezo.core.html
 
 import io.eezo.core.html.Html.*
 
-/** What the four cases render to. Elements are built here by hand, so this suite says nothing about
-  * the DSL: [[DslSuite]] owns that.
-  */
 class RenderingSuite extends munit.FunSuite {
 
   test("an element renders its attributes in insertion order") {

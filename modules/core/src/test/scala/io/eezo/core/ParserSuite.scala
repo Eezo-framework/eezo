@@ -5,11 +5,6 @@ import java.util.UUID
 
 import io.eezo.core.html.Url
 
-/** The core readings every type with a Parser shares, pinned where a form never sees them.
-  *
-  * A Parser is what Config reads application.conf with, so its messages and its blanks have to be
-  * right without a browser in the loop. The form side of the same readings is FormSuite's.
-  */
 class ParserSuite extends munit.FunSuite {
 
   test("a String reads as itself, the empty text included, and has no absent value") {
@@ -115,6 +110,27 @@ class ParserSuite extends munit.FunSuite {
       ),
       errors
     )
+  }
+
+  test("no message of a core Parser repeats the text it refused") {
+    val secret   = "sk_live_s3cr3t"
+    val refusals = List(
+      summon[Parser[Int]].read(secret),
+      summon[Parser[Long]].read(secret),
+      summon[Parser[Double]].read(secret),
+      summon[Parser[UUID]].read(secret),
+      summon[Parser[LocalDate]].read(secret),
+      summon[Parser[LocalDateTime]].read(secret),
+      summon[Parser[Instant]].read(secret),
+      summon[Parser[Boolean]].read(secret),
+      summon[Parser[Id[Widget]]].read(secret),
+      summon[Parser[Option[Int]]].read(secret),
+      summon[Parser[Url]].read(s"http://[$secret")
+    )
+    refusals.foreach { refusal =>
+      assert(refusal.isLeft, refusal)
+      assert(!refusal.left.exists(_.contains(secret)), refusal)
+    }
   }
 }
 

@@ -1,34 +1,28 @@
 package io.eezo.core.html
 
-/** eezo's HTML node tree.
+/** eezo's HTML node tree, in four cases.
   *
-  * Four cases and no more. There is no `Comment` case, because nothing eezo renders emits one and
-  * [[Html.raw]] covers it if something ever does, and no `Doctype` case, because [[Html.doctype]]
-  * is a `Raw` the caller puts first. A case that may legally appear at exactly one position in the
-  * tree is a case every `match` in `modules/live` has to handle and then ignore.
+  * [[Html.doctype]] is a `Raw` that a page puts first, and [[Html.raw]] carries anything the four
+  * cases do not, such as a comment.
   */
 enum Html {
 
-  /** Text that is **already escaped**. The constructor is package private, so [[Html.text]] is the
-    * only way to build one from outside `io.eezo.core.html`, while the pattern match that the
-    * differ in `modules/live` needs still compiles from anywhere.
+  /** Text that is **already escaped**. Build one with [[Html.text]]: the constructor is private to
+    * `io.eezo.core.html`, and the pattern match works from anywhere.
     */
   case Text private[html] (escaped: String)
 
   /** The single unescaped path into the tree.
     *
-    * Mounting stops at its layer. `Route.under` moves a [[Url.Mounted]] wherever one sits in an
-    * attribute, and raw content is a string eezo never parses, so a link written inside it keeps
-    * whatever it says and stays where the author put it.
+    * A mount does not look inside it. `Route.under` moves a [[Url.Mounted]] that sits in an
+    * attribute, and a link written inside raw content stays as its author wrote it.
     */
   case Raw(html: String)
 
-  /** An element. Void ness is a property of the tag *name*, looked up in an internal void tag table
-    * at render time, so `Element("br", …, void = false)` is not a state that exists.
+  /** An element. Whether it is void is decided by the tag name when it renders, so
+    * `Element("br", …)` never renders children.
     *
-    * `key` is a field rather than an ordinary attribute because `modules/live` addresses list
-    * children by identity, and a requirement one module places on another belongs in a type rather
-    * than in a string two modules agree on by convention. It renders as `data-eezo-key`.
+    * `key` renders as `data-eezo-key`. Give it with [[key]] among the arguments of a tag.
     */
   case Element(
       name: String,
@@ -39,18 +33,12 @@ enum Html {
 
   /** Several nodes with no element of their own.
     *
-    * A `Fragment` renders its children and nothing of its own, so one tree child can become several
-    * DOM nodes, and every index after it would run ahead of the tree if the fragment were left in
-    * place. For example, `div(span("a"), text("x") ++ text("y"), span("z"))` renders
-    * `<div><span>a</span>xy<span>z</span></div>`, which a browser parses as three DOM children;
-    * left unspliced, the two text nodes would sit behind one tree child. [[Tag.apply]] is the
-    * guard: it splices a `Fragment` child into its parent's children, then merges adjacent `Text`
-    * children and drops empty ones, because the parser knows no boundary between `x` and `y`
-    * either, so an `Element` built through a tag holds exactly three children here and tree child
-    * index equals DOM child index. That guard is `Tag.apply`'s alone; building an `Element` by hand
-    * with a `Fragment` among its children, or nesting one `Fragment` inside another before it
-    * reaches a tag, sits outside it. The case survives as a root level value, where there is no
-    * parent to index into.
+    * A tag splices a `Fragment` child into its own children, then merges adjacent `Text` children
+    * and drops empty ones. So `div(span("a"), text("x") ++ text("y"), span("z"))` holds three
+    * children, as the browser parses `<div><span>a</span>xy<span>z</span></div>`. An `Element`
+    * built by hand, or a `Fragment` inside a `Fragment`, does not get this guard. Use a `Fragment`
+    * for several nodes with no parent element, such as a view that answers two siblings or the
+    * result of `++`: it renders its children and nothing of its own.
     */
   case Fragment(children: Vector[Html])
 
@@ -62,27 +50,13 @@ enum Html {
     case (a, b)                     => Fragment(Vector(a, b))
   }
 
-  /** This tree as seen from under `prefix`: every [[Url.Mounted]] sitting in an attribute takes the
-    * prefix, and stays mounted so that a second layer can move it again.
-    *
-    * `private[eezo]` because `Response.under` is the one caller, walking the page of a response a
-    * mounted route is about to return, and a mount is a property of where routes are served rather
-    * than something a view decides for itself.
-    */
   private[eezo] def under(prefix: String): Html = transform {
     case node @ Element(name, attrs, key, children) =>
       val rewritten = attrs.map(_.under(prefix))
       if (Html.same(rewritten, attrs)) node else Element(name, rewritten, key, children)
-    // Text carries no address, and raw markup is a string eezo never parses.
     case leaf => leaf
   }
 
-  /** This tree rebuilt top down: `f` sees a node before its children, and the walk descends into
-    * whatever `f` returned, through `Element` and `Fragment` alike. `Text` and `Raw` are leaves.
-    *
-    * A node `f` leaves alone, whose children the walk leaves alone, is returned as the same object,
-    * so a walk that changes one node allocates only the spine above it.
-    */
   private[eezo] def transform(f: Html => Html): Html = f(this) match {
     case node @ Element(name, attrs, key, children) =>
       val walked = children.map(_.transform(f))
@@ -101,9 +75,6 @@ enum Html {
     sb.result()
   }
 
-  /** Renders into an existing builder. Internal, so that a streaming writer can arrive later for
-    * the reserved `Body.Stream` case without a second public renderer.
-    */
   private[eezo] def renderTo(sb: StringBuilder): Unit = {
     def put(s: String): Unit = { val _ = sb.append(s) }
 
@@ -155,20 +126,11 @@ object Html {
   /** The document type declaration, which a page puts first. */
   val doctype: Html = Raw("<!DOCTYPE html>")
 
-  /** Renders `body` when `cond` holds, and nothing otherwise. There is no `unless`: `when(!cond)`
-    * is the same length and one concept instead of two.
+  /** Renders `body` when `cond` holds, and nothing otherwise. There is no `unless`: write
+    * `when(!cond)`.
     */
   def when(cond: Boolean)(body: => Html): Html = if (cond) body else empty
 
-  /** The tags a browser parses as self closing. They render `<br>`, not `<br/>`: the XHTML spelling
-    * is not what an HTML parser is reading.
-    *
-    * `private[eezo]`, the same reach as [[Html.renderTo]], because void ness is a fact
-    * `modules/live`'s differ will need too: a void `Element` with non empty `children` renders none
-    * of them, so the differ has to know void ness to keep tree child index equal to DOM child
-    * index. Nothing outside `renderTo` reads this table today, so a public `Set[String]` would be
-    * an API commitment with no caller asking for it.
-    */
   private[eezo] val VoidTags: Set[String] =
     Set(
       "area",
@@ -187,29 +149,9 @@ object Html {
       "wbr"
     )
 
-  /** Whether `mapped` holds the same objects as `original`, position by position: the check a walk
-    * makes before allocating a parent, since a `map` that changed nothing still built a new
-    * `Vector`.
-    */
   private def same[A <: AnyRef](mapped: Vector[A], original: Vector[A]): Boolean =
     mapped.corresponds(original)(_ eq _)
 
-  /** Escapes the five characters that can break out of a text or an attribute value.
-    *
-    * One function for both positions. Text strictly needs `<` and `&`, an attribute value `&` and
-    * `"`, but over escaping is inert in a browser, one function is the thing a reviewer checks
-    * once, and a context sensitive split is a rule that eventually gets applied to the wrong
-    * context.
-    */
-  /** The inverse of [[escape]], for the two readers of escaped text outside rendering. The differ
-    * in `modules/live` ships a text change as the *unescaped* value, because the client applies it
-    * with `data`, which is literal, not parsed. The layout's title lifting in `modules/http` hands
-    * the plain text to a `title` tag that escapes it again, so the text must leave escaped form
-    * once or it is escaped twice. It lives here beside [[escape]] because the five entities are
-    * this file's choice, and an inverse maintained elsewhere is the pair drifting apart. `&amp;` is
-    * decoded last for the reason it is encoded first: every other entity's ampersand must not be
-    * read again.
-    */
   private[eezo] def unescape(escaped: String): String =
     if (!escaped.contains('&')) escaped
     else
@@ -234,48 +176,32 @@ object Html {
   }
 }
 
-/** An attribute. The value is optional rather than a plain [[AttrValue]] so that `value := ""` and
-  * `disabled` stay distinct: `None` renders the bare name, `Some(Literal(""))` renders `value=""`.
-  * Collapsing the two would make an empty text input indistinguishable from a boolean flag.
+/** An attribute. `None` renders the bare name and `Some(Literal(""))` renders `value=""`, so an
+  * empty text input and a boolean flag stay distinct.
   *
-  * The constructor is package private, the same shape as [[Html.Text]], so `:=` on an [[AttrName]]
-  * is the only way to build one from outside `io.eezo.core.html`, while the pattern match that the
-  * differ in `modules/live` needs still compiles from anywhere. Pairing a name of a call site's own
-  * choosing with an [[AttrValue.Link]] is what would otherwise reopen the set of url bearing names
-  * that [[Attrs]] closes.
+  * Build one with `:=` on an [[AttrName]]: the constructor is private to `io.eezo.core.html`, and
+  * the pattern match works from anywhere.
   */
 final case class Attr private[html] (name: String, value: Option[AttrValue]) {
 
-  /** Unchanged unless this attribute carries a [[Url]], which is what keeps a handwritten `String`
-    * link exactly where its author wrote it.
-    */
   private[eezo] def under(prefix: String): Attr = value match {
     case Some(AttrValue.Link(url)) => copy(value = Some(AttrValue.Link(url.under(prefix))))
     case _                         => this
   }
 }
 
-/** What an attribute carries.
-  *
-  * Two cases because a mount has to tell them apart: text is finished, and a [[Url]] is a value
-  * `Route.under` can still move. Only the url bearing names build a [[Link]], so the arm exists
-  * exactly where prefixing an address is meaningful.
+/** What an attribute carries: finished text, or a [[Url]] that a mount can still move. Only the url
+  * bearing names of [[Attrs]] build a [[Link]].
   */
 enum AttrValue {
 
   case Literal(value: String)
 
-  /** An address a mount may still move. The constructor is package private, so `:=` on a
-    * [[UrlAttrName]] is the only way to build one from outside `io.eezo.core.html`, while the
-    * pattern match [[Attr.under]] and the differ in `modules/live` need still compiles from
-    * anywhere.
+  /** An address a mount may still move. Build one with `:=` on a [[UrlAttrName]]: the constructor
+    * is private to `io.eezo.core.html`, and the pattern match works from anywhere.
     */
   case Link private[html] (url: Url)
 
-  /** The one spelling of an attribute value, so that a [[Link]] cannot reach the output down a path
-    * that skips [[Html.escape]]. An unresolved [[Url.Mounted]] flattens to its bare payload: a page
-    * rendered outside any mount is a page at no prefix.
-    */
   private[eezo] def text: String = this match {
     case Literal(value) => value
     case Link(url)      => url.path

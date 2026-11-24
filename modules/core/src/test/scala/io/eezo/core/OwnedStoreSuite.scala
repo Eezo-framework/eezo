@@ -1,13 +1,5 @@
 package io.eezo.core
 
-/** The owner seam, stated in `core` for the reason `Store` is: `db` produces one half, `http`
-  * consumes it, and the generated route table is the only file where both names appear.
-  *
-  * What the suite pins is the shape, because the shape is the contract. `by` answers a plain
-  * `Store[A]`, so nothing downstream of a narrowing learns a sixth operation, and `OwnerOf` carries
-  * a name and a getter and nothing else, which is what lets `db` find a column and `http` compare
-  * two owners without either learning the other's vocabulary.
-  */
 class OwnedStoreSuite extends munit.FunSuite {
 
   case class Widget(id: Id[Widget], owner: String, name: String)

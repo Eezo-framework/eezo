@@ -3,68 +3,55 @@ package io.eezo.core
 import io.eezo.core.Dispatch.Usage
 import io.eezo.core.internal.Json
 
-/** `main`, and the dispatch every entry trait shares. Users never name this trait: they extend an
-  * layer's entry trait (`HttpApp`, `DbApp`) or the umbrella's `EezoApp`, and each of those chains
-  * its own commands in front of [[commands]].
-  *
-  * `core` cannot see either layer, so nothing here starts or stops anything: no server, no
-  * database, no lifecycle hook. What lives here is only what both layers would otherwise write
-  * twice, which is `main`, the unknown command answer, `help` over [[usage]], and the `--json` flag
-  * with the one error shape it implies.
+/** `main`, and the dispatch every entry trait shares. Extend a layer's entry trait (`HttpApp`,
+  * `DbApp`) or the umbrella's `EezoApp`, not this trait: each of those chains its own commands in
+  * front of [[commands]].
   */
 trait Dispatch {
 
-  /** The application itself: what `sbt run` with no arguments does. Abstract, and the one member
-    * every layer implements, so an application that stacks two layers by hand inherits two concrete
-    * `program`s and the compiler refuses the stacking until it says which one it means. That is how
-    * the umbrella is made to state "the http layer under the database" in words, instead of getting
-    * it from whichever layer happens to be the later mixin.
+  /** The application itself: what `sbt run` with no arguments does.
     *
-    * The refusal depends on the layers implementing this without `override`. An implementation
-    * marked `override` is one the linearization may let a later mixin's silently replace, and two
-    * of those stack in either order with no error, which is the hazard this member exists to close.
-    * Only the trait that resolves the conflict writes `override`.
+    * Implement it in a layer without `override`. A trait that stacks two layers then inherits two
+    * implementations, and the compiler refuses the stacking until that trait overrides `program` to
+    * say which one runs. With `override` on a layer, a later mixin replaces that layer's `program`
+    * with no error.
     */
   protected def program(): Unit
 
-  /** The commands this application answers, as `first argument :: rest`. `Nil` is [[program]] and
-    * is answered here, so no layer owns it. The one arm ahead of it is the configuration read every
-    * layer shares, in `eezo-config`, which this module cannot see: it answers `Nil` with an exit
-    * code before calling [[program]], since a refused read must stop the start with 1. Each layer
-    * writes `own orElse super.commands` for its own commands, so the later mixin's arms are
-    * consulted first.
+  /** The commands this application answers, as `first argument :: rest`, each arm returning the
+    * exit code. `Nil` runs [[program]] and is answered here. `ConfigApp`, in `eezo-config`, answers
+    * `Nil` first, to read the configuration before [[program]] runs. A layer adds its own commands
+    * with `own orElse super.commands`, so the arms of the later mixin are tried first.
     */
   protected def commands: PartialFunction[List[String], Int] = { case Nil => program(); 0 }
 
-  /** One row per command, for `help`. Each layer writes `own ++ super.usage`, and names only the
-    * spelling and the description: the columns are [[help]]'s to lay out, once, over every layer's
-    * rows together, so no layer has to guess how wide the others' spellings are.
+  /** One row per command, for `help`. A layer writes `own ++ super.usage` and gives only the
+    * spelling and the description: `help` lays out the columns once, over the rows of every layer.
     */
   protected def usage: List[Usage] = Nil
 
-  /** What `help` says after the command table and before its footer: the caveats that belong to no
-    * single row. Each layer writes `own ++ super.notes`, and they are kept apart from [[usage]] so
-    * a stacked application prints one table and then every layer's notes, rather than one layer's
-    * notes in the middle of the other's commands.
+  /** What `help` prints after the command table and before its footer: the caveats that belong to
+    * no single row. A layer writes `own ++ super.notes`.
     */
   protected def notes: List[String] = Nil
 
-  /** `--json` renders the same result values through the layer's `RenderJson` instead of its
-    * `Render`, the machine readable half of design/objective.md's dev loop. Exit codes are
-    * identical in both modes, so a caller gates on the code and parses the body.
+  /** Whether the arguments ask for `--json`. Under `--json` a command prints the same result as
+    * without it, rendered as JSON by the layer instead of as text, and gives the same exit code.
+    * Print the result with [[emit]] and report a failure with [[fail]], and both modes follow.
     */
   protected final def json(args: List[String]): Boolean = args.contains("--json")
 
-  /** Prints a command's result in the shape `flags` asks for: `asJson` under `--json`, `asText`
-    * otherwise. Every arm that answers on stdout goes through here, so the choice is made in one
-    * place and an arm names only its two renderings. Both are by name: rendering the shape that is
-    * not printed would be wasted work, and for a large result a visible one.
+  /** Prints the result of a command in the shape `flags` asks for: `asJson` under `--json`,
+    * `asText` otherwise. Both are by name, and only the printed one is evaluated.
+    *
+    * Print every result that a command writes on stdout through `emit`, so that each command of the
+    * layer answers `--json`.
     */
   protected final def emit(flags: List[String])(asJson: => String, asText: => String): Unit =
     println(if (json(flags)) asJson else asText)
 
-  /** One failure line on stderr: `{"error": ...}` under `--json`, prose otherwise. The layers call
-    * it for what they alone can catch; `core` calls it for the unknown command.
+  /** One failure line on stderr: `{"error": ...}` under `--json`, `[eezo] message` otherwise. A
+    * layer calls it for a failure only it can catch; `Dispatch` calls it for an unknown command.
     */
   protected final def fail(args: List[String], message: String): Unit =
     Console.err.println(
@@ -74,14 +61,11 @@ trait Dispatch {
 
   final def main(args: Array[String]): Unit = {
     val code = run(args.toList)
-    // Only a failure exits explicitly: `sys.exit(0)` on the happy path would tear down anything
-    // the process still owes (a test harness, an embedding) for no benefit.
-    if (code != 0) sys.exit(code)
+    if (code != 0) exit(code)
   }
 
-  /** `main` without the exit, so a suite can assert on the code. `help` is matched here rather than
-    * being an arm of [[commands]], so that no layer can shadow it.
-    */
+  private[eezo] def exit(code: Int): Unit = sys.exit(code)
+
   private[eezo] final def run(args: List[String]): Int = args match {
     case "help" :: _ => println(help); 0
     case list        => commands.applyOrElse(list, unknown)
@@ -92,18 +76,14 @@ trait Dispatch {
     2
   }
 
-  /** Rows laid out as one table, every spelling padded to the widest. `help` uses it over every
-    * layer's rows together; a layer with a namespace of its own (`db`) uses it for that namespace's
-    * own list, so the two read alike.
+  /** Rows laid out as one table, every spelling padded to the widest, the way `help` lays them out.
+    * A layer with a namespace of its own, such as `db`, uses it for the list of that namespace.
     */
   protected final def usageTable(rows: List[Usage]): List[String] = {
     val width = rows.map(_.command.length).max
     rows.map(row => s"  ${row.command.padTo(width, ' ')}  ${row.description}")
   }
 
-  /** The command table, then the layers' notes, then the footer. `help` itself is a row of the same
-    * table, so it lines up with whatever the layers brought.
-    */
   private def help: String = {
     val extra = if (notes.isEmpty) Nil else "" :: notes
     (("eezo" :: usageTable(usage :+ Usage("help", "this list"))) ++ extra ++

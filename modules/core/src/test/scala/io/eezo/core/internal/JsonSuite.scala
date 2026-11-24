@@ -1,13 +1,5 @@
 package io.eezo.core.internal
 
-/** The reader, and the round trip against the writer.
-  *
-  * `parse(render(j)) == j` is the property that matters: the writer is what every `--json` command
-  * already pins, so the reader is tested as its inverse rather than against a second set of
-  * expected strings. The generator is a seeded `Random` walk rather than a property testing
-  * library, because determinism is worth more here than shrinking: a failing seed is its own
-  * reproduction.
-  */
 class JsonSuite extends munit.FunSuite {
 
   test("parse(render(j)) == j over generated values") {

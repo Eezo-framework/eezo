@@ -1,6 +1,5 @@
 package io.eezo.core.html
 
-/** What a [[Url]] is as a value, before any renderer or any mount has looked at it. */
 class UrlSuite extends munit.FunSuite {
 
   test("a mounted url normalises its payload, so one intention written three ways is one value") {

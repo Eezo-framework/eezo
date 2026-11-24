@@ -2,39 +2,10 @@ package io.eezo.core.support
 
 import io.eezo.core.{Id, Store}
 
-/** The five assertions both halves of [[io.eezo.core.OwnedStore]] have to satisfy, written once.
-  *
-  * It lives in `core`'s test sources, and both layers reach it through their `test->test`
-  * dependency on `core`, for the reason the seam itself lives in `core`: `db`'s half and `http`'s
-  * half are siblings that never see each other, and a behaviour present in one and absent in the
-  * other is a difference nobody notices until a browser shows it. Mixed into a suite, this turns
-  * that difference into a failing test in the module that has it.
-  *
-  * Every hook is a `def` rather than a `val`. The tests below register while this trait's body
-  * runs, which is before a mixing suite's own fields are initialised, so a `val` hook would be read
-  * as `null` by whichever of them ran first.
-  *
-  * @tparam A
-  *   the model, which each half brings its own of: `db` needs one carrying a `Table`, and `http`
-  *   needs one carrying nothing at all.
-  * @tparam V
-  *   the owner's type, a `String` on both sides so that neither half has to invent a second user
-  *   model to be scoped by.
-  */
 trait OwnedStoreContract[A, V] { self: munit.FunSuite =>
 
-  /** An empty world: the unnarrowed store over the rows, and the narrowing of the owner aware half
-    * over those same rows. Called once per test, so no test sees another's rows.
-    *
-    * A function rather than the [[io.eezo.core.OwnedStore]] itself, because a half whose `by` is
-    * reached through an adapter is still the half under test, and each side's own suite is where
-    * the type of what its factory answers belongs.
-    */
   def emptyWorld(): (Store[A], V => Store[A])
 
-  /** A key whose text sorts where the caller says, so the order assertion states an expected order
-    * rather than discovering one.
-    */
   def keyAt(nth: Int): Id[A] =
     Id.apply[A](java.util.UUID.fromString(f"$nth%08x-0000-4000-8000-000000000000"))
 
@@ -42,7 +13,6 @@ trait OwnedStoreContract[A, V] { self: munit.FunSuite =>
 
   def labelOf(row: A): String
 
-  /** The owner whose rows the tests narrow to, and the one whose rows have to be invisible. */
   def mine: V
   def theirs: V
 
@@ -96,5 +66,13 @@ trait OwnedStoreContract[A, V] { self: munit.FunSuite =>
     by(mine).insert(keyAt(1), written)
 
     assertEquals(plain.find(keyAt(1)), Some(written))
+  }
+
+  test("every test starts from a world with no rows, whatever the tests before it wrote") {
+    val (plain, by) = emptyWorld()
+
+    assertEquals(plain.all(), Seq.empty[A])
+    assertEquals(by(mine).all(), Seq.empty[A])
+    assertEquals(by(theirs).all(), Seq.empty[A])
   }
 }
