@@ -9,7 +9,6 @@ package io.eezo.core.html
   */
 object Attrs {
 
-  // Global
   val id: AttrName     = AttrName("id")
   val cls: AttrName    = AttrName("class")
   val style: AttrName  = AttrName("style")
@@ -18,16 +17,9 @@ object Attrs {
   val role: AttrName   = AttrName("role")
   val hidden: AttrName = AttrName("hidden")
 
-  // Links and media
   val href: UrlAttrName = UrlAttrName("href")
   val src: UrlAttrName  = UrlAttrName("src")
 
-  /** The live mount's base marker, `private[eezo]` because it is the framework's own: it carries
-    * `Url.Mounted("/")` so that `Route.under` moves it with the page, and the live client reports
-    * the moved value at join — which is how re-renders on the server learn the prefix the DOM was
-    * rewritten with (design/live.md §2.6). A fourth url bearing name, minted in the one place
-    * allowed to mint them.
-    */
   private[eezo] val eezoBase: UrlAttrName = UrlAttrName("data-eezo-base")
   val alt: AttrName                       = AttrName("alt")
   val rel: AttrName                       = AttrName("rel")
@@ -37,7 +29,6 @@ object Attrs {
   val charset: AttrName                   = AttrName("charset")
   val content: AttrName                   = AttrName("content")
 
-  // Forms
   val action: UrlAttrName   = UrlAttrName("action")
   val method: AttrName      = AttrName("method")
   val name: AttrName        = AttrName("name")
@@ -60,7 +51,6 @@ object Attrs {
   val step: AttrName        = AttrName("step")
   val autofocus: AttrName   = AttrName("autofocus")
 
-  // Tables
   val colspan: AttrName = AttrName("colspan")
   val rowspan: AttrName = AttrName("rowspan")
   val scope: AttrName   = AttrName("scope")

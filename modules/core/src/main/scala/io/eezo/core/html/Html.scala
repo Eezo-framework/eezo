@@ -62,27 +62,13 @@ enum Html {
     case (a, b)                     => Fragment(Vector(a, b))
   }
 
-  /** This tree as seen from under `prefix`: every [[Url.Mounted]] sitting in an attribute takes the
-    * prefix, and stays mounted so that a second layer can move it again.
-    *
-    * `private[eezo]` because `Response.under` is the one caller, walking the page of a response a
-    * mounted route is about to return, and a mount is a property of where routes are served rather
-    * than something a view decides for itself.
-    */
   private[eezo] def under(prefix: String): Html = transform {
     case node @ Element(name, attrs, key, children) =>
       val rewritten = attrs.map(_.under(prefix))
       if (Html.same(rewritten, attrs)) node else Element(name, rewritten, key, children)
-    // Text carries no address, and raw markup is a string eezo never parses.
     case leaf => leaf
   }
 
-  /** This tree rebuilt top down: `f` sees a node before its children, and the walk descends into
-    * whatever `f` returned, through `Element` and `Fragment` alike. `Text` and `Raw` are leaves.
-    *
-    * A node `f` leaves alone, whose children the walk leaves alone, is returned as the same object,
-    * so a walk that changes one node allocates only the spine above it.
-    */
   private[eezo] def transform(f: Html => Html): Html = f(this) match {
     case node @ Element(name, attrs, key, children) =>
       val walked = children.map(_.transform(f))
@@ -101,9 +87,6 @@ enum Html {
     sb.result()
   }
 
-  /** Renders into an existing builder. Internal, so that a streaming writer can arrive later for
-    * the reserved `Body.Stream` case without a second public renderer.
-    */
   private[eezo] def renderTo(sb: StringBuilder): Unit = {
     def put(s: String): Unit = { val _ = sb.append(s) }
 
@@ -160,15 +143,6 @@ object Html {
     */
   def when(cond: Boolean)(body: => Html): Html = if (cond) body else empty
 
-  /** The tags a browser parses as self closing. They render `<br>`, not `<br/>`: the XHTML spelling
-    * is not what an HTML parser is reading.
-    *
-    * `private[eezo]`, the same reach as [[Html.renderTo]], because void ness is a fact
-    * `modules/live`'s differ will need too: a void `Element` with non empty `children` renders none
-    * of them, so the differ has to know void ness to keep tree child index equal to DOM child
-    * index. Nothing outside `renderTo` reads this table today, so a public `Set[String]` would be
-    * an API commitment with no caller asking for it.
-    */
   private[eezo] val VoidTags: Set[String] =
     Set(
       "area",
@@ -187,29 +161,9 @@ object Html {
       "wbr"
     )
 
-  /** Whether `mapped` holds the same objects as `original`, position by position: the check a walk
-    * makes before allocating a parent, since a `map` that changed nothing still built a new
-    * `Vector`.
-    */
   private def same[A <: AnyRef](mapped: Vector[A], original: Vector[A]): Boolean =
     mapped.corresponds(original)(_ eq _)
 
-  /** Escapes the five characters that can break out of a text or an attribute value.
-    *
-    * One function for both positions. Text strictly needs `<` and `&`, an attribute value `&` and
-    * `"`, but over escaping is inert in a browser, one function is the thing a reviewer checks
-    * once, and a context sensitive split is a rule that eventually gets applied to the wrong
-    * context.
-    */
-  /** The inverse of [[escape]], for the two readers of escaped text outside rendering. The differ
-    * in `modules/live` ships a text change as the *unescaped* value, because the client applies it
-    * with `data`, which is literal, not parsed. The layout's title lifting in `modules/http` hands
-    * the plain text to a `title` tag that escapes it again, so the text must leave escaped form
-    * once or it is escaped twice. It lives here beside [[escape]] because the five entities are
-    * this file's choice, and an inverse maintained elsewhere is the pair drifting apart. `&amp;` is
-    * decoded last for the reason it is encoded first: every other entity's ampersand must not be
-    * read again.
-    */
   private[eezo] def unescape(escaped: String): String =
     if (!escaped.contains('&')) escaped
     else
@@ -246,9 +200,6 @@ object Html {
   */
 final case class Attr private[html] (name: String, value: Option[AttrValue]) {
 
-  /** Unchanged unless this attribute carries a [[Url]], which is what keeps a handwritten `String`
-    * link exactly where its author wrote it.
-    */
   private[eezo] def under(prefix: String): Attr = value match {
     case Some(AttrValue.Link(url)) => copy(value = Some(AttrValue.Link(url.under(prefix))))
     case _                         => this
@@ -272,10 +223,6 @@ enum AttrValue {
     */
   case Link private[html] (url: Url)
 
-  /** The one spelling of an attribute value, so that a [[Link]] cannot reach the output down a path
-    * that skips [[Html.escape]]. An unresolved [[Url.Mounted]] flattens to its bare payload: a page
-    * rendered outside any mount is a page at no prefix.
-    */
   private[eezo] def text: String = this match {
     case Literal(value) => value
     case Link(url)      => url.path

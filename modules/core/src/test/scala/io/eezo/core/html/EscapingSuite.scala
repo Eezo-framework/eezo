@@ -1,6 +1,5 @@
 package io.eezo.core.html
 
-/** Escaping happens once, at construction, and `Html.text` is the only door into a `Text` node. */
 class EscapingSuite extends munit.FunSuite {
 
   test("text escapes all five characters, in one pass") {
@@ -22,7 +21,7 @@ class EscapingSuite extends munit.FunSuite {
   test("unescape inverts escape, entity-looking input included") {
     val hostile = List(
       """<a href="x">Tom & Jerry's</a>""",
-      "&lt;", // already looks escaped: escape must round trip it, not eat it
+      "&lt;",
       "&amp;lt;",
       "a&&b",
       "plain",
@@ -31,5 +30,13 @@ class EscapingSuite extends munit.FunSuite {
     hostile.foreach { s =>
       assertEquals(Html.unescape(Html.escape(s)), s, clues(Html.escape(s)))
     }
+  }
+
+  test("text and an attribute value escape the same five characters, the same way") {
+    val five = """<>&"'"""
+    assertEquals(
+      Tags.p(Attrs.title := five, five).render,
+      """<p title="&lt;&gt;&amp;&quot;&#39;">&lt;&gt;&amp;&quot;&#39;</p>"""
+    )
   }
 }

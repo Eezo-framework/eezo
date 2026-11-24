@@ -36,15 +36,13 @@ final class Tag(val name: String) {
     var key      = Option.empty[String]
 
     def add(mod: Mod): Unit = mod match {
-      case a: Attr   => attrs += a; ()
-      case k: Key    => key = Some(k.value)
-      case h: Html   => children ++= Tag.spliced(h); ()
-      case s: String => children += Html.text(s); ()
-      case i: Int    => children += Html.text(i.toString); ()
-      case l: Long   => children += Html.text(l.toString); ()
-      case d: Double => children += Html.text(d.toString); ()
-      // Erasure leaves nothing to check here beyond `Iterable`; the union is what keeps the
-      // element type honest at the call site.
+      case a: Attr                      => attrs += a; ()
+      case k: Key                       => key = Some(k.value)
+      case h: Html                      => children ++= Tag.spliced(h); ()
+      case s: String                    => children += Html.text(s); ()
+      case i: Int                       => children += Html.text(i.toString); ()
+      case l: Long                      => children += Html.text(l.toString); ()
+      case d: Double                    => children += Html.text(d.toString); ()
       case it: Iterable[Mod @unchecked] => it.foreach(add)
     }
 
@@ -55,36 +53,18 @@ final class Tag(val name: String) {
 
 object Tag {
 
-  /** A fragment contributes its children; anything else contributes itself. */
   private def spliced(node: Html): Vector[Html] = node match {
     case Html.Fragment(children) => children
     case other                   => Vector(other)
   }
 
-  /** Merges adjacent `Text` children and drops empty ones, so that tree children and parsed DOM
-    * children count the same. The HTML parser knows no boundary between `div("a", "b")`'s two text
-    * arguments and produces one text node, and `Html.text("")` produces none at all; either left in
-    * the tree would put every later sibling one index ahead of the DOM, which is the same skew
-    * fragment splicing exists to prevent. Concatenating the escaped forms is sound because
-    * [[Html.escape]] works character by character: escaping a concatenation is the concatenation of
-    * the escapes.
-    *
-    * This is `Tag.apply`'s guard, like splicing: an `Element` built by hand sits outside it, and
-    * the differ in `modules/live` refuses a non canonical tree loudly rather than fixing it up.
-    */
-  private def mergedText(children: Vector[Html]): Vector[Html] = {
-    val canonical = children.foldLeft(Vector.empty[Html]) {
+  private def mergedText(children: Vector[Html]): Vector[Html] =
+    children.foldLeft(Vector.empty[Html]) {
       case (acc, Html.Text(text)) if text.isEmpty => acc
       case (acc :+ Html.Text(a), Html.Text(b))    => acc :+ Html.Text(a + b)
       case (acc, child)                           => acc :+ child
     }
-    // The common case allocates nothing new: text sits alone or not at all in most elements.
-    if (canonical.length == children.length) children else canonical
-  }
 
-  /** Collapses repeated attribute names, keeping the last value and its position. There is no
-    * special case joining `class`: a merging rule for one attribute is a second mental model.
-    */
   private def lastWins(attrs: Vector[Attr]): Vector[Attr] =
     if (attrs.sizeIs < 2) attrs
     else
