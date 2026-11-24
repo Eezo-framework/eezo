@@ -5,11 +5,6 @@ import java.util.UUID
 
 import io.eezo.core.html.Url
 
-/** The core readings every type with a Parser shares, pinned where a form never sees them.
-  *
-  * A Parser is what Config reads application.conf with, so its messages and its blanks have to be
-  * right without a browser in the loop. The form side of the same readings is FormSuite's.
-  */
 class ParserSuite extends munit.FunSuite {
 
   test("a String reads as itself, the empty text included, and has no absent value") {

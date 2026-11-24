@@ -2,12 +2,6 @@ package io.eezo.core
 
 import java.util.UUID
 
-/** `Id[T]` as `core` owns it: a UUID with a phantom owner and nothing else.
-  *
-  * The point of the type living here is what it does *not* carry. `db` supplies its `Column`,
-  * `http` its `Field` and `FromPath`, and neither module can see the other; this suite pins the
-  * surface both of them build on.
-  */
 class IdSuite extends munit.FunSuite {
 
   case class Widget()
