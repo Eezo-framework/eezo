@@ -59,8 +59,6 @@ object Tour extends DbApp {
     }
   }
 
-  // ── chapters ─────────────────────────────────────────────────────────────────────────
-
   private def ch1_theModelIsTheSchema(): Unit = {
     chapter(1, "The model is the schema")
     note("`case class Book(...) derives Table` is the whole declaration. No annotations, no")
@@ -349,8 +347,6 @@ object Tour extends DbApp {
     pause()
   }
 
-  // ── plumbing ─────────────────────────────────────────────────────────────────────────
-
   private val TourSchema = "eezo_tour"
 
   private def connect(): Option[Connection] =
@@ -424,8 +420,6 @@ object Tour extends DbApp {
     val first = m.linesIterator.find(_.trim.nonEmpty).getOrElse(m).trim
     if (first.length > 96) first.take(93) + "..." else first
   }
-
-  // ── output ───────────────────────────────────────────────────────────────────────────
 
   private def header(): Unit = {
     println()
