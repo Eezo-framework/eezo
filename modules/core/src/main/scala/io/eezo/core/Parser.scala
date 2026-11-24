@@ -44,8 +44,7 @@ object Parser {
   private def numeric[X](parse: String => Option[X]): Parser[X] =
     text => parse(text.trim).toRight("is not a number")
 
-  /** For the JDK's own parse methods, which say no by throwing. */
-  private def catching[X](message: String)(parse: String => X): Parser[X] = text =>
+  private def fromThrowingParse[X](message: String)(parse: String => X): Parser[X] = text =>
     try Right(parse(text.trim))
     catch { case _: RuntimeException => Left(message) }
 
@@ -74,13 +73,13 @@ object Parser {
     override def absent: Option[Boolean] = Some(false)
   }
 
-  given Parser[UUID] = catching("is not an id")(UUID.fromString)
+  given Parser[UUID] = fromThrowingParse("is not an id")(UUID.fromString)
 
-  given Parser[LocalDate] = catching("is not a date")(LocalDate.parse)
+  given Parser[LocalDate] = fromThrowingParse("is not a date")(LocalDate.parse)
 
-  given Parser[LocalDateTime] = catching("is not a date and time")(LocalDateTime.parse)
+  given Parser[LocalDateTime] = fromThrowingParse("is not a date and time")(LocalDateTime.parse)
 
-  given Parser[Instant] = catching("is not a date and time")(Instant.parse)
+  given Parser[Instant] = fromThrowingParse("is not a date and time")(Instant.parse)
 
   /** Delegates to the UUID reading, so a key and a bare UUID cannot accept different texts. */
   given [T]: Parser[Id[T]] = text => summon[Parser[UUID]].read(text).map(Id.apply)

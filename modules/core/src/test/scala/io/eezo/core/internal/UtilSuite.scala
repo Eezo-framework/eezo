@@ -10,10 +10,9 @@ class UtilSuite extends munit.FunSuite {
     assertEquals(snake("PublishingHouse"), "publishing_house")
   }
 
-  test("snake: an acronym run stays one word") {
-    // The naive rule — every capital starts a word — gives i_s_b_n and h_t_t_p_log.
-    // `snake` splits before the last capital of a run only when a lowercase letter follows,
-    // which is what makes HTTPLog break as http_log rather than http_l_og.
+  test(
+    "snake: an acronym run stays one word, and its last capital starts a word before lowercase"
+  ) {
     assertEquals(snake("ISBN"), "isbn")
     assertEquals(snake("bookISBN"), "book_isbn")
     assertEquals(snake("HTTPLog"), "http_log")
