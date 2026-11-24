@@ -2,8 +2,8 @@ package example
 
 import io.eezo.db.{DbApp, Schema}
 
-/** The example app's entry point. It names the schema and says what `boot` does; `DbApp` gives it
-  * the `db` commands.
+/** Runs the `db` commands of the example app against the database that [[Db]] names. That database
+  * must be running before you run a command.
   *
   * {{{
   * sbt "example/run db status"
