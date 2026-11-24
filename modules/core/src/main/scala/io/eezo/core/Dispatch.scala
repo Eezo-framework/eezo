@@ -11,9 +11,10 @@ trait Dispatch {
 
   /** The application itself: what `sbt run` with no arguments does.
     *
-    * Each layer implements it without `override`. A trait that stacks two layers therefore inherits
-    * two implementations, and the compiler refuses the stacking until that trait overrides
-    * `program` to say which one runs.
+    * Implement it in a layer without `override`. A trait that stacks two layers then inherits two
+    * implementations, and the compiler refuses the stacking until that trait overrides `program` to
+    * say which one runs. With `override` on a layer, a later mixin replaces that layer's `program`
+    * with no error.
     */
   protected def program(): Unit
 
@@ -34,12 +35,17 @@ trait Dispatch {
     */
   protected def notes: List[String] = Nil
 
-  /** Whether the arguments ask for `--json`. The exit code of a command is the same in both modes.
+  /** Whether the arguments ask for `--json`. Under `--json` a command prints the same result as
+    * without it, rendered as JSON by the layer instead of as text, and gives the same exit code.
+    * Print the result with [[emit]] and report a failure with [[fail]], and both modes follow.
     */
   protected final def json(args: List[String]): Boolean = args.contains("--json")
 
   /** Prints the result of a command in the shape `flags` asks for: `asJson` under `--json`,
     * `asText` otherwise. Both are by name, and only the printed one is evaluated.
+    *
+    * Print every result that a command writes on stdout through `emit`, so that each command of the
+    * layer answers `--json`.
     */
   protected final def emit(flags: List[String])(asJson: => String, asText: => String): Unit =
     println(if (json(flags)) asJson else asText)
@@ -53,9 +59,12 @@ trait Dispatch {
       else s"[eezo] $message"
     )
 
-  final def main(args: Array[String]): Unit = exitOnlyOnFailure(run(args.toList))
+  final def main(args: Array[String]): Unit = {
+    val code = run(args.toList)
+    if (code != 0) exit(code)
+  }
 
-  private def exitOnlyOnFailure(code: Int): Unit = if (code != 0) sys.exit(code)
+  private[eezo] def exit(code: Int): Unit = sys.exit(code)
 
   private[eezo] final def run(args: List[String]): Int = args match {
     case "help" :: _ => println(help); 0

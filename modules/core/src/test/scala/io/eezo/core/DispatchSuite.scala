@@ -104,7 +104,7 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(out.linesIterator.toList, expected)
   }
 
-  test("help is answered ahead of every layer's arms, so a layer's own help arm never runs") {
+  test("help is answered ahead of every layer's arms, and a layer's own help arm never runs") {
     object Shadowing extends Greeter {
       override protected def commands: PartialFunction[List[String], Int] = ({ case "help" :: _ =>
         println("the layer's help"); 7
@@ -156,10 +156,20 @@ class DispatchSuite extends munit.FunSuite {
     assertEquals(captured(Lazy.onlyJson(List("--json")))._2.trim, "json")
   }
 
-  test("main returns when the command succeeds, so the JVM that called it keeps running") {
-    val (code, out, _) = captured { Greeting.main(Array("greet", "eezo")); 0 }
-    assertEquals(code, 0)
+  test(
+    "main exits only on a failure, with its code"
+  ) {
+    val exits = List.newBuilder[Int]
+    object Exiting extends Greeter {
+      override private[eezo] def exit(code: Int): Unit = { val _ = exits += code }
+    }
+    val (_, out, _) = captured {
+      Exiting.main(Array("greet", "eezo"))
+      Exiting.main(Array("status"))
+      0
+    }
     assertEquals(out.trim, "hello eezo")
+    assertEquals(exits.result(), List(2))
   }
 
   test("a later mixin's arm is consulted first, and the earlier one's still answers") {
