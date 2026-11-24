@@ -316,7 +316,16 @@ sbt +test
 The `db` suite starts a real Postgres through testcontainers, so it needs a Docker daemon.
 `sbt check` runs the regression half of that suite, and `sbt backlog` runs the tests that
 describe open work and are expected to fail until it lands. `bin/gate` runs all of it in CI's
-order and installs the repository's git hooks, which check every commit message. The decisions
+order and installs the repository's git hooks, which check every commit message.
+
+The build compiles for JDK 25, and CI builds on JDK 25. On a newer JDK the compiler sees only the
+public API of JDK 25, so code can compile there and fail on CI. Keep a JDK 25 installed next to
+your default one: `bin/gate` and `bin/fast` run sbt on it when the `java` on your `PATH` is another
+JDK. They look in `JAVA_HOME`, then under `~/.sdkman/candidates/java`,
+`~/Library/Java/JavaVirtualMachines`, `/Library/Java/JavaVirtualMachines` and `/usr/lib/jvm`, or
+under the directories that `EEZO_JDK_DIRS` names, separated by colons. Without a JDK 25, `bin/fast`
+warns and `bin/gate` refuses to run, because its green would not be the green of CI.
+`EEZO_GATE_ANY_JDK=1 bin/gate` runs it anyway. The decisions
 behind the framework are recorded in [`docs/adr`](docs/adr).
 
 Pull requests target `dev`, the trunk. `main` is the latest release: it moves only by fast forward
