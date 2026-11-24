@@ -371,3 +371,5 @@ lazy val example = project
     Compile / run / connectInput := true,
     Test / run / connectInput    := true
   )
+
+addCommandAlias("tour", "example/Test/runMain example.Tour")
