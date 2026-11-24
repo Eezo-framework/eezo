@@ -72,13 +72,20 @@ class DerivedApiSuite extends munit.FunSuite {
     val body   = """{"name":"Bolt","cents":3}"""
     assertEquals(routes.dispatch(program(Method.POST, "/api/products", body)).status, 201)
     val stored = store.all().head
-    assertEquals(routes.dispatch(program(Method.GET, s"/products/${stored.id.show}")).status, 200)
+    val page   = routes.dispatch(program(Method.GET, s"/products/${stored.id.show}"))
+    assertEquals(page.status, 200)
+    page.body match {
+      case Body.Html(html) =>
+        assert(clue(html.render).contains(">Bolt<"))
+        assert(clue(html.render).contains(">3<"))
+      case other => fail(s"expected a page, got $other")
+    }
   }
 
   private val ada   = Id.gen[Clerk]()
   private val grace = Id.gen[Clerk]()
 
-  private val callerFromUserHeader = Guarded[Note](
+  private val currentUserFromHeader = Guarded[Note](
     Action.values.toSet,
     {
       case http: Route.Http =>
@@ -99,7 +106,7 @@ class DerivedApiSuite extends munit.FunSuite {
       ownerOf,
       request => request.currentUser.map(text => Id[Clerk](UUID.fromString(text))),
       covers,
-      callerFromUserHeader
+      currentUserFromHeader
     )
     (RouteTable(Api[Note].routes(store, owned)), store, graces)
   }
