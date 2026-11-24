@@ -2,7 +2,7 @@
 
 **Status:** accepted
 
-The seven derived routes of a model read and write its rows. The derivation is in `http`, which cannot see `db`. The two layers meet at a trait in `core`, `Store[A]`, which has two implementations: the in memory store in `http` and the JDBC store in `db`. Issue #112 named the risk of such a seam: it grows into a second and weaker query API beside the query DSL of `db`. Settled on issues #112 and #145, and for ownership on issue #178.
+The seven derived routes of a model read and write its rows. The derivation is in `http`, which cannot see `db`. The two layers meet at a trait in `core`, `Store[A]`, which has two implementations: the in memory store in `http` and the JDBC store in `db`. Issue #112 named the risk of such a seam: it grows into a second and weaker query API beside the query DSL of `db`. Settled on issue #145, and for ownership on issue #178.
 
 ## Decision
 
