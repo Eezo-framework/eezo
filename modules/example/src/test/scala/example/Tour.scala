@@ -30,7 +30,7 @@ object Tour extends DbApp {
   override def databaseUser: String     = container.getUsername
   override def databasePassword: String = container.getPassword
 
-  override def databaseSchema: String = TourSchema
+  override def databaseSchema: String = TourDatabaseSchema
 
   private var paused = true
 
@@ -296,7 +296,7 @@ object Tour extends DbApp {
         pause("Press Enter to apply them")
         transact { Migrator.apply(pending) }
         blank()
-        DeployCheck.verify(c, AppSchema.snapshot, TourSchema) match {
+        DeployCheck.verify(c, AppSchema.snapshot, TourDatabaseSchema) match {
           case Right(_) => ok("replayed from empty and landed exactly on the model")
           case Left(d)  => d.foreach(ch => warn(ch.describe))
         }
@@ -347,7 +347,7 @@ object Tour extends DbApp {
     pause()
   }
 
-  private val TourSchema = "eezo_tour"
+  private val TourDatabaseSchema = "eezo_tour"
 
   private def connect(): Option[Connection] =
     try Some(DriverManager.getConnection(databaseUrl, databaseUser, databasePassword))
@@ -367,22 +367,19 @@ object Tour extends DbApp {
 
   private def prepare(c: Connection): Unit = {
     header()
-    exec(c, s"""drop schema if exists "$TourSchema" cascade""")
-    createTourSchema(c)
-    exec(c, s"""set search_path to "$TourSchema"""")
-    note(s"Working in schema `$TourSchema` on ${Db.url}, so nothing else is touched.")
+    exec(c, s"""drop schema if exists "$TourDatabaseSchema" cascade""")
+    exec(c, s"""create schema if not exists "$TourDatabaseSchema"""")
+    exec(c, s"""set search_path to "$TourDatabaseSchema"""")
+    note(s"Working in schema `$TourDatabaseSchema` on ${Db.url}, so nothing else is touched.")
     note("Everything is dropped again at the end.")
     pause()
   }
 
-  private def createTourSchema(c: Connection): Unit =
-    exec(c, s"""create schema if not exists "$TourSchema"""")
-
   private def finish(c: Connection, dir: Path): Unit = {
     chapter(12, "Done")
     dropAll(c)
-    exec(c, s"""drop schema if exists "$TourSchema" cascade""")
-    ok(s"schema `$TourSchema` dropped")
+    exec(c, s"""drop schema if exists "$TourDatabaseSchema" cascade""")
+    ok(s"schema `$TourDatabaseSchema` dropped")
     ok(s"migration files left in $dir if you want to read them")
     blank()
     note("The whole loop, in one sentence: one case class produced the DDL, the codecs, the")
@@ -391,7 +388,7 @@ object Tour extends DbApp {
     println()
   }
 
-  private def snapshotOf(c: Connection): SchemaSnap = Introspect.snapshot(c, TourSchema)
+  private def snapshotOf(c: Connection): SchemaSnap = Introspect.snapshot(c, TourDatabaseSchema)
 
   private def dropAll(c: Connection): Unit = {
     snapshotOf(c).tables.foreach(t => exec(c, s"""drop table if exists "${t.name}" cascade"""))
