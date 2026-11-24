@@ -9,7 +9,6 @@ package io.eezo.core.html
   */
 object Tags {
 
-  // Document
   val html: Tag   = Tag("html")
   val head: Tag   = Tag("head")
   val body: Tag   = Tag("body")
@@ -20,7 +19,6 @@ object Tags {
   val script: Tag = Tag("script")
   val base: Tag   = Tag("base")
 
-  // Structure
   val div: Tag     = Tag("div")
   val span: Tag    = Tag("span")
   val header: Tag  = Tag("header")
@@ -32,7 +30,6 @@ object Tags {
   val aside: Tag   = Tag("aside")
   val hr: Tag      = Tag("hr")
 
-  // Text
   val h1: Tag         = Tag("h1")
   val h2: Tag         = Tag("h2")
   val h3: Tag         = Tag("h3")
@@ -49,7 +46,6 @@ object Tags {
   val br: Tag         = Tag("br")
   val blockquote: Tag = Tag("blockquote")
 
-  // Lists
   val ul: Tag = Tag("ul")
   val ol: Tag = Tag("ol")
   val li: Tag = Tag("li")
@@ -57,7 +53,6 @@ object Tags {
   val dt: Tag = Tag("dt")
   val dd: Tag = Tag("dd")
 
-  // Forms
   val form: Tag     = Tag("form")
   val fieldset: Tag = Tag("fieldset")
   val legend: Tag   = Tag("legend")
@@ -68,7 +63,6 @@ object Tags {
   val option: Tag   = Tag("option")
   val button: Tag   = Tag("button")
 
-  // Media
   val img: Tag        = Tag("img")
   val figure: Tag     = Tag("figure")
   val figcaption: Tag = Tag("figcaption")
@@ -76,7 +70,6 @@ object Tags {
   val audio: Tag      = Tag("audio")
   val source: Tag     = Tag("source")
 
-  // Tables
   val table: Tag   = Tag("table")
   val thead: Tag   = Tag("thead")
   val tbody: Tag   = Tag("tbody")
