@@ -50,19 +50,10 @@ object Json {
     }
   }
 
-  /** The reader's only failure, caught inside [[parse]] and never seen outside it. An exception
-    * rather than `Either` threaded through every production, because the parser is recursive and
-    * the failure is terminal: nothing recovers mid-value.
-    */
   private final case class Parse(message: String) extends RuntimeException(message) {
-    // The message is the payload; a stack trace into a hand rolled parser helps nobody.
     override def fillInStackTrace(): Throwable = this
   }
 
-  /** Deep enough for any frame eezo writes or reads, shallow enough that a hostile `[[[[…` frame
-    * inside the transport's size cap is a parse error rather than a stack overflow: the parser is
-    * recursive, and recursion depth on untrusted input is a resource like any other.
-    */
   private val MaxDepth = 64
 
   private final class Parser(s: String) {
@@ -92,7 +83,6 @@ object Json {
       at += 1
     }
 
-    /** Consumes `word` when it is next, for the three literals. */
     private def literal(word: String, value: Json): Json = {
       if (!s.startsWith(word, at)) fail(s"'$word'")
       at += word.length
@@ -162,13 +152,14 @@ object Json {
 
     private def string(): String = {
       expect('"')
-      val sb = new StringBuilder
-      while (true) {
+      val sb     = new StringBuilder
+      var closed = false
+      while (!closed) {
         if (done) fail("a closing '\"'")
         s.charAt(at) match {
           case '"' =>
             at += 1
-            return sb.result()
+            closed = true
           case '\\' =>
             at += 1
             if (done) fail("an escape character")
@@ -196,7 +187,7 @@ object Json {
           case c            => sb.append(c); at += 1
         }
       }
-      sb.result() // unreachable; the loop returns
+      sb.result()
     }
 
     private def number(): Json = {
