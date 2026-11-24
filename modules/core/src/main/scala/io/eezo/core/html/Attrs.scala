@@ -1,11 +1,9 @@
 package io.eezo.core.html
 
-/** The attribute names, qualified rather than wildcard imported, because they collide with the tags
-  * on `title`, `style`, `label`, `form`, `value`, `name`, `data` and `span`.
+/** The attribute names. Import them qualified, as `Attrs.cls`, because they share names with the
+  * tags: `title`, `style`, `label`, `form`, `value`, `name`, `data` and `span`.
   *
-  * The three Scala keywords are spelled `cls`, `tpe` and `htmlFor` rather than backticked, because
-  * a backticked `` `for` `` is a papercut on every label in every form, and forms are the
-  * framework's most written markup.
+  * The three Scala keywords are spelled `cls`, `tpe` and `htmlFor`.
   */
 object Attrs {
 
@@ -57,12 +55,8 @@ object Attrs {
 
   /** An arbitrary attribute, for the ones this list does not carry.
     *
-    * A plain [[AttrName]], even when the name spelled here is `href`. A [[Url]] moves under a
-    * mount, and which names a mount is allowed to rewrite is a decision this list makes once rather
-    * than one a string handed in at a call site can reopen. The package private constructors of
-    * [[Attr]] and [[AttrValue.Link]] are what hold that shut: outside `io.eezo.core.html`, `:=` on
-    * one of the [[UrlAttrName]] values above is the only expression that produces an attribute a
-    * mount rewrites.
+    * It is a plain [[AttrName]], also when the name is `href`, so a mount never rewrites its value.
+    * Only the [[UrlAttrName]] values of this list make an attribute that a mount rewrites.
     */
   def attr(name: String): AttrName = AttrName(name)
 

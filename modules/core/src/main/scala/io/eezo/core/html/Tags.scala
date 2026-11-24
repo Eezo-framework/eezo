@@ -1,11 +1,10 @@
 package io.eezo.core.html
 
-/** The tags. Wildcard imported, because a view file mentions far more distinct tags than distinct
-  * attributes; [[Attrs]] stays qualified, because the two collide on `title`, `style`, `label`,
-  * `form`, `value`, `name`, `data` and `span`.
+/** The tags. Import them with a wildcard, `import io.eezo.core.html.*`, and import [[Attrs]]
+  * qualified, because the two share names: `title`, `style`, `label`, `form`, `value`, `name`,
+  * `data` and `span`.
   *
-  * Coverage is the floor the seven derived routes need: document, structure, text, lists, forms,
-  * media and tables, which is everything they render.
+  * The list covers document, structure, text, lists, forms, media and tables.
   */
 object Tags {
 

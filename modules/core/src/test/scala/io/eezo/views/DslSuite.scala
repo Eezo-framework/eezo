@@ -139,4 +139,23 @@ class DslSuite extends munit.FunSuite {
     assert(compileErrors("div(List(true))").nonEmpty)
     assert(compileErrors("div(Vector(Some(\"a\")))").nonEmpty)
   }
+
+  test(
+    "a runtime match on an Iterable cannot see its element type, so only the Mod union refuses one"
+  ) {
+    val booleans: Any = List(true)
+    val matched       = booleans match {
+      case _: Iterable[String @unchecked] => true
+      case _                              => false
+    }
+    assert(matched)
+  }
+
+  test("children that need no merging come out of a tag as they went in") {
+    val children = Vector(span("a"), Html.text("b"), Html.raw("<i>c</i>"), span("d"))
+    div(children) match {
+      case Html.Element(_, _, _, out) => assertEquals(out, children)
+      case other                      => fail(s"expected an element, got $other")
+    }
+  }
 }

@@ -68,4 +68,13 @@ class MountingSuite extends munit.FunSuite {
     val anchor = div(Attrs.eezoBase := Url.Mounted("/"))
     assertEquals(anchor.under("/admin").render, """<div data-eezo-base="/admin"></div>""")
   }
+
+  test(
+    "a Vector map that changes nothing still builds a new Vector, so a mount compares by reference"
+  ) {
+    val children = Vector(p("a"), p("b"))
+    val mapped   = children.map(identity)
+    assert(!(mapped eq children))
+    assert(mapped.corresponds(children)(_ eq _))
+  }
 }
