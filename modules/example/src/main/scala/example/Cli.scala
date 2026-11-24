@@ -2,14 +2,8 @@ package example
 
 import io.eezo.db.{DbApp, Schema}
 
-/** The demo app's entry point.
-  *
-  * This object used to *be* the CLI: `status`, `sync`, `freeze`, `migrate` and the rest were
-  * implemented here, printing as they went, and `design/cli.md` §3 named it the specification for
-  * `modules/cli`. That port happened. The command bodies live in `io.eezo.db.cli.Commands` as
-  * functions returning values, the rendering in `io.eezo.db.cli.Render`, and the dispatch in
-  * `io.eezo.db.DbApp`; what remains here is exactly what an application is supposed to write: name
-  * the schema, and say what `boot` does.
+/** The example app's entry point. It names the schema and says what `boot` does; `DbApp` gives it
+  * the `db` commands.
   *
   * {{{
   * sbt "example/run db status"
