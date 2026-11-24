@@ -36,16 +36,11 @@ given idReadWriter[A]: ReadWriter[Id[A]] =
   * wire in a shape of its own keeps it; otherwise a case class has one derived, so a flat model
   * needs no `derives` clause to be a payload. Derivation reaches no further than that one case
   * class: each of its fields needs a `ReadWriter` of its own, and so does the model when it sits
-  * inside a `List` or an `Option`. Only a case class is derived because `List` and `Option` are
-  * sums of the standard library too, and deriving them would end in an error about `::` or `Some`
-  * rather than the collection the author wrote; anything else is asked for as an instance, so the
-  * compiler's message names the type at the summon site. Inline because both questions can only be
-  * asked where the model is known: neither the instance nor the `Mirror` and `ClassTag` derivation
-  * needs resolves for an abstract `A`.
+  * inside a `List` or an `Option`. When an instance is missing, the compiler's message names the
+  * type that needs it at the place where the `Serde` is summoned.
   *
-  * Imported, so it sits in the caller's lexical scope and is found before any `Serde` in a model's
-  * companion. An application that writes its own `Serde` for one model brings it into scope at a
-  * nearer level than this import for it to win.
+  * Imported, it is found before any `Serde` in a model's companion. An application that writes its
+  * own `Serde` for one model brings it into scope at a nearer level than this import for it to win.
   */
 inline given serde[A]: Serde[A] = summonFrom {
   case rw: ReadWriter[A]         => adapt(rw)
