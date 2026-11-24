@@ -3,15 +3,6 @@ package io.eezo.core
 import io.eezo.core.Dispatch.Usage
 import io.eezo.core.support.Captured.captured
 
-/** `Dispatch` as `core` owns it: `main`, the chained `commands`, `help` over `usage`, and `emit`.
-  *
-  * Nothing here starts or stops anything. Each layer chains its own arms in front of
-  * `super.commands`, and this suite pins the things the layers build on: an unknown first argument
-  * is exit 2, `Nil` is `program` and is answered here rather than by a layer, two layers that both
-  * implement `program` cannot be stacked without saying which one wins, a later mixin's arm shadows
-  * an earlier one's, `help` lays the table out once for every layer, and `emit` is the one place
-  * the `--json` choice is made.
-  */
 class DispatchSuite extends munit.FunSuite {
 
   trait Greeter extends Dispatch {
@@ -44,9 +35,6 @@ class DispatchSuite extends munit.FunSuite {
 
   object Greeting extends Greeter
 
-  /** Two layers stacked. `program` is concrete in both, so this object has to say which one it
-    * means, and it says both, in the earlier one's order.
-    */
   object Both extends Greeter with Counter {
     override protected def program(): Unit = {
       super[Greeter].program()
@@ -91,6 +79,13 @@ class DispatchSuite extends munit.FunSuite {
     assert(err.contains("help"), err)
   }
 
+  test("an unrecognised first argument without --json is one [eezo] line, with the same exit 2") {
+    val (code, out, err) = captured(Greeting.run(List("status")))
+    assertEquals(code, 2)
+    assertEquals(out, "")
+    assertEquals(err, "[eezo] unknown command: status. Run `help` for the list.\n")
+  }
+
   test("an unrecognised first argument under --json is the one error shape, escaped") {
     val (code, out, err) = captured(Greeting.run(List("say", "\"hi\"", "--json")))
     assertEquals(code, 2)
@@ -107,6 +102,18 @@ class DispatchSuite extends munit.FunSuite {
       "  help         this list"
     ) ++ footer
     assertEquals(out.linesIterator.toList, expected)
+  }
+
+  test("help is answered ahead of every layer's arms, so a layer's own help arm never runs") {
+    object Shadowing extends Greeter {
+      override protected def commands: PartialFunction[List[String], Int] = ({ case "help" :: _ =>
+        println("the layer's help"); 7
+      }: PartialFunction[List[String], Int]) orElse super.commands
+    }
+    val (code, out, _) = captured(Shadowing.run(List("help")))
+    assertEquals(code, 0)
+    assertEquals(out.linesIterator.next(), "eezo")
+    assert(!out.contains("the layer's help"), out)
   }
 
   test("help prints the notes after the table and before the footer, once for every layer") {
@@ -147,6 +154,12 @@ class DispatchSuite extends munit.FunSuite {
     }
     assertEquals(captured(Lazy.onlyText(Nil))._2.trim, "text")
     assertEquals(captured(Lazy.onlyJson(List("--json")))._2.trim, "json")
+  }
+
+  test("main returns when the command succeeds, so the JVM that called it keeps running") {
+    val (code, out, _) = captured { Greeting.main(Array("greet", "eezo")); 0 }
+    assertEquals(code, 0)
+    assertEquals(out.trim, "hello eezo")
   }
 
   test("a later mixin's arm is consulted first, and the earlier one's still answers") {
