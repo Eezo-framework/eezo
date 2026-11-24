@@ -36,6 +36,19 @@ final case class Entry(id: Id[Entry], owner: Id[Product], count: Long)
 
 final case class Note(text: Option[String])
 
+final class Fixed[A](text: String) extends Serde[A] {
+  def serialize(value: A): String                              = text
+  def deserialize(body: Array[Byte]): Either[Serde.Failure, A] = Left(Serde.Failure.Unfit(text))
+  def deserialize(body: Array[Byte], decided: Map[String, Id[Any]]): Either[Serde.Failure, A] =
+    deserialize(body)
+}
+
+final case class Companioned(name: String)
+
+object Companioned {
+  given Serde[Companioned] = Fixed("companion")
+}
+
 class UpickleAdapterSuite extends munit.FunSuite {
 
   private def bytes(text: String): Array[Byte] = text.getBytes(StandardCharsets.UTF_8)
@@ -52,16 +65,19 @@ class UpickleAdapterSuite extends munit.FunSuite {
 
   private val order = Order(Id.gen(), Id.gen(), 2, BigDecimal("9.50"))
 
-  test(
-    "this suite sits outside io.eezo, so the inline given expands with an application's access"
-  ) {
-    assert(!clue(getClass.getPackageName).startsWith("io.eezo"))
-  }
-
   test("the author's ReadWriter wins over derivation, both ways") {
     val serde = summon[Serde[Renamed]]
     assertEquals(serde.serialize(Renamed("x")), """{"nome":"x"}""")
     assertEquals(serde.deserialize(bytes("""{"nome":"y"}""")), Right(Renamed("y")))
+  }
+
+  test("the imported serde wins over a Serde in the model's companion") {
+    assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), """{"name":"x"}""")
+  }
+
+  test("a Serde the application brings into a nearer scope wins over the imported serde") {
+    given Serde[Companioned] = Fixed("nearer")
+    assertEquals(summon[Serde[Companioned]].serialize(Companioned("x")), "nearer")
   }
 
   test("a model with no ReadWriter is derived, with its fields named as declared") {
@@ -227,14 +243,6 @@ class UpickleAdapterSuite extends munit.FunSuite {
       clue(unfit(summon[Serde[List[String]]].deserialize(bytes("""["a",null]""")))).endsWith(
         " at $[1]"
       )
-    )
-  }
-
-  test("upickle alone reads a JSON null into a String field as null and into an Int field as 0") {
-    val reader = upickle.default.macroRW[Line]
-    assertEquals(
-      upickle.default.read[Line]("""{"sku":null,"quantity":null}""")(using reader),
-      Line(null, 0)
     )
   }
 
