@@ -8,10 +8,13 @@ import io.eezo.db.{DbApp, Schema}
   * implemented here, printing as they went, and `design/cli.md` §3 named it the specification for
   * `modules/cli`. That port happened. The command bodies live in `io.eezo.db.cli.Commands` as
   * functions returning values, the rendering in `io.eezo.db.cli.Render`, and the dispatch in
-  * `io.eezo.db.DbApp`; what remains here is exactly what an application is supposed to write:
-  * name the schema, and say what `boot` does.
+  * `io.eezo.db.DbApp`; what remains here is exactly what an application is supposed to write: name
+  * the schema, and say what `boot` does.
   *
-  *   sbt "example/run db status" sbt "example/run db migrate --apply"
+  * {{{
+  * sbt "example/run db status"
+  * sbt "example/run db migrate --apply"
+  * }}}
   */
 object Cli extends DbApp {
 
@@ -22,6 +25,8 @@ object Cli extends DbApp {
   override def schema: Schema = AppSchema
 
   override def boot(): Unit = {
-    println("eezo example — run a command: status, sync, freeze, migrate, reset, drop, dump, ddl, help")
+    println(
+      "eezo example — run a command: status, sync, freeze, migrate, reset, drop, dump, ddl, help"
+    )
   }
 }
