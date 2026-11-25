@@ -36,6 +36,13 @@ class TableDerivationSuite extends FunSuite {
     assertEquals(c.nullable, true)
   }
 
+  test("a field that is not a Ref carries no FK target") {
+    assertEquals(
+      Table[Author].columns.map(c => c.name -> c.references),
+      List("id" -> None, "name" -> None, "country" -> None, "mentor_id" -> Some("author"))
+    )
+  }
+
   test("a self-reference resolves to its own table") {
     val c = Table[Author].columns.find(_.name == "mentor_id").get
     assertEquals(c.references, Some("author"))

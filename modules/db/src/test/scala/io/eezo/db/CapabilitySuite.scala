@@ -3,11 +3,13 @@ package io.eezo.db
 import munit.FunSuite
 import io.eezo.core.Id
 
+import scala.compiletime.testing.typeCheckErrors
+
 /** What the compiler refuses, and what it says.
   *
   * Every assertion here is on the **message**, not on "did not compile". An unrelated implicit
   * error in the same compilation unit suppresses `summonFrom`'s output, so a test that checked only
-  * for failure could pass for the wrong reason — DESIGN §8.6.
+  * for failure could pass for the wrong reason, see DESIGN §8.6.
   */
 class CapabilitySuite extends FunSuite {
 
@@ -117,6 +119,56 @@ class CapabilitySuite extends FunSuite {
   test("a model with no `id` at all is refused") {
     val e = compileErrors("case class Keyless(name: String) derives Table")
     assert(e.contains("has no `id` field"), e)
+  }
+
+  // The five tests below assert the whole text and that it is the only error. Each derivation
+  // expands in the compiler, so `typeCheckErrors` is how a suite sees the refusal it makes.
+
+  test("a model with no fields is refused") {
+    assertEquals(
+      typeCheckErrors("case class Empty() derives Table").map(_.message),
+      List("Empty has no fields.")
+    )
+  }
+
+  test("an `id` that is the key of another model is refused") {
+    // `Id[Untabled]` is an `Id`, so a check that compares only the outer type lets it through.
+    assertEquals(
+      typeCheckErrors("case class Stray(id: Id[Untabled], name: String) derives Table")
+        .map(_.message),
+      List(
+        "`id` must be `Id[Stray]`, but is `io.eezo.core.Id$package.Id[CapabilitySuite.this.Untabled]`."
+      )
+    )
+  }
+
+  test("an `id` of the wrong type is refused before a field with no mapping") {
+    assertEquals(
+      typeCheckErrors("case class Twice(id: String, home: java.net.URI) derives Table")
+        .map(_.message),
+      List("`id` must be `Id[Twice]`, but is `scala.Predef.String`.")
+    )
+  }
+
+  test("a field with no mapping is refused, and the message shows the given to add") {
+    assertEquals(
+      typeCheckErrors("case class Homed(id: Id[Homed], home: java.net.URI) derives Table")
+        .map(_.message),
+      List(
+        """No database mapping for java.net.URI at field `home`.
+          |
+          |Provide one in scope:
+          |  given Column[java.net.URI] = Column[String].imap(...)(...)
+          |""".stripMargin
+      )
+    )
+  }
+
+  test("a model with no `id` is refused before a field with no mapping") {
+    assertEquals(
+      typeCheckErrors("case class Lost(home: java.net.URI) derives Table").map(_.message),
+      List("Lost has no `id` field. Every Eezo table needs one, e.g. `id: Id[Lost]`.")
+    )
   }
 }
 

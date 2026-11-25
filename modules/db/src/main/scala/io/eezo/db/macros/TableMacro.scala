@@ -6,125 +6,126 @@ import scala.quoted.*
 // `Expr` is excluded: `io.eezo.db.Expr` is the query predicate and `scala.quoted.Expr` is the macro
 // one, and every macro in this package needs the latter. The exclusion is local to macro sources.
 import io.eezo.db.{Expr as _, *}
-import io.eezo.core.internal.util.*
 import io.eezo.core.Id
 
+/** `derives Table`. Only what needs `Quotes` is here: reading the case class, summoning the givens,
+  * building the trees. Every decision that needs no compiler is in `TableRules`, where a suite
+  * calls it. This code runs in the compiler while it compiles the test sources, so a suite sees
+  * only the trees it builds and the compile errors it reports.
+  */
 object TableMacro {
 
-  def derive[T: Type](using q: Quotes): Expr[Table[T]] = {
-    val s = new Structure[q.type](using q)
+  def derive[T: Type](using q: Quotes): Expr[Table[T]] = new Expansion[T].table
+
+  /** One expansion of `derives Table` for `T`. The checks run in this order: the case class checks
+    * of `Structure` and then no fields and no `id`, while the fields below are read; then the type
+    * of `id`, and then the first field with no `Column` given, while `table` runs. A model that
+    * breaks several rules is refused for the first one.
+    */
+  private final class Expansion[T: Type](using val q: Quotes) {
     import q.reflect.*
 
-    val sym    = TypeRepr.of[T].typeSymbol
-    val fields = s.of[T]
+    private val s         = new Structure[q.type](using q)
+    private val className = TypeRepr.of[T].typeSymbol.name
+    private val fields    = s.of[T]
+    private val key       = fields(
+      TableRules
+        .keyIndex(className, fields.map(_.name))
+        .fold(report.errorAndAbort(_, Position.ofMacroExpansion), identity)
+    )
 
-    if (fields.isEmpty)
-      report.errorAndAbort(s"${sym.name} has no fields.", Position.ofMacroExpansion)
-
-    val idField = fields.find(_.name == "id").getOrElse {
-      report.errorAndAbort(
-        s"${sym.name} has no `id` field. Every Eezo table needs one, e.g. `id: Id[${sym.name}]`.",
-        Position.ofMacroExpansion
-      )
+    def table: Expr[Table[T]] = {
+      checkKeyType()
+      val columnDefs = Expr.ofList(fields.map(columnDef))
+      val colValues  = colsExpr
+      '{
+        new Table[T] {
+          def tableName: String        = ${ Expr(TableRules.tableName(className)) }
+          val columns: List[ColumnDef] = $columnDefs
+          def encode(ps: PreparedStatement, offset: Int, value: T): Unit =
+            ${ encodeBody('ps, 'offset, 'value) }
+          def decode(rs: ResultSet, offset: Int): T =
+            ${ decodeBody('rs, 'offset) }
+          def idOf(value: T): Id[T] = ${ idOfBody('value) }
+          val cols: ColsOf[T]       = $colValues
+        }
+      }
     }
 
     // Checked, not merely suggested: `findById`, `update` and `delete` are typed in terms of
-    // `Id[T]`, and `idOf` below reads this field, so a differently-typed `id` would fail later and
+    // `Id[T]`, and `idOf` below reads this field, so a differently typed `id` would fail later and
     // further from the cause.
-    if (!(idField.tpe =:= TypeRepr.of[Id[T]]))
-      report.errorAndAbort(
-        s"`id` must be `Id[${sym.name}]`, but is `${idField.tpe.show}`.",
-        idField.pos
-      )
+    private def checkKeyType(): Unit =
+      if (!(key.tpe =:= TypeRepr.of[Id[T]]))
+        report.errorAndAbort(TableRules.wrongKeyType(className, key.tpe.show), key.pos)
 
-    def summonOrFail[A: Type](f: s.FieldInfo): Expr[Column[A]] =
-      Expr.summon[Column[A]].getOrElse {
-        report.errorAndAbort(
-          s"""No database mapping for ${Type.show[A]} at field `${f.name}`.
-             |
-             |Provide one in scope:
-             |  given Column[${Type.show[A]}] = Column[String].imap(...)(...)
-             |""".stripMargin,
-          f.pos
+    private def column[A: Type](f: s.FieldInfo): Expr[Column[A]] =
+      Expr
+        .summon[Column[A]]
+        .getOrElse(
+          report.errorAndAbort(TableRules.noMapping(Type.show[A], f.name), f.pos)
         )
-      }
 
-    val colDefs: List[Expr[ColumnDef]] = fields.map { f =>
+    private def refTarget[A: Type]: Option[Expr[RefTarget[A]]] = Expr.summon[RefTarget[A]]
+
+    private def columnName[A: Type](f: s.FieldInfo): Expr[String] =
+      Expr(TableRules.columnName(f.name, refTarget[A].isDefined))
+
+    private def columnDef(f: s.FieldInfo): Expr[ColumnDef] =
       f.tpe.asType match {
         case '[t] =>
-          val c       = summonOrFail[t](f)
-          val rt      = Expr.summon[RefTarget[t]]
-          val colName = if (rt.isDefined) snake(f.name) + "_id" else snake(f.name)
-          val refExpr: Expr[Option[String]] = rt match {
-            case Some(r) => '{ Some($r.table) }
-            case None    => '{ None }
-          }
+          val c                            = column[t](f)
+          val target: Expr[Option[String]] =
+            refTarget[t].map(r => '{ Some($r.table) }).getOrElse('{ None })
           '{
-            ColumnDef.of[t](
-              ${ Expr(colName) },
-              ${ Expr(f.name == "id") },
-              $refExpr
-            )(using $c)
+            ColumnDef
+              .of[t](${ columnName[t](f) }, ${ Expr(TableRules.isKey(f.name)) }, $target)(using $c)
           }
       }
-    }
 
-    def encodeBody(ps: Expr[PreparedStatement], off: Expr[Int], v: Expr[T]): Expr[Unit] = {
-      val stmts = fields.zipWithIndex.map { case (f, i) =>
-        f.tpe.asType match {
-          case '[t] =>
-            val c   = summonOrFail[t](f)
-            val fld = Select.unique(v.asTerm, f.name).asExprOf[t]
-            '{ $c.put($ps, $off + ${ Expr(i) }, $fld) }.asTerm
-        }
+    private def put(ps: Expr[PreparedStatement], off: Expr[Int], v: Expr[T])(
+        f: s.FieldInfo,
+        i: Int
+    ): Term =
+      f.tpe.asType match {
+        case '[t] =>
+          val c   = column[t](f)
+          val fld = Select.unique(v.asTerm, f.name).asExprOf[t]
+          '{ $c.put($ps, $off + ${ Expr(i) }, $fld) }.asTerm
       }
-      Block(stmts, '{ () }.asTerm).asExprOf[Unit]
-    }
 
-    def decodeBody(rs: Expr[ResultSet], off: Expr[Int]): Expr[T] = {
-      val args = fields.zipWithIndex.map { case (f, i) =>
-        f.tpe.asType match {
-          case '[t] =>
-            val c = summonOrFail[t](f)
-            '{ $c.get($rs, $off + ${ Expr(i) }) }.asTerm
-        }
+    private def encodeBody(ps: Expr[PreparedStatement], off: Expr[Int], v: Expr[T]): Expr[Unit] =
+      Block(fields.zipWithIndex.map(put(ps, off, v)), '{ () }.asTerm).asExprOf[Unit]
+
+    private def get(rs: Expr[ResultSet], off: Expr[Int])(f: s.FieldInfo, i: Int): Term =
+      f.tpe.asType match {
+        case '[t] =>
+          val c = column[t](f)
+          '{ $c.get($rs, $off + ${ Expr(i) }) }.asTerm
       }
-      Apply(Select(New(TypeTree.of[T]), sym.primaryConstructor), args).asExprOf[T]
+
+    private def decodeBody(rs: Expr[ResultSet], off: Expr[Int]): Expr[T] = {
+      val args = fields.zipWithIndex.map(get(rs, off))
+      Apply(Select(New(TypeTree.of[T]), TypeRepr.of[T].typeSymbol.primaryConstructor), args)
+        .asExprOf[T]
     }
 
-    def idOfBody(v: Expr[T]): Expr[Id[T]] = Select.unique(v.asTerm, "id").asExprOf[Id[T]]
+    private def idOfBody(v: Expr[T]): Expr[Id[T]] =
+      Select.unique(v.asTerm, key.name).asExprOf[Id[T]]
+
+    private def col(f: s.FieldInfo): Expr[Any] =
+      f.tpe.asType match {
+        case '[t] => '{ new Col[T, t](${ columnName[t](f) })(using ${ column[t](f) }) }
+      }
 
     /** The `Col` values, in declaration order.
       *
       * Assembled as an ordinary tuple and cast, rather than through `NamedTuple.build`: a named
       * tuple *is* a `Tuple` at run time, and the labels come from `NamedTuple.From[T]`, which reads
-      * the same constructor parameters in the same order as `fields` below. So the cast asserts an
-      * ordering the compiler derives from the same source — not an assumption about the user.
+      * the same constructor parameters in the same order as `fields`. So the cast asserts an
+      * ordering the compiler derives from the same source, not an assumption about the user.
       */
-    val colsExpr: Expr[ColsOf[T]] = {
-      val values: List[Expr[Any]] = fields.map { f =>
-        f.tpe.asType match {
-          case '[t] =>
-            val c       = summonOrFail[t](f)
-            val rt      = Expr.summon[RefTarget[t]]
-            val colName = if (rt.isDefined) snake(f.name) + "_id" else snake(f.name)
-            '{ new Col[T, t](${ Expr(colName) })(using $c) }
-        }
-      }
-      '{ ${ Expr.ofTupleFromSeq(values) }.asInstanceOf[ColsOf[T]] }
-    }
-
-    '{
-      new Table[T] {
-        def tableName: String                                          = ${ Expr(snake(sym.name)) }
-        val columns: List[ColumnDef]                                   = ${ Expr.ofList(colDefs) }
-        def encode(ps: PreparedStatement, offset: Int, value: T): Unit =
-          ${ encodeBody('ps, 'offset, 'value) }
-        def decode(rs: ResultSet, offset: Int): T =
-          ${ decodeBody('rs, 'offset) }
-        def idOf(value: T): Id[T] = ${ idOfBody('value) }
-        val cols: ColsOf[T]       = $colsExpr
-      }
-    }
+    private def colsExpr: Expr[ColsOf[T]] =
+      '{ ${ Expr.ofTupleFromSeq(fields.map(col)) }.asInstanceOf[ColsOf[T]] }
   }
 }
