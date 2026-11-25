@@ -49,6 +49,20 @@ class MethodOverrideSuite extends munit.FunSuite {
     )
   }
 
+  test("a mixed case form type is form encoded for the override too") {
+    val contentType = "Application/X-WWW-Form-Urlencoded"
+    assertEquals(
+      Request.withMethodOverride(post("_method=PUT", contentType = contentType)).method,
+      Method.PUT
+    )
+    assertEquals(
+      Request
+        .withMethodOverride(post(query = Map("_method" -> Seq("PUT")), contentType = contentType))
+        .method,
+      Method.PUT
+    )
+  }
+
   test("a POST is never downgraded to a safe verb, whatever the field says") {
     Seq(Method.GET, Method.HEAD, Method.OPTIONS).foreach { safe =>
       assertEquals(Request.withMethodOverride(post(s"_method=$safe")).method, Method.POST, safe)

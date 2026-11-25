@@ -63,7 +63,8 @@ class RequestSuite extends munit.FunSuite {
       contentType <- Seq(
         "Application/X-WWW-Form-Urlencoded",
         "APPLICATION/X-WWW-FORM-URLENCODED; charset=UTF-8",
-        "application/x-www-form-urlencoded;charset=utf-8"
+        "application/x-www-form-urlencoded;charset=utf-8",
+        "application/x-www-form-urlencoded ; charset=UTF-8"
       )
     ) {
       val req = request(
